@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.user.UserRepository">
+
+    <!--
+        name 속성 대신 위치 기반 매핑 사용
+        <arg> 순서가 User 생성자 파라미터 순서와 반드시 일치해야 함
+    -->
+    <resultMap id="UserResultMap" type="com.hohoedu.book_clinic.user.model.User">
+        <constructor>
+            <idArg column="id"            javaType="Integer"/>
+            <arg   column="created_at"    javaType="java.time.LocalDateTime"/>
+            <arg   column="center_code"   javaType="String"/>
+            <arg   column="role_key"      javaType="String"/>
+            <arg   column="user_code"     javaType="String"/>
+            <arg   column="user_id"       javaType="String"/>
+            <arg   column="user_name"     javaType="String"/>
+            <arg   column="password_hash" javaType="String"/>
+            <arg   column="salt"          javaType="String"/>
+            <arg   column="type"          javaType="String"/>
+            <arg   column="user_phone"    javaType="String"/>
+            <arg   column="is_han"        javaType="Boolean"/>
+            <arg   column="is_book"       javaType="Boolean"/>
+            <arg   column="use_yn"        javaType="Boolean"/>
+            <arg   column="is_clinic"     javaType="Boolean"/>
+        </constructor>
+    </resultMap>
+
+    <select id="findByUserId" resultMap="UserResultMap">
+        SELECT id, created_at, center_code, role_key, user_code, user_id, user_name,
+               password_hash, salt, type, user_phone, is_han, is_book, use_yn, is_clinic
+        FROM erp_user
+        WHERE user_id = #{userId}
+          AND use_yn = 1
+    </select>
+
+</mapper>
