@@ -1,0 +1,45 @@
+package com.hohoedu.book_clinic.bookstore.question;
+
+import java.util.List;
+
+import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
+
+import com.hohoedu.book_clinic.bookstore.question._dto.QuestionReqDTO;
+import com.hohoedu.book_clinic.bookstore.question._dto.QuestionRespDTO;
+
+/**
+ * 문제 MyBatis 매퍼 인터페이스
+ * QuestionMapper.xml과 매핑되어 DB 쿼리를 실행
+ */
+@Mapper
+public interface QuestionRepository {
+
+    /** 문제 등록 */
+    void registerQuestion(QuestionReqDTO.RegisterReqDTO reqDTO);
+
+    /** 문제 일괄 등록 (엑셀 업로드용) */
+    void registerQuestionBatch(@Param("list") List<QuestionReqDTO.RegisterReqDTO> list);
+
+    /** 문제 수정 */
+    void updateQuestion(QuestionReqDTO.UpdateReqDTO reqDTO);
+
+    /** 문제를 itempool_del 테이블로 이관 (삭제 전 보관) */
+    void archiveQuestion(@Param("contentId") Integer contentId, @Param("qnum") String qnum, @Param("deletedBy") String deletedBy);
+
+    /** 문제 삭제 */
+    void deleteQuestion(@Param("contentId") Integer contentId, @Param("qnum") String qnum);
+
+    /** itempool_del에서 itempool로 복원 */
+    void restoreQuestionFromDel(@Param("delId") Integer delId);
+
+    /** itempool_del 레코드 삭제 */
+    void deleteQuestionDel(@Param("delId") Integer delId);
+
+    /** 도서별 문제 목록 조회 (contentId 필수, qtype/state 선택) */
+    List<QuestionRespDTO.QuestionDTO> searchQuestions(@Param("contentId") Integer contentId, @Param("qtype") String qtype, @Param("state") String state);
+
+    /** 삭제된 문제 목록 조회 (contentId 기준) */
+    List<QuestionRespDTO.QuestionDelDTO> findDeletedQuestions(@Param("contentId") Integer contentId);
+
+}

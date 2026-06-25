@@ -1,0 +1,169 @@
+package com.hohoedu.book_clinic.bookstore.book;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
+import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+
+/**
+ * 도서 관련 API 컨트롤러
+ * - 마스터 도서(content): 도서 원본 정보 관리
+ * - 실물 도서(item): ISBN 단위 실물 도서 관리
+ * - 센터 도서(item_center): 센터별 도서 보유 현황 관리
+ */
+@Slf4j
+@RestController
+@RequestMapping("/book")
+@RequiredArgsConstructor
+public class BookController {
+
+    private final BookService bookService;
+
+
+    // ===================== 마스터 도서 관리 =====================
+
+    /** 마스터 도서 등록 */
+    @PostMapping("/register")
+    public ResponseEntity<?> registerContent(@RequestBody BookReqDTO.RegisterReqDTO reqDTO) {
+        bookService.registerContent(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
+    }
+
+    /** 마스터 도서 수정 */
+    @PostMapping("/update")
+    public ResponseEntity<?> updateContent(@RequestBody BookReqDTO.UpdateReqDTO reqDTO) {
+        bookService.updateContent(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
+    }
+
+    /** 마스터 도서 삭제 (연결된 실물도서, 문제까지 일괄 삭제 후 del 테이블 이관) */
+    @PostMapping("/delete")
+    public ResponseEntity<?> deleteBook(@RequestBody BookReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        bookService.deleteBook(reqDTO, userDetails.getUsername());
+        return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
+    }
+
+    /** 마스터 도서 복구 (del 테이블에서 원본 테이블로 복원) */
+    @PostMapping("/restore")
+    public ResponseEntity<?> restoreBook(@RequestBody BookReqDTO.RestoreReqDTO reqDTO) {
+        bookService.restoreBook(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("복구되었습니다."));
+    }
+
+    /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형 복합 조건) */
+    @GetMapping("/search")
+    public ResponseEntity<?> searchContents(
+            @RequestParam(value = "title", required = false) String title,
+            @RequestParam(value = "author", required = false) String author,
+            @RequestParam(value = "genre", required = false) String genre,
+            @RequestParam(value = "schoolYear", required = false) String schoolYear,
+            @RequestParam(value = "keyword", required = false) String keyword,
+            @RequestParam(value = "contentType", required = false) String contentType) {
+        return ResponseEntity.ok(ApiUtils.success(bookService.searchContents(title, author, genre, schoolYear, keyword, contentType)));
+    }
+
+    /** 삭제된 마스터 도서 목록 조회 (복구 화면용) */
+    @GetMapping("/deleted")
+    public ResponseEntity<?> findDeletedContents() {
+        return ResponseEntity.ok(ApiUtils.success(bookService.findDeletedContents()));
+    }
+
+
+    // ===================== 실물 도서 관리 =====================
+
+    /** 실물 도서 등록 (ISBN 최초 등록 시 센터 매핑도 동시 처리) */
+    @PostMapping("/item/register")
+    public ResponseEntity<?> registerItem(@RequestBody BookReqDTO.ItemRegisterReqDTO reqDTO) {
+        bookService.registerItem(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
+    }
+
+    /** 실물 도서 수정 (도서 제목, 출판사, 키워드) */
+    @PostMapping("/item/update")
+    public ResponseEntity<?> updateItem(@RequestBody BookReqDTO.ItemUpdateReqDTO reqDTO) {
+        bookService.updateItem(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
+    }
+
+    /** 실물 도서 삭제 (센터 매핑 제거 후 del 테이블 이관) */
+    @PostMapping("/item/delete")
+    public ResponseEntity<?> deleteItem(@RequestBody BookReqDTO.ItemDeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        bookService.deleteItem(reqDTO, userDetails.getUsername());
+        return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
+    }
+
+    /** 실물 도서 복구 (del 테이블에서 원본 테이블로 복원) */
+    @PostMapping("/item/restore")
+    public ResponseEntity<?> restoreItem(@RequestBody BookReqDTO.ItemRestoreReqDTO reqDTO) {
+        bookService.restoreItem(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("복구되었습니다."));
+    }
+
+    /** 바코드(ISBN)로 실물 도서 단건 조회 */
+    @GetMapping("/item/{bcode}")
+    public ResponseEntity<?> findItemByBcode(@PathVariable("bcode") String bcode) {
+        return ResponseEntity.ok(ApiUtils.success(bookService.findItemByBcode(bcode)));
+    }
+
+    /** 실물 도서 검색 (마스터ID/상태/출판사 복합 조건) */
+    @GetMapping("/item/search")
+    public ResponseEntity<?> searchItems(
+            @RequestParam(value = "contentId", required = false) Integer contentId,
+            @RequestParam(value = "state", required = false) String state,
+            @RequestParam(value = "publisher", required = false) String publisher) {
+        return ResponseEntity.ok(ApiUtils.success(bookService.searchItems(contentId, state, publisher)));
+    }
+
+    /** 삭제된 실물 도서 목록 조회 (복구 화면용) */
+    @GetMapping("/item/deleted")
+    public ResponseEntity<?> findDeletedItems() {
+        return ResponseEntity.ok(ApiUtils.success(bookService.findDeletedItems()));
+    }
+
+
+    // ===================== 센터 도서 관리 =====================
+
+    /**
+     * 센터 도서 매핑 등록
+     * ISBN이 이미 등록된 경우, 다른 센터에서 동일 ISBN을 보유할 때 사용
+     */
+    @PostMapping("/item/center/register")
+    public ResponseEntity<?> registerItemCenter(@RequestBody BookReqDTO.ItemCenterRegisterReqDTO reqDTO) {
+        bookService.registerItemCenter(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
+    }
+
+    /** 센터 도서 수량/상태 수정 */
+    @PutMapping("/item/center/update")
+    public ResponseEntity<?> updateItemCenter(@RequestBody BookReqDTO.ItemCenterUpdateReqDTO reqDTO) {
+        bookService.updateItemCenter(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
+    }
+
+    /** 센터 도서 매핑 삭제 (해당 센터에서 ISBN 제거) */
+    @DeleteMapping("/item/center/delete")
+    public ResponseEntity<?> deleteItemCenter(@RequestBody BookReqDTO.ItemCenterDeleteReqDTO reqDTO) {
+        bookService.deleteItemCenter(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
+    }
+
+    /** 특정 센터의 보유 도서 목록 조회 */
+    @GetMapping("/item/center/{centerCode}")
+    public ResponseEntity<?> findItemsByCenter(@PathVariable("centerCode") String centerCode) {
+        return ResponseEntity.ok(ApiUtils.success(bookService.findItemsByCenter(centerCode)));
+    }
+}

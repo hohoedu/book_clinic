@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>문제 일괄 등록</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: 'Malgun Gothic', sans-serif; background: #f4f6fb; min-height: 100vh; margin: 0; display: flex; align-items: center; justify-content: center; }
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 40px 44px; width: 520px; }
+    h2 { font-size: 20px; color: #222; margin: 0 0 6px; }
+    .subtitle { font-size: 13px; color: #999; margin: 0 0 32px; }
+
+    /* 스텝 바 */
+    .steps { display: flex; align-items: center; margin-bottom: 32px; }
+    .step { display: flex; align-items: center; gap: 8px; }
+    .step-num { width: 26px; height: 26px; border-radius: 50%; background: #e3eaf8; color: #4a90d9; font-size: 13px; font-weight: bold; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .step-text { font-size: 13px; color: #aaa; white-space: nowrap; }
+    .step-line { flex: 1; height: 1px; background: #ddd; margin: 0 8px; }
+
+    /* 섹션 */
+    .section { border: 1px solid #e8edf5; border-radius: 8px; padding: 20px 22px; margin-bottom: 14px; }
+    .section-title { font-size: 12px; font-weight: bold; color: #4a90d9; margin-bottom: 12px; letter-spacing: .5px; }
+    .section-desc { font-size: 13px; color: #666; margin-bottom: 12px; line-height: 1.6; }
+    label { display: block; font-size: 13px; color: #555; margin-bottom: 6px; }
+    input[type="file"] { width: 100%; padding: 8px 10px; border: 1px dashed #c0cce0; border-radius: 6px; font-size: 13px; color: #555; background: #f9fbff; cursor: pointer; }
+
+    /* 버튼 */
+    .btn-row { display: flex; gap: 10px; }
+    .btn { padding: 10px 22px; border-radius: 6px; font-size: 14px; cursor: pointer; border: none; font-weight: bold; }
+    .btn-primary { background: #4a90d9; color: #fff; }
+    .btn-primary:hover { background: #3578c4; }
+    .btn-outline { background: #fff; color: #4a90d9; border: 1.5px solid #4a90d9; text-decoration: none; display: inline-flex; align-items: center; }
+    .btn-outline:hover { background: #eaf3ff; }
+
+    /* 결과 */
+    #result { margin-top: 16px; padding: 13px 16px; border-radius: 6px; font-size: 14px; display: none; }
+    .success { background: #e6f4ea; border: 1px solid #81c784; color: #2e7d32; }
+    .error   { background: #fdecea; border: 1px solid #e57373; color: #c62828; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h2>문제 일괄 등록</h2>
+  <p class="subtitle">엑셀 양식을 다운로드하여 작성 후 업로드하면 한 번에 등록됩니다.</p>
+
+  <div class="steps">
+    <div class="step"><div class="step-num">1</div><div class="step-text">양식 다운로드</div></div>
+    <div class="step-line"></div>
+    <div class="step"><div class="step-num">2</div><div class="step-text">도서 선택 · 문제 작성</div></div>
+    <div class="step-line"></div>
+    <div class="step"><div class="step-num">3</div><div class="step-text">파일 업로드</div></div>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="section">
+    <div class="section-title">STEP 1 &nbsp;·&nbsp; 엑셀 양식 다운로드</div>
+    <div class="section-desc">양식 안의 <strong>B2 셀 드롭다운</strong>에서 도서를 선택하고,<br>4행부터 문제를 입력하세요.</div>
+    <div class="btn-row">
+      <a class="btn btn-outline" href="/question/upload/template" download>📥 엑셀 양식 다운로드</a>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="section">
+    <div class="section-title">STEP 3 &nbsp;·&nbsp; 작성한 파일 업로드</div>
+    <label for="fileInput">.xlsx 파일 선택</label>
+    <input type="file" id="fileInput" accept=".xlsx" style="margin-bottom:12px;">
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="upload()">업로드</button>
+    </div>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+  async function upload() {
+    const file     = document.getElementById('fileInput').files[0];
+    const resultEl = document.getElementById('result');
+
+    if (!file) { show(resultEl, '파일을 선택해주세요.', false); return; }
+    if (!file.name.endsWith('.xlsx')) { show(resultEl, '.xlsx 형식의 파일만 업로드할 수 있습니다.', false); return; }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res  = await fetch('/question/upload', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        show(resultEl, '✔ ' + json.response, true);
+      } else {
+        show(resultEl, '✘ ' + (json.error?.message ?? '서버 오류가 발생했습니다.'), false);
+      }
+    } catch (e) {
+      show(resultEl, '✘ 요청 실패: ' + e.message, false);
+    }
+  }
+
+  function show(el, msg, ok) {
+    el.textContent   = msg;
+    el.className     = ok ? 'success' : 'error';
+    el.style.display = 'block';
+  }
+</script>
+</body>
+</html>

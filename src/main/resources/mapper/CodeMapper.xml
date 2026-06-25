@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.common.code.CodeRepository">
+
+    <insert id="registerCode" parameterType="com.hohoedu.book_clinic.common.code._dto.CodeReqDTO$RegisterReqDTO">
+        INSERT INTO erp_code (group_code, code, code_name, sort_order)
+        VALUES (#{groupCode}, #{code}, #{codeName}, #{sortOrder})
+    </insert>
+
+    <update id="updateCode" parameterType="com.hohoedu.book_clinic.common.code._dto.CodeReqDTO$UpdateReqDTO">
+        UPDATE erp_code
+        <set>
+            <if test="codeName != null">code_name = #{codeName},</if>
+            <if test="sortOrder != null">sort_order = #{sortOrder},</if>
+            <if test="useYn != null">use_yn = #{useYn},</if>
+        </set>
+        WHERE code_id = #{codeId}
+    </update>
+
+    <delete id="deleteCode">
+        DELETE FROM erp_code WHERE code_id = #{codeId}
+    </delete>
+
+    <select id="findByGroupCode" resultType="com.hohoedu.book_clinic.common.code._dto.CodeRespDTO$CodeDTO">
+        SELECT code_id, group_code, code, code_name, sort_order, use_yn
+        FROM erp_code
+        WHERE group_code = #{groupCode}
+        ORDER BY sort_order ASC
+    </select>
+
+    <select id="findAll" resultType="com.hohoedu.book_clinic.common.code._dto.CodeRespDTO$CodeDTO">
+        SELECT code_id, group_code, code, code_name, sort_order, use_yn
+        FROM erp_code
+        ORDER BY group_code ASC, sort_order ASC
+    </select>
+
+</mapper>

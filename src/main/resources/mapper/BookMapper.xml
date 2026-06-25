@@ -1,0 +1,157 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.bookstore.book.BookRepository">
+
+    <insert id="registerContent" parameterType="com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO$RegisterReqDTO">
+        INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords)
+        VALUES (#{title}, #{author}, #{genre}, #{contentType}, #{schoolYear}, #{summary}, #{keywords})
+    </insert>
+
+    <update id="updateContent" parameterType="com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO$UpdateReqDTO">
+        UPDATE erp_bookstore_content
+        <set>
+            <if test="title != null">original_title = #{title},</if>
+            <if test="author != null">author = #{author},</if>
+            <if test="genre != null">genre = #{genre},</if>
+            <if test="contentType != null">content_type = #{contentType},</if>
+            <if test="schoolYear != null">schoolyear = #{schoolYear},</if>
+            <if test="summary != null">summary = #{summary},</if>
+            <if test="keywords != null">keywords = #{keywords},</if>
+        </set>
+        WHERE content_id = #{contentId}
+    </update>
+
+    <select id="deleteBook" statementType="CALLABLE">
+        {call sp_delete_book(#{contentId, jdbcType=INTEGER}, #{deletedBy, jdbcType=VARCHAR})}
+    </select>
+
+    <select id="restoreBook" statementType="CALLABLE">
+        {call sp_restore_book(#{delId, jdbcType=INTEGER})}
+    </select>
+
+    <insert id="registerItem" parameterType="com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO$ItemRegisterReqDTO">
+        INSERT INTO erp_bookstore_item (bcode, content_id, book_title, publisher, keywords)
+        VALUES (#{bcode}, #{contentId}, #{bookTitle}, #{publisher}, #{keywords})
+    </insert>
+
+    <update id="updateItem" parameterType="com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO$ItemUpdateReqDTO">
+        UPDATE erp_bookstore_item
+        <set>
+            <if test="bookTitle != null">book_title = #{bookTitle},</if>
+            <if test="publisher != null">publisher = #{publisher},</if>
+            <if test="keywords != null">keywords = #{keywords},</if>
+        </set>
+        WHERE bcode = #{bcode}
+    </update>
+
+    <insert id="archiveItem">
+        INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, publisher, keywords)
+        SELECT #{deletedBy}, bcode, content_id, book_title, publisher, keywords
+        FROM erp_bookstore_item
+        WHERE bcode = #{bcode}
+    </insert>
+
+    <delete id="deleteItem">
+        DELETE FROM erp_bookstore_item WHERE bcode = #{bcode}
+    </delete>
+
+    <insert id="restoreItemFromDel">
+        INSERT INTO erp_bookstore_item (bcode, content_id, book_title, publisher, keywords)
+        SELECT bcode, content_id, book_title, publisher, keywords
+        FROM erp_bookstore_item_del
+        WHERE del_id = #{delId}
+    </insert>
+
+    <delete id="deleteItemDel">
+        DELETE FROM erp_bookstore_item_del WHERE del_id = #{delId}
+    </delete>
+
+    <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 복합 검색 -->
+    <select id="searchContents" resultType="com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO$ContentRespDTO">
+        SELECT content_id, original_title, author, genre, content_type, schoolyear, summary, keywords
+        FROM erp_bookstore_content
+        <where>
+            <if test="title != null and title != ''">AND original_title LIKE '%' + #{title} + '%'</if>
+            <if test="author != null and author != ''">AND author LIKE '%' + #{author} + '%'</if>
+            <if test="genre != null and genre != ''">AND genre = #{genre}</if>
+            <if test="schoolYear != null and schoolYear != ''">AND schoolyear = #{schoolYear}</if>
+            <if test="keyword != null and keyword != ''">AND keywords LIKE '%' + #{keyword} + '%'</if>
+            <if test="contentType != null and contentType != ''">AND content_type = #{contentType}</if>
+        </where>
+    </select>
+
+    <!-- 도서 제목으로 content_id 단건 조회 (엑셀 업로드 도서 선택 매핑용) -->
+    <select id="findContentIdByTitle" resultType="java.lang.Integer">
+        SELECT TOP 1 content_id FROM erp_bookstore_content WHERE original_title = #{title}
+    </select>
+
+    <!-- 6: 바코드로 단건 조회 -->
+    <select id="findItemByBcode" resultType="com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO$ItemRespDTO">
+        SELECT i.bcode, i.content_id, i.book_title, i.publisher, i.keywords, bc.center_code, bc.state
+        FROM erp_bookstore_item i
+        LEFT JOIN erp_bookstore_item_center bc ON i.bcode = bc.bcode
+        WHERE i.bcode = #{bcode}
+    </select>
+
+    <!-- 7~9: contentId / 상태 / 출판사 복합 검색 -->
+    <select id="searchItems" resultType="com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO$ItemRespDTO">
+        SELECT i.bcode, i.content_id, i.book_title, i.publisher, i.keywords, bc.center_code, bc.state
+        FROM erp_bookstore_item i
+        LEFT JOIN erp_bookstore_item_center bc ON i.bcode = bc.bcode
+        <where>
+            <if test="contentId != null">AND i.content_id = #{contentId}</if>
+            <if test="state != null and state != ''">AND bc.state = #{state}</if>
+            <if test="publisher != null and publisher != ''">AND i.publisher LIKE '%' + #{publisher} + '%'</if>
+        </where>
+    </select>
+
+    <!-- item_center CUD -->
+    <insert id="registerItemCenter" parameterType="com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO$ItemCenterRegisterReqDTO">
+        INSERT INTO erp_bookstore_item_center (bcode, center_code, quantity, state)
+        VALUES (#{bcode}, #{centerCode}, #{quantity}, #{state})
+    </insert>
+
+    <update id="updateItemCenter" parameterType="com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO$ItemCenterUpdateReqDTO">
+        UPDATE erp_bookstore_item_center
+        <set>
+            <if test="quantity != null">quantity = #{quantity},</if>
+            <if test="state != null">state = #{state},</if>
+        </set>
+        WHERE bcode = #{bcode} AND center_code = #{centerCode}
+    </update>
+
+    <delete id="deleteItemCenter">
+        DELETE FROM erp_bookstore_item_center
+        WHERE bcode = #{bcode} AND center_code = #{centerCode}
+    </delete>
+
+    <delete id="deleteItemCenterByBcode">
+        DELETE FROM erp_bookstore_item_center WHERE bcode = #{bcode}
+    </delete>
+
+    <!-- 삭제된 실물도서 목록 -->
+    <select id="findDeletedItems" resultType="com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO$ItemDelRespDTO">
+        SELECT del_id, deleted_at, deleted_by, bcode, content_id, book_title, publisher, keywords
+        FROM erp_bookstore_item_del
+        ORDER BY deleted_at DESC
+    </select>
+
+    <!-- 센터별 보유 도서 목록 -->
+    <select id="findItemsByCenter" resultType="com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO$ItemCenterRespDTO">
+        SELECT ic.bcode, ic.center_code, ic.quantity, ic.state, ic.registered_at, i.content_id, i.book_title, i.publisher, i.keywords
+        FROM erp_bookstore_item_center ic
+        JOIN erp_bookstore_item i ON ic.bcode = i.bcode
+        WHERE ic.center_code = #{centerCode}
+        ORDER BY ic.registered_at DESC
+    </select>
+
+    <!-- 10: 삭제된 도서 목록 -->
+    <select id="findDeletedContents" resultType="com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO$ContentDelRespDTO">
+        SELECT del_id, deleted_at, deleted_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords
+        FROM erp_bookstore_content_del
+        ORDER BY deleted_at DESC
+    </select>
+
+</mapper>

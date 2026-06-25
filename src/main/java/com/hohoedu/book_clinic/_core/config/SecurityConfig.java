@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
 @EnableWebSecurity
@@ -20,7 +21,9 @@ public class SecurityConfig {
         http
                 .authenticationProvider(customAuthenticationProvider)
                 .csrf(csrf -> csrf
-                        .ignoringRequestMatchers("/h2-console/**"))
+                        .csrfTokenRepository(new StaticCsrfTokenRepository())
+                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload"))
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
@@ -29,11 +32,14 @@ public class SecurityConfig {
                                 "/login", "/join",
                                 "/error",
                                 "/h2-console/**",
-                                "/css/**", "/js/**", "/images/**", "/favicon.ico")
+                                "/css/**", "/js/**", "/images/**", "/favicon.ico",
+                                "/temp-upload.html",
+                                "/question/upload/template",
+                                "/question/upload")
                         .permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
-                        .defaultSuccessUrl("/")
+                        .defaultSuccessUrl("/api/user/me")
                         .permitAll())
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login")

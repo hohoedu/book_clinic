@@ -1,0 +1,22 @@
+{"properties": [
+  {
+    "name": "PASSWORD",
+    "type": "java.lang.String",
+    "description": "A description for 'PASSWORD'"
+  },
+  {
+    "name": "USERNAME",
+    "type": "java.lang.String",
+    "description": "A description for 'USERNAME'"
+  },
+  {
+    "name": "DEV_USERNAME",
+    "type": "java.lang.String",
+    "description": "A description for 'DEV_USERNAME'"
+  },
+  {
+    "name": "DEV_PASSWORD",
+    "type": "java.lang.String",
+    "description": "A description for 'DEV_PASSWORD'"
+  }
+]}

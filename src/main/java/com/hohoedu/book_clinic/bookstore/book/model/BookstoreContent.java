@@ -1,4 +1,4 @@
-package com.hohoedu.book_clinic.bookstore.model;
+package com.hohoedu.book_clinic.bookstore.book.model;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -12,13 +12,15 @@ public class BookstoreContent {
     private String originalTitle;
     private String author;
     private String genre;
-    private String contentType;  // DB 컬럼명 'class' — Java 예약어로 인해 변경
+    private String contentType;
     private String schoolyear;
     private String summary;
+    private String keywords;
 
     @Builder
     public BookstoreContent(Integer contentId, String originalTitle, String author,
-                            String genre, String contentType, String schoolyear, String summary) {
+                            String genre, String contentType, String schoolyear,
+                            String summary, String keywords) {
         this.contentId = contentId;
         this.originalTitle = originalTitle;
         this.author = author;
@@ -26,5 +28,6 @@ public class BookstoreContent {
         this.contentType = contentType;
         this.schoolyear = schoolyear;
         this.summary = summary;
+        this.keywords = keywords;
     }
 }
