@@ -1,12 +1,12 @@
-package com.hohoedu.book_clinic.bookstore.question;
+package com.hohoedu.book_clinic.question;
 
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import com.hohoedu.book_clinic.bookstore.question._dto.QuestionReqDTO;
-import com.hohoedu.book_clinic.bookstore.question._dto.QuestionRespDTO;
+import com.hohoedu.book_clinic.question._dto.QuestionReqDTO;
+import com.hohoedu.book_clinic.question._dto.QuestionRespDTO;
 
 /**
  * 문제 MyBatis 매퍼 인터페이스
@@ -25,10 +25,10 @@ public interface QuestionRepository {
     void updateQuestion(QuestionReqDTO.UpdateReqDTO reqDTO);
 
     /** 문제를 itempool_del 테이블로 이관 (삭제 전 보관) */
-    void archiveQuestion(@Param("contentId") Integer contentId, @Param("qnum") String qnum, @Param("deletedBy") String deletedBy);
+    void archiveQuestion(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qnum") String qnum, @Param("deletedBy") String deletedBy);
 
     /** 문제 삭제 */
-    void deleteQuestion(@Param("contentId") Integer contentId, @Param("qnum") String qnum);
+    void deleteQuestion(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qnum") String qnum);
 
     /** itempool_del에서 itempool로 복원 */
     void restoreQuestionFromDel(@Param("delId") Integer delId);
@@ -36,10 +36,16 @@ public interface QuestionRepository {
     /** itempool_del 레코드 삭제 */
     void deleteQuestionDel(@Param("delId") Integer delId);
 
-    /** 도서별 문제 목록 조회 (contentId 필수, qtype/state 선택) */
-    List<QuestionRespDTO.QuestionDTO> searchQuestions(@Param("contentId") Integer contentId, @Param("qtype") String qtype, @Param("state") String state);
+    /** 도서별 문제 목록 조회 (contentId 필수, qlevel/qtype/state 선택) */
+    List<QuestionRespDTO.QuestionDTO> searchQuestions(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qtype") String qtype, @Param("state") String state);
 
     /** 삭제된 문제 목록 조회 (contentId 기준) */
     List<QuestionRespDTO.QuestionDelDTO> findDeletedQuestions(@Param("contentId") Integer contentId);
+
+    /** 등록 대상 목록 중 이미 존재하는 문제 조회 (중복 체크용) */
+    List<QuestionRespDTO.DuplicateInfo> findExistingQuestions(@Param("list") List<QuestionReqDTO.RegisterReqDTO> list);
+
+    /** 문제 전체 내용 업데이트 (덮어쓰기용) */
+    void overwriteQuestion(QuestionReqDTO.RegisterReqDTO reqDTO);
 
 }

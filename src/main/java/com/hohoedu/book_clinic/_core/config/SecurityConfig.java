@@ -23,7 +23,8 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(new StaticCsrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
-                        .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload"))
+                        .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload",
+                                "/api/notification/**"))
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth

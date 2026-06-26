@@ -49,8 +49,8 @@ public class StoredProcedureInitializer implements ApplicationRunner {
             BEGIN
                 SET NOCOUNT ON;
 
-                INSERT INTO erp_bookstore_itempool_del (deleted_by, content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
-                SELECT @deletedBy, content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+                INSERT INTO erp_bookstore_itempool_del (deleted_by, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+                SELECT @deletedBy, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
                 FROM erp_bookstore_itempool WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_itempool WHERE content_id = @contentId;
@@ -98,8 +98,8 @@ public class StoredProcedureInitializer implements ApplicationRunner {
                 FROM erp_bookstore_item_del
                 WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
 
-                INSERT INTO erp_bookstore_itempool (content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
-                SELECT content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+                INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+                SELECT content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
                 FROM erp_bookstore_itempool_del
                 WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
 

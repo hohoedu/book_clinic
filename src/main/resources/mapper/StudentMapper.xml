@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.student.StudentRepository">
+
+    <select id="findById" resultType="com.hohoedu.book_clinic.student.model.Student">
+        SELECT id, created_at, updated_at, center_code, grade_key, status_key, school,
+               student_id, student_name, address, address_detail, app_id, app_password,
+               app_token, birth, profile_img, consult_key, billing_phone, serial_num,
+               gender, student_privacy_agree, is_hoho, sub_han, sub_book, sub_hoho
+        FROM erp_student
+        WHERE student_id = #{studentId}
+    </select>
+
+    <select id="findTokensByCenter" resultType="String">
+        SELECT app_token
+        FROM erp_student
+        WHERE center_code = #{centerCode}
+          AND app_token IS NOT NULL
+          AND app_token != ''
+    </select>
+
+    <select id="findAllTokens" resultType="String">
+        SELECT app_token
+        FROM erp_student
+        WHERE app_token IS NOT NULL
+          AND app_token != ''
+    </select>
+
+</mapper>

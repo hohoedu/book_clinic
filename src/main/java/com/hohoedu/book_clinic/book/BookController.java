@@ -1,5 +1,6 @@
-package com.hohoedu.book_clinic.bookstore.book;
+package com.hohoedu.book_clinic.book;
 
+import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,7 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
-import com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO;
+import com.hohoedu.book_clinic.book._dto.BookReqDTO;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,28 +39,28 @@ public class BookController {
 
     /** 마스터 도서 등록 */
     @PostMapping("/register")
-    public ResponseEntity<?> registerContent(@RequestBody BookReqDTO.RegisterReqDTO reqDTO) {
+    public ResponseEntity<?> registerContent(@RequestBody @Valid BookReqDTO.RegisterReqDTO reqDTO) {
         bookService.registerContent(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
     }
 
     /** 마스터 도서 수정 */
     @PostMapping("/update")
-    public ResponseEntity<?> updateContent(@RequestBody BookReqDTO.UpdateReqDTO reqDTO) {
+    public ResponseEntity<?> updateContent(@RequestBody @Valid BookReqDTO.UpdateReqDTO reqDTO) {
         bookService.updateContent(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
     /** 마스터 도서 삭제 (연결된 실물도서, 문제까지 일괄 삭제 후 del 테이블 이관) */
     @PostMapping("/delete")
-    public ResponseEntity<?> deleteBook(@RequestBody BookReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+    public ResponseEntity<?> deleteBook(@RequestBody @Valid BookReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
         bookService.deleteBook(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }
 
     /** 마스터 도서 복구 (del 테이블에서 원본 테이블로 복원) */
     @PostMapping("/restore")
-    public ResponseEntity<?> restoreBook(@RequestBody BookReqDTO.RestoreReqDTO reqDTO) {
+    public ResponseEntity<?> restoreBook(@RequestBody @Valid BookReqDTO.RestoreReqDTO reqDTO) {
         bookService.restoreBook(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("복구되었습니다."));
     }
@@ -87,28 +88,28 @@ public class BookController {
 
     /** 실물 도서 등록 (ISBN 최초 등록 시 센터 매핑도 동시 처리) */
     @PostMapping("/item/register")
-    public ResponseEntity<?> registerItem(@RequestBody BookReqDTO.ItemRegisterReqDTO reqDTO) {
+    public ResponseEntity<?> registerItem(@RequestBody @Valid BookReqDTO.ItemRegisterReqDTO reqDTO) {
         bookService.registerItem(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
     }
 
     /** 실물 도서 수정 (도서 제목, 출판사, 키워드) */
     @PostMapping("/item/update")
-    public ResponseEntity<?> updateItem(@RequestBody BookReqDTO.ItemUpdateReqDTO reqDTO) {
+    public ResponseEntity<?> updateItem(@RequestBody @Valid BookReqDTO.ItemUpdateReqDTO reqDTO) {
         bookService.updateItem(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
     /** 실물 도서 삭제 (센터 매핑 제거 후 del 테이블 이관) */
     @PostMapping("/item/delete")
-    public ResponseEntity<?> deleteItem(@RequestBody BookReqDTO.ItemDeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+    public ResponseEntity<?> deleteItem(@RequestBody @Valid BookReqDTO.ItemDeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
         bookService.deleteItem(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }
 
     /** 실물 도서 복구 (del 테이블에서 원본 테이블로 복원) */
     @PostMapping("/item/restore")
-    public ResponseEntity<?> restoreItem(@RequestBody BookReqDTO.ItemRestoreReqDTO reqDTO) {
+    public ResponseEntity<?> restoreItem(@RequestBody @Valid BookReqDTO.ItemRestoreReqDTO reqDTO) {
         bookService.restoreItem(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("복구되었습니다."));
     }
@@ -142,22 +143,24 @@ public class BookController {
      * ISBN이 이미 등록된 경우, 다른 센터에서 동일 ISBN을 보유할 때 사용
      */
     @PostMapping("/item/center/register")
-    public ResponseEntity<?> registerItemCenter(@RequestBody BookReqDTO.ItemCenterRegisterReqDTO reqDTO) {
+    public ResponseEntity<?> registerItemCenter(@RequestBody @Valid BookReqDTO.ItemCenterRegisterReqDTO reqDTO) {
         bookService.registerItemCenter(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
     }
 
     /** 센터 도서 수량/상태 수정 */
     @PutMapping("/item/center/update")
-    public ResponseEntity<?> updateItemCenter(@RequestBody BookReqDTO.ItemCenterUpdateReqDTO reqDTO) {
+    public ResponseEntity<?> updateItemCenter(@RequestBody @Valid BookReqDTO.ItemCenterUpdateReqDTO reqDTO) {
         bookService.updateItemCenter(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
-    /** 센터 도서 매핑 삭제 (해당 센터에서 ISBN 제거) */
-    @DeleteMapping("/item/center/delete")
-    public ResponseEntity<?> deleteItemCenter(@RequestBody BookReqDTO.ItemCenterDeleteReqDTO reqDTO) {
-        bookService.deleteItemCenter(reqDTO);
+    /** 센터 도서 매핑 삭제 — PathVariable로 전달 (DELETE with body는 클라이언트 호환성 문제) */
+    @DeleteMapping("/item/center/{bcode}/{centerCode}")
+    public ResponseEntity<?> deleteItemCenter(
+            @PathVariable("bcode") String bcode,
+            @PathVariable("centerCode") String centerCode) {
+        bookService.deleteItemCenter(bcode, centerCode);
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }
 

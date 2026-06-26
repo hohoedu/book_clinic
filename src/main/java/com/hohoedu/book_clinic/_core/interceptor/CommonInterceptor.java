@@ -13,7 +13,10 @@ public class CommonInterceptor implements HandlerInterceptor {
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {
-        System.out.println("[요청] " + request.getMethod() + " " + request.getRequestURI());
+        String uri = request.getRequestURI();
+        if (!uri.equals("/error")) {
+            System.out.println("[요청] " + request.getMethod() + " " + uri);
+        }
         return true;
     }
 }

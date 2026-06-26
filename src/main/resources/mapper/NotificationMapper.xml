@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.common.notification.NotificationRepository">
+
+    <resultMap id="NotificationResultMap" type="com.hohoedu.book_clinic.common.notification.model.Notification">
+        <id     column="id"          property="id"/>
+        <result column="sent_at"     property="sentAt"/>
+        <result column="sent_by"     property="sentBy"/>
+        <result column="title"       property="title"/>
+        <result column="body"        property="body"/>
+        <result column="target_type" property="targetType"/>
+        <result column="target_id"   property="targetId" javaType="String"/>
+        <result column="fcm_token"   property="fcmToken"/>
+        <result column="status"      property="status"/>
+        <result column="error_msg"   property="errorMsg"/>
+    </resultMap>
+
+    <insert id="save">
+        INSERT INTO erp_notification (sent_by, title, body, target_type, target_id, fcm_token, status, error_msg)
+        VALUES (#{sentBy}, #{title}, #{body}, #{targetType}, #{targetId}, #{fcmToken}, #{status}, #{errorMsg})
+    </insert>
+
+    <select id="findAll" resultMap="NotificationResultMap">
+        SELECT id, sent_at, sent_by, title, body, target_type, target_id, fcm_token, status, error_msg
+        FROM erp_notification
+        ORDER BY sent_at DESC
+    </select>
+
+    <select id="findByTargetId" resultMap="NotificationResultMap">
+        SELECT id, sent_at, sent_by, title, body, target_type, target_id, fcm_token, status, error_msg
+        FROM erp_notification
+        WHERE target_id = #{targetId}
+        ORDER BY sent_at DESC
+    </select>
+
+</mapper>

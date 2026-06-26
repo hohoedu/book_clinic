@@ -1,4 +1,4 @@
-package com.hohoedu.book_clinic.bookstore.book._dto;
+package com.hohoedu.book_clinic.book._dto;
 
 import lombok.Data;
 

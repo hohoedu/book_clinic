@@ -1,12 +1,10 @@
-package com.hohoedu.book_clinic.bookstore.question;
+package com.hohoedu.book_clinic.question;
 
 import java.io.IOException;
-import java.util.List;
 
 import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,11 +16,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import jakarta.validation.Valid;
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
-import com.hohoedu.book_clinic.bookstore.book.BookService;
-import com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO;
-import com.hohoedu.book_clinic.bookstore.question._dto.QuestionReqDTO;
+import com.hohoedu.book_clinic.question._dto.QuestionReqDTO;
+import com.hohoedu.book_clinic.question._dto.QuestionRespDTO;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,32 +36,31 @@ import lombok.extern.slf4j.Slf4j;
 public class QuestionController {
 
     private final QuestionService questionService;
-    private final BookService bookService;
 
     /** 문제 등록 */
     @PostMapping("/register")
-    public ResponseEntity<?> registerQuestion(@RequestBody QuestionReqDTO.RegisterReqDTO reqDTO) {
+    public ResponseEntity<?> registerQuestion(@RequestBody @Valid QuestionReqDTO.RegisterReqDTO reqDTO) {
         questionService.registerQuestion(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
     }
 
     /** 문제 수정 */
     @PostMapping("/update")
-    public ResponseEntity<?> updateQuestion(@RequestBody QuestionReqDTO.UpdateReqDTO reqDTO) {
+    public ResponseEntity<?> updateQuestion(@RequestBody @Valid QuestionReqDTO.UpdateReqDTO reqDTO) {
         questionService.updateQuestion(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
     /** 문제 삭제 (itempool_del로 이관) */
     @PostMapping("/delete")
-    public ResponseEntity<?> deleteQuestion(@RequestBody QuestionReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+    public ResponseEntity<?> deleteQuestion(@RequestBody @Valid QuestionReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
         questionService.deleteQuestion(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }
 
     /** 문제 복구 (itempool_del에서 itempool로 복원) */
     @PostMapping("/restore")
-    public ResponseEntity<?> restoreQuestion(@RequestBody QuestionReqDTO.RestoreReqDTO reqDTO) {
+    public ResponseEntity<?> restoreQuestion(@RequestBody @Valid QuestionReqDTO.RestoreReqDTO reqDTO) {
         questionService.restoreQuestion(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("복구되었습니다."));
     }
@@ -74,27 +71,27 @@ public class QuestionController {
      */
     @GetMapping("/search")
     public ResponseEntity<?> searchQuestions(
-            @RequestParam(value = "contentId") Integer contentId,
-            @RequestParam(value = "qtype", required = false) String qtype,
-            @RequestParam(value = "state", required = false) String state) {
-        return ResponseEntity.ok(ApiUtils.success(questionService.searchQuestions(contentId, qtype, state)));
+            @RequestParam Integer contentId,
+            @RequestParam(required = false) String qlevel,
+            @RequestParam(required = false) String qtype,
+            @RequestParam(required = false) String state) {
+        return ResponseEntity.ok(ApiUtils.success(questionService.searchQuestions(contentId, qlevel, qtype, state)));
     }
 
     /** 삭제된 문제 목록 조회 (복구 화면용) */
     @GetMapping("/deleted")
     public ResponseEntity<?> findDeletedQuestions(
-            @RequestParam(value = "contentId") Integer contentId) {
+            @RequestParam Integer contentId) {
         return ResponseEntity.ok(ApiUtils.success(questionService.findDeletedQuestions(contentId)));
     }
 
     /**
      * 문제 일괄 등록용 엑셀 양식 다운로드
-     * DB에서 도서 목록을 조회해 엑셀 B2 셀에 드롭다운으로 삽입
+     * QuestionService 내부에서 DB 도서 목록 조회 후 드롭다운 삽입
      */
     @GetMapping("/upload/template")
     public ResponseEntity<byte[]> downloadTemplate() throws IOException {
-        List<BookRespDTO.ContentRespDTO> books = bookService.searchContents(null, null, null, null, null, null);
-        try (Workbook wb = questionService.createUploadTemplate(books);
+        try (Workbook wb = questionService.createUploadTemplate();
              java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
             wb.write(out);
             HttpHeaders headers = new HttpHeaders();
@@ -106,17 +103,21 @@ public class QuestionController {
 
     /**
      * 엑셀 파일로 문제 일괄 등록
-     * 도서는 엑셀 B2 셀 드롭다운에서 선택 — contentId 별도 전달 불필요
+     * mode=check(기본): 중복 확인만, 중복 있으면 409 반환
+     * mode=overwrite: 기존 비활성화 후 새 문제 삽입
+     * mode=inactive: 새 문제를 비활성으로 삽입
      */
     @PostMapping("/upload")
-    public ResponseEntity<?> uploadQuestions(@RequestParam(value = "file") MultipartFile file) {
-        try {
-            int count = questionService.uploadQuestions(file);
-            return ResponseEntity.ok(ApiUtils.success(count + "개의 문제가 등록되었습니다."));
-        } catch (Exception e) {
-            log.error("엑셀 업로드 실패: {}", e.getMessage(), e);
-            return ResponseEntity.badRequest().body(ApiUtils.error(e.getMessage(), HttpStatus.BAD_REQUEST));
+    public ResponseEntity<?> uploadQuestions(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "mode", defaultValue = "check") String mode,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IOException {
+        String uploadedBy = userDetails != null ? userDetails.getUsername() : "SYSTEM";
+        QuestionRespDTO.UploadResultDTO result = questionService.uploadQuestions(file, mode, uploadedBy);
+        if (result.hasDuplicates()) {
+            return ResponseEntity.status(409).body(ApiUtils.success(result));
         }
+        return ResponseEntity.ok(ApiUtils.success(result));
     }
 
 }

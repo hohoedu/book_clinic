@@ -1,12 +1,13 @@
-package com.hohoedu.book_clinic.bookstore.book;
+package com.hohoedu.book_clinic.book;
 
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO;
-import com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO;
+import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic.book._dto.BookReqDTO;
+import com.hohoedu.book_clinic.book._dto.BookRespDTO;
 
 import lombok.RequiredArgsConstructor;
 
@@ -43,17 +44,19 @@ public class BookService {
 
     /**
      * 실물 도서 등록
-     * ISBN 최초 등록 시 item과 item_center를 동시에 INSERT
+     * ISBN 최초 등록 시 item INSERT 후, centerCode가 있으면 item_center도 함께 INSERT
      */
     @Transactional
     public void registerItem(BookReqDTO.ItemRegisterReqDTO reqDTO) {
         bookRepository.registerItem(reqDTO);
-        BookReqDTO.ItemCenterRegisterReqDTO centerDTO = new BookReqDTO.ItemCenterRegisterReqDTO();
-        centerDTO.setBcode(reqDTO.getBcode());
-        centerDTO.setCenterCode(reqDTO.getCenterCode());
-        centerDTO.setQuantity(reqDTO.getQuantity());
-        centerDTO.setState(reqDTO.getState());
-        bookRepository.registerItemCenter(centerDTO);
+        if (reqDTO.getCenterCode() != null && !reqDTO.getCenterCode().isBlank()) {
+            BookReqDTO.ItemCenterRegisterReqDTO centerDTO = new BookReqDTO.ItemCenterRegisterReqDTO();
+            centerDTO.setBcode(reqDTO.getBcode());
+            centerDTO.setCenterCode(reqDTO.getCenterCode());
+            centerDTO.setQuantity(reqDTO.getQuantity());
+            centerDTO.setState(reqDTO.getState());
+            bookRepository.registerItemCenter(centerDTO);
+        }
     }
 
     /** 실물 도서 수정 (제목, 출판사, 키워드) */
@@ -87,9 +90,11 @@ public class BookService {
         return bookRepository.searchContents(title, author, genre, schoolYear, keyword, contentType);
     }
 
-    /** 바코드(ISBN)로 실물 도서 단건 조회 */
+    /** 바코드(ISBN)로 실물 도서 단건 조회 — 없으면 404 */
     public BookRespDTO.ItemRespDTO findItemByBcode(String bcode) {
-        return bookRepository.findItemByBcode(bcode);
+        BookRespDTO.ItemRespDTO item = bookRepository.findItemByBcode(bcode);
+        if (item == null) throw new Exception404("해당 바코드의 실물 도서를 찾을 수 없습니다: " + bcode);
+        return item;
     }
 
     /** 실물 도서 검색 (마스터ID/상태/출판사 복합 조건) */
@@ -123,7 +128,7 @@ public class BookService {
     }
 
     /** 센터 도서 매핑 삭제 */
-    public void deleteItemCenter(BookReqDTO.ItemCenterDeleteReqDTO reqDTO) {
-        bookRepository.deleteItemCenter(reqDTO.getBcode(), reqDTO.getCenterCode());
+    public void deleteItemCenter(String bcode, String centerCode) {
+        bookRepository.deleteItemCenter(bcode, centerCode);
     }
 }

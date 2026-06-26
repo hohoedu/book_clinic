@@ -1,5 +1,7 @@
-package com.hohoedu.book_clinic.bookstore.book._dto;
+package com.hohoedu.book_clinic.book._dto;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 /** 도서 관련 요청 DTO 모음 */
@@ -8,6 +10,7 @@ public class BookReqDTO {
     /** 마스터 도서 등록 요청 */
     @Data
     public static class RegisterReqDTO {
+        @NotBlank(message = "도서 제목은 필수입니다.")
         private String title;
         private String author;
         private String genre;
@@ -20,6 +23,7 @@ public class BookReqDTO {
     /** 마스터 도서 수정 요청 */
     @Data
     public static class UpdateReqDTO {
+        @NotNull(message = "도서 ID는 필수입니다.")
         private Integer contentId;
         private String title;
         private String author;
@@ -33,12 +37,14 @@ public class BookReqDTO {
     /** 마스터 도서 삭제 요청 */
     @Data
     public static class DeleteReqDTO {
+        @NotNull(message = "도서 ID는 필수입니다.")
         private Integer contentId;
     }
 
     /** 마스터 도서 복구 요청 */
     @Data
     public static class RestoreReqDTO {
+        @NotNull(message = "삭제 이력 ID는 필수입니다.")
         private Integer delId;
     }
 
@@ -48,7 +54,9 @@ public class BookReqDTO {
      */
     @Data
     public static class ItemRegisterReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
         private String bcode;
+        @NotNull(message = "마스터 도서 ID는 필수입니다.")
         private Integer contentId;
         private String bookTitle;
         private String publisher;
@@ -61,6 +69,7 @@ public class BookReqDTO {
     /** 실물 도서 수정 요청 */
     @Data
     public static class ItemUpdateReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
         private String bcode;
         private String bookTitle;
         private String publisher;
@@ -70,12 +79,14 @@ public class BookReqDTO {
     /** 실물 도서 삭제 요청 */
     @Data
     public static class ItemDeleteReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
         private String bcode;
     }
 
     /** 실물 도서 복구 요청 */
     @Data
     public static class ItemRestoreReqDTO {
+        @NotNull(message = "삭제 이력 ID는 필수입니다.")
         private Integer delId;
     }
 
@@ -85,7 +96,9 @@ public class BookReqDTO {
      */
     @Data
     public static class ItemCenterRegisterReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
         private String bcode;
+        @NotBlank(message = "센터 코드는 필수입니다.")
         private String centerCode;
         private Integer quantity;
         private String state;
@@ -94,17 +107,12 @@ public class BookReqDTO {
     /** 센터 도서 수량/상태 수정 요청 */
     @Data
     public static class ItemCenterUpdateReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
         private String bcode;
+        @NotBlank(message = "센터 코드는 필수입니다.")
         private String centerCode;
         private Integer quantity;
         private String state;
-    }
-
-    /** 센터 도서 매핑 삭제 요청 */
-    @Data
-    public static class ItemCenterDeleteReqDTO {
-        private String bcode;
-        private String centerCode;
     }
 
 }

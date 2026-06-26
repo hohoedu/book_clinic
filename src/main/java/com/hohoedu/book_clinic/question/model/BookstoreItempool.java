@@ -1,4 +1,4 @@
-package com.hohoedu.book_clinic.bookstore.question.model;
+package com.hohoedu.book_clinic.question.model;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -9,6 +9,7 @@ import lombok.NoArgsConstructor;
 public class BookstoreItempool {
 
     private Integer contentId;
+    private String qlevel;
     private String qnum;
     private String q;
     private String qex;
@@ -22,10 +23,11 @@ public class BookstoreItempool {
     private String state;
 
     @Builder
-    public BookstoreItempool(Integer contentId, String qnum, String q, String qex,
+    public BookstoreItempool(Integer contentId, String qlevel, String qnum, String q, String qex,
                              String e1, String e2, String e3, String e4,
                              String ans, String qtype, String qexgb, String state) {
         this.contentId = contentId;
+        this.qlevel = qlevel;
         this.qnum = qnum;
         this.q = q;
         this.qex = qex;

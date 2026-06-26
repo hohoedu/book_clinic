@@ -1,5 +1,5 @@
 -- DROP (FK 역순)
--- DROP (FK 역순)
+IF OBJECT_ID('erp_notification',           'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',         'U') IS NOT NULL DROP TABLE erp_bookstore_code;
 IF OBJECT_ID('erp_bookstore_itempool_del', 'U') IS NOT NULL DROP TABLE erp_bookstore_itempool_del;
 IF OBJECT_ID('erp_bookstore_itempool',     'U') IS NOT NULL DROP TABLE erp_bookstore_itempool;
@@ -151,6 +151,7 @@ CREATE TABLE erp_bookstore_item_del (
 
 CREATE TABLE erp_bookstore_itempool (
     content_id     INT,
+    qlevel         VARCHAR(20),
     qnum           VARCHAR(20),
     q              NVARCHAR(2000),
     qex            NVARCHAR(2000),
@@ -162,7 +163,8 @@ CREATE TABLE erp_bookstore_itempool (
     qtype          VARCHAR(20),
     qexgb          VARCHAR(20),
     state          VARCHAR(20),
-    PRIMARY KEY (content_id, qnum),
+
+    PRIMARY KEY (content_id, qlevel, qnum),
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
@@ -180,6 +182,20 @@ CREATE TABLE erp_bookstore_itempool_del (
     e4             NVARCHAR(500),
     ans            VARCHAR(100),
     qtype          VARCHAR(20),
+    qlevel         VARCHAR(20),
     qexgb          VARCHAR(20),
     state          VARCHAR(20)
+);
+
+CREATE TABLE erp_notification (
+    id            INT IDENTITY(1,1) PRIMARY KEY,
+    sent_at       DATETIME2    DEFAULT CURRENT_TIMESTAMP,
+    sent_by       VARCHAR(100),
+    title         NVARCHAR(200),
+    body          NVARCHAR(1000),
+    target_type   VARCHAR(20),
+    target_id     VARCHAR(100),
+    fcm_token     VARCHAR(500),
+    status        VARCHAR(10),
+    error_msg     VARCHAR(500)
 );

@@ -1,4 +1,4 @@
-package com.hohoedu.book_clinic.bookstore.book.model;
+package com.hohoedu.book_clinic.book.model;
 
 import lombok.Builder;
 import lombok.Getter;

@@ -1,0 +1,513 @@
+{
+  "info": {
+    "name": "호호책방 API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:8000"
+    }
+  ],
+  "item": [
+    {
+      "name": "인증 (Auth)",
+      "item": [
+        {
+          "name": "로그인",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{BASE_URL}}/login",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "username", "value": "" },
+                { "key": "password", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "로그아웃",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{BASE_URL}}/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "사용자 (User)",
+      "item": [
+        {
+          "name": "내 정보 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/api/user/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "학생 (Student)",
+      "item": [
+        {
+          "name": "FCM 토큰 저장",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/api/student/fcm-token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"studentId\": \"\",\n  \"fcmToken\": \"\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "도서 - 마스터 (Book Content)",
+      "item": [
+        {
+          "name": "마스터 도서 등록",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\",\n  \"author\": \"\",\n  \"genre\": \"\",\n  \"contentType\": \"\",\n  \"schoolYear\": \"\",\n  \"summary\": \"\",\n  \"keywords\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "마스터 도서 수정",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentId\": 0,\n  \"title\": \"\",\n  \"author\": \"\",\n  \"genre\": \"\",\n  \"contentType\": \"\",\n  \"schoolYear\": \"\",\n  \"summary\": \"\",\n  \"keywords\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "마스터 도서 삭제",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/delete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentId\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "마스터 도서 복구",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/restore",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delId\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "마스터 도서 검색",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/book/search",
+              "host": ["{{BASE_URL}}"],
+              "path": ["book", "search"],
+              "query": [
+                { "key": "title", "value": "", "disabled": true },
+                { "key": "author", "value": "", "disabled": true },
+                { "key": "genre", "value": "", "disabled": true },
+                { "key": "schoolYear", "value": "", "disabled": true },
+                { "key": "keyword", "value": "", "disabled": true },
+                { "key": "contentType", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "삭제된 마스터 도서 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/book/deleted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "도서 - 실물 (Book Item)",
+      "item": [
+        {
+          "name": "실물 도서 등록",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcode\": \"\",\n  \"contentId\": 0,\n  \"bookTitle\": \"\",\n  \"publisher\": \"\",\n  \"keywords\": \"\",\n  \"centerCode\": \"\",\n  \"quantity\": 0,\n  \"state\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "실물 도서 수정",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcode\": \"\",\n  \"bookTitle\": \"\",\n  \"publisher\": \"\",\n  \"keywords\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "실물 도서 삭제",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/delete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcode\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "실물 도서 복구",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/restore",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delId\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "실물 도서 단건 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/book/item/:bcode",
+            "variable": [{ "key": "bcode", "value": "" }]
+          }
+        },
+        {
+          "name": "실물 도서 검색",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/book/item/search",
+              "host": ["{{BASE_URL}}"],
+              "path": ["book", "item", "search"],
+              "query": [
+                { "key": "contentId", "value": "", "disabled": true },
+                { "key": "state", "value": "", "disabled": true },
+                { "key": "publisher", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "삭제된 실물 도서 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/book/item/deleted"
+          }
+        }
+      ]
+    },
+    {
+      "name": "도서 - 센터 (Book Item Center)",
+      "item": [
+        {
+          "name": "센터 도서 등록",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/center/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcode\": \"\",\n  \"centerCode\": \"\",\n  \"quantity\": 0,\n  \"state\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "센터 도서 수정",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/center/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcode\": \"\",\n  \"centerCode\": \"\",\n  \"quantity\": 0,\n  \"state\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "센터 도서 삭제",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/book/item/center/delete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bcode\": \"\",\n  \"centerCode\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "센터 보유 도서 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/book/item/center/:centerCode",
+            "variable": [{ "key": "centerCode", "value": "" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "문제 (Question)",
+      "item": [
+        {
+          "name": "문제 등록",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/question/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentId\": 0,\n  \"qnum\": \"\",\n  \"q\": \"\",\n  \"qex\": \"\",\n  \"e1\": \"\",\n  \"e2\": \"\",\n  \"e3\": \"\",\n  \"e4\": \"\",\n  \"ans\": \"\",\n  \"qtype\": \"\",\n  \"qexgb\": \"\",\n  \"state\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "문제 수정",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/question/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentId\": 0,\n  \"qnum\": \"\",\n  \"q\": \"\",\n  \"qex\": \"\",\n  \"e1\": \"\",\n  \"e2\": \"\",\n  \"e3\": \"\",\n  \"e4\": \"\",\n  \"ans\": \"\",\n  \"qtype\": \"\",\n  \"qexgb\": \"\",\n  \"state\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "문제 삭제",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/question/delete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contentId\": 0,\n  \"qnum\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "문제 복구",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/question/restore",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"delId\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "문제 검색",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/question/search?contentId=",
+              "host": ["{{BASE_URL}}"],
+              "path": ["question", "search"],
+              "query": [
+                { "key": "contentId", "value": "" },
+                { "key": "qtype", "value": "", "disabled": true },
+                { "key": "state", "value": "", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "삭제된 문제 목록",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/question/deleted?contentId=",
+              "host": ["{{BASE_URL}}"],
+              "path": ["question", "deleted"],
+              "query": [
+                { "key": "contentId", "value": "" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "엑셀 양식 다운로드",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/question/upload/template"
+          }
+        },
+        {
+          "name": "엑셀 일괄 등록",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{BASE_URL}}/question/upload",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "file", "type": "file", "src": "" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "공통 코드 (Code)",
+      "item": [
+        {
+          "name": "공통 코드 등록",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/code/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"groupCode\": \"\",\n  \"code\": \"\",\n  \"codeName\": \"\",\n  \"sortOrder\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "공통 코드 수정",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/code/update",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codeId\": 0,\n  \"codeName\": \"\",\n  \"sortOrder\": 0,\n  \"useYn\": true\n}"
+            }
+          }
+        },
+        {
+          "name": "공통 코드 삭제",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/code/delete",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"codeId\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "그룹별 코드 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/code/list/:groupCode",
+            "variable": [{ "key": "groupCode", "value": "" }]
+          }
+        },
+        {
+          "name": "전체 코드 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/code/list"
+          }
+        }
+      ]
+    },
+    {
+      "name": "알림 (Notification)",
+      "item": [
+        {
+          "name": "알림 발송 - 단건",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/api/notification/send",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\",\n  \"body\": \"\",\n  \"targetType\": \"STUDENT\",\n  \"targetValue\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "알림 발송 - 센터 전체",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/api/notification/send",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\",\n  \"body\": \"\",\n  \"targetType\": \"CENTER\",\n  \"targetValue\": \"\"\n}"
+            }
+          }
+        },
+        {
+          "name": "알림 발송 - 전체",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{BASE_URL}}/api/notification/send",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"\",\n  \"body\": \"\",\n  \"targetType\": \"ALL\"\n}"
+            }
+          }
+        },
+        {
+          "name": "전체 발송 이력 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/api/notification/history"
+          }
+        },
+        {
+          "name": "학생별 발송 이력 조회",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{BASE_URL}}/api/notification/history/student/:studentId",
+            "variable": [{ "key": "studentId", "value": "" }]
+          }
+        }
+      ]
+    }
+  ]
+}

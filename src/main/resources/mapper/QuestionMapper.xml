@@ -2,27 +2,27 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.hohoedu.book_clinic.bookstore.question.QuestionRepository">
+<mapper namespace="com.hohoedu.book_clinic.question.QuestionRepository">
 
     <!-- 문제 등록 -->
-    <insert id="registerQuestion" parameterType="com.hohoedu.book_clinic.bookstore.question._dto.QuestionReqDTO$RegisterReqDTO">
-        INSERT INTO erp_bookstore_itempool (content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
-        VALUES (#{contentId}, #{qnum}, #{q}, #{qex}, #{e1}, #{e2}, #{e3}, #{e4}, #{ans}, #{qtype}, #{qexgb}, #{state})
+    <insert id="registerQuestion" parameterType="com.hohoedu.book_clinic.question._dto.QuestionReqDTO$RegisterReqDTO">
+        INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+        VALUES (#{contentId}, #{qlevel}, #{qnum}, #{q}, #{qex}, #{e1}, #{e2}, #{e3}, #{e4}, #{ans}, #{qtype}, #{qexgb}, #{state})
     </insert>
 
     <!-- 문제 일괄 등록 (엑셀 업로드용) -->
     <insert id="registerQuestionBatch">
-        INSERT INTO erp_bookstore_itempool (content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+        INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
         VALUES
         <foreach collection="list" item="item" separator=",">
-            (#{item.contentId}, #{item.qnum}, #{item.q}, #{item.qex},
+            (#{item.contentId}, #{item.qlevel}, #{item.qnum}, #{item.q}, #{item.qex},
              #{item.e1}, #{item.e2}, #{item.e3}, #{item.e4},
              #{item.ans}, #{item.qtype}, #{item.qexgb}, #{item.state})
         </foreach>
     </insert>
 
     <!-- 문제 수정 -->
-    <update id="updateQuestion" parameterType="com.hohoedu.book_clinic.bookstore.question._dto.QuestionReqDTO$UpdateReqDTO">
+    <update id="updateQuestion" parameterType="com.hohoedu.book_clinic.question._dto.QuestionReqDTO$UpdateReqDTO">
         UPDATE erp_bookstore_itempool
         <set>
             <if test="q != null">q = #{q},</if>
@@ -36,27 +36,27 @@
             <if test="qexgb != null">qexgb = #{qexgb},</if>
             <if test="state != null">state = #{state},</if>
         </set>
-        WHERE content_id = #{contentId} AND qnum = #{qnum}
+        WHERE content_id = #{contentId} AND qlevel = #{qlevel} AND qnum = #{qnum}
     </update>
 
     <!-- 문제 삭제 전 itempool_del로 이관 -->
     <insert id="archiveQuestion">
-        INSERT INTO erp_bookstore_itempool_del (deleted_by, content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
-        SELECT #{deletedBy}, content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+        INSERT INTO erp_bookstore_itempool_del (deleted_by, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+        SELECT #{deletedBy}, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
         FROM erp_bookstore_itempool
-        WHERE content_id = #{contentId} AND qnum = #{qnum}
+        WHERE content_id = #{contentId} AND qlevel = #{qlevel} AND qnum = #{qnum}
     </insert>
 
     <!-- 문제 삭제 -->
     <delete id="deleteQuestion">
         DELETE FROM erp_bookstore_itempool
-        WHERE content_id = #{contentId} AND qnum = #{qnum}
+        WHERE content_id = #{contentId} AND qlevel = #{qlevel} AND qnum = #{qnum}
     </delete>
 
     <!-- itempool_del에서 itempool로 복원 -->
     <insert id="restoreQuestionFromDel">
-        INSERT INTO erp_bookstore_itempool (content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
-        SELECT content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+        INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+        SELECT content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
         FROM erp_bookstore_itempool_del
         WHERE del_id = #{delId}
     </insert>
@@ -66,21 +66,41 @@
         DELETE FROM erp_bookstore_itempool_del WHERE del_id = #{delId}
     </delete>
 
-    <!-- 도서별 문제 목록 조회 (contentId 필수, qtype/state 선택) -->
-    <select id="searchQuestions" resultType="com.hohoedu.book_clinic.bookstore.question._dto.QuestionRespDTO$QuestionDTO">
-        SELECT content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+    <!-- 도서별 문제 목록 조회 (contentId 필수, qlevel/qtype/state 선택) -->
+    <select id="searchQuestions" resultType="com.hohoedu.book_clinic.question._dto.QuestionRespDTO$QuestionDTO">
+        SELECT content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
         FROM erp_bookstore_itempool
         <where>
             AND content_id = #{contentId}
+            <if test="qlevel != null and qlevel != ''">AND qlevel = #{qlevel}</if>
             <if test="qtype != null and qtype != ''">AND qtype = #{qtype}</if>
             <if test="state != null and state != ''">AND state = #{state}</if>
         </where>
-        ORDER BY qnum ASC
+        ORDER BY qlevel ASC, qnum ASC
     </select>
 
+    <!-- 중복 문제 존재 여부 배치 조회 -->
+    <select id="findExistingQuestions" resultType="com.hohoedu.book_clinic.question._dto.QuestionRespDTO$DuplicateInfo">
+        SELECT i.content_id AS contentId, i.qlevel, i.qnum, c.original_title AS bookTitle
+        FROM erp_bookstore_itempool i
+        JOIN erp_bookstore_content c ON i.content_id = c.content_id
+        WHERE 1=0
+        <foreach collection="list" item="item">
+            OR (i.content_id = #{item.contentId} AND i.qlevel = #{item.qlevel} AND i.qnum = #{item.qnum})
+        </foreach>
+    </select>
+
+    <!-- 문제 전체 내용 업데이트 (덮어쓰기용) -->
+    <update id="overwriteQuestion" parameterType="com.hohoedu.book_clinic.question._dto.QuestionReqDTO$RegisterReqDTO">
+        UPDATE erp_bookstore_itempool
+        SET q=#{q}, qex=#{qex}, e1=#{e1}, e2=#{e2}, e3=#{e3}, e4=#{e4},
+            ans=#{ans}, qtype=#{qtype}, qexgb=#{qexgb}, state=#{state}
+        WHERE content_id=#{contentId} AND qlevel=#{qlevel} AND qnum=#{qnum}
+    </update>
+
     <!-- 삭제된 문제 목록 조회 -->
-    <select id="findDeletedQuestions" resultType="com.hohoedu.book_clinic.bookstore.question._dto.QuestionRespDTO$QuestionDelDTO">
-        SELECT del_id, deleted_at, deleted_by, content_id, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+    <select id="findDeletedQuestions" resultType="com.hohoedu.book_clinic.question._dto.QuestionRespDTO$QuestionDelDTO">
+        SELECT del_id, deleted_at, deleted_by, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
         FROM erp_bookstore_itempool_del
         WHERE content_id = #{contentId}
         ORDER BY deleted_at DESC

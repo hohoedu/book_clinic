@@ -31,11 +31,38 @@
     .btn-primary:hover { background: #3578c4; }
     .btn-outline { background: #fff; color: #4a90d9; border: 1.5px solid #4a90d9; text-decoration: none; display: inline-flex; align-items: center; }
     .btn-outline:hover { background: #eaf3ff; }
+    .btn-danger  { background: #e53935; color: #fff; }
+    .btn-danger:hover  { background: #c62828; }
+    .btn-secondary { background: #fff; color: #555; border: 1.5px solid #ccc; }
+    .btn-secondary:hover { background: #f5f5f5; }
 
     /* 결과 */
-    #result { margin-top: 16px; padding: 13px 16px; border-radius: 6px; font-size: 14px; display: none; }
+    #result { margin-top: 16px; padding: 13px 16px; border-radius: 6px; font-size: 14px; display: none; line-height: 1.7; }
     .success { background: #e6f4ea; border: 1px solid #81c784; color: #2e7d32; }
     .error   { background: #fdecea; border: 1px solid #e57373; color: #c62828; }
+
+    /* 로딩 */
+    #loading { display: none; margin-top: 16px; }
+    .progress-bar-wrap { background: #e3eaf8; border-radius: 999px; height: 10px; overflow: hidden; }
+    .progress-bar { height: 100%; width: 0; background: #4a90d9; border-radius: 999px; transition: width 0.2s ease; }
+    .progress-bar.indeterminate { animation: indeterminate 1.4s infinite ease-in-out; width: auto; }
+    @keyframes indeterminate {
+      0%   { margin-left: 0;    width: 0; }
+      50%  { margin-left: 15%;  width: 70%; }
+      100% { margin-left: 100%; width: 0; }
+    }
+    .loading-text { font-size: 13px; color: #4a90d9; margin-top: 8px; text-align: center; }
+
+    /* 모달 */
+    .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; align-items: center; justify-content: center; }
+    .modal-backdrop.open { display: flex; }
+    .modal { background: #fff; border-radius: 12px; padding: 28px 32px; width: 440px; max-width: 90vw; box-shadow: 0 8px 32px rgba(0,0,0,.18); }
+    .modal h3 { font-size: 16px; color: #222; margin: 0 0 6px; }
+    .modal .modal-sub { font-size: 13px; color: #888; margin: 0 0 16px; }
+    .dup-list { max-height: 180px; overflow-y: auto; border: 1px solid #e8edf5; border-radius: 6px; padding: 8px 12px; margin-bottom: 20px; }
+    .dup-item { font-size: 13px; color: #444; padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+    .dup-item:last-child { border-bottom: none; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
   </style>
 </head>
 <body>
@@ -54,7 +81,7 @@
   <!-- STEP 1 -->
   <div class="section">
     <div class="section-title">STEP 1 &nbsp;·&nbsp; 엑셀 양식 다운로드</div>
-    <div class="section-desc">양식 안의 <strong>B2 셀 드롭다운</strong>에서 도서를 선택하고,<br>4행부터 문제를 입력하세요.</div>
+    <div class="section-desc">양식 안의 <strong>A열 드롭다운</strong>에서 도서를 선택하고,<br>2행부터 문제를 입력하세요.</div>
     <div class="btn-row">
       <a class="btn btn-outline" href="/question/upload/template" download>📥 엑셀 양식 다운로드</a>
     </div>
@@ -66,39 +93,121 @@
     <label for="fileInput">.xlsx 파일 선택</label>
     <input type="file" id="fileInput" accept=".xlsx" style="margin-bottom:12px;">
     <div class="btn-row">
-      <button class="btn btn-primary" onclick="upload()">업로드</button>
+      <button class="btn btn-primary" onclick="upload('check')">업로드</button>
     </div>
   </div>
 
+  <div id="loading">
+    <div class="progress-bar-wrap"><div class="progress-bar"></div></div>
+    <div class="loading-text">업로드 중입니다...</div>
+  </div>
   <div id="result"></div>
 </div>
 
-<script>
-  async function upload() {
-    const file     = document.getElementById('fileInput').files[0];
-    const resultEl = document.getElementById('result');
+<!-- 중복 확인 모달 -->
+<div class="modal-backdrop" id="dupModal">
+  <div class="modal">
+    <h3>이미 등록된 문제가 있습니다</h3>
+    <p class="modal-sub">아래 문제가 이미 존재합니다. 어떻게 처리할까요?</p>
+    <div class="dup-list" id="dupList"></div>
+    <div class="modal-actions">
+      <button class="btn btn-danger"    onclick="upload('overwrite')">예 (기존 내용 덮어쓰기)</button>
+      <button class="btn btn-secondary" onclick="upload('skip')">아니오 (중복 건너뛰기)</button>
+      <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+    </div>
+  </div>
+</div>
 
+<script>
+  const loadingEl  = document.getElementById('loading');
+  const progressEl = loadingEl.querySelector('.progress-bar');
+  const loadingTxt = loadingEl.querySelector('.loading-text');
+  const resultEl   = document.getElementById('result');
+
+  function upload(mode) {
+    const file = document.getElementById('fileInput').files[0];
     if (!file) { show(resultEl, '파일을 선택해주세요.', false); return; }
     if (!file.name.endsWith('.xlsx')) { show(resultEl, '.xlsx 형식의 파일만 업로드할 수 있습니다.', false); return; }
+
+    closeModal();
+    resultEl.style.display = 'none';
+    setProgress(0, '업로드 준비 중...');
 
     const formData = new FormData();
     formData.append('file', file);
 
-    try {
-      const res  = await fetch('/question/upload', { method: 'POST', body: formData });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        show(resultEl, '✔ ' + json.response, true);
-      } else {
-        show(resultEl, '✘ ' + (json.error?.message ?? '서버 오류가 발생했습니다.'), false);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/question/upload?mode=' + mode);
+
+    // 실제 파일 전송 진행률
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        setProgress(pct, `업로드 중... ${pct}%`);
       }
-    } catch (e) {
-      show(resultEl, '✘ 요청 실패: ' + e.message, false);
-    }
+    };
+
+    // 전송 완료 후 서버 처리 중
+    xhr.upload.onload = () => setIndeterminate('서버 처리 중...');
+
+    xhr.onload = () => {
+      hideLoading();
+      try {
+        const json = JSON.parse(xhr.responseText);
+        if (xhr.status === 409 && json.response?.duplicates?.length) {
+          showDupModal(json.response.duplicates);
+          return;
+        }
+        if (xhr.status === 200 && json.success) {
+          const r = json.response;
+          show(resultEl,
+            `✔ ${r.total}건 등록 &nbsp;|&nbsp; 활성 ${r.activeCount}건 / 비활성 ${r.inactiveCount}건`,
+            true);
+        } else {
+          show(resultEl, '✘ ' + (json.error?.message ?? '서버 오류가 발생했습니다.'), false);
+        }
+      } catch (e) {
+        show(resultEl, '✘ 응답 파싱 오류: ' + e.message, false);
+      }
+    };
+
+    xhr.onerror = () => { hideLoading(); show(resultEl, '✘ 요청 실패', false); };
+
+    xhr.send(formData);
+  }
+
+  function setProgress(pct, text) {
+    loadingEl.style.display = 'block';
+    progressEl.classList.remove('indeterminate');
+    progressEl.style.width = pct + '%';
+    loadingTxt.textContent = text;
+  }
+
+  function setIndeterminate(text) {
+    progressEl.classList.add('indeterminate');
+    loadingTxt.textContent = text;
+  }
+
+  function hideLoading() {
+    loadingEl.style.display = 'none';
+    progressEl.classList.remove('indeterminate');
+    progressEl.style.width = '0';
+  }
+
+  function showDupModal(duplicates) {
+    const list = document.getElementById('dupList');
+    list.innerHTML = duplicates
+      .map(d => `<div class="dup-item">📖 ${d.bookTitle} &nbsp;—&nbsp; ${d.qnum}번 문제</div>`)
+      .join('');
+    document.getElementById('dupModal').classList.add('open');
+  }
+
+  function closeModal() {
+    document.getElementById('dupModal').classList.remove('open');
   }
 
   function show(el, msg, ok) {
-    el.textContent   = msg;
+    el.innerHTML     = msg;
     el.className     = ok ? 'success' : 'error';
     el.style.display = 'block';
   }

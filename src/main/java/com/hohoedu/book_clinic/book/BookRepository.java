@@ -1,12 +1,12 @@
-package com.hohoedu.book_clinic.bookstore.book;
+package com.hohoedu.book_clinic.book;
 
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
-import com.hohoedu.book_clinic.bookstore.book._dto.BookReqDTO;
-import com.hohoedu.book_clinic.bookstore.book._dto.BookRespDTO;
+import com.hohoedu.book_clinic.book._dto.BookReqDTO;
+import com.hohoedu.book_clinic.book._dto.BookRespDTO;
 
 /**
  * 도서 MyBatis 매퍼 인터페이스
