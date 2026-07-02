@@ -14,8 +14,11 @@ public class BookRespDTO {
         private String originalTitle;
         private String author;
         private String genre;
+        private String genreName;
         private String contentType;
+        private String contentTypeName;
         private String schoolyear;
+        private String schoolyearName;
         private String summary;
         private String keywords;
     }

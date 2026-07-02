@@ -70,15 +70,22 @@
 
     <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 복합 검색 -->
     <select id="searchContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentRespDTO">
-        SELECT content_id, original_title, author, genre, content_type, schoolyear, summary, keywords
-        FROM erp_bookstore_content
+        SELECT bc.content_id, bc.original_title, bc.author,
+               bc.genre, g.codeNm AS genre_name,
+               bc.content_type, ct.codeNm AS content_type_name,
+               bc.schoolyear, s.codeNm AS schoolyear_name,
+               bc.summary, bc.keywords
+        FROM erp_bookstore_content bc
+        LEFT JOIN erp_bookstore_code g ON g.gubun = 'G' AND g.code = bc.genre
+        LEFT JOIN erp_bookstore_code s ON s.gubun = 'S' AND s.code = bc.schoolyear
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         <where>
-            <if test="title != null and title != ''">AND original_title LIKE '%' + #{title} + '%'</if>
-            <if test="author != null and author != ''">AND author LIKE '%' + #{author} + '%'</if>
-            <if test="genre != null and genre != ''">AND genre = #{genre}</if>
-            <if test="schoolYear != null and schoolYear != ''">AND schoolyear = #{schoolYear}</if>
-            <if test="keyword != null and keyword != ''">AND keywords LIKE '%' + #{keyword} + '%'</if>
-            <if test="contentType != null and contentType != ''">AND content_type = #{contentType}</if>
+            <if test="title != null and title != ''">AND bc.original_title LIKE '%' + #{title} + '%'</if>
+            <if test="author != null and author != ''">AND bc.author LIKE '%' + #{author} + '%'</if>
+            <if test="genre != null and genre != ''">AND bc.genre = #{genre}</if>
+            <if test="schoolYear != null and schoolYear != ''">AND bc.schoolyear = #{schoolYear}</if>
+            <if test="keyword != null and keyword != ''">AND bc.keywords LIKE '%' + #{keyword} + '%'</if>
+            <if test="contentType != null and contentType != ''">AND bc.content_type = #{contentType}</if>
         </where>
     </select>
 

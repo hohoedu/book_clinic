@@ -1,0 +1,121 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans KR", sans-serif;
+  color: #222;
+  background: #f5f7f8;
+  height: 100%;
+  overflow: hidden;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+}
+
+.admin-layout {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  min-height: 100vh;
+  transition: grid-template-columns .25s ease;
+  overflow: hidden;
+}
+
+.admin-layout.sidebar-open {
+  grid-template-columns: 228px 1fr;
+}
+
+.content {
+  min-width: 0;
+  background: #f5f7f8;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.page-header {
+  height: 56px;
+  padding: 0 28px;
+  background: #fff;
+  border-bottom: 1px solid #e8ecef;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.guide-btn {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+  color: #555;
+}
+
+.btn {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 6px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.btn.small {
+  height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.btn.primary {
+  background: #008b7a;
+  color: #fff;
+}
+
+.btn.outline {
+  border: 1px solid #ddd;
+  background: #fff;
+  color: #333;
+}
+
+.btn.danger-outline {
+  border: 1px solid #ff5b4f;
+  background: #fff;
+  color: #ff4b3f;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid #d8dde2;
+  border-radius: 6px;
+  background: #fff;
+  font-size: 14px;
+}
+
+input:not([type="radio"]):not([type="checkbox"]),
+select {
+  height: 38px;
+  padding: 0 12px;
+}
+
+textarea {
+  padding: 12px;
+  resize: none;
+  line-height: 1.5;
+}

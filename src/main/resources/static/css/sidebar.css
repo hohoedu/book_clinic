@@ -1,0 +1,132 @@
+.sidebar {
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 72px 156px;
+  background: #007c6e;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar-main {
+  background: #006f61;
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 20;
+}
+
+.sidebar-logo {
+  width: 44px;
+  height: 44px;
+  margin: 16px 0 20px;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.sidebar-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.main-menu {
+  width: 100%;
+}
+
+.main-menu-item {
+  width: 100%;
+  height: 78px;
+  color: #fff;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12px;
+  opacity: .95;
+}
+
+.main-menu-item i {
+  font-size: 24px;
+}
+
+.main-menu-item.active {
+  background: #008b7a;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  width: 100%;
+  padding: 20px 8px;
+  border-top: 1px solid rgba(255,255,255,.25);
+}
+
+.quick-btn {
+  width: 42px;
+  height: 28px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 800;
+  margin: 5px auto;
+  display: block;
+}
+
+.quick-btn.pink {
+  background: #ff7bd4;
+  color: #3d1740;
+}
+
+.quick-btn.green {
+  background: #5ed16f;
+  color: #063b20;
+}
+
+.sidebar-sub {
+  width: 156px;
+  background: #007c6e;
+  padding-top: 86px;
+  transform: translateX(-156px);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform .25s ease, opacity .2s ease;
+  position: absolute;
+  left:72px;
+  top:0;
+  bottom:0;
+  z-index: 10;
+}
+
+.admin-layout.sidebar-open .sidebar-sub {
+  transform: translateX(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sub-menu {
+  display: none;
+  flex-direction: column;
+}
+
+.sub-menu.active {
+  display: flex;
+}
+
+.sub-menu a {
+  height: 40px;
+  padding-left: 18px;
+  color: #e9fffb;
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 40px;
+}
+
+.sub-menu a.active,
+.sub-menu a:hover {
+  background: #00a08e;
+  font-weight: 800;
+}

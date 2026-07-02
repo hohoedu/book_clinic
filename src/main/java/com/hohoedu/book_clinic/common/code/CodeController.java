@@ -49,7 +49,7 @@ public class CodeController {
 
     /** 특정 그룹 코드 목록 조회 (정렬순서 오름차순) */
     @GetMapping("/list/{groupCode}")
-    public ResponseEntity<?> findByGroupCode(@PathVariable String groupCode) {
+    public ResponseEntity<?> findByGroupCode(@PathVariable("groupCode") String groupCode) {
         return ResponseEntity.ok(ApiUtils.success(codeService.findByGroupCode(groupCode)));
     }
 

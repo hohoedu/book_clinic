@@ -1,0 +1,64 @@
+<aside class="sidebar" th:fragment="sidebar" xmlns:th="http://www.thymeleaf.org">
+
+  <div class="sidebar-main">
+    <div class="sidebar-logo">
+      <img th:src="@{/images/logo.png}" alt="호호책방">
+    </div>
+
+    <nav class="main-menu">
+
+      <button type="button" class="main-menu-item active" data-menu="data">
+        <i class="fa-solid fa-database"></i>
+        <span>데이터<br>관리</span>
+      </button>
+
+      <button type="button" class="main-menu-item" data-menu="operation">
+        <i class="fa-solid fa-gears"></i>
+        <span>운영관리</span>
+      </button>
+
+      <button type="button" class="main-menu-item" data-menu="monitor">
+        <i class="fa-solid fa-desktop"></i>
+        <span>모니터링</span>
+      </button>
+
+      <button type="button" class="main-menu-item" data-menu="growth">
+        <i class="fa-solid fa-chart-line"></i>
+        <span>성장관리</span>
+      </button>
+
+    </nav>
+
+    <div class="sidebar-bottom">
+      <button class="quick-btn green">메인으로</button>
+    </div>
+  </div>
+
+  <div class="sidebar-sub">
+
+    <div class="sub-menu active" data-sub="data">
+      <a th:href="@{/admin/book-data}">도서 데이터 관리</a>
+      <a href="book-ranking.html">권장도서 순위</a>
+      <a href="level-badge.html">레벨/뱃지 관리</a>
+    </div>
+
+    <div class="sub-menu" data-sub="operation">
+      <a href="operation.html">운영 현황</a>
+      <a href="center.html">기관 관리</a>
+      <a href="teacher.html">선생님 관리</a>
+    </div>
+
+    <div class="sub-menu" data-sub="monitor">
+      <a href="monitor.html">독서 모니터링</a>
+      <a href="student-progress.html">학생 진행 현황</a>
+      <a href="result.html">결과 관리</a>
+    </div>
+
+    <div class="sub-menu" data-sub="growth">
+      <a href="growth.html">성장 리포트</a>
+      <a href="reward.html">리워드 관리</a>
+    </div>
+
+  </div>
+
+</aside>
