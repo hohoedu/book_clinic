@@ -43,6 +43,9 @@ dependencies {
 	testAnnotationProcessor 'org.projectlombok:lombok'
 
 	implementation 'com.google.firebase:firebase-admin:9.4.1'
+
+	// 가비아 이미지 호스팅 FTP 업로드
+	implementation 'commons-net:commons-net:3.11.1'
 }
 
 tasks.named('test') {

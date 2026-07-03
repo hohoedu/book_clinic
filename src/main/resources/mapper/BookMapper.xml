@@ -5,8 +5,8 @@
 <mapper namespace="com.hohoedu.book_clinic.book.BookRepository">
 
     <insert id="registerContent" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$RegisterReqDTO">
-        INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords)
-        VALUES (#{title}, #{author}, #{genre}, #{contentType}, #{schoolYear}, #{summary}, #{keywords})
+        INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
+        VALUES (#{title}, #{author}, #{genre}, #{contentType}, #{schoolYear}, #{summary}, #{keywords}, #{state}, #{publisher}, #{imageUrl}, #{readingTime}, #{difficulty})
     </insert>
 
     <update id="updateContent" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$UpdateReqDTO">
@@ -19,6 +19,11 @@
             <if test="schoolYear != null">schoolyear = #{schoolYear},</if>
             <if test="summary != null">summary = #{summary},</if>
             <if test="keywords != null">keywords = #{keywords},</if>
+            <if test="state != null">state = #{state},</if>
+            <if test="publisher != null">publisher = #{publisher},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
+            <if test="readingTime != null">reading_time = #{readingTime},</if>
+            <if test="difficulty != null">difficulty = #{difficulty},</if>
         </set>
         WHERE content_id = #{contentId}
     </update>
@@ -32,49 +37,57 @@
     </select>
 
     <insert id="registerItem" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$ItemRegisterReqDTO">
-        INSERT INTO erp_bookstore_item (bcode, content_id, book_title, publisher, keywords)
-        VALUES (#{bcode}, #{contentId}, #{bookTitle}, #{publisher}, #{keywords})
+        INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url)
+        VALUES (#{bcode}, #{contentId}, #{bookTitle}, #{author}, #{publisher}, #{imageUrl})
     </insert>
 
     <update id="updateItem" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$ItemUpdateReqDTO">
         UPDATE erp_bookstore_item
         <set>
             <if test="bookTitle != null">book_title = #{bookTitle},</if>
+            <if test="author != null">author = #{author},</if>
             <if test="publisher != null">publisher = #{publisher},</if>
-            <if test="keywords != null">keywords = #{keywords},</if>
+            <if test="imageUrl != null">image_url = #{imageUrl},</if>
         </set>
         WHERE bcode = #{bcode}
     </update>
 
+    <!-- 센터 보유분(bcode + center)을 item_del로 이관 (실물 레코드는 유지) -->
     <insert id="archiveItem">
-        INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, publisher, keywords)
-        SELECT #{deletedBy}, bcode, content_id, book_title, publisher, keywords
-        FROM erp_bookstore_item
-        WHERE bcode = #{bcode}
+        INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, author, publisher, image_url, center_code, quantity, state)
+        SELECT #{deletedBy}, i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, ic.center_code, ic.quantity, ic.state
+        FROM erp_bookstore_item i
+        JOIN erp_bookstore_item_center ic ON i.bcode = ic.bcode
+        WHERE i.bcode = #{bcode} AND ic.center_code = #{centerCode}
     </insert>
 
-    <delete id="deleteItem">
-        DELETE FROM erp_bookstore_item WHERE bcode = #{bcode}
-    </delete>
-
     <insert id="restoreItemFromDel">
-        INSERT INTO erp_bookstore_item (bcode, content_id, book_title, publisher, keywords)
-        SELECT bcode, content_id, book_title, publisher, keywords
+        INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url)
+        SELECT bcode, content_id, book_title, author, publisher, image_url
         FROM erp_bookstore_item_del
         WHERE del_id = #{delId}
+    </insert>
+
+    <!-- 실물도서 복구 시 센터 매핑(item_center)도 함께 복원 (center_code가 보관돼 있을 때만) -->
+    <insert id="restoreItemCenterFromDel">
+        INSERT INTO erp_bookstore_item_center (bcode, center_code, quantity, state)
+        SELECT bcode, center_code, ISNULL(quantity, 0), state
+        FROM erp_bookstore_item_del
+        WHERE del_id = #{delId} AND center_code IS NOT NULL
     </insert>
 
     <delete id="deleteItemDel">
         DELETE FROM erp_bookstore_item_del WHERE del_id = #{delId}
     </delete>
 
-    <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 복합 검색 -->
+    <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 / 사용여부 복합 검색 -->
     <select id="searchContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentRespDTO">
         SELECT bc.content_id, bc.original_title, bc.author,
                bc.genre, g.codeNm AS genre_name,
                bc.content_type, ct.codeNm AS content_type_name,
                bc.schoolyear, s.codeNm AS schoolyear_name,
-               bc.summary, bc.keywords
+               bc.summary, bc.keywords,
+               bc.state, bc.publisher, bc.image_url, bc.reading_time, bc.difficulty
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_code g ON g.gubun = 'G' AND g.code = bc.genre
         LEFT JOIN erp_bookstore_code s ON s.gubun = 'S' AND s.code = bc.schoolyear
@@ -86,6 +99,7 @@
             <if test="schoolYear != null and schoolYear != ''">AND bc.schoolyear = #{schoolYear}</if>
             <if test="keyword != null and keyword != ''">AND bc.keywords LIKE '%' + #{keyword} + '%'</if>
             <if test="contentType != null and contentType != ''">AND bc.content_type = #{contentType}</if>
+            <if test="state != null and state != ''">AND bc.state = #{state}</if>
         </where>
     </select>
 
@@ -96,7 +110,7 @@
 
     <!-- 6: 바코드로 단건 조회 -->
     <select id="findItemByBcode" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
-        SELECT i.bcode, i.content_id, i.book_title, i.publisher, i.keywords, bc.center_code, bc.state
+        SELECT i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, bc.center_code, bc.state
         FROM erp_bookstore_item i
         LEFT JOIN erp_bookstore_item_center bc ON i.bcode = bc.bcode
         WHERE i.bcode = #{bcode}
@@ -104,7 +118,7 @@
 
     <!-- 7~9: contentId / 상태 / 출판사 복합 검색 -->
     <select id="searchItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
-        SELECT i.bcode, i.content_id, i.book_title, i.publisher, i.keywords, bc.center_code, bc.state
+        SELECT i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, bc.center_code, bc.state
         FROM erp_bookstore_item i
         LEFT JOIN erp_bookstore_item_center bc ON i.bcode = bc.bcode
         <where>
@@ -129,25 +143,27 @@
         WHERE bcode = #{bcode} AND center_code = #{centerCode}
     </update>
 
-    <delete id="deleteItemCenter">
+    <!-- 실물도서 삭제 시: 해당 (bcode + 센터) 매핑만 제거 -->
+    <delete id="deleteItemCenterCode">
         DELETE FROM erp_bookstore_item_center
         WHERE bcode = #{bcode} AND center_code = #{centerCode}
     </delete>
 
-    <delete id="deleteItemCenterByBcode">
-        DELETE FROM erp_bookstore_item_center WHERE bcode = #{bcode}
+    <!-- 특정 센터의 모든 매핑 제거 -->
+    <delete id="deleteItemCenterByCenterCode">
+        DELETE FROM erp_bookstore_item_center WHERE center_code = #{centerCode}
     </delete>
 
     <!-- 삭제된 실물도서 목록 -->
     <select id="findDeletedItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemDelRespDTO">
-        SELECT del_id, deleted_at, deleted_by, bcode, content_id, book_title, publisher, keywords
+        SELECT del_id, deleted_at, deleted_by, bcode, content_id, book_title, author, publisher, image_url, center_code, quantity, state
         FROM erp_bookstore_item_del
         ORDER BY deleted_at DESC
     </select>
 
     <!-- 센터별 보유 도서 목록 -->
     <select id="findItemsByCenter" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemCenterRespDTO">
-        SELECT ic.bcode, ic.center_code, ic.quantity, ic.state, ic.registered_at, i.content_id, i.book_title, i.publisher, i.keywords
+        SELECT ic.bcode, ic.center_code, ic.quantity, ic.state, ic.registered_at, i.content_id, i.book_title, i.author, i.publisher, i.image_url
         FROM erp_bookstore_item_center ic
         JOIN erp_bookstore_item i ON ic.bcode = i.bcode
         WHERE ic.center_code = #{centerCode}

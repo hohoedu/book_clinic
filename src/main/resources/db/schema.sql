@@ -101,7 +101,12 @@ CREATE TABLE erp_bookstore_content (
     content_type   VARCHAR(50),
     schoolyear     VARCHAR(20),
     summary        VARCHAR(2000),
-    keywords       VARCHAR(1000)
+    keywords       VARCHAR(1000),
+    state          VARCHAR(20),
+    publisher      VARCHAR(100),
+    image_url      VARCHAR(500),
+    reading_time   VARCHAR(20),
+    difficulty     VARCHAR(20)
 );
 
 CREATE TABLE erp_bookstore_content_del (
@@ -115,15 +120,21 @@ CREATE TABLE erp_bookstore_content_del (
     content_type   VARCHAR(50),
     schoolyear     VARCHAR(20),
     summary        VARCHAR(2000),
-    keywords       VARCHAR(1000)
+    keywords       VARCHAR(1000),
+    state          VARCHAR(20),
+    publisher      VARCHAR(100),
+    image_url      VARCHAR(500),
+    reading_time   VARCHAR(20),
+    difficulty     VARCHAR(20)
 );
 
 CREATE TABLE erp_bookstore_item (
     bcode          VARCHAR(50)  PRIMARY KEY,
     content_id     INT,
     book_title     VARCHAR(255),
+    author         VARCHAR(100),
     publisher      VARCHAR(100),
-    keywords       VARCHAR(500),
+    image_url      VARCHAR(500),
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
@@ -145,8 +156,12 @@ CREATE TABLE erp_bookstore_item_del (
     bcode          VARCHAR(50),
     content_id     INT,
     book_title     VARCHAR(255),
+    author         VARCHAR(100),
     publisher      VARCHAR(100),
-    keywords       VARCHAR(500)
+    image_url      VARCHAR(500),
+    center_code    VARCHAR(20),
+    quantity       INT,
+    state          VARCHAR(20)
 );
 
 CREATE TABLE erp_bookstore_itempool (

@@ -48,6 +48,10 @@ public class BookService {
      */
     @Transactional
     public void registerItem(BookReqDTO.ItemRegisterReqDTO reqDTO) {
+        // ISBN을 쓰지 않으므로 bcode 미전달 시 숫자 UUID 자동 생성
+        if (reqDTO.getBcode() == null || reqDTO.getBcode().isBlank()) {
+            reqDTO.setBcode(generateNumericBcode());
+        }
         bookRepository.registerItem(reqDTO);
         if (reqDTO.getCenterCode() != null && !reqDTO.getCenterCode().isBlank()) {
             BookReqDTO.ItemCenterRegisterReqDTO centerDTO = new BookReqDTO.ItemCenterRegisterReqDTO();
@@ -65,29 +69,29 @@ public class BookService {
     }
 
     /**
-     * 실물 도서 삭제
-     * item_center FK 제약으로 인해 센터 매핑 먼저 삭제 후 item_del 이관
+     * 실물 도서(센터 보유) 삭제
+     * 우리 센터 보유분을 item_del로 이관한 뒤 해당 센터 매핑만 해제한다.
+     * 실물도서(item) 레코드는 유지 → 다른 센터 보유/공유에 영향 없음.
      */
     @Transactional
     public void deleteItem(BookReqDTO.ItemDeleteReqDTO reqDTO, String deletedBy) {
-        bookRepository.deleteItemCenterByBcode(reqDTO.getBcode());
-        bookRepository.archiveItem(reqDTO.getBcode(), deletedBy);
-        bookRepository.deleteItem(reqDTO.getBcode());
+        bookRepository.archiveItem(reqDTO.getBcode(), reqDTO.getCenterCode(), deletedBy);
+        bookRepository.deleteItemCenterCode(reqDTO.getBcode(), reqDTO.getCenterCode());
     }
 
     /**
      * 실물 도서 복구
-     * item_del에서 item으로 복원 후 del 레코드 제거
+     * 실물 레코드는 유지되므로 item_del에 보관된 센터 매핑만 되살린다.
      */
     @Transactional
     public void restoreItem(BookReqDTO.ItemRestoreReqDTO reqDTO) {
-        bookRepository.restoreItemFromDel(reqDTO.getDelId());
+        bookRepository.restoreItemCenterFromDel(reqDTO.getDelId());
         bookRepository.deleteItemDel(reqDTO.getDelId());
     }
 
-    /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형 복합 조건) */
-    public List<BookRespDTO.ContentRespDTO> searchContents(String title, String author, String genre, String schoolYear, String keyword, String contentType) {
-        return bookRepository.searchContents(title, author, genre, schoolYear, keyword, contentType);
+    /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형/사용여부 복합 조건) */
+    public List<BookRespDTO.ContentRespDTO> searchContents(String title, String author, String genre, String schoolYear, String keyword, String contentType, String state) {
+        return bookRepository.searchContents(title, author, genre, schoolYear, keyword, contentType, state);
     }
 
     /** 바코드(ISBN)로 실물 도서 단건 조회 — 없으면 404 */
@@ -129,6 +133,16 @@ public class BookService {
 
     /** 센터 도서 매핑 삭제 */
     public void deleteItemCenter(String bcode, String centerCode) {
-        bookRepository.deleteItemCenter(bcode, centerCode);
+        bookRepository.deleteItemCenterCode (bcode, centerCode);
+    }
+
+    /**
+     * 실물 도서 식별자(bcode) 생성 — ISBN을 사용하지 않으므로 숫자로만 이루어진 UUID를 발급한다.
+     * (타임스탬프 13자리 + 랜덤 5자리 = 18자리 숫자, VARCHAR(50) PK에 저장)
+     */
+    private String generateNumericBcode() {
+        long timestamp = System.currentTimeMillis();
+        int random = (int) (Math.random() * 100000);
+        return timestamp + String.format("%05d", random);
     }
 }

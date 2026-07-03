@@ -13,16 +13,16 @@ public class BookstoreItem {
     private String bookTitle;
     private String publisher;
     private String state;
-    private String keywords;
+    private String imageUrl;
 
     @Builder
     public BookstoreItem(String bcode, Integer contentId, String bookTitle,
-                         String publisher, String state, String keywords) {
+                         String publisher, String state, String imageUrl) {
         this.bcode = bcode;
         this.contentId = contentId;
         this.bookTitle = bookTitle;
         this.publisher = publisher;
         this.state = state;
-        this.keywords = keywords;
+        this.imageUrl = imageUrl;
     }
 }

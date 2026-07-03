@@ -58,14 +58,14 @@ public class StoredProcedureInitializer implements ApplicationRunner {
                 DELETE FROM erp_bookstore_item_center
                 WHERE bcode IN (SELECT bcode FROM erp_bookstore_item WHERE content_id = @contentId);
 
-                INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, publisher, keywords)
-                SELECT @deletedBy, bcode, content_id, book_title, publisher, keywords
+                INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, author, publisher, image_url)
+                SELECT @deletedBy, bcode, content_id, book_title, author, publisher, image_url
                 FROM erp_bookstore_item WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_item WHERE content_id = @contentId;
 
-                INSERT INTO erp_bookstore_content_del (deleted_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords)
-                SELECT @deletedBy, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords
+                INSERT INTO erp_bookstore_content_del (deleted_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
+                SELECT @deletedBy, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty
                 FROM erp_bookstore_content WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_content WHERE content_id = @contentId;
@@ -87,14 +87,14 @@ public class StoredProcedureInitializer implements ApplicationRunner {
 
                 SET IDENTITY_INSERT erp_bookstore_content ON;
 
-                INSERT INTO erp_bookstore_content (content_id, original_title, author, genre, content_type, schoolyear, summary, keywords)
-                SELECT content_id, original_title, author, genre, content_type, schoolyear, summary, keywords
+                INSERT INTO erp_bookstore_content (content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
+                SELECT content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty
                 FROM erp_bookstore_content_del WHERE del_id = @delId;
 
                 SET IDENTITY_INSERT erp_bookstore_content OFF;
 
-                INSERT INTO erp_bookstore_item (bcode, content_id, book_title, publisher, keywords)
-                SELECT bcode, content_id, book_title, publisher, keywords
+                INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url)
+                SELECT bcode, content_id, book_title, author, publisher, image_url
                 FROM erp_bookstore_item_del
                 WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
 

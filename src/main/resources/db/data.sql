@@ -64,26 +64,32 @@ INSERT INTO erp_bookstore_code (gubun, code, codeNm) VALUES
 ('L',	'02',	'심화');
 
 INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, password_hash, salt, type, use_yn, is_han, is_book, is_clinic)
-VALUES ('CENTER01', 'ADMIN', 'USR001', 'admin', '관리자', '5a936b52f3d505ad53c895eaf94ac3e683f6dbcb74cbff46a7fc9d0f1e8e94b8', 'test_salt', 'ADMIN', 1, 1, 1, 1);
+VALUES ('PUS001', 'ADMIN', 'USR001', 'admin', '관리자', '5a936b52f3d505ad53c895eaf94ac3e683f6dbcb74cbff46a7fc9d0f1e8e94b8', 'test_salt', 'ADMIN', 1, 1, 1, 1);
+
+-- 비본사(지점) 테스트 계정 — admin과 동일 비밀번호, 센터만 PUS002 (본사 PUS001 아님) / 실물도서 등록 테스트용
+INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, password_hash, salt, type, use_yn, is_han, is_book, is_clinic) VALUES 
+('PUS002', 'ADMIN', 'USR002', 'branch', '지점관리자', '5a936b52f3d505ad53c895eaf94ac3e683f6dbcb74cbff46a7fc9d0f1e8e94b8', 'test_salt', 'ADMIN', 1, 1, 1, 1),
+('DAE001', 'ADMIN', 'USR003', 'branch2', '지점관리자', '5a936b52f3d505ad53c895eaf94ac3e683f6dbcb74cbff46a7fc9d0f1e8e94b8', 'test_salt', 'ADMIN', 1, 1, 1, 1);
 
 INSERT INTO erp_student (gender, student_privacy_agree, created_at, updated_at, app_id, center_code, grade_key, status_key, school, student_id, student_name, address, address_detail, app_password, app_token, birth, is_hoho, billing_phone, sub_han, sub_book, sub_hoho, serial_num)
 VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880', 'PUS001', '13', 'ACTIVE', '호호 초등학교', 'PUS001251202FDA6E', '김호이', '부산 해운대구 센텀중앙로 97', 'A동 2810호', '62da5956da04fdedd0ff08a3f8c812793ef4219cd0405d44bf5412f3264fecf0', 'el7jugjIxU2ikFMRCZyTK8:APA91bE2fkQ6TDmwXcy7sHIdScsIMJ7mGrkixZxYLwpVuDWogq3aXHxbAStlasw7h1VeByp0Ey0iU9MUiiiMCqyOGwNpYOqDOHeq7A4rwp17ATklirE2oOU', '2015-12-12',  0, '01062954886', 1, 1, 0, '002260002');
-INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords) VALUES 
-('어린왕자', '생텍쥐페리', '02', '03', '01', '어린왕자의 모험 이야기', '어린왕자, 안토안 드 생텍쥐페리'),
-('나의 라임오렌지나무', 'J. M. 데 바스콘셀로스', '01', '04', '05', 
-'학년필독서 / 너무도 일찍 슬픔을 발견한 다섯 살 꼬마 제제와 라임오렌지나무 밍기뉴의 아름답고도 가슴 저미는 이야기이다.', '나의 라임오렌지나무, J. M. 데 바스콘셀로스'),
-('신데렐라', '달리는곰셋 기획팀', '02', '01', '02', '/', null);
 
-INSERT INTO erp_bookstore_item (bcode, content_id, book_title, publisher, keywords) VALUES
-('9791191200157', 1, '어린왕자', '문학동네', null),
-('9788972976196', 2, '나의 라임오렌지나무', '동녘', null),
-('8809416540023', 3, '신데렐라', '달리는곰셋', null);
-    
+INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty) VALUES 
+('어린왕자', '생텍쥐페리', '02', '03', '01', '어린왕자의 모험 이야기', '어린왕자, 안토안 드 생텍쥐페리','Y','문학동네', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg', 30, 1),
+('나의 라임오렌지나무', 'J. M. 데 바스콘셀로스', '01', '04', '05', 
+'학년필독서 / 너무도 일찍 슬픔을 발견한 다섯 살 꼬마 제제와 라임오렌지나무 밍기뉴의 아름답고도 가슴 저미는 이야기이다.', '나의 라임오렌지나무, J. M. 데 바스콘셀로스', 'Y','동녘', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg', 30, 3),
+('신데렐라', '달리는곰셋 기획팀', '02', '01', '02', '/', null, 'N', '달리는곰셋', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg', 30, 5);
+
+INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url) VALUES
+('9791191200157', 1, '어린왕자', '생텍쥐페리', '문학동네', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg'),
+('9788972976196', 2, '나의 라임오렌지나무', 'J. M. 데 바스콘셀로스', '동녘', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg'),
+('8809416540023', 3, '신데렐라', '달리는곰셋 기획팀', '달리는곰셋', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg');
+
 INSERT INTO erp_bookstore_item_center (bcode, center_code, quantity, state) VALUES
 ('9791191200157', 'PUS002', 3, 'S'),
 ('9788972976196', 'PUS002', 2, 'S'),
 ('9791191200157', 'DAE001', 2, 'S'),
-('9788972976196', 'DAE001', 1, 'S');
+('8809416540023', 'DAE001', 1, 'S');
 
 
 INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state) VALUES

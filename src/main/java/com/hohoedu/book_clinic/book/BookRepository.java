@@ -33,20 +33,20 @@ public interface BookRepository {
     /** 실물 도서 수정 */
     void updateItem(BookReqDTO.ItemUpdateReqDTO reqDTO);
 
-    /** 실물 도서를 item_del 테이블로 이관 (삭제 전 보관) */
-    void archiveItem(@Param("bcode") String bcode, @Param("deletedBy") String deletedBy);
-
-    /** 실물 도서 삭제 */
-    void deleteItem(@Param("bcode") String bcode);
+    /** 센터 보유분(bcode + center)을 item_del 테이블로 이관 (삭제 전 보관, 실물 레코드는 유지) */
+    void archiveItem(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("deletedBy") String deletedBy);
 
     /** item_del에서 item으로 복원 */
     void restoreItemFromDel(@Param("delId") Integer delId);
 
+    /** item_del에 보관된 센터 매핑(item_center) 복원 */
+    void restoreItemCenterFromDel(@Param("delId") Integer delId);
+
     /** item_del 레코드 삭제 */
     void deleteItemDel(@Param("delId") Integer delId);
 
-    /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형 복합 조건) */
-    List<BookRespDTO.ContentRespDTO> searchContents(@Param("title") String title, @Param("author") String author, @Param("genre") String genre, @Param("schoolYear") String schoolYear, @Param("keyword") String keyword, @Param("contentType") String contentType);
+    /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형/사용여부 복합 조건) */
+    List<BookRespDTO.ContentRespDTO> searchContents(@Param("title") String title, @Param("author") String author, @Param("genre") String genre, @Param("schoolYear") String schoolYear, @Param("keyword") String keyword, @Param("contentType") String contentType, @Param("state") String state);
 
     /** 도서 제목으로 content_id 단건 조회 (엑셀 업로드 시 도서 선택 매핑용) */
     Integer findContentIdByTitle(@Param("title") String title);
@@ -73,8 +73,8 @@ public interface BookRepository {
     void updateItemCenter(BookReqDTO.ItemCenterUpdateReqDTO reqDTO);
 
     /** 센터 도서 매핑 삭제 (bcode + centerCode 기준) */
-    void deleteItemCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+    void deleteItemCenterCode(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
 
-    /** 해당 bcode의 모든 센터 매핑 삭제 (실물 도서 삭제 시 FK 정리용) */
-    void deleteItemCenterByBcode(@Param("bcode") String bcode);
+    /** 해당 centerCode의 모든 센터 매핑 삭제 (실물 도서 삭제 시 FK 정리용) */
+    void deleteItemCenterByCenterCode(@Param("centerCode") String centerCode);
 }

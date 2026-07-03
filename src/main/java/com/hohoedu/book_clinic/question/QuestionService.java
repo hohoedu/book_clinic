@@ -176,7 +176,7 @@ public class QuestionService {
      * - 2행~: 문제 입력 영역 (도서, 문제번호, 문제, 지문, 보기①~④, 정답, 유형, 지문구분, 상태)
      */
     public Workbook createUploadTemplate() {
-        List<BookRespDTO.ContentRespDTO> books = bookRepository.searchContents(null, null, null, null, null, null);
+        List<BookRespDTO.ContentRespDTO> books = bookRepository.searchContents(null, null, null, null, null, null, null);
         Workbook wb = new XSSFWorkbook();
 
         Sheet main = wb.createSheet("문제등록");

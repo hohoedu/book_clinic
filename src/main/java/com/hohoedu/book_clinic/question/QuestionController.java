@@ -53,7 +53,8 @@ public class QuestionController {
 
     /** 문제 삭제 (itempool_del로 이관) */
     @PostMapping("/delete")
-    public ResponseEntity<?> deleteQuestion(@RequestBody @Valid QuestionReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+    public ResponseEntity<?> deleteQuestion(@RequestBody @Valid QuestionReqDTO.DeleteReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
         questionService.deleteQuestion(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }
@@ -71,10 +72,10 @@ public class QuestionController {
      */
     @GetMapping("/search")
     public ResponseEntity<?> searchQuestions(
-            @RequestParam Integer contentId,
-            @RequestParam(required = false) String qlevel,
-            @RequestParam(required = false) String qtype,
-            @RequestParam(required = false) String state) {
+            @RequestParam(value = "contentId", required = true) Integer contentId,
+            @RequestParam(value = "qlevel", required = false) String qlevel,
+            @RequestParam(value = "qtype", required = false) String qtype,
+            @RequestParam(value = "state", required = false) String state) {
         return ResponseEntity.ok(ApiUtils.success(questionService.searchQuestions(contentId, qlevel, qtype, state)));
     }
 
@@ -92,10 +93,11 @@ public class QuestionController {
     @GetMapping("/upload/template")
     public ResponseEntity<byte[]> downloadTemplate() throws IOException {
         try (Workbook wb = questionService.createUploadTemplate();
-             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
+                java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream()) {
             wb.write(out);
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
+            headers.setContentType(
+                    MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
             headers.setContentDisposition(ContentDisposition.attachment().filename("question_template.xlsx").build());
             return ResponseEntity.ok().headers(headers).body(out.toByteArray());
         }

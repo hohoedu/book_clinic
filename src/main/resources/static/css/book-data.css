@@ -151,8 +151,45 @@
   padding: 0 14px 12px;
 }
 
+/* TODO: 도서목록에서의 검색기능 숨김 - [hidden]이 display:flex에 덮이지 않도록 명시 */
+.list-search[hidden] {
+  display: none;
+}
+
 .list-search .search-box input {
   width: 220px;
+}
+
+/* 상세 필터 */
+.detail-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 14px 12px;
+}
+
+/* TODO: 도서목록에서의 검색기능 숨김 - [hidden]이 display:flex에 덮이지 않도록 명시 */
+.detail-filter[hidden] {
+  display: none;
+}
+
+.detail-filter-row {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-filter-row label {
+  color: #666;
+  font-size: 13px;
+}
+
+.detail-filter-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
 }
 
 .book-list {
@@ -161,6 +198,89 @@
   padding: 0 12px;
   max-height: calc(100vh - 250px);
   overflow-y: auto;
+}
+
+/* 삭제 도서함 모달 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+}
+
+.modal-body {
+  padding: 8px 20px 20px;
+  overflow-y: auto;
+}
+
+.deleted-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.deleted-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.deleted-item strong {
+  font-size: 15px;
+}
+
+.deleted-item p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #888;
+}
+
+.deleted-empty {
+  padding: 24px;
+  text-align: center;
+  color: #999;
 }
 
 .book-item {
@@ -195,6 +315,36 @@
   margin: 4px 0 0;
   font-size: 13px;
   color: #666;
+}
+
+/* 마스터 하위 우리 센터 실물도서 (들여쓰기) */
+.book-subitem {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-left: 24px;
+  padding: 8px 10px;
+  border-left: 2px solid #cfe9e4;
+  border-bottom: 1px solid #f2f5f6;
+  cursor: pointer;
+}
+
+.book-subitem img {
+  width: 30px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.book-subitem strong {
+  font-size: 14px;
+}
+
+.book-subitem p {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: #888;
 }
 
 .grade {
@@ -366,7 +516,58 @@
   height: 130px;
 }
 
+/* 비본사 우리 센터 실물도서 */
+.branch-item-panel {
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 2px dashed #d8dde2;
+}
+
+.branch-item-panel h3 {
+  margin: 0 0 14px;
+  color: #008b7a;
+  font-size: 16px;
+}
+
+.branch-item-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.item-card {
+  padding: 14px;
+  border: 1px solid #e6eaee;
+  border-radius: 8px;
+  background: #fafbfc;
+}
+
+.item-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 /* 문제 출제 */
+.question-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.question-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.empty-hint {
+  margin: 24px 4px;
+  color: #999;
+  font-size: 14px;
+  text-align: center;
+}
+
 .question-tabs {
   display: flex;
   gap: 28px;

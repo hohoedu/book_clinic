@@ -23,5 +23,30 @@
     "name": "FIREBASE_CREDENTIALS_PATH",
     "type": "java.lang.String",
     "description": "A description for 'FIREBASE_CREDENTIALS_PATH'"
+  },
+  {
+    "name": "GABIA_FTP_MASTER_BOOK",
+    "type": "java.lang.String",
+    "description": "A description for 'GABIA_FTP_MASTER_BOOK'"
+  },
+  {
+    "name": "GABIA_FTP_PASSWORD",
+    "type": "java.lang.String",
+    "description": "A description for 'GABIA_FTP_PASSWORD'"
+  },
+  {
+    "name": "GABIA_FTP_USERNAME",
+    "type": "java.lang.String",
+    "description": "A description for 'GABIA_FTP_USERNAME'"
+  },
+  {
+    "name": "GABIA_FTP_HOST",
+    "type": "java.lang.String",
+    "description": "A description for 'GABIA_FTP_HOST'"
+  },
+  {
+    "name": "GABIA_FTP_PORT",
+    "type": "java.lang.String",
+    "description": "A description for 'GABIA_FTP_PORT'"
   }
 ]}

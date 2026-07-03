@@ -33,14 +33,15 @@ public class SecurityConfig {
                                 "/login", "/join",
                                 "/error",
                                 "/h2-console/**",
-                                "/css/**", "/js/**", "/images/**", "/favicon.ico",
+                                "/css/**", "/js/**", "/images/**", "/uploads/**", "/favicon.ico",
                                 "/temp-upload.html",
                                 "/question/upload/template",
                                 "/question/upload")
                         .permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
-                        .defaultSuccessUrl("/api/user/me")
+                        // 로그인 성공 시 저장된 요청(saved-request) 무시하고 항상 도서 데이터 화면으로 이동
+                        .defaultSuccessUrl("/admin/book-data", true)
                         .permitAll())
                 .logout(logout -> logout
                         .logoutSuccessUrl("/login")

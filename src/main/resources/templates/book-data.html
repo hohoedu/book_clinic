@@ -10,6 +10,12 @@
   <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
   <link rel="stylesheet" th:href="@{/css/book-data.css}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Summernote (지문 예시 입력 에디터) — jQuery 의존 -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-lite.min.css">
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-lite.min.js"></script>
+
   <script th:src="@{/js/sidebar.js}"></script>
   <script th:src="@{/js/book-data.js}"></script>
   <script src="https://kit.fontawesome.com/본인키트주소.js" crossorigin="anonymous"></script>
@@ -33,44 +39,33 @@
 
       <section class="toolbar">
         <div class="toolbar-left">
-          <select>
-            <option>학년 전체</option>
-            <option>7세</option>
-            <option>초1</option>
-            <option>초2</option>
-            <option>초3</option>
-            <option>초4</option>
-            <option>초5</option>
-            <option>초6</option>
-            <option>중등</option>
+          <!-- 옵션은 book-data.js에서 코드값 기준으로 렌더링 -->
+          <select id="filterGrade">
+            <option value="">학년 전체</option>
           </select>
 
-          <select>
-            <option>분류 전체</option>
-            <option>교과연계</option>
-            <option>학년필독</option>
-            <option>권장도서</option>
-            <option>기관추천</option>
-            <option>인증수상작</option>
+          <select id="filterContentType">
+            <option value="">분류 전체</option>
           </select>
 
-          <select>
-            <option>사용여부 전체</option>
-            <option>사용중</option>
-            <option>절판</option>
+          <select id="filterState">
+            <option value="">사용여부 전체</option>
+            <option value="Y">사용중</option>
+            <option value="N">절판</option>
           </select>
 
           <div class="search-box">
-            <input type="text" placeholder="도서명, 저자, 출판사 검색" />
+            <input type="text" id="toolbarSearch" placeholder="도서명 검색" />
             <i class="fa-solid fa-magnifying-glass"></i>
           </div>
 
-          <button class="btn primary">조회</button>
+          <button type="button" id="btnSearch" class="btn primary">조회</button>
         </div>
 
         <div class="toolbar-right">
+          <button type="button" id="btnDeletedBooks" class="btn outline">삭제 도서함</button>
           <button type="button" id="btnNewBook" class="btn outline">+ 신규 도서 등록</button>
-          <button type="button" class="btn danger-outline">선택 도서 삭제</button>
+          <button type="button" id="btnDeleteSelected" class="btn danger-outline">선택 도서 삭제</button>
           <button type="button" id="btnSaveBook" class="btn primary">저장</button>
         </div>
       </section>
@@ -81,45 +76,42 @@
         <section class="panel book-list-panel">
           <h2>도서 목록</h2>
 
-          <div class="list-search">
+          <!-- TODO: 도서목록에서의 검색기능 숨김 - 추후 필요 시 hidden 제거하여 복구 -->
+          <div class="list-search" hidden>
             <div class="search-box">
-              <input type="text" placeholder="도서명, 저자, 출판사 검색" />
+              <input type="text" id="listSearch" placeholder="도서명, 저자, 키워드 검색" />
               <i class="fa-solid fa-magnifying-glass"></i>
             </div>
-            <button class="btn outline small">
+            <button type="button" id="btnDetailFilter" class="btn outline small">
               <i class="fa-solid fa-sliders"></i>
               상세 필터
             </button>
           </div>
 
-          <ul class="book-list">
-            <li class="book-item active">
-              <img th:src="@{/images/book-sample.png}" alt="">
-              <div>
-                <strong>프린들 주세요</strong>
-                <p>교과연계, 인증수상작</p>
-              </div>
-              <span class="grade orange">초2</span>
-            </li>
+          <!-- 상세 필터 (저자 / 장르 / 키워드) -->
+          <div class="detail-filter" id="detailFilterPanel" hidden>
+            <div class="detail-filter-row">
+              <label>저자</label>
+              <input type="text" id="filterAuthor" placeholder="저자명" />
+            </div>
+            <div class="detail-filter-row">
+              <label>장르</label>
+              <select id="filterGenre">
+                <option value="">전체</option>
+              </select>
+            </div>
+            <div class="detail-filter-row">
+              <label>키워드</label>
+              <input type="text" id="filterKeyword" placeholder="키워드" />
+            </div>
+            <div class="detail-filter-actions">
+              <button type="button" id="btnDetailReset" class="btn outline small">초기화</button>
+              <button type="button" id="btnDetailApply" class="btn primary small">필터 적용</button>
+            </div>
+          </div>
 
-            <li class="book-item">
-              <img th:src="@{/images/book-sample.png}" alt="">
-              <div>
-                <strong>책 먹는 여우</strong>
-                <p>교과연계</p>
-              </div>
-              <span class="grade yellow">초1</span>
-            </li>
-
-            <li class="book-item">
-              <img th:src="@{/images/book-sample.png}" alt="">
-              <div>
-                <strong>이상한 나라의 앨리스</strong>
-                <p>인증수상작</p>
-              </div>
-              <span class="grade green">초3</span>
-            </li>
-          </ul>
+          <!-- 도서 목록은 book-data.js에서 렌더링 -->
+          <ul class="book-list"></ul>
         </section>
 
         <!-- 도서 정보 -->
@@ -142,28 +134,29 @@
           <form class="book-form">
             <div class="form-row">
               <label>도서명</label>
-              <input type="text" id="bookInfoTitleInput" value="프린들 주세요" />
+              <input type="text" id="bookInfoTitleInput" />
             </div>
 
             <div class="form-row image-row">
               <label>도서 이미지</label>
               <div class="image-area">
-                <img th:src="@{/images/book-sample.png}" alt="">
+                <img id="bookInfoImage" th:src="@{/images/book-sample.png}" alt="">
                 <div class="image-actions">
-                  <button type="button" class="btn outline small">이미지 변경</button>
-                  <button type="button" class="btn danger-outline small">이미지 삭제</button>
+                  <input type="file" id="bookImageInput" accept="image/*" hidden>
+                  <button type="button" id="btnImageChange" class="btn outline small">이미지 변경</button>
+                  <button type="button" id="btnImageDelete" class="btn danger-outline small">이미지 삭제</button>
                 </div>
               </div>
             </div>
 
             <div class="form-row">
               <label>저자</label>
-              <input type="text" id="bookInfoAuthorInput" value="앤드루 클레먼츠" />
+              <input type="text" id="bookInfoAuthorInput" />
             </div>
 
             <div class="form-row">
               <label>출판사</label>
-              <input type="text" id="bookInfoPublisherInput" value="사계절" />
+              <input type="text" id="bookInfoPublisherInput" />
             </div>
 
             <div class="form-row">
@@ -190,28 +183,36 @@
 
             <div class="form-row">
               <label>분류</label>
-              <div class="chip-group">
-                <button type="button" class="chip active">교과연계</button>
-                <button type="button" class="chip">학년필독</button>
-                <button type="button" class="chip">권장도서</button>
-                <button type="button" class="chip">기관추천</button>
-                <button type="button" class="chip active">인증수상작</button>
-              </div>
+              <!-- 분류 chip은 book-data.js에서 코드값 기준으로 렌더링 (단일 선택) -->
+              <div class="chip-group" id="contentTypeChips"></div>
             </div>
 
             <div class="form-row">
               <label>독서 예상 시간</label>
-              <select>
-                <!-- 학년별 디폴트 옵션 -->
-                <option>10분</option>
-                <option>15분</option>
-                <option>20분</option>
-                <option>25분</option>
-                <option>30분</option>
-                <option>35분</option>
-                <option>40분</option>
-                <option>45분</option>
-                <option>50분</option>
+              <!-- value는 숫자만 저장(예: 15), 표시만 '분' -->
+              <select id="bookInfoReadingTime">
+                <option value="">선택</option>
+                <option value="10">10분</option>
+                <option value="15">15분</option>
+                <option value="20">20분</option>
+                <option value="25">25분</option>
+                <option value="30">30분</option>
+                <option value="35">35분</option>
+                <option value="40">40분</option>
+                <option value="45">45분</option>
+                <option value="50">50분</option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label>난이도</label>
+              <select id="bookInfoDifficulty">
+                <option value="">선택</option>
+                <option value="1">⭐</option>
+                <option value="2">⭐⭐</option>
+                <option value="3">⭐⭐⭐</option>
+                <option value="4">⭐⭐⭐⭐</option>
+                <option value="5">⭐⭐⭐⭐⭐</option>
               </select>
             </div>
 
@@ -219,170 +220,35 @@
               <label>도서 소개</label>
               <textarea id="bookInfoSummary" placeholder="도서 소개글을 작성해 주세요."></textarea>
             </div>
+
+            <!-- 비본사(지점) 우리 센터 실물도서 — 기본 숨김, 비본사 도서 선택 시 노출 -->
+            <div class="branch-item-panel" id="branchItemPanel" hidden>
+              <h3>우리 센터 실물도서</h3>
+              <!-- 실물도서 카드는 book-data.js에서 렌더링 (기존=수정/삭제, 신규=취소/등록) -->
+              <div class="branch-item-list" id="branchItemList"></div>
+            </div>
           </form>
         </section>
 
         <!-- 문제 출제 -->
         <section class="panel question-panel">
-          <h2>문제 출제</h2>
+          <div class="panel-title-row">
+            <h2>문제 출제</h2>
+            <div class="question-actions">
+              <button type="button" id="btnAddQuestion" class="btn outline small">+ 문제 추가</button>
+              <button type="button" id="btnSaveQuestions" class="btn primary small">문제 저장</button>
+            </div>
+          </div>
 
           <div class="question-tabs">
-            <button class="active">기본문제</button>
-            <button>심화문제</button>
+            <button type="button" class="active" data-level="01">기본문제</button>
+            <button type="button" data-level="02">심화문제</button>
           </div>
 
-          <div class="question-numbers">
-            <button data-target="question-1" class="active">1</button>
-            <button data-target="question-2">2</button>
-            <button data-target="question-3">3</button>
-            <button data-target="question-4">4</button>
-            <button data-target="question-5">5</button>
-            <button data-target="question-6">6</button>
-            <button data-target="question-7">7</button>
-            <button data-target="question-8">8</button>
-            <button data-target="question-9">9</button>
-            <button data-target="question-10">10</button>
-            <button data-target="question-11">11</button>
-            <button data-target="question-12">12</button>
-          </div>
+          <!-- 문제 번호 / 문제 카드는 book-data.js에서 렌더링 -->
+          <div class="question-numbers"></div>
 
-          <article class="question-editor">
-            <!-- 문제별 넘버링 -->
-            <section class="question-card" id="question-1">
-              <h3>1번 문제</h3>
-              <!-- 영역 선택 -->
-              <div class="form-row">
-                <label>문제 영역</label>
-                <select>
-                  <option>이해</option>
-                  <option>논리</option>
-                  <option>사고</option>
-                  <option>표현</option>
-                  <option>어휘</option>
-                  <option>감정</option>
-                </select>
-              </div>
-              <!-- 문제 유형 -->
-              <div class="form-row">
-                <label>문제 유형</label>
-                <div class="question-type-group">
-                  <label class="question-type-chip">
-                    <input type="radio" name="questionType" value="normal">
-                    <span class="check-box">
-                      <i class="fa-solid fa-check"></i>
-                    </span>
-                    <span class="label-text">일반 객관식</span>
-                  </label>
-
-                  <label class="question-type-chip active">
-                    <input type="radio" name="questionType" value="passage" checked>
-                    <span class="check-box">
-                      <i class="fa-solid fa-check"></i>
-                    </span>
-                    <span class="label-text">지문 예시형</span>
-                  </label>
-                </div>
-              </div>
-              <!-- 문제 질문 -->
-              <div class="form-row full">
-                <label>문제 질문</label>
-                <input type="text" value="그레이저 선생님이 닉에게 숙제 덤터기를 씌우자 닉은 어떤 행동을 했나요?" />
-              </div>
-              <!-- 지문 예시-지문 유형 선택시에만 오픈 -->
-              <div class="form-row full">
-                <label>지문 예시</label>
-                <textarea>그레이저 선생님이 닉에게 말했어요.
-  “스스로 답을 찾아보는 편이 훨씬 의미가 있단다.”</textarea>
-              </div>
-              <!-- 보기 -->
-              <div class="form-row full">
-                <label>보기</label>
-                <div class="answer-list">
-                  <div><span>1</span><input type="text" value="모두가 쓰는 말을 ‘프린들’이라고 부르기로 했어요."></div>
-                  <div><span>2</span><input type="text" value="숙제를 제대로 제출했어요."></div>
-                  <div><span>3</span><input type="text" value="학교를 그만두기로 했어요."></div>
-                  <div><span>4</span><input type="text" value="부모님께 선생님의 행동을 알리기로 했어요."></div>
-                </div>
-              </div>
-              <!-- 정답선택 -->
-              <div class="form-row">
-                <label>정답</label>
-                <select>
-                  <option>1</option>
-                  <option>2</option>
-                  <option>3</option>
-                  <option>4</option>
-                </select>
-              </div>
-            </section>
-            <section class="question-card" id="question-2">
-              <h3>2번 문제</h3>
-              <!-- 영역 선택 -->
-              <div class="form-row">
-                <label>문제 영역</label>
-                <select>
-                  <option>이해</option>
-                  <option>논리</option>
-                  <option>사고</option>
-                  <option>표현</option>
-                  <option>어휘</option>
-                  <option>감정</option>
-                </select>
-              </div>
-              <!-- 문제 유형 -->
-              <div class="form-row">
-                <label>문제 유형</label>
-                <div class="question-type-group">
-                  <label class="question-type-chip">
-                    <input type="radio" name="questionType" value="normal">
-                    <span class="check-box">
-                      <i class="fa-solid fa-check"></i>
-                    </span>
-                    <span class="label-text">일반 객관식</span>
-                  </label>
-
-                  <label class="question-type-chip active">
-                    <input type="radio" name="questionType" value="passage" checked>
-                    <span class="check-box">
-                      <i class="fa-solid fa-check"></i>
-                    </span>
-                    <span class="label-text">지문 예시형</span>
-                  </label>
-                </div>
-              </div>
-              <!-- 문제 질문 -->
-              <div class="form-row full">
-                <label>문제 질문</label>
-                <input type="text" value="그레이저 선생님이 닉에게 숙제 덤터기를 씌우자 닉은 어떤 행동을 했나요?" />
-              </div>
-              <!-- 지문 예시-지문 유형 선택시에만 오픈 -->
-              <div class="form-row full">
-                <label>지문 예시</label>
-                <textarea>그레이저 선생님이 닉에게 말했어요.
-  “스스로 답을 찾아보는 편이 훨씬 의미가 있단다.”</textarea>
-              </div>
-              <!-- 보기 -->
-              <div class="form-row full">
-                <label>보기</label>
-                <div class="answer-list">
-                  <div><span>1</span><input type="text" value="모두가 쓰는 말을 ‘프린들’이라고 부르기로 했어요."></div>
-                  <div><span>2</span><input type="text" value="숙제를 제대로 제출했어요."></div>
-                  <div><span>3</span><input type="text" value="학교를 그만두기로 했어요."></div>
-                  <div><span>4</span><input type="text" value="부모님께 선생님의 행동을 알리기로 했어요."></div>
-                </div>
-              </div>
-              <!-- 정답선택 -->
-              <div class="form-row">
-                <label>정답</label>
-                <select>
-                  <option>1</option>
-                  <option>2</option>
-                  <option>3</option>
-                  <option>4</option>
-                </select>
-              </div>
-            </section>
-          </article>
+          <article class="question-editor"></article>
         </section>
 
       </section>
@@ -391,7 +257,20 @@
 
   </div>
 
-
+  <!-- 삭제 도서함 모달 -->
+  <div class="modal-overlay" id="deletedModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3>삭제된 도서</h3>
+        <button type="button" id="btnCloseDeleted" class="modal-close" aria-label="닫기">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <ul class="deleted-list" id="deletedList"></ul>
+      </div>
+    </div>
+  </div>
 
 </body>
 

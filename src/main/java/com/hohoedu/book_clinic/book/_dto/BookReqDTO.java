@@ -18,6 +18,11 @@ public class BookReqDTO {
         private String schoolYear;
         private String summary;
         private String keywords;
+        private String state;         // 사용여부 (Y: 사용중, N: 절판)
+        private String publisher;     // 출판사
+        private String imageUrl;      // 도서 이미지 경로
+        private String readingTime;   // 독서 예상 시간
+        private String difficulty;    // 난이도 (별 1~5)
     }
 
     /** 마스터 도서 수정 요청 */
@@ -32,6 +37,11 @@ public class BookReqDTO {
         private String schoolYear;
         private String summary;
         private String keywords;
+        private String state;         // 사용여부 (Y: 사용중, N: 절판)
+        private String publisher;     // 출판사
+        private String imageUrl;      // 도서 이미지 경로
+        private String readingTime;   // 독서 예상 시간
+        private String difficulty;    // 난이도 (별 1~5)
     }
 
     /** 마스터 도서 삭제 요청 */
@@ -54,13 +64,14 @@ public class BookReqDTO {
      */
     @Data
     public static class ItemRegisterReqDTO {
-        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
+        // ISBN 대신 숫자 UUID를 서버에서 자동 생성하므로 필수 아님 (전달 시 그대로 사용)
         private String bcode;
         @NotNull(message = "마스터 도서 ID는 필수입니다.")
         private Integer contentId;
         private String bookTitle;
+        private String author;
         private String publisher;
-        private String keywords;
+        private String imageUrl;
         private String centerCode;
         private Integer quantity;
         private String state;
@@ -69,18 +80,21 @@ public class BookReqDTO {
     /** 실물 도서 수정 요청 */
     @Data
     public static class ItemUpdateReqDTO {
-        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
+        @NotBlank(message = "실물 도서 식별자(bcode)는 필수입니다.")
         private String bcode;
         private String bookTitle;
+        private String author;
         private String publisher;
-        private String keywords;
+        private String imageUrl;
     }
 
-    /** 실물 도서 삭제 요청 */
+    /** 실물 도서(센터 보유) 삭제 요청 — 실물 레코드는 유지, 해당 센터 매핑만 해제 */
     @Data
     public static class ItemDeleteReqDTO {
-        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
+        @NotBlank(message = "실물 도서 식별자(bcode)는 필수입니다.")
         private String bcode;
+        @NotBlank(message = "센터 코드는 필수입니다.")
+        private String centerCode;
     }
 
     /** 실물 도서 복구 요청 */

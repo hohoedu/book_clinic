@@ -21,6 +21,11 @@ public class BookRespDTO {
         private String schoolyearName;
         private String summary;
         private String keywords;
+        private String state;         // 사용여부 (Y: 사용중, N: 절판)
+        private String publisher;     // 출판사
+        private String imageUrl;      // 도서 이미지 경로
+        private String readingTime;   // 독서 예상 시간
+        private String difficulty;    // 난이도 (별 1~5)
     }
 
     /** 실물 도서 조회 응답 (센터 매핑 정보 포함) */
@@ -29,8 +34,9 @@ public class BookRespDTO {
         private String bcode;
         private Integer contentId;
         private String bookTitle;
+        private String author;
         private String publisher;
-        private String keywords;
+        private String imageUrl;
         private String centerCode;
         private String state;
     }
@@ -44,8 +50,12 @@ public class BookRespDTO {
         private String bcode;
         private Integer contentId;
         private String bookTitle;
+        private String author;
         private String publisher;
-        private String keywords;
+        private String imageUrl;
+        private String centerCode;
+        private Integer quantity;
+        private String state;
     }
 
     /** 센터별 보유 도서 조회 응답 */
@@ -58,8 +68,9 @@ public class BookRespDTO {
         private LocalDateTime registeredAt;
         private Integer contentId;
         private String bookTitle;
+        private String author;
         private String publisher;
-        private String keywords;
+        private String imageUrl;
     }
 
     /** 삭제된 마스터 도서 조회 응답 */

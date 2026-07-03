@@ -34,7 +34,6 @@ public class BookController {
 
     private final BookService bookService;
 
-
     // ===================== 마스터 도서 관리 =====================
 
     /** 마스터 도서 등록 */
@@ -53,7 +52,8 @@ public class BookController {
 
     /** 마스터 도서 삭제 (연결된 실물도서, 문제까지 일괄 삭제 후 del 테이블 이관) */
     @PostMapping("/delete")
-    public ResponseEntity<?> deleteBook(@RequestBody @Valid BookReqDTO.DeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
+    public ResponseEntity<?> deleteBook(@RequestBody @Valid BookReqDTO.DeleteReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
         bookService.deleteBook(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }
@@ -73,8 +73,10 @@ public class BookController {
             @RequestParam(value = "genre", required = false) String genre,
             @RequestParam(value = "schoolYear", required = false) String schoolYear,
             @RequestParam(value = "keyword", required = false) String keyword,
-            @RequestParam(value = "contentType", required = false) String contentType) {
-        return ResponseEntity.ok(ApiUtils.success(bookService.searchContents(title, author, genre, schoolYear, keyword, contentType)));
+            @RequestParam(value = "contentType", required = false) String contentType,
+            @RequestParam(value = "state", required = false) String state) {
+        return ResponseEntity.ok(ApiUtils
+                .success(bookService.searchContents(title, author, genre, schoolYear, keyword, contentType, state)));
     }
 
     /** 삭제된 마스터 도서 목록 조회 (복구 화면용) */
@@ -82,7 +84,6 @@ public class BookController {
     public ResponseEntity<?> findDeletedContents() {
         return ResponseEntity.ok(ApiUtils.success(bookService.findDeletedContents()));
     }
-
 
     // ===================== 실물 도서 관리 =====================
 
@@ -100,7 +101,7 @@ public class BookController {
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
-    /** 실물 도서 삭제 (센터 매핑 제거 후 del 테이블 이관) */
+    /** 실물 도서(센터 보유) 삭제 — item_del로 이관 후 해당 센터 매핑만 해제 (실물 레코드 유지) */
     @PostMapping("/item/delete")
     public ResponseEntity<?> deleteItem(@RequestBody @Valid BookReqDTO.ItemDeleteReqDTO reqDTO, @AuthenticationPrincipal CustomUserDetails userDetails) {
         bookService.deleteItem(reqDTO, userDetails.getUsername());
@@ -134,7 +135,6 @@ public class BookController {
     public ResponseEntity<?> findDeletedItems() {
         return ResponseEntity.ok(ApiUtils.success(bookService.findDeletedItems()));
     }
-
 
     // ===================== 센터 도서 관리 =====================
 
