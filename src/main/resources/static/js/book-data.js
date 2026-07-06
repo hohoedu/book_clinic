@@ -12,9 +12,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   initImageButtons();
   initStatusToggle();
   initCategoryTagInput();
+  initExtraFieldButtons();
   initQuestionTabs();
   initQuestionActions();
   initGuideLogout();
+  initUnsavedChangesGuard();
 
   loadGradeOptions();
   await loadCurrentUser();
@@ -43,13 +45,6 @@ const SCHOOLYEAR_CODES = [
   { code: "06", name: "초6" },
 ];
 
-const CONTENTTYPE_CODES = [
-  { code: "01", name: "수록" },
-  { code: "02", name: "연계" },
-  { code: "03", name: "필독" },
-  { code: "04", name: "추천" },
-];
-
 const GENRE_CODES = [
   { code: "01", name: "창작" }, { code: "02", name: "명작" }, { code: "03", name: "전래" },
   { code: "04", name: "고전" }, { code: "05", name: "외국창작" }, { code: "06", name: "환경" },
@@ -72,11 +67,28 @@ const QTYPE_CODES = [
   { code: "05", name: "감정" },
   { code: "06", name: "어휘" },
   { code: "07", name: "지식" },
+  { code: "08", name: "문법" },
 ];
+
+/*
+ * 레벨/학년별 문제 영역
+ * - 심화(02): 어휘, 문법 고정
+ * - 기본(01), 초1·초2(schoolyear 01·02): 이해, 논리, 사고, 표현, 어휘, 감정
+ * - 기본(01), 초3~초6(schoolyear 03~06): 이해, 논리, 사고, 표현, 어휘, 지식
+ */
+function qtypeCodesForActiveLevel() {
+  if (activeLevel === "02") return QTYPE_CODES.filter((t) => ["06", "08"].includes(t.code));
+
+  const book = bookListCache.find((b) => b.contentId === currentContentId);
+  const schoolyear = book?.schoolyear;
+  const excluded = schoolyear === "01" || schoolyear === "02" ? "07" : "05";
+  return QTYPE_CODES.filter((t) => t.code !== excluded && t.code !== "08");
+}
 
 const GRADE_COLORS = ["orange", "yellow", "green"];
 
 let bookListCache = [];
+let questionsOriginalSnapshot = "[]"; // 뒤로가기/새로고침/닫기 시 저장 안 된 변경사항 감지용
 let currentMode = "edit"; // "edit" | "new"
 let currentContentId = null;
 let currentImageUrl = "";
@@ -145,9 +157,10 @@ function applyRoleUi() {
 /* 마스터 도서 정보 폼 읽기전용 처리 (실물도서 등록 폼 입력칸은 제외) */
 const MASTER_FIELD_IDS = [
   "bookInfoTitleInput", "bookInfoAuthorInput", "bookInfoPublisherInput",
-  "bookInfoGradeSelect", "bookInfoReadingTime", "bookInfoDifficulty",
+  "bookInfoGradeSelect", "bookInfoGenreSelect", "bookInfoReadingTime", "bookInfoDifficulty",
   "bookInfoSummary", "categoryInput", "bookImageInput",
   "btnImageChange", "btnImageDelete",
+  "bookInfoAward", "bookInfoRecommendOrg", "btnAddAward", "btnAddRecommendOrg",
 ];
 
 function setBookFormReadonly(readonly) {
@@ -184,6 +197,19 @@ function initGuideLogout() {
       console.error(error);
     }
     window.location.href = "/login";
+  });
+}
+
+/* 저장 안 된 변경사항이 있을 때 뒤로가기/새로고침/브라우저 닫기 경고 */
+function initUnsavedChangesGuard() {
+  window.addEventListener("beforeunload", (event) => {
+    const bookDirty = JSON.stringify(getFormSnapshot()) !== JSON.stringify(originalSnapshot);
+    const questionsDirty = getQuestionsSnapshot() !== questionsOriginalSnapshot;
+
+    if (!bookDirty && !questionsDirty) return;
+
+    event.preventDefault();
+    event.returnValue = "";
   });
 }
 
@@ -410,10 +436,9 @@ async function deleteBranchItem(card) {
 
 function initToolbarFilters() {
   const grade = document.getElementById("filterGrade");
-  const contentType = document.getElementById("filterContentType");
 
   if (grade) SCHOOLYEAR_CODES.forEach(({ code, name }) => grade.add(new Option(name, code)));
-  if (contentType) CONTENTTYPE_CODES.forEach(({ code, name }) => contentType.add(new Option(name, code)));
+  // 분류(filterContentType) 옵션은 서버(Thymeleaf)에서 렌더링됨
 }
 
 /* 현재 필터 값 (툴바 + 상세 필터, 서버 조회 파라미터) */
@@ -485,11 +510,15 @@ function initDetailFilter() {
 }
 
 /* 삭제 도서함 (조회 + 복구) */
+let deletedBooksCache = [];
+
 function initDeletedBooks() {
   const modal = document.getElementById("deletedModal");
 
   document.getElementById("btnDeletedBooks")?.addEventListener("click", () => {
     if (modal) modal.hidden = false;
+    const searchInput = document.getElementById("deletedSearchInput");
+    if (searchInput) searchInput.value = "";
     loadDeletedBooks();
   });
 
@@ -499,6 +528,21 @@ function initDeletedBooks() {
 
   modal?.addEventListener("click", (event) => {
     if (event.target === modal) modal.hidden = true;
+  });
+
+  document.getElementById("deletedSearchInput")?.addEventListener("input", (event) => {
+    renderDeletedBooks(filterDeletedBooks(deletedBooksCache, event.target.value));
+  });
+}
+
+function filterDeletedBooks(books, keyword) {
+  const term = keyword.trim().toLowerCase();
+  if (!term) return books;
+
+  return books.filter((book) => {
+    const title = (book.originalTitle ?? book.bookTitle ?? "").toLowerCase();
+    const author = (book.author ?? "").toLowerCase();
+    return title.includes(term) || author.includes(term);
   });
 }
 
@@ -521,7 +565,9 @@ async function loadDeletedBooks() {
     // 비본사는 우리 센터에서 삭제한 실물도서만 표시
     if (!isHq) list = list.filter((it) => it.centerCode === currentUser?.centerCode);
 
-    renderDeletedBooks(list);
+    deletedBooksCache = list;
+    const keyword = document.getElementById("deletedSearchInput")?.value ?? "";
+    renderDeletedBooks(filterDeletedBooks(deletedBooksCache, keyword));
   } catch (error) {
     console.error(error);
     listEl.innerHTML = '<li class="deleted-empty">조회 중 오류가 발생했습니다.</li>';
@@ -569,12 +615,14 @@ async function restoreBook(delId) {
     : "이 실물도서를 복구하시겠습니까?";
   if (!confirm(message)) return;
 
+  const modal = document.getElementById("deletedModal");
+  if (modal) modal.hidden = true;
+
   const url = isHq ? "/book/restore" : "/book/item/restore";
 
   try {
     await postJson(url, { delId });
     alert("복구되었습니다.");
-    await loadDeletedBooks();
     if (isHq) {
       await loadBookList(currentFilters());
     } else {
@@ -743,21 +791,13 @@ function loadGradeOptions() {
   SCHOOLYEAR_CODES.forEach(({ code, name }) => select.add(new Option(name, code)));
 }
 
-/* 분류 chip (단일 선택) */
+/* 분류 chip (단일 선택) - chip 자체는 서버(Thymeleaf)에서 렌더링, 여기서는 클릭만 바인딩 */
 function initContentTypeChips() {
   const wrap = document.getElementById("contentTypeChips");
 
   if (!wrap) return;
 
-  wrap.innerHTML = "";
-
-  CONTENTTYPE_CODES.forEach(({ code, name }) => {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "chip";
-    chip.dataset.code = code;
-    chip.textContent = name;
-
+  wrap.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => {
       if (chip.classList.contains("active")) {
         chip.classList.remove("active");
@@ -765,11 +805,9 @@ function initContentTypeChips() {
       } else {
         wrap.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
         chip.classList.add("active");
-        selectedContentType = code;
+        selectedContentType = chip.dataset.code;
       }
     });
-
-    wrap.appendChild(chip);
   });
 }
 
@@ -780,9 +818,34 @@ function setContentTypeChip(code) {
     .forEach((chip) => chip.classList.toggle("active", chip.dataset.code === selectedContentType));
 }
 
-/* 사용여부 라디오 (use → Y, stop → N) */
+/* 사용여부 라디오 (use → Y, stop → N) - 선택 즉시 확인 후 DB 반영 */
 function initStatusToggle() {
-  // 라벨 클릭만으로 값이 반영되므로 별도 핸들러 불필요 (스냅샷 시 조회)
+  document.querySelectorAll('.status-toggle input[name="bookStatus"]').forEach((radio) => {
+    radio.addEventListener("change", async () => {
+      if (currentMode === "new" || currentContentId == null) return;
+
+      const newState = getStatusValue();
+      const prevState = newState === "N" ? "Y" : "N";
+      const title = document.getElementById("bookInfoTitleInput")?.value.trim() || "선택한 도서";
+
+      if (!confirm(`[${title}]의 상태를 변경하시겠습니까?`)) {
+        setStatusRadio(prevState);
+        return;
+      }
+
+      try {
+        await postJson("/book/update", { contentId: currentContentId, state: newState });
+        alert("변경이 완료되었습니다.");
+        if (originalSnapshot) originalSnapshot.state = newState;
+        const book = bookListCache.find((b) => b.contentId === currentContentId);
+        if (book) book.state = newState;
+      } catch (error) {
+        console.error(error);
+        alert(error.message ?? "상태 변경 중 오류가 발생했습니다.");
+        setStatusRadio(prevState);
+      }
+    });
+  });
 }
 
 function setStatusRadio(state) {
@@ -853,6 +916,7 @@ function renderBookInfo(book) {
   setValue("bookInfoAuthorInput", book.author ?? "");
   setValue("bookInfoPublisherInput", book.publisher ?? "");
   setValue("bookInfoGradeSelect", book.schoolyear ?? "");
+  setValue("bookInfoGenreSelect", book.genre ?? "");
   setValue("bookInfoReadingTime", book.readingTime ?? "");
   setValue("bookInfoDifficulty", book.difficulty ?? "");
   setValue("bookInfoSummary", book.summary ?? "");
@@ -861,6 +925,7 @@ function renderBookInfo(book) {
   setBookImage(book.imageUrl);
   setContentTypeChip(book.contentType ?? "");
   setCategoryTags(book.keywords ? book.keywords.split(",").map((k) => k.trim()).filter(Boolean) : []);
+  resetExtraFields();
 
   originalSnapshot = getFormSnapshot();
 
@@ -878,6 +943,7 @@ function clearBookInfo(isNew) {
   setValue("bookInfoAuthorInput", "");
   setValue("bookInfoPublisherInput", "");
   setValue("bookInfoGradeSelect", "");
+  setValue("bookInfoGenreSelect", "");
   setValue("bookInfoReadingTime", "");
   setValue("bookInfoDifficulty", "");
   setValue("bookInfoSummary", "");
@@ -886,6 +952,7 @@ function clearBookInfo(isNew) {
   setBookImage("");
   setContentTypeChip("");
   setCategoryTags([]);
+  resetExtraFields();
 
   originalSnapshot = getFormSnapshot();
 
@@ -896,7 +963,10 @@ function clearBookInfo(isNew) {
 
 function setField(id, text, isText) {
   const el = document.getElementById(id);
-  if (el) el[isText ? "textContent" : "value"] = text;
+  if (!el) return;
+  el[isText ? "textContent" : "value"] = text;
+  // 제목이 길어 말줄임(ellipsis) 처리될 때 마우스 오버로 전체 텍스트 확인 가능하도록
+  if (isText) el.title = text;
 }
 
 function setValue(id, value) {
@@ -928,6 +998,7 @@ function getFormSnapshot() {
     author: document.getElementById("bookInfoAuthorInput")?.value.trim() ?? "",
     publisher: document.getElementById("bookInfoPublisherInput")?.value.trim() ?? "",
     schoolYear: document.getElementById("bookInfoGradeSelect")?.value ?? "",
+    genre: document.getElementById("bookInfoGenreSelect")?.value ?? "",
     readingTime: document.getElementById("bookInfoReadingTime")?.value ?? "",
     difficulty: document.getElementById("bookInfoDifficulty")?.value ?? "",
     summary: document.getElementById("bookInfoSummary")?.value.trim() ?? "",
@@ -971,6 +1042,7 @@ async function saveBook(mode, snapshot) {
     author: snapshot.author,
     publisher: snapshot.publisher,
     schoolYear: snapshot.schoolYear,
+    genre: snapshot.genre,
     readingTime: snapshot.readingTime,
     difficulty: snapshot.difficulty,
     summary: snapshot.summary,
@@ -1006,8 +1078,9 @@ function renderCategoryTags() {
     const tagItem = document.createElement("div");
     tagItem.className = "tag-item";
 
+    // 저장은 원문 그대로, 표시만 # 접두 (해시태그 스타일)
     const span = document.createElement("span");
-    span.textContent = tag;
+    span.textContent = `#${tag}`;
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
@@ -1022,7 +1095,8 @@ function renderCategoryTags() {
 }
 
 function addCategoryTag(text) {
-  const tagText = text.trim().replace(/,$/, "");
+  // 표시할 때 #을 붙이므로, 사용자가 #을 직접 입력해도 저장값에서는 제거
+  const tagText = text.trim().replace(/,$/, "").replace(/^#+/, "");
 
   if (!tagText) return;
   if (categoryTags.includes(tagText)) return;
@@ -1050,10 +1124,19 @@ function initCategoryTagInput() {
   input.addEventListener("keydown", (event) => {
     // 한글 IME 조합 중에는 Enter를 무시 (마지막 글자가 중복 추가되는 문제 방지)
     if (event.isComposing || event.keyCode === 229) return;
-    if (event.key !== "Enter" && event.key !== ",") return;
+    if (event.key !== "Enter") return;
     event.preventDefault();
     addCategoryTag(input.value);
     input.value = "";
+  });
+
+  // ','는 keydown이 IME 조합에 가로막히므로, 입력값에 쉼표가 생기면 그 앞부분을 태그로 추가
+  input.addEventListener("input", () => {
+    if (!input.value.includes(",")) return;
+    const parts = input.value.split(",");
+    const remainder = parts.pop(); // 마지막 조각은 아직 입력 중인 텍스트
+    parts.forEach((part) => addCategoryTag(part));
+    input.value = remainder;
   });
 
   input.addEventListener("blur", () => {
@@ -1065,6 +1148,47 @@ function initCategoryTagInput() {
     const removeButton = event.target.closest(".tag-remove");
     if (!removeButton) return;
     removeCategoryTag(Number(removeButton.dataset.index));
+  });
+}
+
+/* ===================== 수상명 / 추천기관 동적 폼 ===================== */
+
+const EXTRA_FIELDS = [
+  { buttonId: "btnAddAward", rowId: "awardFieldRow", inputId: "bookInfoAward" },
+  { buttonId: "btnAddRecommendOrg", rowId: "recommendOrgFieldRow", inputId: "bookInfoRecommendOrg" },
+];
+
+/* 버튼 클릭 → 버튼 숨기고 입력 폼 노출, X 클릭 → 입력 비우고 버튼 복원 */
+function initExtraFieldButtons() {
+  EXTRA_FIELDS.forEach(({ buttonId, rowId, inputId }) => {
+    const button = document.getElementById(buttonId);
+    const row = document.getElementById(rowId);
+    if (!button || !row) return;
+
+    button.addEventListener("click", () => {
+      button.hidden = true;
+      row.hidden = false;
+      document.getElementById(inputId)?.focus();
+    });
+
+    row.querySelector(".extra-field-remove")?.addEventListener("click", () => {
+      const input = document.getElementById(inputId);
+      if (input) input.value = "";
+      row.hidden = true;
+      button.hidden = false;
+    });
+  });
+}
+
+/* 다른 도서 선택/신규 등록 시 동적 폼 초기 상태(버튼만 보임)로 복원 */
+function resetExtraFields() {
+  EXTRA_FIELDS.forEach(({ buttonId, rowId, inputId }) => {
+    const button = document.getElementById(buttonId);
+    const row = document.getElementById(rowId);
+    const input = document.getElementById(inputId);
+    if (input) input.value = "";
+    if (row) row.hidden = true;
+    if (button) button.hidden = false;
   });
 }
 
@@ -1153,6 +1277,7 @@ function renderQuestions() {
 
   if (currentContentId == null) {
     editor.innerHTML = '<p class="empty-hint">도서를 선택하면 문제를 편집할 수 있습니다.</p>';
+    questionsOriginalSnapshot = "[]";
     return;
   }
 
@@ -1170,6 +1295,14 @@ function renderQuestions() {
   editor.querySelectorAll(".question-card").forEach((card) => initSummernoteFor(card.querySelector(".q-qex")));
 
   if (!isHq) setQuestionsReadonly();
+
+  questionsOriginalSnapshot = getQuestionsSnapshot();
+}
+
+/* 현재 화면에 표시된 문제 카드들의 상태 스냅샷 (변경 여부 비교용) */
+function getQuestionsSnapshot() {
+  const cards = [...document.querySelectorAll(".question-editor .question-card")];
+  return JSON.stringify(cards.map((card) => ({ qnum: card.dataset.qnum ?? "", ...collectCard(card) })));
 }
 
 /* 문제 카드 DOM 생성 */
@@ -1189,7 +1322,7 @@ function buildQuestionCard(q) {
     <div class="form-row">
       <label>문제 영역</label>
       <select class="q-qtype">
-        ${QTYPE_CODES.map((t) => `<option value="${t.code}">${t.name}</option>`).join("")}
+        ${qtypeCodesForActiveLevel().map((t) => `<option value="${t.code}">${t.name}</option>`).join("")}
       </select>
     </div>
     <div class="form-row">
@@ -1244,6 +1377,17 @@ function buildQuestionCard(q) {
     card.querySelector(".q-e3").value = q.e3 ?? "";
     card.querySelector(".q-e4").value = q.e4 ?? "";
     card.querySelector(".q-ans").value = q.ans ?? "1";
+  }
+
+  // 비본사는 문제 수정이 불가하므로 지문을 입력용 textarea 대신 읽기 전용 텍스트로 표시
+  if (!isHq) {
+    const qexEl = card.querySelector(".q-qex");
+    if (qexEl) {
+      const view = document.createElement("div");
+      view.className = "q-qex-view";
+      view.innerHTML = q?.qex ?? "";
+      qexEl.replaceWith(view);
+    }
   }
 
   const normal = card.querySelector('input[value="normal"]');
@@ -1328,6 +1472,18 @@ function bindQuestionObserver(cards) {
 }
 
 /* 문제 추가 (미저장 카드) */
+/*
+ * 레벨/학년별 최대 문제 수
+ * - 심화(02): 12문제 고정
+ * - 기본(01): 도서 학년 초1~초4(schoolyear 01~04)는 12문제, 초5·초6(05·06)은 15문제
+ */
+function maxQuestionsForActiveLevel() {
+  if (activeLevel === "02") return 12;
+  const book = bookListCache.find((b) => b.contentId === currentContentId);
+  const schoolyear = book?.schoolyear;
+  return schoolyear === "05" || schoolyear === "06" ? 15 : 12;
+}
+
 function addQuestion() {
   if (currentContentId == null) {
     alert("먼저 도서를 저장한 뒤 문제를 등록해주세요.");
@@ -1335,6 +1491,15 @@ function addQuestion() {
   }
 
   const editor = document.querySelector(".question-editor");
+
+  const max = maxQuestionsForActiveLevel();
+  const currentCount = editor.querySelectorAll(".question-card").length;
+  if (currentCount >= max) {
+    const levelLabel = activeLevel === "02" ? "심화" : "기본";
+    alert(`${levelLabel} 문제는 최대 ${max}개까지만 등록할 수 있습니다.`);
+    return;
+  }
+
   editor.querySelector(".empty-hint")?.remove();
 
   const card = buildQuestionCard(null);

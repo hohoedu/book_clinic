@@ -46,6 +46,7 @@
 
           <select id="filterContentType">
             <option value="">분류 전체</option>
+            <option th:each="ct : ${contentTypeCodes}" th:value="${ct.code}" th:text="${ct.codeName}"></option>
           </select>
 
           <select id="filterState">
@@ -174,17 +175,29 @@
             </div>
 
             <div class="form-row">
-              <label>카테고리</label>
-              <div class="tag-input-area">
-                <div class="tag-list"></div>
-                <input type="text" id="categoryInput" placeholder="카테고리 입력 후 Enter 또는 , 입력">
+              <label>분류</label>
+              <!-- 분류 chip은 서버(erp_bookstore_code, gubun='C')에서 조회해 렌더링, 클릭(단일 선택)은 book-data.js -->
+              <div class="chip-group" id="contentTypeChips">
+                <button type="button" class="chip" th:each="ct : ${contentTypeCodes}"
+                        th:data-code="${ct.code}" th:text="${ct.codeName}"></button>
               </div>
             </div>
 
             <div class="form-row">
-              <label>분류</label>
-              <!-- 분류 chip은 book-data.js에서 코드값 기준으로 렌더링 (단일 선택) -->
-              <div class="chip-group" id="contentTypeChips"></div>
+              <label>장르</label>
+              <!-- 장르 옵션은 서버(erp_bookstore_code, gubun='G')에서 조회해 렌더링 -->
+              <select id="bookInfoGenreSelect">
+                <option value="">선택</option>
+                <option th:each="g : ${genreCodes}" th:value="${g.code}" th:text="${g.codeName}"></option>
+              </select>
+            </div>
+
+            <div class="form-row">
+              <label>해시태그</label>
+              <div class="tag-input-area">
+                <div class="tag-list"></div>
+                <input type="text" id="categoryInput" placeholder="해시태그 입력 후 Enter 또는 , 입력">
+              </div>
             </div>
 
             <div class="form-row">
@@ -208,17 +221,41 @@
               <label>난이도</label>
               <select id="bookInfoDifficulty">
                 <option value="">선택</option>
-                <option value="1">⭐</option>
-                <option value="2">⭐⭐</option>
-                <option value="3">⭐⭐⭐</option>
-                <option value="4">⭐⭐⭐⭐</option>
-                <option value="5">⭐⭐⭐⭐⭐</option>
+                <option value="상">상</option>
+                <option value="중">중</option>
+                <option value="하">하</option>
               </select>
             </div>
 
             <div class="form-row">
               <label>도서 소개</label>
               <textarea id="bookInfoSummary" placeholder="도서 소개글을 작성해 주세요."></textarea>
+            </div>
+
+            <!-- 수상명/추천기관 — 버튼 클릭 시 버튼이 사라지고 입력 폼이 나타남 (X로 되돌리기) -->
+            <div class="form-row extra-field" id="awardFieldRow" hidden>
+              <label>수상명</label>
+              <div class="extra-field-input">
+                <input type="text" id="bookInfoAward" placeholder="수상명을 입력해 주세요.">
+                <button type="button" class="extra-field-remove" aria-label="수상명 입력 취소">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-row extra-field" id="recommendOrgFieldRow" hidden>
+              <label>추천기관</label>
+              <div class="extra-field-input">
+                <input type="text" id="bookInfoRecommendOrg" placeholder="추천기관명을 입력해 주세요.">
+                <button type="button" class="extra-field-remove" aria-label="추천기관 입력 취소">
+                  <i class="fa-solid fa-xmark"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="extra-field-buttons">
+              <button type="button" id="btnAddAward" class="btn outline small">+ 수상명 추가</button>
+              <button type="button" id="btnAddRecommendOrg" class="btn outline small">+ 추천기관 추가</button>
             </div>
 
             <!-- 비본사(지점) 우리 센터 실물도서 — 기본 숨김, 비본사 도서 선택 시 노출 -->
@@ -267,6 +304,9 @@
         </button>
       </div>
       <div class="modal-body">
+        <div class="deleted-search">
+          <input type="text" id="deletedSearchInput" placeholder="도서명, 저자로 검색">
+        </div>
         <ul class="deleted-list" id="deletedList"></ul>
       </div>
     </div>

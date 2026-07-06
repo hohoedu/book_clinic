@@ -36,4 +36,12 @@
         ORDER BY group_code ASC, sort_order ASC
     </select>
 
+    <!-- 도서 코드(erp_bookstore_code) gubun별 목록 -->
+    <select id="findBookstoreCodesByGubun" resultType="com.hohoedu.book_clinic.common.code._dto.CodeRespDTO$BookstoreCodeDTO">
+        SELECT code, codeNm AS code_name
+        FROM erp_bookstore_code
+        WHERE gubun = #{gubun}
+        ORDER BY code ASC
+    </select>
+
 </mapper>

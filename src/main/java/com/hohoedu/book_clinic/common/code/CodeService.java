@@ -44,4 +44,9 @@ public class CodeService {
         return codeRepository.findAll();
     }
 
+    /** 도서 코드(erp_bookstore_code) gubun별 목록 조회 */
+    public List<CodeRespDTO.BookstoreCodeDTO> findBookstoreCodes(String gubun) {
+        return codeRepository.findBookstoreCodesByGubun(gubun);
+    }
+
 }

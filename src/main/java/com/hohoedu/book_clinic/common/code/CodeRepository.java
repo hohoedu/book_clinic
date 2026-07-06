@@ -30,4 +30,7 @@ public interface CodeRepository {
     /** 전체 공통 코드 목록 조회 (그룹코드, 정렬순서 오름차순) */
     List<CodeRespDTO.CodeDTO> findAll();
 
+    /** 도서 코드(erp_bookstore_code) gubun별 목록 조회 - C:분류, G:장르, S:학년, T:문제영역, L:레벨 */
+    List<CodeRespDTO.BookstoreCodeDTO> findBookstoreCodesByGubun(@Param("gubun") String gubun);
+
 }

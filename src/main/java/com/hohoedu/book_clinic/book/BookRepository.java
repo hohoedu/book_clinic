@@ -21,6 +21,12 @@ public interface BookRepository {
     /** 마스터 도서 수정 */
     void updateContent(BookReqDTO.UpdateReqDTO reqDTO);
 
+    /** 도서 분류별 상세(C=연계교과/R=추천기관/A=수상명) upsert - erp_bookstore_content_detail (content_id + gubun 복합키) */
+    void upsertContentDetail(@Param("contentId") Integer contentId, @Param("gubun") String gubun, @Param("name") String name);
+
+    /** 도서 분류별 상세 삭제 (특정 gubun 값 제거) */
+    void deleteContentDetail(@Param("contentId") Integer contentId, @Param("gubun") String gubun);
+
     /** 마스터 도서 삭제 (저장 프로시저 sp_delete_book 호출) */
     void deleteBook(@Param("contentId") Integer contentId, @Param("deletedBy") String deletedBy);
 

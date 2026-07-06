@@ -4,7 +4,8 @@
 
 <mapper namespace="com.hohoedu.book_clinic.book.BookRepository">
 
-    <insert id="registerContent" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$RegisterReqDTO">
+    <insert id="registerContent" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$RegisterReqDTO"
+            useGeneratedKeys="true" keyProperty="contentId">
         INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
         VALUES (#{title}, #{author}, #{genre}, #{contentType}, #{schoolYear}, #{summary}, #{keywords}, #{state}, #{publisher}, #{imageUrl}, #{readingTime}, #{difficulty})
     </insert>
@@ -27,6 +28,19 @@
         </set>
         WHERE content_id = #{contentId}
     </update>
+
+    <!-- 분류별 상세 (C=연계교과/R=추천기관/A=수상명) upsert — (content_id, gubun) 복합키 기준 -->
+    <update id="upsertContentDetail">
+        MERGE erp_bookstore_content_detail AS target
+        USING (SELECT #{contentId, jdbcType=INTEGER} AS content_id, #{gubun, jdbcType=VARCHAR} AS gubun) AS source
+        ON target.content_id = source.content_id AND target.gubun = source.gubun
+        WHEN MATCHED THEN UPDATE SET name = #{name, jdbcType=VARCHAR}
+        WHEN NOT MATCHED THEN INSERT (content_id, gubun, name) VALUES (source.content_id, source.gubun, #{name, jdbcType=VARCHAR});
+    </update>
+
+    <delete id="deleteContentDetail">
+        DELETE FROM erp_bookstore_content_detail WHERE content_id = #{contentId} AND gubun = #{gubun}
+    </delete>
 
     <select id="deleteBook" statementType="CALLABLE">
         {call sp_delete_book(#{contentId, jdbcType=INTEGER}, #{deletedBy, jdbcType=VARCHAR})}

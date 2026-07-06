@@ -25,7 +25,7 @@ public class BookRespDTO {
         private String publisher;     // 출판사
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
-        private String difficulty;    // 난이도 (별 1~5)
+        private String difficulty;    // 난이도 (상/중/하)
     }
 
     /** 실물 도서 조회 응답 (센터 매핑 정보 포함) */

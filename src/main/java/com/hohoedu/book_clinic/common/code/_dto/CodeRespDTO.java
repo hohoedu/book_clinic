@@ -16,4 +16,11 @@ public class CodeRespDTO {
         private Boolean useYn;
     }
 
+    /** 도서 코드(erp_bookstore_code) 조회 응답 */
+    @Data
+    public static class BookstoreCodeDTO {
+        private String code;
+        private String codeName;
+    }
+
 }

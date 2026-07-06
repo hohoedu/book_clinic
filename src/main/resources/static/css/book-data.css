@@ -87,6 +87,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   padding: 20px 18px;
 }
 
@@ -100,6 +101,11 @@
 
 .panel-title-row h2 {
   padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .panel-title-row h2 span {
@@ -252,6 +258,18 @@
   overflow-y: auto;
 }
 
+.deleted-search {
+  margin-bottom: 12px;
+}
+
+.deleted-search input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #d8dde2;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
 .deleted-list {
   list-style: none;
   margin: 0;
@@ -385,6 +403,11 @@
   margin-bottom: 14px;
 }
 
+/* display:grid가 hidden 속성(display:none)을 덮어쓰지 않도록 보정 (수상명/추천기관 동적 폼) */
+.form-row[hidden] {
+  display: none;
+}
+
 .form-row label {
   color: #666;
   font-size: 14px;
@@ -516,6 +539,33 @@
   height: 130px;
 }
 
+/* 수상명/추천기관 동적 폼 */
+.extra-field-buttons {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.extra-field-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.extra-field-input input {
+  flex: 1;
+}
+
+.extra-field-remove {
+  padding: 0 8px;
+  color: #999;
+  font-size: 15px;
+}
+
+.extra-field-remove:hover {
+  color: #ff4b3f;
+}
+
 /* 비본사 우리 센터 실물도서 */
 .branch-item-panel {
   margin-top: 8px;
@@ -631,6 +681,28 @@
 
 .question-editor .form-row.full {
   align-items: start;
+}
+
+/* 비본사 지문 읽기 전용 표시 (입력 불가, 보기 좋은 박스 형태 유지) */
+.q-qex-view {
+  width: 100%;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid #d8dde2;
+  border-radius: 6px;
+  background: #f5f7f8;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.q-qex-view p {
+  margin: 0 0 8px;
+}
+
+.q-qex-view p:last-child {
+  margin-bottom: 0;
 }
 
 /* 문제유형 */
@@ -764,6 +836,11 @@ select {
 
 .question-editor textarea {
   height: 96px;
+}
+
+/* summernote 빈 편집영역의 <p> 기본 margin 때문에 플레이스홀더 아래로 커서가 밀리는 문제 보정 */
+.question-editor .note-editable p {
+  margin: 0;
 }
 
 .answer-list {

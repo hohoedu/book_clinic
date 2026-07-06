@@ -17,7 +17,7 @@ public class TestViewController {
     // data.sql 테스트 계정 설정용 — 초기 세팅 후 제거
     @GetMapping("/test/hash")
     @ResponseBody
-    public String hash(@RequestParam String password, @RequestParam String salt) {
+    public String hash(@RequestParam(value = "password") String password, @RequestParam(value = "salt") String salt) {
         return HashUtils.hashPassword(password, salt);
     }
 }

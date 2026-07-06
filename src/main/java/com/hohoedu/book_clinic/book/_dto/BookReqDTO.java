@@ -10,6 +10,8 @@ public class BookReqDTO {
     /** 마스터 도서 등록 요청 */
     @Data
     public static class RegisterReqDTO {
+        // 등록 후 MyBatis useGeneratedKeys로 채워짐 (genre를 content_detail에 함께 저장하기 위함)
+        private Integer contentId;
         @NotBlank(message = "도서 제목은 필수입니다.")
         private String title;
         private String author;
@@ -22,7 +24,7 @@ public class BookReqDTO {
         private String publisher;     // 출판사
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
-        private String difficulty;    // 난이도 (별 1~5)
+        private String difficulty;    // 난이도 (상/중/하)
     }
 
     /** 마스터 도서 수정 요청 */
@@ -41,7 +43,7 @@ public class BookReqDTO {
         private String publisher;     // 출판사
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
-        private String difficulty;    // 난이도 (별 1~5)
+        private String difficulty;    // 난이도 (상/중/하)
     }
 
     /** 마스터 도서 삭제 요청 */

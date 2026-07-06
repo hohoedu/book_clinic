@@ -1,16 +1,25 @@
 -- DROP (FK 역순)
-IF OBJECT_ID('erp_notification',           'U') IS NOT NULL DROP TABLE erp_notification;
-IF OBJECT_ID('erp_bookstore_code',         'U') IS NOT NULL DROP TABLE erp_bookstore_code;
-IF OBJECT_ID('erp_bookstore_itempool_del', 'U') IS NOT NULL DROP TABLE erp_bookstore_itempool_del;
-IF OBJECT_ID('erp_bookstore_itempool',     'U') IS NOT NULL DROP TABLE erp_bookstore_itempool;
-IF OBJECT_ID('erp_bookstore_item_del',     'U') IS NOT NULL DROP TABLE erp_bookstore_item_del;
-IF OBJECT_ID('erp_bookstore_item_center',  'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
-IF OBJECT_ID('erp_bookstore_item',         'U') IS NOT NULL DROP TABLE erp_bookstore_item;
-IF OBJECT_ID('erp_bookstore_content_del',  'U') IS NOT NULL DROP TABLE erp_bookstore_content_del;
-IF OBJECT_ID('erp_bookstore_content',      'U') IS NOT NULL DROP TABLE erp_bookstore_content;
-IF OBJECT_ID('erp_student',                'U') IS NOT NULL DROP TABLE erp_student;
-IF OBJECT_ID('erp_user',                   'U') IS NOT NULL DROP TABLE erp_user;
-IF OBJECT_ID('erp_center',                 'U') IS NOT NULL DROP TABLE erp_center;
+IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
+IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
+IF OBJECT_ID('erp_bookstore_itempool_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_itempool_del;
+IF OBJECT_ID('erp_bookstore_itempool',              'U') IS NOT NULL DROP TABLE erp_bookstore_itempool;
+IF OBJECT_ID('erp_bookstore_item_del',              'U') IS NOT NULL DROP TABLE erp_bookstore_item_del;
+IF OBJECT_ID('erp_bookstore_item_center',           'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
+IF OBJECT_ID('erp_bookstore_item',                  'U') IS NOT NULL DROP TABLE erp_bookstore_item;
+IF OBJECT_ID('erp_bookstore_content_detail_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_content_detail_del;
+IF OBJECT_ID('erp_bookstore_content_detail',        'U') IS NOT NULL DROP TABLE erp_bookstore_content_detail;
+-- 이전 설계 단계에서 만들어졌던 테이블 (지금은 content_detail 하나로 통합됨) — 남아있으면 정리
+IF OBJECT_ID('erp_bookstore_content_curriculum_del','U') IS NOT NULL DROP TABLE erp_bookstore_content_curriculum_del;
+IF OBJECT_ID('erp_bookstore_content_curriculum',    'U') IS NOT NULL DROP TABLE erp_bookstore_content_curriculum;
+IF OBJECT_ID('erp_bookstore_content_recommend_del', 'U') IS NOT NULL DROP TABLE erp_bookstore_content_recommend_del;
+IF OBJECT_ID('erp_bookstore_content_recommend',     'U') IS NOT NULL DROP TABLE erp_bookstore_content_recommend;
+IF OBJECT_ID('erp_bookstore_content_award_del',     'U') IS NOT NULL DROP TABLE erp_bookstore_content_award_del;
+IF OBJECT_ID('erp_bookstore_content_award',         'U') IS NOT NULL DROP TABLE erp_bookstore_content_award;
+IF OBJECT_ID('erp_bookstore_content_del',           'U') IS NOT NULL DROP TABLE erp_bookstore_content_del;
+IF OBJECT_ID('erp_bookstore_content',               'U') IS NOT NULL DROP TABLE erp_bookstore_content;
+IF OBJECT_ID('erp_student',                         'U') IS NOT NULL DROP TABLE erp_student;
+IF OBJECT_ID('erp_user',                            'U') IS NOT NULL DROP TABLE erp_user;
+IF OBJECT_ID('erp_center',                          'U') IS NOT NULL DROP TABLE erp_center;
 
 
 -- CREATE
@@ -97,7 +106,7 @@ CREATE TABLE erp_bookstore_content (
     content_id     INT IDENTITY(1,1) PRIMARY KEY,
     original_title VARCHAR(255),
     author         VARCHAR(100),
-    genre          VARCHAR(50),
+    genre          VARCHAR(50),   -- 장르 (code gubun='G') — 모든 도서가 1개씩 가지므로 detail이 아닌 컬럼으로 관리
     content_type   VARCHAR(50),
     schoolyear     VARCHAR(20),
     summary        VARCHAR(2000),
@@ -126,6 +135,25 @@ CREATE TABLE erp_bookstore_content_del (
     image_url      VARCHAR(500),
     reading_time   VARCHAR(20),
     difficulty     VARCHAR(20)
+);
+
+-- 분류별 전용 상세 (소분류) — content_type이 정하는 부가 값 1개 (교과연계=연계교과, 기관추천=추천기관명, 인증수상작=수상명)
+-- 장르(G)는 모든 도서가 가지므로 content.genre 컬럼으로 이동, 여기는 분류 부가정보만 남음 (도서당 최대 1행)
+CREATE TABLE erp_bookstore_content_detail (
+    content_id     INT          NOT NULL,
+    gubun          VARCHAR(1)   NOT NULL,  -- C(교과연계) / R(기관추천) / A(인증수상작)
+    name           VARCHAR(200),           -- gubun별 값: 연계교과 / 추천기관명 / 수상명
+    PRIMARY KEY (content_id, gubun),
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+
+CREATE TABLE erp_bookstore_content_detail_del (
+    del_id         INT IDENTITY(1,1) PRIMARY KEY,
+    deleted_at     DATETIME2 DEFAULT CURRENT_TIMESTAMP,
+    deleted_by     VARCHAR(100),
+    content_id     INT,
+    gubun          VARCHAR(1),
+    name           VARCHAR(200)
 );
 
 CREATE TABLE erp_bookstore_item (
