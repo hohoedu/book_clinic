@@ -6,9 +6,12 @@ IF OBJECT_ID('erp_bookstore_itempool',              'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_bookstore_item_del',              'U') IS NOT NULL DROP TABLE erp_bookstore_item_del;
 IF OBJECT_ID('erp_bookstore_item_center',           'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
 IF OBJECT_ID('erp_bookstore_item',                  'U') IS NOT NULL DROP TABLE erp_bookstore_item;
+IF OBJECT_ID('erp_bookstore_priority_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_priority_del;
+IF OBJECT_ID('erp_bookstore_priority',              'U') IS NOT NULL DROP TABLE erp_bookstore_priority;
+IF OBJECT_ID('erp_bookstore_priority_draft_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft_del;
+IF OBJECT_ID('erp_bookstore_priority_draft',        'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft;
 IF OBJECT_ID('erp_bookstore_content_detail_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_content_detail_del;
 IF OBJECT_ID('erp_bookstore_content_detail',        'U') IS NOT NULL DROP TABLE erp_bookstore_content_detail;
--- 이전 설계 단계에서 만들어졌던 테이블 (지금은 content_detail 하나로 통합됨) — 남아있으면 정리
 IF OBJECT_ID('erp_bookstore_content_curriculum_del','U') IS NOT NULL DROP TABLE erp_bookstore_content_curriculum_del;
 IF OBJECT_ID('erp_bookstore_content_curriculum',    'U') IS NOT NULL DROP TABLE erp_bookstore_content_curriculum;
 IF OBJECT_ID('erp_bookstore_content_recommend_del', 'U') IS NOT NULL DROP TABLE erp_bookstore_content_recommend_del;
@@ -29,10 +32,10 @@ CREATE TABLE erp_bookstore_code (
     codeNm         VARCHAR(20) NOT NULL
     CONSTRAINT PK_erp_bookstore_code PRIMARY KEY CLUSTERED (gubun ASC, code ASC)
     WITH (
-        PAD_INDEX = OFF, 
-        STATISTICS_NORECOMPUTE = OFF, 
-        IGNORE_DUP_KEY = OFF, 
-        ALLOW_ROW_LOCKS = ON, 
+        PAD_INDEX = OFF,
+        STATISTICS_NORECOMPUTE = OFF,
+        IGNORE_DUP_KEY = OFF,
+        ALLOW_ROW_LOCKS = ON,
         ALLOW_PAGE_LOCKS = ON
         ) ON [PRIMARY])
     ON [PRIMARY];
@@ -154,6 +157,49 @@ CREATE TABLE erp_bookstore_content_detail_del (
     content_id     INT,
     gubun          VARCHAR(1),
     name           VARCHAR(200)
+);
+
+-- 권장도서 순위 초안 (연도+학년별로 여러 건 저장 가능, 그중 하나만 적용 상태)
+-- 학년탭을 각각 편집/저장하므로 초안 선택도 학년별로 독립적이어야 해서 schoolyear를 둔다 (content_detail과 달리 여긴 학년이 '어느 편집 세션인지'를 나타내는 키라 중복 저장 아님)
+-- "1월 1일 반영"은 스케줄러 없이, 조회 시 year=올해 AND is_active='Y'로 필터링하는 것만으로 처리
+CREATE TABLE erp_bookstore_priority_draft (
+    draft_id    INT IDENTITY(1,1) PRIMARY KEY,
+    year        VARCHAR(4)  NOT NULL,  -- 노출 연도 (예: '2026', '2027')
+    schoolyear  VARCHAR(20) NOT NULL,  -- 학년 코드 (S코드) — 이 초안이 어느 학년 탭 편집본인지
+    is_active   VARCHAR(1)  NOT NULL DEFAULT 'N',  -- 이 연도+학년에 실제 적용할 초안인지 (연도+학년당 최대 1건 'Y')
+    created_by  VARCHAR(100),  -- 저장한 사용자 이름
+    created_at  DATETIME2   DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 초안별 순위 내용 — 학년은 content.schoolyear로 이미 정해지므로 별도 컬럼 없이 content_id로 조인해서 판별
+CREATE TABLE erp_bookstore_priority (
+    draft_id    INT         NOT NULL,
+    content_id  INT         NOT NULL,
+    sort_order  INT         NOT NULL,  -- 순위 (1부터)
+    PRIMARY KEY (draft_id, content_id),
+    FOREIGN KEY (draft_id)   REFERENCES erp_bookstore_priority_draft(draft_id),
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+
+-- 순위 초안 삭제 이력 (복구 기능 없음 — 삭제 시 그대로 이관만 하고 끝)
+CREATE TABLE erp_bookstore_priority_draft_del (
+    del_id      INT IDENTITY(1,1) PRIMARY KEY,
+    deleted_at  DATETIME2   DEFAULT CURRENT_TIMESTAMP,
+    deleted_by  VARCHAR(100),
+    draft_id    INT,
+    year        VARCHAR(4),
+    schoolyear  VARCHAR(20),
+    is_active   VARCHAR(1),
+    created_by  VARCHAR(100),
+    created_at  DATETIME2
+);
+
+CREATE TABLE erp_bookstore_priority_del (
+    del_id      INT IDENTITY(1,1) PRIMARY KEY,
+    deleted_at  DATETIME2   DEFAULT CURRENT_TIMESTAMP,
+    draft_id    INT,
+    content_id  INT,
+    sort_order  INT
 );
 
 CREATE TABLE erp_bookstore_item (

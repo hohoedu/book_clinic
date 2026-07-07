@@ -11,6 +11,7 @@
   <link rel="stylesheet" th:href="@{/css/book-priority.css}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
+  <script th:src="@{/js/common.js}"></script>
   <script th:src="@{/js/sidebar.js}"></script>
   <script th:src="@{/js/book-priority.js}"></script>
 </head>
@@ -78,6 +79,23 @@
 
     </main>
 
+  </div>
+
+  <!-- 순위 초안(예약) 목록 모달 -->
+  <div class="modal-overlay" id="draftModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <!-- 학년/연도는 book-priority.js에서 모달 열 때 채움 -->
+        <h3 id="draftModalTitle">저장된 순위 초안</h3>
+        <button type="button" id="btnCloseDraftModal" class="modal-close" aria-label="닫기">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 초안 목록은 book-priority.js에서 렌더링 -->
+        <ul class="draft-list" id="draftList"></ul>
+      </div>
+    </div>
   </div>
 
 </body>

@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initCategoryTagInput();
   initExtraFieldButtons();
   initQuestionTabs();
-  initQuestionActions();
+  initGradeSelectChange();
   initGuideLogout();
   initUnsavedChangesGuard();
 
@@ -43,7 +43,19 @@ const SCHOOLYEAR_CODES = [
   { code: "04", name: "초4" },
   { code: "05", name: "초5" },
   { code: "06", name: "초6" },
+  { code: "07", name: "중등" },
 ];
+
+/* 학년별 뱃지 색상 클래스 (book-data.css) */
+const GRADE_BADGE_CLASS = {
+  "01": "grade-01",
+  "02": "grade-02",
+  "03": "grade-03",
+  "04": "grade-04",
+  "05": "grade-05",
+  "06": "grade-06",
+  "07": "grade-07",
+};
 
 const GENRE_CODES = [
   { code: "01", name: "창작" }, { code: "02", name: "명작" }, { code: "03", name: "전래" },
@@ -79,13 +91,34 @@ const QTYPE_CODES = [
 function qtypeCodesForActiveLevel() {
   if (activeLevel === "02") return QTYPE_CODES.filter((t) => ["06", "08"].includes(t.code));
 
-  const book = bookListCache.find((b) => b.contentId === currentContentId);
-  const schoolyear = book?.schoolyear;
+  const schoolyear = getCurrentSchoolyear();
   const excluded = schoolyear === "01" || schoolyear === "02" ? "07" : "05";
   return QTYPE_CODES.filter((t) => t.code !== excluded && t.code !== "08");
 }
 
-const GRADE_COLORS = ["orange", "yellow", "green"];
+/* 도서 정보 폼에서 현재 선택된 권장학년 (신규 도서도 저장 전에 폼 값을 그대로 기준으로 삼는다) */
+function getCurrentSchoolyear() {
+  return document.getElementById("bookInfoGradeSelect")?.value ?? "";
+}
+
+/* 이 학년에 심화문제 탭이 있는지 (초1·초2는 없음) */
+function hasAdvancedLevel(schoolyear) {
+  return schoolyear !== "01" && schoolyear !== "02";
+}
+
+/*
+ * 학년+레벨별 고정 문제 수
+ * - 기본(01): 초1~초4는 12문제, 초5·초6은 15문제
+ * - 심화(02): 초1·초2는 없음(0), 초3·초4는 10문제, 초5·초6은 12문제
+ */
+function requiredQuestionCount(schoolyear, level) {
+  if (level === "02") {
+    if (!hasAdvancedLevel(schoolyear)) return 0;
+    return schoolyear === "03" || schoolyear === "04" ? 10 : 12;
+  }
+  return schoolyear === "05" || schoolyear === "06" ? 15 : 12;
+}
+
 
 let bookListCache = [];
 let questionsOriginalSnapshot = "[]"; // 뒤로가기/새로고침/닫기 시 저장 안 된 변경사항 감지용
@@ -147,7 +180,7 @@ function applyRoleUi() {
 
   // 비본사: 마스터 도서 정보 read-only, 신규 등록 = 우리 센터 실물도서 등록
   if (newBtn) newBtn.textContent = "+ 우리 센터 도서 등록";
-  ["btnSaveBook", "btnDeleteSelected", "btnAddQuestion", "btnSaveQuestions"].forEach((id) => {
+  ["btnSaveBook", "btnDeleteSelected"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.hidden = true;
   });
@@ -680,6 +713,13 @@ function renderBookList(books) {
   listEl.innerHTML = "";
 
   books.forEach((book, index) => {
+    // 도서 사이 구분선 (맨 위 도서 앞에는 넣지 않음)
+    if (index > 0) {
+      const divider = document.createElement("li");
+      divider.className = "book-list-divider";
+      listEl.appendChild(divider);
+    }
+
     const li = document.createElement("li");
     li.className = "book-item" + (book.contentId === currentContentId ? " active" : "");
     li.dataset.contentId = book.contentId;
@@ -699,7 +739,7 @@ function renderBookList(books) {
     info.append(title, genre);
 
     const grade = document.createElement("span");
-    grade.className = "grade " + GRADE_COLORS[index % GRADE_COLORS.length];
+    grade.className = "grade " + (GRADE_BADGE_CLASS[book.schoolyear] ?? "");
     grade.textContent = book.schoolyearName ?? "";
 
     li.append(img, info, grade);
@@ -1009,7 +1049,64 @@ function getFormSnapshot() {
   };
 }
 
-/* 저장 버튼 - 신규 등록 / 수정 / 변경 없음 분기 */
+/* 도서 정보 필수 항목 (해시태그/이미지는 선택 항목이라 제외) */
+const REQUIRED_BOOK_FIELDS = [
+  { key: "title", label: "도서명" },
+  { key: "author", label: "저자" },
+  { key: "publisher", label: "출판사" },
+  { key: "schoolYear", label: "권장학년" },
+  { key: "contentType", label: "분류" },
+  { key: "genre", label: "장르" },
+  { key: "readingTime", label: "독서 예상 시간" },
+  { key: "difficulty", label: "난이도" },
+  { key: "summary", label: "도서 소개" },
+];
+
+function getMissingBookFields(snapshot) {
+  return REQUIRED_BOOK_FIELDS.filter((field) => !snapshot[field.key]).map((field) => field.label);
+}
+
+/*
+ * 출제되지 않은 문제 번호 확인 — 현재 보고 있는 탭은 화면에 입력된 값을 기준으로,
+ * 나머지 탭은 아직 화면에 없으므로 서버에 저장된 값(questionCache)을 기준으로 판단한다.
+ */
+function getMissingQuestionSlots() {
+  const schoolyear = getCurrentSchoolyear();
+  if (!schoolyear) return [];
+
+  const levels = hasAdvancedLevel(schoolyear) ? ["01", "02"] : ["01"];
+  const missing = [];
+
+  levels.forEach((level) => {
+    const count = requiredQuestionCount(schoolyear, level);
+    if (!count) return;
+
+    const filledQnums = level === activeLevel
+      ? new Set(
+          [...document.querySelectorAll(".question-editor .question-card")]
+            .filter((card) => collectCard(card).q)
+            .map((card) => card.dataset.qnum)
+        )
+      : new Set(questionCache.filter((q) => q.qlevel === level).map((q) => String(q.qnum)));
+
+    for (let i = 1; i <= count; i++) {
+      const qnum = String(i).padStart(2, "0");
+      if (!filledQnums.has(qnum)) missing.push({ level, qnum });
+    }
+  });
+
+  return missing;
+}
+
+/* 문제 질문은 입력했는데 보기(1~4)나 정답이 비어있는 카드 — 이 경우는 그대로 저장하면 안 되는 오류라 확인 없이 막는다 */
+function getIncompleteQuestionCards() {
+  return [...document.querySelectorAll(".question-editor .question-card")]
+    .map((card) => ({ qnum: card.dataset.qnum, payload: collectCard(card) }))
+    .filter(({ payload }) => payload.q && (!payload.e1 || !payload.e2 || !payload.e3 || !payload.e4 || !payload.ans))
+    .map(({ qnum }) => qnum);
+}
+
+/* 저장 버튼 - 도서 정보 + 문제 등록을 한 번에 처리 (신규 등록 / 수정 / 변경 없음 분기) */
 function initSaveBookButton() {
   const button = document.getElementById("btnSaveBook");
 
@@ -1018,23 +1115,53 @@ function initSaveBookButton() {
   button.addEventListener("click", async () => {
     const snapshot = getFormSnapshot();
 
-    if (!snapshot.title) {
-      alert("도서명을 입력해주세요.");
+    const missingFields = getMissingBookFields(snapshot);
+    if (missingFields.length) {
+      alert(`다음 항목을 입력해주세요.\n${missingFields.join(", ")}`);
       return;
     }
 
-    if (currentMode === "edit") {
-      if (JSON.stringify(snapshot) === JSON.stringify(originalSnapshot)) {
-        alert("변경 사항이 없습니다.");
-        return;
+    const incompleteQuestions = getIncompleteQuestionCards();
+    if (incompleteQuestions.length) {
+      alert(`${incompleteQuestions.join(", ")}번 문제의 보기와 정답을 모두 입력해주세요.`);
+      return;
+    }
+
+    const bookDirty = currentMode !== "edit" || JSON.stringify(snapshot) !== JSON.stringify(originalSnapshot);
+    const questionsDirty = getQuestionsSnapshot() !== questionsOriginalSnapshot;
+
+    if (!bookDirty && !questionsDirty) {
+      alert("변경 사항이 없습니다.");
+      return;
+    }
+
+    if (getMissingQuestionSlots().length) {
+      const proceed = await customConfirm("출제되지 않은 문제가 있습니다. 그래도 저장하시겠습니까?");
+      if (!proceed) return;
+    }
+
+    try {
+      let contentId = currentContentId;
+
+      if (bookDirty) {
+        contentId = await saveBook(currentMode === "edit" ? "update" : "register", snapshot);
       }
-      await saveBook("update", snapshot);
-    } else {
-      await saveBook("register", snapshot);
+
+      if (questionsDirty) {
+        await saveQuestions(contentId);
+      }
+
+      alert("저장되었습니다.");
+      currentContentId = contentId;
+      await loadBookList(currentFilters());
+    } catch (error) {
+      console.error(error);
+      alert(error.message ?? "저장 중 오류가 발생했습니다.");
     }
   });
 }
 
+/* 도서 정보 저장 → 저장된(또는 기존) contentId 반환 */
 async function saveBook(mode, snapshot) {
   const url = mode === "update" ? "/book/update" : "/book/register";
   const payload = {
@@ -1054,15 +1181,8 @@ async function saveBook(mode, snapshot) {
 
   if (mode === "update") payload.contentId = currentContentId;
 
-  try {
-    await postJson(url, payload);
-    alert("저장되었습니다.");
-    currentContentId = mode === "update" ? currentContentId : null;
-    await loadBookList(currentFilters());
-  } catch (error) {
-    console.error(error);
-    alert(error.message ?? "저장 중 오류가 발생했습니다.");
-  }
+  const data = await postJson(url, payload);
+  return mode === "update" ? currentContentId : data.response;
 }
 
 /* ===================== 카테고리 태그 ===================== */
@@ -1206,9 +1326,23 @@ function initQuestionTabs() {
   });
 }
 
-function initQuestionActions() {
-  document.getElementById("btnAddQuestion")?.addEventListener("click", addQuestion);
-  document.getElementById("btnSaveQuestions")?.addEventListener("click", saveQuestions);
+/* 권장학년(초1·초2)엔 심화문제 탭 자체가 없으므로, 학년이 바뀔 때마다 탭 노출 여부를 갱신 */
+function updateQuestionTabsVisibility() {
+  const advancedTab = document.querySelector('.question-tabs button[data-level="02"]');
+  if (!advancedTab) return;
+
+  const showAdvanced = hasAdvancedLevel(getCurrentSchoolyear());
+  advancedTab.hidden = !showAdvanced;
+
+  if (!showAdvanced && activeLevel === "02") {
+    activeLevel = "01";
+    document.querySelectorAll(".question-tabs button").forEach((b) => b.classList.toggle("active", b.dataset.level === "01"));
+  }
+}
+
+/* 권장학년 변경 시 문제 입력 폼(개수/탭)을 다시 그린다 */
+function initGradeSelectChange() {
+  document.getElementById("bookInfoGradeSelect")?.addEventListener("change", renderQuestions);
 }
 
 /* 도서별 문제 목록 조회 */
@@ -1264,31 +1398,50 @@ function readQexValue(card) {
   return qexEl.value;
 }
 
-/* 현재 레벨 문제 렌더링 */
+/*
+ * 학년+레벨별 고정 문제 수만큼 입력 폼을 항상 그대로 보여준다 (문제 추가 버튼 없음).
+ * 이미 저장된 문제가 있으면 해당 슬롯(qnum)에 값을 채워서, 없으면 빈 폼으로 렌더링한다.
+ */
 function renderQuestions() {
   const editor = document.querySelector(".question-editor");
   const numbers = document.querySelector(".question-numbers");
 
   if (!editor || !numbers) return;
 
+  updateQuestionTabsVisibility();
+
   destroyAllSummernote();
   editor.innerHTML = "";
   numbers.innerHTML = "";
 
-  if (currentContentId == null) {
-    editor.innerHTML = '<p class="empty-hint">도서를 선택하면 문제를 편집할 수 있습니다.</p>';
+  const schoolyear = getCurrentSchoolyear();
+
+  if (!schoolyear) {
+    editor.innerHTML = '<p class="empty-hint">권장학년을 선택하면 문제 입력 폼이 표시됩니다.</p>';
     questionsOriginalSnapshot = "[]";
     return;
   }
 
-  const list = questionCache
-    .filter((q) => q.qlevel === activeLevel)
-    .sort((a, b) => String(a.qnum).localeCompare(String(b.qnum)));
+  const count = requiredQuestionCount(schoolyear, activeLevel);
 
-  list.forEach((q) => editor.appendChild(buildQuestionCard(q)));
+  if (count === 0) {
+    editor.innerHTML = '<p class="empty-hint">이 학년은 심화문제가 없습니다.</p>';
+    questionsOriginalSnapshot = "[]";
+    return;
+  }
 
-  if (!list.length) {
-    editor.innerHTML = '<p class="empty-hint">등록된 문제가 없습니다. ‘+ 문제 추가’로 새 문제를 만들어 주세요.</p>';
+  const byQnum = new Map(questionCache.filter((q) => q.qlevel === activeLevel).map((q) => [String(q.qnum), q]));
+
+  if (isHq) {
+    // 본사: 빈 슬롯까지 항상 고정 개수만큼 보여줘서 바로 입력할 수 있게 함
+    for (let i = 1; i <= count; i++) {
+      const qnum = String(i).padStart(2, "0");
+      editor.appendChild(buildQuestionCard(byQnum.get(qnum) ?? null, qnum));
+    }
+  } else {
+    // 비본사(읽기전용): 실제로 저장된 문제만 보여줌 (빈 슬롯을 볼 필요 없음)
+    [...byQnum.keys()].sort().forEach((qnum) => editor.appendChild(buildQuestionCard(byQnum.get(qnum), qnum)));
+    if (!byQnum.size) editor.innerHTML = '<p class="empty-hint">등록된 문제가 없습니다.</p>';
   }
 
   refreshQuestionNumbers();
@@ -1305,14 +1458,15 @@ function getQuestionsSnapshot() {
   return JSON.stringify(cards.map((card) => ({ qnum: card.dataset.qnum ?? "", ...collectCard(card) })));
 }
 
-/* 문제 카드 DOM 생성 */
-function buildQuestionCard(q) {
+/* 문제 카드 DOM 생성 — qnum은 학년별 고정 슬롯 번호(항상 존재), q는 그 슬롯에 저장된 문제(없으면 null) */
+function buildQuestionCard(q, qnum) {
   const uid = ++questionUid;
   const isPassage = q ? q.qexgb === "Y" : false;
 
   const card = document.createElement("section");
   card.className = "question-card";
-  card.dataset.qnum = q ? q.qnum : ""; // 기존 문제면 원본 qnum, 신규면 빈 값
+  card.dataset.qnum = qnum;
+  card.dataset.existing = q ? "1" : ""; // 서버에 이미 저장된 슬롯인지 (저장 시 update/register 분기용)
 
   card.innerHTML = `
     <div class="question-card-head">
@@ -1471,65 +1625,26 @@ function bindQuestionObserver(cards) {
   cards.forEach((card) => questionObserver.observe(card));
 }
 
-/* 문제 추가 (미저장 카드) */
 /*
- * 레벨/학년별 최대 문제 수
- * - 심화(02): 12문제 고정
- * - 기본(01): 도서 학년 초1~초4(schoolyear 01~04)는 12문제, 초5·초6(05·06)은 15문제
+ * 문제 삭제 — 슬롯 개수는 학년별로 고정돼 있으므로 카드 자체를 없애지 않는다.
+ * 서버에 저장된 문제면 삭제 API 호출 후 다시 불러오고(그 슬롯은 빈 폼으로 되돌아옴),
+ * 아직 저장 안 한 슬롯이면 그냥 입력값만 비운다.
  */
-function maxQuestionsForActiveLevel() {
-  if (activeLevel === "02") return 12;
-  const book = bookListCache.find((b) => b.contentId === currentContentId);
-  const schoolyear = book?.schoolyear;
-  return schoolyear === "05" || schoolyear === "06" ? 15 : 12;
-}
-
-function addQuestion() {
-  if (currentContentId == null) {
-    alert("먼저 도서를 저장한 뒤 문제를 등록해주세요.");
-    return;
-  }
-
-  const editor = document.querySelector(".question-editor");
-
-  const max = maxQuestionsForActiveLevel();
-  const currentCount = editor.querySelectorAll(".question-card").length;
-  if (currentCount >= max) {
-    const levelLabel = activeLevel === "02" ? "심화" : "기본";
-    alert(`${levelLabel} 문제는 최대 ${max}개까지만 등록할 수 있습니다.`);
-    return;
-  }
-
-  editor.querySelector(".empty-hint")?.remove();
-
-  const card = buildQuestionCard(null);
-  editor.appendChild(card);
-  refreshQuestionNumbers();
-  initSummernoteFor(card.querySelector(".q-qex"));
-
-  card.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-/* 문제 삭제 */
 async function deleteQuestion(card) {
-  const qnum = card.dataset.qnum;
-
-  // 미저장 카드는 DOM에서만 제거
-  if (!qnum) {
+  if (card.dataset.existing !== "1") {
+    const qnum = card.dataset.qnum;
     destroySummernote(card.querySelector(".q-qex"));
-    card.remove();
-    if (!document.querySelector(".question-editor .question-card")) {
-      renderQuestions();
-    } else {
-      refreshQuestionNumbers();
-    }
+    const fresh = buildQuestionCard(null, qnum);
+    card.replaceWith(fresh);
+    initSummernoteFor(fresh.querySelector(".q-qex"));
+    refreshQuestionNumbers();
     return;
   }
 
   if (!confirm("이 문제를 삭제하시겠습니까?")) return;
 
   try {
-    await postJson("/question/delete", { contentId: currentContentId, qlevel: activeLevel, qnum });
+    await postJson("/question/delete", { contentId: currentContentId, qlevel: activeLevel, qnum: card.dataset.qnum });
     await loadQuestions(currentContentId);
   } catch (error) {
     console.error(error);
@@ -1557,47 +1672,24 @@ function collectCard(card) {
   };
 }
 
-/* 문제 저장 (기존은 update, 신규는 register) */
-async function saveQuestions() {
-  if (currentMode === "new" || currentContentId == null) {
-    alert("먼저 도서를 저장한 뒤 문제를 등록해주세요.");
-    return;
-  }
+/* 문제 저장 — 슬롯의 qnum은 이미 고정돼 있으므로, 서버에 있던 슬롯이면 update, 없던 슬롯이면 register.
+   내용을 하나도 입력하지 않은 빈 슬롯은 그냥 건너뛴다(불필요한 빈 문제 등록 방지).
+   신규 도서는 저장 버튼 클릭 시 도서 등록이 먼저 끝난 뒤 그 contentId로 문제를 저장한다. */
+async function saveQuestions(contentId) {
+  currentContentId = contentId;
 
   const cards = [...document.querySelectorAll(".question-editor .question-card")];
 
-  if (!cards.length) {
-    alert("저장할 문제가 없습니다.");
-    return;
-  }
+  for (const card of cards) {
+    const payload = collectCard(card);
+    if (!payload.q) continue; // 아직 입력 안 한 빈 슬롯은 저장하지 않음
 
-  // 신규 카드에 부여할 문제 번호 계산 (이미 사용 중인 qnum 회피)
-  const used = new Set(cards.map((c) => c.dataset.qnum).filter(Boolean));
-  let nextNum = 1;
-  const nextQnum = () => {
-    while (used.has(String(nextNum).padStart(2, "0"))) nextNum++;
-    const value = String(nextNum).padStart(2, "0");
-    used.add(value);
-    return value;
-  };
+    payload.qnum = card.dataset.qnum;
 
-  try {
-    for (const card of cards) {
-      const payload = collectCard(card);
-
-      if (card.dataset.qnum) {
-        payload.qnum = card.dataset.qnum;
-        await postJson("/question/update", payload);
-      } else {
-        payload.qnum = nextQnum();
-        await postJson("/question/register", payload);
-      }
+    if (card.dataset.existing === "1") {
+      await postJson("/question/update", payload);
+    } else {
+      await postJson("/question/register", payload);
     }
-
-    alert("문제가 저장되었습니다.");
-    await loadQuestions(currentContentId);
-  } catch (error) {
-    console.error(error);
-    alert(error.message ?? "문제 저장 중 오류가 발생했습니다.");
   }
 }

@@ -36,11 +36,11 @@ public class BookController {
 
     // ===================== 마스터 도서 관리 =====================
 
-    /** 마스터 도서 등록 */
+    /** 마스터 도서 등록 (등록 직후 이어서 문제를 저장할 수 있도록 생성된 contentId를 응답으로 반환) */
     @PostMapping("/register")
     public ResponseEntity<?> registerContent(@RequestBody @Valid BookReqDTO.RegisterReqDTO reqDTO) {
         bookService.registerContent(reqDTO);
-        return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
+        return ResponseEntity.ok(ApiUtils.success(reqDTO.getContentId()));
     }
 
     /** 마스터 도서 수정 */

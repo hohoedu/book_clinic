@@ -307,10 +307,16 @@
   grid-template-columns: 48px 1fr auto;
   gap: 10px;
   padding: 12px 10px;
-  border-bottom: 1px solid #edf0f2;
   border-radius: 8px;
   align-items: center;
   cursor: pointer;
+}
+
+/* 도서 사이 구분선 (라운드 코너가 있어 .book-item 테두리로는 안 어울려서 별도 요소로, 맨 위/아래는 제외) */
+.book-list-divider {
+  height: 1px;
+  margin: 2px 10px;
+  background: #edf0f2;
 }
 
 .book-item.active {
@@ -370,24 +376,56 @@
   border-radius: 6px;
   font-size: 13px;
   font-weight: 800;
+  border: 1px solid transparent;
 }
 
-.grade.orange {
-  background: #fff1e7;
-  color: #ff6b00;
-  border: 1px solid #ff8a2a;
+/* 7세 — 현재 시스템에 실제 코드가 없는 화면 잔재용 클래스 (사용 시 확인 필요) */
+.grade-presch {
+  color: #338FCA;
+  background: #C3E7FE;
+  border-color: #6ABAEC;
 }
 
-.grade.yellow {
-  background: #fff8d8;
-  color: #d89400;
-  border: 1px solid #ffbe24;
+.grade-01 { /* 초1 */
+  color: #DD8200;
+  background: #FFF9D0;
+  border-color: #FEC336;
 }
 
-.grade.green {
-  background: #e8ffd6;
-  color: #5e9f00;
-  border: 1px solid #9bd84d;
+.grade-02 { /* 초2 */
+  color: #DB6D01;
+  background: #FFE9D9;
+  border-color: #E69153;
+}
+
+.grade-03 { /* 초3 */
+  color: #90A727;
+  background: #E5F1AE;
+  border-color: #A7BE3C;
+}
+
+.grade-04 { /* 초4 */
+  color: #37AF9F;
+  background: #CAF0EB;
+  border-color: #90D9CF;
+}
+
+.grade-05 { /* 초5 */
+  color: #338FCA;
+  background: #C3E7FE;
+  border-color: #6ABAEC;
+}
+
+.grade-06 { /* 초6 */
+  color: #6A6DD9;
+  background: #CDCEFF;
+  border-color: #9091E2;
+}
+
+.grade-07 { /* 중등 */
+  color: #C05AB8;
+  background: #FFCDFB;
+  border-color: #E186DA;
 }
 
 /* 도서 정보 */
@@ -491,8 +529,9 @@
   height:30px;
   padding:0 10px;
   border-radius:15px;
-  background:#eaf8f5;
-  color:#008b7a;
+  border:1px solid #E79902;
+  background:#FFF9D0;
+  color:#E79902;
   display:flex;
   align-items:center;
   gap:8px;
@@ -502,11 +541,12 @@
 .tag-remove{
   cursor:pointer;
   font-size:12px;
+  color:#E79902;
 }
 
 #categoryInput{
   flex:1;
-  min-width:120px;
+  min-width:2px;
   border:none;
   outline:none;
   height:30px;
@@ -600,11 +640,6 @@
 }
 
 /* 문제 출제 */
-.question-actions {
-  display: flex;
-  gap: 8px;
-}
-
 .question-card-head {
   display: flex;
   align-items: center;

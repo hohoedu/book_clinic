@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.priority.PriorityRepository">
+
+    <select id="countDrafts" resultType="int">
+        SELECT COUNT(*) FROM erp_bookstore_priority_draft
+        WHERE year = #{year} AND schoolyear = #{schoolYear}
+    </select>
+
+    <insert id="insertDraft" useGeneratedKeys="true" keyProperty="req.draftId">
+        INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by)
+        VALUES (#{req.year}, #{req.schoolYear}, #{isActive}, #{createdBy})
+    </insert>
+
+    <insert id="insertPriorityRows">
+        INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order) VALUES
+        <foreach collection="items" item="item" separator=",">
+            (#{draftId}, #{item.contentId}, #{item.sortOrder})
+        </foreach>
+    </insert>
+
+    <!-- 현재 적용 중인 초안의 순위를 조인 - 순위가 없으면(초안 자체가 없거나, 초안에 없는 신간 도서) 목록 뒤로 -->
+    <select id="findRankedBooks" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$RankedBookDTO">
+        SELECT bc.content_id, bc.original_title,
+               ct.codeNm AS content_type_name,
+               bc.keywords, bc.difficulty, bc.state, bc.image_url,
+               p.sort_order
+        FROM erp_bookstore_content bc
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        LEFT JOIN erp_bookstore_priority_draft d
+               ON d.year = #{year} AND d.schoolyear = #{schoolYear} AND d.is_active = 'Y'
+        LEFT JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id AND p.content_id = bc.content_id
+        WHERE bc.schoolyear = #{schoolYear}
+        ORDER BY CASE WHEN p.sort_order IS NULL THEN 1 ELSE 0 END, p.sort_order ASC, bc.content_id ASC
+    </select>
+
+    <select id="findDrafts" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$DraftDTO">
+        SELECT d.draft_id, d.year, d.schoolyear, d.is_active, d.created_by, d.created_at,
+               (SELECT COUNT(*) FROM erp_bookstore_priority p WHERE p.draft_id = d.draft_id) AS book_count
+        FROM erp_bookstore_priority_draft d
+        WHERE d.year = #{year} AND d.schoolyear = #{schoolYear}
+        ORDER BY d.created_at DESC
+    </select>
+
+    <!-- 특정 초안의 순위 미리보기 (예약 목록에서 펼쳐보기) -->
+    <select id="findBooksByDraftId" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$RankedBookDTO">
+        SELECT bc.content_id, bc.original_title,
+               ct.codeNm AS content_type_name,
+               bc.keywords, bc.difficulty, bc.state, bc.image_url,
+               p.sort_order
+        FROM erp_bookstore_priority p
+        JOIN erp_bookstore_content bc ON bc.content_id = p.content_id
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        WHERE p.draft_id = #{draftId}
+        ORDER BY p.sort_order ASC
+    </select>
+
+    <select id="findDraftById" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$DraftDTO">
+        SELECT draft_id, year, schoolyear, is_active, created_at
+        FROM erp_bookstore_priority_draft
+        WHERE draft_id = #{draftId}
+    </select>
+
+    <update id="deactivateDrafts">
+        UPDATE erp_bookstore_priority_draft SET is_active = 'N'
+        WHERE year = #{year} AND schoolyear = #{schoolYear}
+    </update>
+
+    <update id="activateDraftById">
+        UPDATE erp_bookstore_priority_draft SET is_active = 'Y'
+        WHERE draft_id = #{draftId}
+    </update>
+
+    <!-- 초안 삭제 — 복구 기능이 없으므로 _del 테이블로 그대로 이관만 하고 원본은 삭제한다 -->
+    <insert id="insertDraftDel">
+        INSERT INTO erp_bookstore_priority_draft_del (deleted_by, draft_id, year, schoolyear, is_active, created_by, created_at)
+        SELECT #{deletedBy}, draft_id, year, schoolyear, is_active, created_by, created_at
+        FROM erp_bookstore_priority_draft
+        WHERE draft_id = #{draftId}
+    </insert>
+
+    <insert id="insertPriorityDelRows">
+        INSERT INTO erp_bookstore_priority_del (draft_id, content_id, sort_order)
+        SELECT draft_id, content_id, sort_order
+        FROM erp_bookstore_priority
+        WHERE draft_id = #{draftId}
+    </insert>
+
+    <delete id="deletePriorityRowsByDraftId">
+        DELETE FROM erp_bookstore_priority WHERE draft_id = #{draftId}
+    </delete>
+
+    <delete id="deleteDraftById">
+        DELETE FROM erp_bookstore_priority_draft WHERE draft_id = #{draftId}
+    </delete>
+
+    <!-- 엑셀 다운로드 — 해당 연도에 적용(is_active='Y') 중인 초안의 전체 학년 순위를 한 번에 조회 -->
+    <select id="findExcelRows" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$ExcelRowDTO">
+        SELECT bc.schoolyear,
+               sc.codeNm AS schoolyear_name,
+               ct.codeNm AS content_type_name,
+               bc.original_title,
+               gc.codeNm AS genre_name,
+               bc.difficulty,
+               cd_c.name AS curriculum_name,
+               cd_r.name AS recommend_org_name,
+               cd_a.name AS award_name,
+               p.sort_order
+        FROM erp_bookstore_priority_draft d
+        JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id
+        JOIN erp_bookstore_content bc ON bc.content_id = p.content_id
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        LEFT JOIN erp_bookstore_code gc ON gc.gubun = 'G' AND gc.code = bc.genre
+        LEFT JOIN erp_bookstore_code sc ON sc.gubun = 'S' AND sc.code = bc.schoolyear
+        LEFT JOIN erp_bookstore_content_detail cd_c ON cd_c.content_id = bc.content_id AND cd_c.gubun = 'C'
+        LEFT JOIN erp_bookstore_content_detail cd_r ON cd_r.content_id = bc.content_id AND cd_r.gubun = 'R'
+        LEFT JOIN erp_bookstore_content_detail cd_a ON cd_a.content_id = bc.content_id AND cd_a.gubun = 'A'
+        WHERE d.year = #{year} AND d.is_active = 'Y'
+        ORDER BY bc.schoolyear ASC, p.sort_order ASC
+    </select>
+
+</mapper>

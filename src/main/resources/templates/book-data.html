@@ -16,6 +16,7 @@
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/summernote@0.8.20/dist/summernote-lite.min.js"></script>
 
+  <script th:src="@{/js/common.js}"></script>
   <script th:src="@{/js/sidebar.js}"></script>
   <script th:src="@{/js/book-data.js}"></script>
   <script src="https://kit.fontawesome.com/본인키트주소.js" crossorigin="anonymous"></script>
@@ -196,7 +197,7 @@
               <label>해시태그</label>
               <div class="tag-input-area">
                 <div class="tag-list"></div>
-                <input type="text" id="categoryInput" placeholder="해시태그 입력 후 Enter 또는 , 입력">
+                <input type="text" id="categoryInput">
               </div>
             </div>
 
@@ -271,10 +272,6 @@
         <section class="panel question-panel">
           <div class="panel-title-row">
             <h2>문제 출제</h2>
-            <div class="question-actions">
-              <button type="button" id="btnAddQuestion" class="btn outline small">+ 문제 추가</button>
-              <button type="button" id="btnSaveQuestions" class="btn primary small">문제 저장</button>
-            </div>
           </div>
 
           <div class="question-tabs">

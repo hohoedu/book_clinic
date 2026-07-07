@@ -3,10 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <title>오류 발생</title>
+    <link rel="stylesheet" th:href="@{/css/common.css}" />
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: visible;
+            text-align: center;
+            gap: 8px;
+        }
+
+        .error-back-btn {
+            margin-top: 24px;
+        }
+    </style>
 </head>
 <body>
     <h2>오류가 발생했습니다</h2>
     <p th:text="'상태 코드: ' + ${status}"></p>
     <p th:text="'메시지: ' + ${message}"></p>
+
+    <button type="button" class="btn primary error-back-btn" onclick="history.back()">뒤로가기</button>
 </body>
 </html>
