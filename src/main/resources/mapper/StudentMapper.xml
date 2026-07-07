@@ -13,6 +13,15 @@
         WHERE student_id = #{studentId}
     </select>
 
+    <select id="findByAppId" resultType="com.hohoedu.book_clinic.student.model.Student">
+        SELECT id, created_at, updated_at, center_code, grade_key, status_key, school,
+               student_id, student_name, address, address_detail, app_id, app_password,
+               app_token, birth, profile_img, consult_key, billing_phone, serial_num,
+               gender, student_privacy_agree, is_hoho, sub_han, sub_book, sub_hoho
+        FROM erp_student
+        WHERE app_id = #{appId}
+    </select>
+
     <select id="findTokensByCenter" resultType="String">
         SELECT app_token
         FROM erp_student

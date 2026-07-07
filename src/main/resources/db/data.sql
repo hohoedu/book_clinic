@@ -76,7 +76,7 @@ INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, pass
 ('DAE001', 'ADMIN', 'USR003', 'branch2', '지점관리자', '96ce7949d922462c4abff4cf507abb65299a3bd61b2d34285630d5054a6e53f6', 'test_salt', 'ADMIN', 1, 1, 1, 1);
 
 INSERT INTO erp_student (gender, student_privacy_agree, created_at, updated_at, app_id, center_code, grade_key, status_key, school, student_id, student_name, address, address_detail, app_password, app_token, birth, is_hoho, billing_phone, sub_han, sub_book, sub_hoho, serial_num)
-VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880', 'PUS001', '13', 'ACTIVE', '호호 초등학교', 'PUS001251202FDA6E', '김호이', '부산 해운대구 센텀중앙로 97', 'A동 2810호', '62da5956da04fdedd0ff08a3f8c812793ef4219cd0405d44bf5412f3264fecf0', 'el7jugjIxU2ikFMRCZyTK8:APA91bE2fkQ6TDmwXcy7sHIdScsIMJ7mGrkixZxYLwpVuDWogq3aXHxbAStlasw7h1VeByp0Ey0iU9MUiiiMCqyOGwNpYOqDOHeq7A4rwp17ATklirE2oOU', '2015-12-12',  0, '01062954886', 1, 1, 0, '002260002');
+VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880', 'PUS001', '11', 'ACTIVE', '호호 초등학교', 'PUS001251202FDA6E', '김호이', '부산 해운대구 센텀중앙로 97', 'A동 2810호', '62da5956da04fdedd0ff08a3f8c812793ef4219cd0405d44bf5412f3264fecf0', 'el7jugjIxU2ikFMRCZyTK8:APA91bE2fkQ6TDmwXcy7sHIdScsIMJ7mGrkixZxYLwpVuDWogq3aXHxbAStlasw7h1VeByp0Ey0iU9MUiiiMCqyOGwNpYOqDOHeq7A4rwp17ATklirE2oOU', '2015-12-12',  0, '01062954886', 1, 1, 0, '002260002');
 
 INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty) VALUES
 ('어린왕자', '생텍쥐페리', '02', '03', '01', '어린왕자의 모험 이야기', '어린왕자, 안토안 드 생텍쥐페리','Y','문학동네', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg', 30, '하'),
@@ -605,3 +605,77 @@ INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, 
 ('흥부전', '김해등', '01', NULL, '03', '평생 밥 한 그릇 배불리 먹는 게 소원인 흥부와 가지면 가질수록 더 가지려고 하는 놀부의 이야기이다.', 'Y', '상'),
 ('WHAT? 지구와 달', '유영진', '19', NULL, '04', '옛날부터 오늘날까지 지구와 달에 대해 사람들이 가졌던 생각과 궁금증에 대해 알려주는 책이다.', 'Y', '중');
 
+
+
+-- ────────────────────────────────────────────────────────
+-- 학생 독서 클리닉 마스터 데이터
+-- ────────────────────────────────────────────────────────
+
+-- 레벨 마스터 (1~10) — required_exp: 다음 레벨로 올라가는 데 필요한 누적 EXP (레벨10은 만렙 기준치)
+INSERT INTO erp_bookstore_level (level_no, level_name, title, feature, required_exp) VALUES
+(1,  N'입문',   N'독서 씨앗',     N'독서의 즐거움을 발견하는 시기',            80),
+(2,  N'입문',   N'독서 새싹',     N'독서의 즐거움을 발견하는 시기',            200),
+(3,  N'입문',   N'이야기 친구',   N'독서의 즐거움을 발견하는 시기',            360),
+(4,  N'입문',   N'책벌레',        N'독서의 즐거움을 발견하는 시기',            560),
+(5,  N'성장',   N'독서 탐험가',   N'책 속 지식과 생각을 모으는 시기',          760),
+(6,  N'성장',   N'생각 탐험가',   N'책 속 지식과 생각을 모으는 시기',          980),
+(7,  N'성장',   N'이야기 수집가', N'책 속 지식과 생각을 모으는 시기',          1200),
+(8,  N'성장',   N'독서 여행자',   N'책 속 지식과 생각을 모으는 시기',          1440),
+(9,  N'마스터', N'꿈꾸는 독서가', N'책을 통해 성장한 호호책방 대표 독서가',    1680),
+(10, N'마스터', N'독서 완주자',   N'책을 통해 성장한 호호책방 대표 독서가',    1920);
+
+-- 학년별 권당 EXP — 읽은 책의 학년(content.schoolyear) 기준. 중등(S07)은 운영에서 확정 예정이라 제외
+INSERT INTO erp_bookstore_exp_rule (schoolyear, exp_per_book) VALUES
+('01', 20),  -- 초1
+('02', 20),  -- 초2
+('03', 40),  -- 초3
+('04', 40),  -- 초4
+('05', 80),  -- 초5
+('06', 80);  -- 초6
+
+-- 뱃지 마스터 — student-main.html에 있는 4종
+INSERT INTO erp_bookstore_badge (badge_name, description, image_url, condition_type, condition_value) VALUES
+(N'독서 탐험가',   N'첫 번째 정독을 완료했어요!',       '/images/badge-1-01.png', 'FIRST_DONE',  1),
+(N'이해력 마스터', N'독서친구를 5번 받았어요!',         '/images/badge-1-02.png', 'FRIEND_CNT',  5),
+(N'추론 분석가',   N'독서왕을 5번 받았어요!',           '/images/badge-1-03.png', 'KING_CNT',    5),
+(N'완독 챌린저',   N'이번 달 필독서를 모두 읽었어요!',  '/images/badge-1-04.png', 'MONTHLY_ALL', 1);
+
+
+-- ────────────────────────────────────────────────────────
+-- 학생 독서 클리닉 테스트 데이터 (데모 학생: 김호이 / PUS001251202FDA6E, 초5 기준)
+-- ────────────────────────────────────────────────────────
+
+-- 학생 현황: 레벨3 (누적 EXP 280 — 200 이상 360 미만 구간)
+INSERT INTO erp_bookstore_student_info (student_id, level_no, exp, books_read) VALUES
+('PUS001251202FDA6E', 3, 280, 5);
+
+-- 획득 뱃지: 4종 모두 (화면 데모용)
+INSERT INTO erp_bookstore_student_badge (student_id, badge_id, acquired_at)
+SELECT 'PUS001251202FDA6E', badge_id, DATEADD(day, -badge_id, GETDATE())
+FROM erp_bookstore_badge;
+
+-- 독서 기록: 이번 달 완독 1건 (기관추천 '04' 분류/창작 장르 → 추천 시 이 분류·장르가 스킵되는지 확인용)
+INSERT INTO erp_bookstore_reading (student_id, content_id, status, started_at, completed_at)
+SELECT TOP 1 'PUS001251202FDA6E', content_id, 'DONE', DATEADD(day, -5, GETDATE()), DATEADD(day, -2, GETDATE())
+FROM erp_bookstore_content
+WHERE schoolyear = '05' AND content_type = '04' AND state = 'Y'
+ORDER BY content_id;
+
+-- 독서 기록: 읽는 중 1건
+INSERT INTO erp_bookstore_reading (student_id, content_id, status, started_at)
+SELECT TOP 1 'PUS001251202FDA6E', content_id, 'READING', DATEADD(day, -1, GETDATE())
+FROM erp_bookstore_content
+WHERE schoolyear = '05' AND content_type IS NULL AND state = 'Y'
+ORDER BY content_id;
+
+-- 권장도서 순위 초안: 올해 + 초5, 활성 상태
+INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by) VALUES
+(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '05', 'Y', 'seed');
+
+-- 순위 내용: 초5 노출 도서 전체를 content_id 순으로 순위 부여
+INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
+SELECT (SELECT MAX(draft_id) FROM erp_bookstore_priority_draft),
+       content_id,
+       ROW_NUMBER() OVER (ORDER BY content_id)
+FROM erp_bookstore_content
+WHERE schoolyear = '05' AND state = 'Y';

@@ -34,9 +34,11 @@ public class SecurityConfig {
                                 "/error",
                                 "/h2-console/**",
                                 "/css/**", "/js/**", "/images/**", "/uploads/**", "/favicon.ico",
+                                "/manifest.json", "/sw.js",
                                 "/temp-upload.html",
                                 "/question/upload/template",
-                                "/question/upload")
+                                "/question/upload",
+                                "/student/**")
                         .permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form

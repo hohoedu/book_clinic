@@ -11,6 +11,8 @@ public interface StudentRepository {
 
     Student findById(@Param("studentId") String studentId);
 
+    Student findByAppId(@Param("appId") String appId);
+
     List<String> findTokensByCenter(@Param("centerCode") String centerCode);
 
     List<String> findAllTokens();

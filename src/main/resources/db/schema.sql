@@ -1,4 +1,12 @@
 -- DROP (FK 역순)
+IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE erp_bookstore_recommend_log;
+IF OBJECT_ID('erp_bookstore_reading',               'U') IS NOT NULL DROP TABLE erp_bookstore_reading;
+IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
+IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
+IF OBJECT_ID('erp_bookstore_student_info',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_info;
+IF OBJECT_ID('erp_bookstore_character',             'U') IS NOT NULL DROP TABLE erp_bookstore_character;
+IF OBJECT_ID('erp_bookstore_exp_rule',              'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;
+IF OBJECT_ID('erp_bookstore_level',                 'U') IS NOT NULL DROP TABLE erp_bookstore_level;
 IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
 IF OBJECT_ID('erp_bookstore_itempool_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_itempool_del;
@@ -287,4 +295,86 @@ CREATE TABLE erp_notification (
     fcm_token     VARCHAR(500),
     status        VARCHAR(10),
     error_msg     VARCHAR(500)
+);
+
+
+-- ────────────────────────────────────────────────────────
+-- 학생 독서 클리닉 (student-main 화면)
+-- 참고: erp_student.student_id 에 UNIQUE 제약이 없어 학생 연결은 FK 없이
+--       student_id VARCHAR 값으로만 연결한다 (erp_notification.target_id와 같은 방식)
+-- ────────────────────────────────────────────────────────
+
+-- 레벨 마스터 — 누적 EXP 기준으로 레벨이 정해지고, 레벨마다 단계/칭호/특징이 있다
+CREATE TABLE erp_bookstore_level (
+    level_no      INT           PRIMARY KEY,      -- 1 ~ 10
+    level_name    NVARCHAR(50)  NOT NULL,         -- 단계명 (입문 / 성장 / 마스터)
+    title         NVARCHAR(50),                   -- 칭호 (독서 씨앗, 독서 새싹 ...)
+    feature       NVARCHAR(300),                  -- 단계별 특징 문구
+    required_exp  INT           NOT NULL          -- 이 레벨에서 다음 레벨로 올라가는 데 필요한 누적 EXP (레벨10은 만렙 기준치)
+);
+
+-- 학년별 권당 EXP — 읽은 "책의 학년(content.schoolyear)"에 따라 획득 EXP가 다르다
+-- (예: 초1~2 책 = 20EXP, 초5~6 책 = 80EXP)
+CREATE TABLE erp_bookstore_exp_rule (
+    schoolyear    VARCHAR(20)   PRIMARY KEY,      -- 학년 코드 (S코드)
+    exp_per_book  INT           NOT NULL          -- 해당 학년 도서 1권 완독 시 획득 EXP
+);
+
+-- 캐릭터 마스터 — 레벨과 무관하게 학생이 직접 선택
+CREATE TABLE erp_bookstore_character (
+    character_id   INT IDENTITY(1,1) PRIMARY KEY,
+    character_name NVARCHAR(50)  NOT NULL,
+    image_url      VARCHAR(255)  NOT NULL
+);
+
+-- 학생 독서 현황 (erp_student 1:1) — 현재 상태 스냅샷
+CREATE TABLE erp_bookstore_student_info (
+    student_id    VARCHAR(100)  PRIMARY KEY,      -- erp_student.student_id
+    level_no      INT           NOT NULL DEFAULT 1,
+    exp           INT           NOT NULL DEFAULT 0,  -- 누적 경험치
+    books_read    INT           NOT NULL DEFAULT 0,  -- 누적 완독 수 (reading에서 파생되는 캐시)
+    character_id  INT,                               -- 학생이 선택한 캐릭터
+    updated_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (level_no)     REFERENCES erp_bookstore_level(level_no),
+    FOREIGN KEY (character_id) REFERENCES erp_bookstore_character(character_id)
+);
+
+-- 뱃지 마스터
+CREATE TABLE erp_bookstore_badge (
+    badge_id        INT IDENTITY(1,1) PRIMARY KEY,
+    badge_name      NVARCHAR(50)  NOT NULL,       -- '독서 탐험가'
+    description     NVARCHAR(200),                -- '첫 번째 정독을 완료했어요!'
+    image_url       VARCHAR(255),
+    condition_type  VARCHAR(30),                  -- 획득 조건 유형 (FIRST_DONE / FRIEND_CNT / KING_CNT / MONTHLY_ALL ...)
+    condition_value INT                           -- 조건 수치 (5번, 1회 등)
+);
+
+-- 학생-뱃지 매핑 (N:N)
+CREATE TABLE erp_bookstore_student_badge (
+    student_id   VARCHAR(100)  NOT NULL,
+    badge_id     INT           NOT NULL,
+    acquired_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (student_id, badge_id),
+    FOREIGN KEY (badge_id) REFERENCES erp_bookstore_badge(badge_id)
+);
+
+-- 독서 기록 — "이번 달에 읽은 책", 추천 제외 조건(분류/장르/기읽음), EXP 적립의 원천
+CREATE TABLE erp_bookstore_reading (
+    reading_id    INT IDENTITY(1,1) PRIMARY KEY,
+    student_id    VARCHAR(100)  NOT NULL,
+    content_id    INT           NOT NULL,
+    status        VARCHAR(20)   NOT NULL DEFAULT 'READING',  -- READING / DONE
+    started_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    completed_at  DATETIME2,                       -- 완독 시각 (월별 조회 및 EXP 적립 기준)
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+
+-- 추천 이력 — 로그인/'다른 도서 추천' 클릭 시마다 다음 우선순위 도서가 추천되므로
+-- 시퀀셜 로그로 쌓고, "다음 추천"은 마지막 추천 이후의 순위부터 탐색한다
+CREATE TABLE erp_bookstore_recommend_log (
+    recommend_id    INT IDENTITY(1,1) PRIMARY KEY,
+    student_id      VARCHAR(100)  NOT NULL,
+    content_id      INT           NOT NULL,
+    recommended_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
