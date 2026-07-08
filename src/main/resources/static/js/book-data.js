@@ -1,3 +1,10 @@
+// PWA 설치 버튼(beforeinstallprompt)이 뜨려면 이 페이지에도 서비스워커가 등록돼 있어야 함
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch((err) => console.error("Service worker 등록 실패:", err));
+  });
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
   initToolbarFilters();
   initContentTypeChips();
@@ -12,10 +19,10 @@ document.addEventListener("DOMContentLoaded", async () => {
   initImageButtons();
   initStatusToggle();
   initCategoryTagInput();
-  initExtraFieldButtons();
   initQuestionTabs();
   initGradeSelectChange();
   initGuideLogout();
+  initPwaInstallButton();
   initUnsavedChangesGuard();
 
   loadGradeOptions();
@@ -193,7 +200,7 @@ const MASTER_FIELD_IDS = [
   "bookInfoGradeSelect", "bookInfoGenreSelect", "bookInfoReadingTime", "bookInfoDifficulty",
   "bookInfoSummary", "categoryInput", "bookImageInput",
   "btnImageChange", "btnImageDelete",
-  "bookInfoAward", "bookInfoRecommendOrg", "btnAddAward", "btnAddRecommendOrg",
+  "bookInfoExtraDetail",
 ];
 
 function setBookFormReadonly(readonly) {
@@ -220,7 +227,7 @@ function setQuestionsReadonly() {
 
 /* 사용 가이드 버튼 → (임시) 로그아웃 */
 function initGuideLogout() {
-  const button = document.querySelector(".guide-btn");
+  const button = document.getElementById("btnGuideLogout");
   if (!button) return;
 
   button.addEventListener("click", async () => {
@@ -230,6 +237,33 @@ function initGuideLogout() {
       console.error(error);
     }
     window.location.href = "/login";
+  });
+}
+
+/* PWA 설치 버튼 — 브라우저가 설치 가능하다고 판단하면 beforeinstallprompt가 발생함 */
+function initPwaInstallButton() {
+  const installBtn = document.getElementById("pwaInstallBtn");
+  if (!installBtn) return;
+
+  let deferredInstallPrompt = null;
+
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    installBtn.hidden = false;
+  });
+
+  installBtn.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    deferredInstallPrompt.prompt();
+    await deferredInstallPrompt.userChoice;
+    deferredInstallPrompt = null;
+    installBtn.hidden = true;
+  });
+
+  window.addEventListener("appinstalled", () => {
+    installBtn.hidden = true;
+    deferredInstallPrompt = null;
   });
 }
 
@@ -347,6 +381,18 @@ function buildItemCard(item, master) {
         ? '<button type="button" class="btn primary small it-update">수정</button><button type="button" class="btn danger-outline small it-delete">삭제</button>'
         : '<button type="button" class="btn outline small it-cancel">취소</button><button type="button" class="btn primary small it-register">등록</button>'}
     </div>
+    ${isExisting ? `
+    <div class="item-loan-panel">
+      <div class="item-loan-stock">
+        보유 <b class="loan-qty-total">-</b> · 대여중 <b class="loan-qty-loaned">-</b> · 대여가능 <b class="loan-qty-available">-</b>
+      </div>
+      <div class="item-loan-form">
+        <input type="text" class="it-loan-appid" placeholder="학생 앱ID">
+        <button type="button" class="btn primary small it-loan-btn">대여</button>
+        <button type="button" class="btn outline small it-loan-list-btn">대여 중 목록</button>
+      </div>
+      <div class="item-loan-list" hidden></div>
+    </div>` : ''}
   `;
 
   card.querySelector(".it-title").value = (isExisting ? item.bookTitle : master?.originalTitle) ?? "";
@@ -379,12 +425,102 @@ function buildItemCard(item, master) {
   if (isExisting) {
     card.querySelector(".it-update").addEventListener("click", () => updateBranchItem(card));
     card.querySelector(".it-delete").addEventListener("click", () => deleteBranchItem(card));
+    renderLoanStock(card, item);
+    card.querySelector(".it-loan-btn").addEventListener("click", () => loanBranchItem(card, item));
+    card.querySelector(".it-loan-list-btn").addEventListener("click", () => toggleLoanList(card, item));
   } else {
     card.querySelector(".it-cancel").addEventListener("click", () => card.remove());
     card.querySelector(".it-register").addEventListener("click", () => registerBranchItem(card));
   }
 
   return card;
+}
+
+/* 보유/대여중/대여가능 수량 표시 */
+function renderLoanStock(card, item) {
+  const total = item.quantity ?? 0;
+  const loaned = item.loanedQty ?? 0;
+  const lost = item.lostQty ?? 0;
+  const available = Math.max(total - loaned - lost, 0);
+  card.querySelector(".loan-qty-total").textContent = total;
+  card.querySelector(".loan-qty-loaned").textContent = loaned;
+  card.querySelector(".loan-qty-available").textContent = available;
+}
+
+/* 학생에게 대여 처리 (재고 확인은 서버에서 최종 판단) */
+async function loanBranchItem(card, item) {
+  const appIdInput = card.querySelector(".it-loan-appid");
+  const appId = appIdInput.value.trim();
+  if (!appId) {
+    alert("학생 앱ID를 입력해주세요.");
+    return;
+  }
+  try {
+    await postJson("/book/item/loan", { bcode: item.bcode, centerCode: currentUser?.centerCode, appId });
+    alert("대여 처리되었습니다.");
+    appIdInput.value = "";
+    await refreshBranchItems();
+  } catch (error) {
+    console.error(error);
+    alert(error.message ?? "대여 처리 중 오류가 발생했습니다.");
+  }
+}
+
+/* 대여 중 목록 토글 (열 때마다 최신 상태로 다시 조회) */
+async function toggleLoanList(card, item) {
+  const listEl = card.querySelector(".item-loan-list");
+  if (!listEl.hidden) {
+    listEl.hidden = true;
+    return;
+  }
+  listEl.hidden = false;
+  await loadLoanList(listEl, item);
+}
+
+async function loadLoanList(listEl, item) {
+  listEl.innerHTML = '<p class="empty-hint">불러오는 중...</p>';
+  try {
+    const response = await fetch(`/book/item/loan/${encodeURIComponent(item.bcode)}/${encodeURIComponent(currentUser?.centerCode)}`);
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error?.message ?? "대여 목록 조회에 실패했습니다.");
+
+    const loans = data.response ?? [];
+    if (!loans.length) {
+      listEl.innerHTML = '<p class="empty-hint">대여 중인 건이 없습니다.</p>';
+      return;
+    }
+
+    listEl.innerHTML = "";
+    loans.forEach((loan) => {
+      const row = document.createElement("div");
+      row.className = "loan-row";
+      const loanedAt = loan.loanedAt ? new Date(loan.loanedAt).toLocaleString() : "-";
+      row.innerHTML = `
+        <span class="loan-row-student">${loan.studentName ?? loan.studentId} (${loan.studentId})</span>
+        <span class="loan-row-date">${loanedAt}</span>
+        <button type="button" class="btn outline small loan-row-return">반납</button>
+      `;
+      row.querySelector(".loan-row-return").addEventListener("click", async () => {
+        try {
+          await postJson("/book/item/loan/return", { loanId: loan.loanId });
+          await refreshBranchItems();
+          const refreshedCard = document.querySelector(`.item-card[data-bcode="${CSS.escape(item.bcode)}"]`);
+          const refreshedList = refreshedCard?.querySelector(".item-loan-list");
+          if (refreshedList) {
+            refreshedList.hidden = false;
+            await loadLoanList(refreshedList, item);
+          }
+        } catch (error) {
+          console.error(error);
+          alert(error.message ?? "반납 처리 중 오류가 발생했습니다.");
+        }
+      });
+      listEl.appendChild(row);
+    });
+  } catch (error) {
+    console.error(error);
+    listEl.innerHTML = '<p class="empty-hint">대여 목록을 불러오지 못했습니다.</p>';
+  }
 }
 
 function setCardImage(card, url) {
@@ -839,24 +975,26 @@ function initContentTypeChips() {
 
   wrap.querySelectorAll(".chip").forEach((chip) => {
     chip.addEventListener("click", () => {
-      if (chip.classList.contains("active")) {
-        chip.classList.remove("active");
-        selectedContentType = "";
-      } else {
-        wrap.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-        chip.classList.add("active");
-        selectedContentType = chip.dataset.code;
-      }
+      setContentTypeChip(chip.classList.contains("active") ? "" : chip.dataset.code);
     });
   });
 }
 
+/* 분류 선택 상태 반영 + 그에 딸린 부가 입력칸(연계교과/추천기관/수상명) 갱신 */
 function setContentTypeChip(code) {
   selectedContentType = code ?? "";
   document
     .querySelectorAll("#contentTypeChips .chip")
     .forEach((chip) => chip.classList.toggle("active", chip.dataset.code === selectedContentType));
+  updateExtraDetailField();
 }
+
+/* 분류(content_type)별 부가 입력칸 라벨/placeholder — 교과연계(01)/기관추천(04)/인증수상작(05)만 해당 */
+const EXTRA_DETAIL_BY_TYPE = {
+  "01": { label: "연계교과", placeholder: "연계 교과목을 입력해 주세요." },
+  "04": { label: "추천기관", placeholder: "추천기관명을 입력해 주세요." },
+  "05": { label: "수상명", placeholder: "수상명을 입력해 주세요." },
+};
 
 /* 사용여부 라디오 (use → Y, stop → N) - 선택 즉시 확인 후 DB 반영 */
 function initStatusToggle() {
@@ -965,7 +1103,7 @@ function renderBookInfo(book) {
   setBookImage(book.imageUrl);
   setContentTypeChip(book.contentType ?? "");
   setCategoryTags(book.keywords ? book.keywords.split(",").map((k) => k.trim()).filter(Boolean) : []);
-  resetExtraFields();
+  updateExtraDetailField(book.extraDetailName ?? "");
 
   originalSnapshot = getFormSnapshot();
 
@@ -992,7 +1130,6 @@ function clearBookInfo(isNew) {
   setBookImage("");
   setContentTypeChip("");
   setCategoryTags([]);
-  resetExtraFields();
 
   originalSnapshot = getFormSnapshot();
 
@@ -1046,6 +1183,7 @@ function getFormSnapshot() {
     contentType: selectedContentType,
     state: getStatusValue(),
     imageUrl: currentImageUrl,
+    extraDetail: document.getElementById("bookInfoExtraDetail")?.value.trim() ?? "",
   };
 }
 
@@ -1177,6 +1315,7 @@ async function saveBook(mode, snapshot) {
     contentType: snapshot.contentType,
     state: snapshot.state,
     imageUrl: snapshot.imageUrl,
+    extraDetail: snapshot.extraDetail,
   };
 
   if (mode === "update") payload.contentId = currentContentId;
@@ -1271,45 +1410,27 @@ function initCategoryTagInput() {
   });
 }
 
-/* ===================== 수상명 / 추천기관 동적 폼 ===================== */
+/* ===================== 분류별 부가 입력칸 (연계교과 / 추천기관 / 수상명) ===================== */
 
-const EXTRA_FIELDS = [
-  { buttonId: "btnAddAward", rowId: "awardFieldRow", inputId: "bookInfoAward" },
-  { buttonId: "btnAddRecommendOrg", rowId: "recommendOrgFieldRow", inputId: "bookInfoRecommendOrg" },
-];
+/* 선택된 분류(selectedContentType)에 맞춰 라벨/placeholder를 갈아끼우고 노출 여부를 정한다.
+ * value를 넘기면 그 값으로 채우고, 생략하면 분류 전환 시 이전 값은 비운다. */
+function updateExtraDetailField(value = "") {
+  const row = document.getElementById("extraDetailRow");
+  const label = document.getElementById("extraDetailLabel");
+  const input = document.getElementById("bookInfoExtraDetail");
+  if (!row || !label || !input) return;
 
-/* 버튼 클릭 → 버튼 숨기고 입력 폼 노출, X 클릭 → 입력 비우고 버튼 복원 */
-function initExtraFieldButtons() {
-  EXTRA_FIELDS.forEach(({ buttonId, rowId, inputId }) => {
-    const button = document.getElementById(buttonId);
-    const row = document.getElementById(rowId);
-    if (!button || !row) return;
+  const meta = EXTRA_DETAIL_BY_TYPE[selectedContentType];
+  if (!meta) {
+    row.hidden = true;
+    input.value = "";
+    return;
+  }
 
-    button.addEventListener("click", () => {
-      button.hidden = true;
-      row.hidden = false;
-      document.getElementById(inputId)?.focus();
-    });
-
-    row.querySelector(".extra-field-remove")?.addEventListener("click", () => {
-      const input = document.getElementById(inputId);
-      if (input) input.value = "";
-      row.hidden = true;
-      button.hidden = false;
-    });
-  });
-}
-
-/* 다른 도서 선택/신규 등록 시 동적 폼 초기 상태(버튼만 보임)로 복원 */
-function resetExtraFields() {
-  EXTRA_FIELDS.forEach(({ buttonId, rowId, inputId }) => {
-    const button = document.getElementById(buttonId);
-    const row = document.getElementById(rowId);
-    const input = document.getElementById(inputId);
-    if (input) input.value = "";
-    if (row) row.hidden = true;
-    if (button) button.hidden = false;
-  });
+  row.hidden = false;
+  label.textContent = meta.label;
+  input.placeholder = meta.placeholder;
+  input.value = value;
 }
 
 /* ===================== 문제 출제 ===================== */

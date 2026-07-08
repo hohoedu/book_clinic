@@ -65,16 +65,6 @@ public class ClinicRespDTO {
         private String awardName;        // 수상명 (detail A)
     }
 
-    /** 추천 후보 (우선순위 순회용 — 판정에 필요한 최소 정보) */
-    @Getter
-    @Setter
-    public static class CandidateDTO {
-        private Integer contentId;
-        private String contentType;    // 분류 코드
-        private String genre;          // 장르 코드
-        private Integer sortOrder;
-    }
-
     /** 최근 완독 도서의 분류/장르 (추천 스킵 판정 기준) */
     @Getter
     @Setter

@@ -6,7 +6,13 @@
   <meta name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
   <title>호호책방 학생 로그인</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
   <meta name="theme-color" content="#0988d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" th:href="@{/css/student-common.css}" />
   <style>
@@ -84,6 +90,15 @@
       <button type="submit">입장하기</button>
     </form>
   </div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => {
+          console.error('Service worker 등록 실패:', err);
+        });
+      });
+    }
+  </script>
 </body>
 
 </html>

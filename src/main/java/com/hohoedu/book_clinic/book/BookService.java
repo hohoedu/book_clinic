@@ -1,13 +1,17 @@
 package com.hohoedu.book_clinic.book;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic.book._dto.BookReqDTO;
 import com.hohoedu.book_clinic.book._dto.BookRespDTO;
+import com.hohoedu.book_clinic.student.StudentRepository;
+import com.hohoedu.book_clinic.student.model.Student;
 
 import lombok.RequiredArgsConstructor;
 
@@ -20,16 +24,42 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class BookService {
 
+    // 분류(content_type) 코드 → content_detail gubun (01=교과연계, 04=기관추천, 05=인증수상작)
+    private static final Map<String, String> EXTRA_DETAIL_GUBUN_BY_CONTENT_TYPE =
+            Map.of("01", "C", "04", "R", "05", "A");
+    private static final List<String> ALL_DETAIL_GUBUNS = List.of("C", "R", "A");
+
     private final BookRepository bookRepository;
+    private final StudentRepository studentRepository;
 
     /** 마스터 도서 등록 */
+    @Transactional
     public void registerContent(BookReqDTO.RegisterReqDTO reqDTO) {
         bookRepository.registerContent(reqDTO);
+        saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
     }
 
     /** 마스터 도서 수정 */
+    @Transactional
     public void updateContent(BookReqDTO.UpdateReqDTO reqDTO) {
         bookRepository.updateContent(reqDTO);
+        saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
+    }
+
+    /**
+     * 분류별 부가 정보(연계교과/추천기관/수상명) 저장 — 도서당 최대 1행이므로
+     * 현재 분류에 해당하는 gubun에만 값을 넣고, 나머지 gubun은 정리한다
+     * (분류가 바뀌어 이전 부가정보가 남아있는 경우 대비)
+     */
+    private void saveExtraDetail(Integer contentId, String contentType, String detail) {
+        String activeGubun = EXTRA_DETAIL_GUBUN_BY_CONTENT_TYPE.get(contentType);
+        for (String gubun : ALL_DETAIL_GUBUNS) {
+            if (gubun.equals(activeGubun) && detail != null && !detail.isBlank()) {
+                bookRepository.upsertContentDetail(contentId, gubun, detail);
+            } else {
+                bookRepository.deleteContentDetail(contentId, gubun);
+            }
+        }
     }
 
     /** 마스터 도서 삭제 - 저장 프로시저로 연결된 item, itempool까지 일괄 처리 */
@@ -134,6 +164,39 @@ public class BookService {
     /** 센터 도서 매핑 삭제 */
     public void deleteItemCenter(String bcode, String centerCode) {
         bookRepository.deleteItemCenterCode (bcode, centerCode);
+    }
+
+    /**
+     * 실물 도서 대여 처리
+     * 재고(quantity - loaned_qty - lost_qty)가 남아있을 때만 loaned_qty를 조건부로 +1 하고,
+     * 그 결과(영향 행 수)로 재고 유무를 판단한다 — 대여 이력(item_loan)만 쌓고 loaned_qty를
+     * 갱신하지 않으면 추천 로직이 재고가 그대로 있다고 착각해 이미 나간 책을 다시 추천하게 된다.
+     */
+    @Transactional
+    public void loanItem(BookReqDTO.ItemLoanReqDTO reqDTO) {
+        Student student = studentRepository.findByAppId(reqDTO.getAppId());
+        if (student == null) throw new Exception404("해당 앱 ID의 학생을 찾을 수 없습니다: " + reqDTO.getAppId());
+
+        int updated = bookRepository.incrementLoanedQty(reqDTO.getBcode(), reqDTO.getCenterCode());
+        if (updated == 0) throw new Exception400("대여 가능한 재고가 없습니다.");
+
+        bookRepository.insertItemLoan(reqDTO.getBcode(), reqDTO.getCenterCode(), student.getStudentId());
+    }
+
+    /** 실물 도서 반납 처리 — 대여 이력을 반납 처리하고 loaned_qty를 되돌린다 */
+    @Transactional
+    public void returnItem(BookReqDTO.ItemReturnReqDTO reqDTO) {
+        BookRespDTO.ItemLoanRespDTO loan = bookRepository.findLoanById(reqDTO.getLoanId());
+        if (loan == null) throw new Exception404("대여 이력을 찾을 수 없습니다: " + reqDTO.getLoanId());
+        if (!"LOANED".equals(loan.getStatus())) throw new Exception400("이미 반납 처리된 대여 건입니다.");
+
+        bookRepository.updateLoanReturned(reqDTO.getLoanId());
+        bookRepository.decrementLoanedQty(loan.getBcode(), loan.getCenterCode());
+    }
+
+    /** 특정 실물도서(bcode+센터)의 대여 중 이력 목록 조회 */
+    public List<BookRespDTO.ItemLoanRespDTO> findActiveLoans(String bcode, String centerCode) {
+        return bookRepository.findActiveLoansByItem(bcode, centerCode);
     }
 
     /**

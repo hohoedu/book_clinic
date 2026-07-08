@@ -70,34 +70,54 @@
         ORDER BY rl.recommend_id DESC
     </select>
 
-    <select id="findCandidates" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CandidateDTO">
-        SELECT p.content_id, bc.content_type, bc.genre, p.sort_order
-        FROM erp_bookstore_priority_draft d
-        JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id
-        JOIN erp_bookstore_content bc ON bc.content_id = p.content_id
-        WHERE d.year = #{year} AND d.schoolyear = #{schoolyear} AND d.is_active = 'Y'
-          AND bc.state = 'Y'
-        ORDER BY p.sort_order ASC
-    </select>
-
-    <select id="findReadContentIds" resultType="java.lang.Integer">
-        SELECT DISTINCT content_id
-        FROM erp_bookstore_reading
-        WHERE student_id = #{studentId}
-    </select>
-
-    <select id="findRecommendedContentIds" resultType="java.lang.Integer">
-        SELECT DISTINCT content_id
-        FROM erp_bookstore_recommend_log
-        WHERE student_id = #{studentId}
-    </select>
-
     <select id="findLastRead" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LastReadDTO">
         SELECT TOP 1 bc.content_type, bc.genre
         FROM erp_bookstore_reading r
         JOIN erp_bookstore_content bc ON bc.content_id = r.content_id
         WHERE r.student_id = #{studentId} AND r.status = 'DONE'
         ORDER BY r.completed_at DESC
+    </select>
+
+    <select id="findCenterCode" resultType="java.lang.String">
+        SELECT TOP 1 center_code
+        FROM erp_student
+        WHERE student_id = #{studentId}
+    </select>
+
+    <select id="findGradeKey" resultType="java.lang.String">
+        SELECT TOP 1 grade_key
+        FROM erp_student
+        WHERE student_id = #{studentId}
+    </select>
+
+    <!--
+      추천 후보 1건을 단일 쿼리로 확정 (순위표를 sort_order 순으로 스캔하며 아래 4개 조건을
+      모두 만족하는 첫 도서를 고르는 것과 동일 — 결과 0건이면 "추천할 책 없음")
+        1) 문제풀이 완료(erp_bookstore_reading.status='DONE') 이력이 없을 것
+        2) 학생 소속 센터에 사용 가능한 실물 재고(quantity - loaned_qty - lost_qty > 0)가 있을 것
+        3) 직전 완독 도서와 분류(content_type)가 다를 것 (lastType이 없으면 조건 생략)
+        4) 직전 완독 도서와 장르(genre)가 다를 것 (lastGenre가 없으면 조건 생략)
+    -->
+    <select id="pickNextContentId" resultType="java.lang.Integer">
+        SELECT TOP 1 c.content_id
+        FROM erp_bookstore_priority p
+        JOIN erp_bookstore_priority_draft d
+            ON d.draft_id = p.draft_id AND d.is_active = 'Y'
+           AND d.year = #{year} AND d.schoolyear = #{schoolyear}
+        JOIN erp_bookstore_content c
+            ON c.content_id = p.content_id AND c.state = 'Y'
+        WHERE NOT EXISTS (
+            SELECT 1 FROM erp_bookstore_reading r
+            WHERE r.student_id = #{studentId} AND r.content_id = c.content_id AND r.status = 'DONE'
+        )
+        AND EXISTS (
+            SELECT 1 FROM erp_bookstore_item i
+            JOIN erp_bookstore_item_center ic ON ic.bcode = i.bcode AND ic.center_code = #{centerCode}
+            WHERE i.content_id = c.content_id
+            GROUP BY i.content_id
+            HAVING SUM(ic.quantity - ic.loaned_qty - ic.lost_qty) > 0
+        )
+        ORDER BY p.sort_order ASC
     </select>
 
     <select id="findBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
@@ -120,5 +140,15 @@
         INSERT INTO erp_bookstore_recommend_log (student_id, content_id)
         VALUES (#{studentId}, #{contentId})
     </insert>
+
+    <!-- 추천된 도서(contentId)의 실물 재고 중 센터에서 대여 가능한(quantity-loaned_qty-lost_qty > 0) bcode 1건 (오래 등록된 재고 우선) -->
+    <select id="pickAvailableBcode" resultType="java.lang.String">
+        SELECT TOP 1 i.bcode
+        FROM erp_bookstore_item i
+        JOIN erp_bookstore_item_center ic ON ic.bcode = i.bcode AND ic.center_code = #{centerCode}
+        WHERE i.content_id = #{contentId}
+          AND ic.quantity - ic.loaned_qty - ic.lost_qty > 0
+        ORDER BY ic.registered_at ASC
+    </select>
 
 </mapper>

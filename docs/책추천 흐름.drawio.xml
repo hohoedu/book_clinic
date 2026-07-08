@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net">
+  <diagram name="페이지-1" id="n0MJgUnd8-7izskDzuun">
+    <mxGraphModel dx="2020" dy="967" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="2" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;" value="학년별 권장도서 순위&#xa;최상위 책부터 시작" vertex="1">
+          <mxGeometry height="60" width="240" x="340" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="3" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="이 책의 문제를&#xa;풀었는가?" vertex="1">
+          <mxGeometry height="100" width="220" x="350" y="160" as="geometry" />
+        </mxCell>
+        <mxCell id="4" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="현재 사용 가능한가?&#xa;(대여중·분실 등 아님)" vertex="1">
+          <mxGeometry height="100" width="240" x="340" y="310" as="geometry" />
+        </mxCell>
+        <mxCell id="5" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="직전 독서 책과&#xa;분류가 동일한가?" vertex="1">
+          <mxGeometry height="100" width="240" x="340" y="460" as="geometry" />
+        </mxCell>
+        <mxCell id="6" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="직전 독서 책과&#xa;장르가 동일한가?" vertex="1">
+          <mxGeometry height="100" width="240" x="340" y="610" as="geometry" />
+        </mxCell>
+        <mxCell id="7" parent="1" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;" value="이 책을 추천 도서로 확정" vertex="1">
+          <mxGeometry height="60" width="240" x="340" y="760" as="geometry" />
+        </mxCell>
+        <mxCell id="8" parent="1" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=12;" value="순위 목록에&#xa;다음 책이 있는가?" vertex="1">
+          <mxGeometry height="90" width="220" x="700" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="19" parent="1" style="rounded=1;arcSize=30;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" value="추천 실패&#xa;(추천 가능한 책 없음)" vertex="1">
+          <mxGeometry height="60" width="220" x="700" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="9" edge="1" parent="1" source="2" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;" target="3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="10" edge="1" parent="1" source="3" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;" target="4" value="아니오 (안 읽음)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="11" edge="1" parent="1" source="4" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;" target="5" value="예 (사용 가능)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="12" edge="1" parent="1" source="5" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;" target="6" value="아니오 (동일하지 않음)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="13" edge="1" parent="1" source="6" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;" target="7" value="아니오 (동일하지 않음)">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="14" edge="1" parent="1" source="3" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;exitX=1;exitY=0.5;exitDx=0;exitDy=0;edgeStyle=orthogonalEdgeStyle;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" target="8" value="예 (읽음)">
+          <mxGeometry relative="1" x="-0.2414" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="810" y="210" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="15" edge="1" parent="1" source="4" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;edgeStyle=orthogonalEdgeStyle;" target="8" value="아니오 (사용 불가)">
+          <mxGeometry relative="1" x="-0.5349" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="16" edge="1" parent="1" source="5" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;exitX=1;exitY=0.5;exitDx=0;exitDy=0;edgeStyle=orthogonalEdgeStyle;" target="8" value="예 (동일함)">
+          <mxGeometry relative="1" x="-0.6552" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="17" edge="1" parent="1" source="6" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;exitX=1;exitY=0.5;exitDx=0;exitDy=0;edgeStyle=orthogonalEdgeStyle;" target="8" value="예 (동일함)">
+          <mxGeometry relative="1" x="-0.726" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="18" edge="1" parent="1" source="8" style="rounded=0;edgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="2" value="예 → 다음 순위 책 재검사">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="810" y="70" />
+            </Array>
+            <mxPoint x="460" y="130" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="20" edge="1" parent="1" source="8" style="rounded=0;edgeStyle=orthogonalEdgeStyle;html=1;fontSize=12;" target="19" value="아니오">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

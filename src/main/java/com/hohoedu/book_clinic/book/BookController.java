@@ -169,4 +169,28 @@ public class BookController {
     public ResponseEntity<?> findItemsByCenter(@PathVariable("centerCode") String centerCode) {
         return ResponseEntity.ok(ApiUtils.success(bookService.findItemsByCenter(centerCode)));
     }
+
+    // ===================== 대여 관리 =====================
+
+    /** 실물 도서 대여 처리 (재고 확인 후 loaned_qty 증가 + 대여 이력 등록) */
+    @PostMapping("/item/loan")
+    public ResponseEntity<?> loanItem(@RequestBody @Valid BookReqDTO.ItemLoanReqDTO reqDTO) {
+        bookService.loanItem(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("대여 처리되었습니다."));
+    }
+
+    /** 실물 도서 반납 처리 (대여 이력 반납 처리 + loaned_qty 감소) */
+    @PostMapping("/item/loan/return")
+    public ResponseEntity<?> returnItem(@RequestBody @Valid BookReqDTO.ItemReturnReqDTO reqDTO) {
+        bookService.returnItem(reqDTO);
+        return ResponseEntity.ok(ApiUtils.success("반납 처리되었습니다."));
+    }
+
+    /** 특정 실물도서(bcode+센터)의 대여 중 이력 조회 */
+    @GetMapping("/item/loan/{bcode}/{centerCode}")
+    public ResponseEntity<?> findActiveLoans(
+            @PathVariable("bcode") String bcode,
+            @PathVariable("centerCode") String centerCode) {
+        return ResponseEntity.ok(ApiUtils.success(bookService.findActiveLoans(bcode, centerCode)));
+    }
 }

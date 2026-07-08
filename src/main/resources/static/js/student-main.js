@@ -29,6 +29,17 @@
         window.setTimeout(() => solveButton.classList.remove('is-pressed'), 180);
       });
     }
+
+    const logoutButton = document.querySelector('.logout-btn');
+
+    if (logoutButton) {
+      logoutButton.addEventListener('click', () => {
+        localStorage.clear();
+        sessionStorage.clear();
+        // replace()로 이동해 뒤로가기로 메인 화면에 다시 들어올 수 없게 한다
+        window.location.replace('/student/login');
+      });
+    }
   });
 
   if ('serviceWorker' in navigator) {
@@ -46,29 +57,4 @@
       window.location.reload();
     });
   }
-
-  // PWA 설치 버튼 — 브라우저가 설치 가능하다고 판단하면 beforeinstallprompt가 발생함
-  let deferredInstallPrompt = null;
-  const installBtn = document.getElementById('pwaInstallBtn');
-
-  window.addEventListener('beforeinstallprompt', (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event;
-    if (installBtn) installBtn.style.display = '';
-  });
-
-  if (installBtn) {
-    installBtn.addEventListener('click', async () => {
-      if (!deferredInstallPrompt) return;
-      deferredInstallPrompt.prompt();
-      await deferredInstallPrompt.userChoice;
-      deferredInstallPrompt = null;
-      installBtn.style.display = 'none';
-    });
-  }
-
-  window.addEventListener('appinstalled', () => {
-    if (installBtn) installBtn.style.display = 'none';
-    deferredInstallPrompt = null;
-  });
 })();

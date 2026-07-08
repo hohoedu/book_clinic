@@ -59,6 +59,12 @@ button {
   font-weight: 700;
 }
 
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .guide-btn {
   height: 36px;
   padding: 0 14px;

@@ -83,4 +83,25 @@ public interface BookRepository {
 
     /** 해당 centerCode의 모든 센터 매핑 삭제 (실물 도서 삭제 시 FK 정리용) */
     void deleteItemCenterByCenterCode(@Param("centerCode") String centerCode);
+
+    /** 대여 가능 재고(quantity - loaned_qty - lost_qty > 0)가 있을 때만 loaned_qty +1 — 반영된 행 수로 재고 유무 판단 */
+    int incrementLoanedQty(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+
+    /** loaned_qty -1 (0 미만 방지) */
+    void decrementLoanedQty(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+
+    /** 대여 이력 등록 */
+    void insertItemLoan(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("studentId") String studentId);
+
+    /** 대여 이력을 반납 처리(LOANED -> RETURNED) — 반영된 행 수로 처리 가능 여부 판단 */
+    int updateLoanReturned(@Param("loanId") Integer loanId);
+
+    /** 대여 이력 단건 조회 (반납 처리 전 상태/bcode/centerCode 확인용) */
+    BookRespDTO.ItemLoanRespDTO findLoanById(@Param("loanId") Integer loanId);
+
+    /** 특정 실물도서(bcode+센터)의 대여 중(LOANED) 이력 목록 (학생명 포함) */
+    List<BookRespDTO.ItemLoanRespDTO> findActiveLoansByItem(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+
+    /** 학생의 현재 대여 중(LOANED) 이력 1건 (없으면 null) — 추천 갱신 시 이전 hold 반납 판단용 */
+    BookRespDTO.ItemLoanRespDTO findActiveLoanByStudent(@Param("studentId") String studentId);
 }

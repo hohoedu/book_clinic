@@ -26,6 +26,8 @@ public class BookRespDTO {
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
         private String difficulty;    // 난이도 (상/중/하)
+        // 분류(contentType)에 딸린 부가 정보 (연계교과/추천기관명/수상명 중 해당 분류 값 하나, 도서당 최대 1행)
+        private String extraDetailName;
     }
 
     /** 실물 도서 조회 응답 (센터 매핑 정보 포함) */
@@ -64,6 +66,8 @@ public class BookRespDTO {
         private String bcode;
         private String centerCode;
         private Integer quantity;
+        private Integer loanedQty;
+        private Integer lostQty;
         private String state;
         private LocalDateTime registeredAt;
         private Integer contentId;
@@ -71,6 +75,19 @@ public class BookRespDTO {
         private String author;
         private String publisher;
         private String imageUrl;
+    }
+
+    /** 실물 도서 대여 이력 조회 응답 */
+    @Data
+    public static class ItemLoanRespDTO {
+        private Integer loanId;
+        private String bcode;
+        private String centerCode;
+        private String studentId;
+        private String studentName;
+        private LocalDateTime loanedAt;
+        private LocalDateTime returnedAt;
+        private String status;
     }
 
     /** 삭제된 마스터 도서 조회 응답 */

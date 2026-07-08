@@ -51,15 +51,18 @@ public class StudentViewController {
         return clinicService.debugRecommend(id);
     }
 
+    /** 로그인 없이 studentId 없이 직접 접근하면 로그인 화면으로 되돌린다 (PWA/키오스크의 로그인 → 메인 흐름 강제) */
     @GetMapping("/main")
     public String getStudentMainPage(@RequestParam(value = "studentId", required = false) String studentId,
                                      Model model) {
-        String id = (studentId == null || studentId.isBlank()) ? DEMO_STUDENT_ID : studentId;
+        if (studentId == null || studentId.isBlank()) {
+            return "redirect:/student/login";
+        }
 
-        model.addAttribute("student", clinicService.findStudentInfo(id));
-        model.addAttribute("badges", clinicService.findBadges(id));
-        model.addAttribute("monthBooks", clinicService.findMonthBooks(id));
-        model.addAttribute("recommend", clinicService.recommendBook(id));
+        model.addAttribute("student", clinicService.findStudentInfo(studentId));
+        model.addAttribute("badges", clinicService.findBadges(studentId));
+        model.addAttribute("monthBooks", clinicService.findMonthBooks(studentId));
+        model.addAttribute("recommend", clinicService.recommendBook(studentId));
         return "/student-main";
     }
 

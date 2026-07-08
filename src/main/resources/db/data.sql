@@ -70,13 +70,14 @@ INSERT INTO erp_bookstore_code (gubun, code, codeNm) VALUES
 INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, password_hash, salt, type, use_yn, is_han, is_book, is_clinic)
 VALUES ('PUS001', 'ADMIN', 'USR001', 'admin', '관리자', '96ce7949d922462c4abff4cf507abb65299a3bd61b2d34285630d5054a6e53f6', 'test_salt', 'ADMIN', 1, 1, 1, 1);
 
--- 비본사(지점) 테스트 계정 — admin과 동일 비밀번호, 센터만 PUS002 (본사 PUS001 아님) / 실물도서 등록 테스트용
-INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, password_hash, salt, type, use_yn, is_han, is_book, is_clinic) VALUES 
+-- 비본사(지점) 테스트 계정 — admin과 동일 비밀번호, 센터별 1명씩 / 실물도서 등록 테스트용
+INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, password_hash, salt, type, use_yn, is_han, is_book, is_clinic) VALUES
 ('PUS002', 'ADMIN', 'USR002', 'branch', '지점관리자', '96ce7949d922462c4abff4cf507abb65299a3bd61b2d34285630d5054a6e53f6', 'test_salt', 'ADMIN', 1, 1, 1, 1),
-('DAE001', 'ADMIN', 'USR003', 'branch2', '지점관리자', '96ce7949d922462c4abff4cf507abb65299a3bd61b2d34285630d5054a6e53f6', 'test_salt', 'ADMIN', 1, 1, 1, 1);
+('DAE001', 'ADMIN', 'USR003', 'branch2', '지점관리자', '96ce7949d922462c4abff4cf507abb65299a3bd61b2d34285630d5054a6e53f6', 'test_salt', 'ADMIN', 1, 1, 1, 1),
+('ULS001', 'ADMIN', 'USR004', 'branch3', '지점관리자', '96ce7949d922462c4abff4cf507abb65299a3bd61b2d34285630d5054a6e53f6', 'test_salt', 'ADMIN', 1, 1, 1, 1);
 
 INSERT INTO erp_student (gender, student_privacy_agree, created_at, updated_at, app_id, center_code, grade_key, status_key, school, student_id, student_name, address, address_detail, app_password, app_token, birth, is_hoho, billing_phone, sub_han, sub_book, sub_hoho, serial_num)
-VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880', 'PUS001', '11', 'ACTIVE', '호호 초등학교', 'PUS001251202FDA6E', '김호이', '부산 해운대구 센텀중앙로 97', 'A동 2810호', '62da5956da04fdedd0ff08a3f8c812793ef4219cd0405d44bf5412f3264fecf0', 'el7jugjIxU2ikFMRCZyTK8:APA91bE2fkQ6TDmwXcy7sHIdScsIMJ7mGrkixZxYLwpVuDWogq3aXHxbAStlasw7h1VeByp0Ey0iU9MUiiiMCqyOGwNpYOqDOHeq7A4rwp17ATklirE2oOU', '2015-12-12',  0, '01062954886', 1, 1, 0, '002260002');
+VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880', 'PUS001', '05', 'ACTIVE', '호호 초등학교', 'PUS001251202FDA6E', '김호이', '부산 해운대구 센텀중앙로 97', 'A동 2810호', '62da5956da04fdedd0ff08a3f8c812793ef4219cd0405d44bf5412f3264fecf0', 'el7jugjIxU2ikFMRCZyTK8:APA91bE2fkQ6TDmwXcy7sHIdScsIMJ7mGrkixZxYLwpVuDWogq3aXHxbAStlasw7h1VeByp0Ey0iU9MUiiiMCqyOGwNpYOqDOHeq7A4rwp17ATklirE2oOU', '2015-12-12',  0, '01062954886', 1, 1, 0, '002260002');
 
 INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty) VALUES
 ('어린왕자', '생텍쥐페리', '02', '03', '01', '어린왕자의 모험 이야기', '어린왕자, 안토안 드 생텍쥐페리','Y','문학동네', 'https://hohoeduimg.speedgabia.com/bookstore/master_book/c5665f1b0fea4ac097c258aeb61c4e2a.jpeg', 30, '하'),
@@ -136,15 +137,15 @@ INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3
 -- ===================== 서버 도서 데이터 이관 (bookstore_content.csv) =====================
 -- content_type: 초1(schoolyear=01)은 「초1 독서클리닉_도서분류.xlsx」와 도서명 대조로 매핑, 그 외 학년은 근거 자료가 없어 NULL (추후 분류 엑셀 확보 시 채울 것)
 INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, state, difficulty) VALUES
-('42가지 마음의 색깔', '크리스티나 누녜스,폐레이라', '05', NULL, '02', NULL, 'Y', '하'),
-('7년 동안의 잠', '박완서', '01', NULL, '02', NULL, 'Y', '상'),
-('가끔씩 비 오는 날', '이가을', '01', NULL, '04', '작은 것도 소홀히 지나치지 않고 삶의 진실을 담아낸 아름다운 이야기이다.', 'Y', '상'),
-('가방 들어주는 아이', '고정욱', '01', NULL, '03', '다리에 장애가 있는 영택이와 영택이의 가방을 들어주는 도우미가 된 석우의 갈등과 우정이야기다.', 'Y', '하'),
+('42가지 마음의 색깔', '크리스티나 누녜스,폐레이라', '05', '01', '02', NULL, 'Y', '하'),
+('7년 동안의 잠', '박완서', '01', '01', '02', NULL, 'Y', '상'),
+('가끔씩 비 오는 날', '이가을', '01', '01', '04', '작은 것도 소홀히 지나치지 않고 삶의 진실을 담아낸 아름다운 이야기이다.', 'Y', '상'),
+('가방 들어주는 아이', '고정욱', '01', '04', '03', '다리에 장애가 있는 영택이와 영택이의 가방을 들어주는 도우미가 된 석우의 갈등과 우정이야기다.', 'Y', '하'),
 ('가을 운동회', '임광희', '01', '01', '01', NULL, 'Y', '중'),
-('가을이네 장 담그기', '이규희', '01', NULL, '04', '가을이네가 직접 심은 콩으로 장을 담그며 우리 음식과 가족의 수고에 대해 깨닫는 이야기이다.', 'Y', '상'),
-('간송 선생님이 다시 찾은 우리 문화유산 이야기', '한상남', '09', NULL, '05', '일본으로부터 우리 문화유산과 국보를 지켜낸 간송전형필의 짧은 삶과 의지를 돌아볼 수 있게 한다.', 'Y', '상'),
-('갈매기에게 나는 법을 가르쳐준 고양이', '루이스 세뿔베다', '01', NULL, '06', '타르찌꺼기 때문에 죽음을 맞게 된 갈매기가 우연히 만난 고양이에게 자신의 자녀를 부탁하며 약속의 맹세를 하고 고양이는 명예를 지키기 위해 갈매기와의 약속을 지키려고 최선을 다한다.', 'Y', '상'),
-('감기 걸린 날', '김동수', '01', NULL, '03', NULL, 'Y', '하'),
+('가을이네 장 담그기', '이규희', '01', '01', '04', '가을이네가 직접 심은 콩으로 장을 담그며 우리 음식과 가족의 수고에 대해 깨닫는 이야기이다.', 'Y', '상'),
+('간송 선생님이 다시 찾은 우리 문화유산 이야기', '한상남', '09', '01', '05', '일본으로부터 우리 문화유산과 국보를 지켜낸 간송전형필의 짧은 삶과 의지를 돌아볼 수 있게 한다.', 'Y', '상'),
+('갈매기에게 나는 법을 가르쳐준 고양이', '루이스 세뿔베다', '01', '01', '06', '타르찌꺼기 때문에 죽음을 맞게 된 갈매기가 우연히 만난 고양이에게 자신의 자녀를 부탁하며 약속의 맹세를 하고 고양이는 명예를 지키기 위해 갈매기와의 약속을 지키려고 최선을 다한다.', 'Y', '상'),
+('감기 걸린 날', '김동수', '01', '01', '03', NULL, 'Y', '하'),
 ('강아지 복실이', '한미호', '01', '04', '01', NULL, 'Y', '상'),
 ('강아지똥', '권정생', '01', '05', '01', NULL, 'Y', '하'),
 ('개구리네 한솥밥', '백석', '01', NULL, '02', NULL, 'Y', '하'),
@@ -162,7 +163,11 @@ INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, 
 ('고양이 목에 방울 달기', '정하섭', '02', NULL, '02', NULL, 'Y', '상'),
 ('고정욱 선생님이 들려주는 장영실', '고정욱', '09', NULL, '04', '조선의 과학자 장영실이 어떤 마음으로 뛰어난 발명품을 만들었는지를 알 수 있는 인물 이야기이다.', 'Y', '하'),
 ('곤충들의 운동회', '도쿠다 유키히사', '06', '01', '01', NULL, 'Y', '상'),
-('곰의 아이들', '류화선', '01', NULL, '05', '인류 문명이 본격적으로 출발하는 청동기 시대를 생생하게 재현하면서 인간과 자연의 갈등과 화해를 그려낸 장편동화이다.', 'Y', '하'),
+('곰의 아이들', '류화선', '01', NULL, '05', '인류 문명이 본격적으로 출발하는 청동기 시대를 생생하게 재현하면서 인간과 자연의 갈등과 화해를 그려낸 장편동화이다.', 'Y', '하');
+
+-- 개발/더미 데이터 작업 편의를 위해 나머지 대량 도서 목록은 임시로 주석 처리 (erp_bookstore_content 30권만 유지)
+/*
+INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, state, difficulty) VALUES
 ('곱구나! 우리 장신구', '박세경', '01', NULL, '03', '우리나라의 장신구들을 그림과 사진, 글로 잘 알려주는 책이다.', 'Y', '하'),
 ('교과서 속 세계명작- 피노키오', '카를로 콜로디', '02', NULL, '04', '제페토 할아버지가 만든 나무 인형 ‘피노키오’가 다양한 경험과 모험을 통해 진짜 아이가 되는 작품이다.', 'Y', '하'),
 ('구름놀이', '한태희', '01', '01', '01', NULL, 'Y', '하'),
@@ -604,6 +609,7 @@ INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, 
 ('흥부와 놀부', '푸른숲 글방', '03', NULL, '03', NULL, 'Y', '하'),
 ('흥부전', '김해등', '01', NULL, '03', '평생 밥 한 그릇 배불리 먹는 게 소원인 흥부와 가지면 가질수록 더 가지려고 하는 놀부의 이야기이다.', 'Y', '상'),
 ('WHAT? 지구와 달', '유영진', '19', NULL, '04', '옛날부터 오늘날까지 지구와 달에 대해 사람들이 가졌던 생각과 궁금증에 대해 알려주는 책이다.', 'Y', '중');
+*/
 
 
 
@@ -679,3 +685,99 @@ SELECT (SELECT MAX(draft_id) FROM erp_bookstore_priority_draft),
        ROW_NUMBER() OVER (ORDER BY content_id)
 FROM erp_bookstore_content
 WHERE schoolyear = '05' AND state = 'Y';
+
+
+-- ────────────────────────────────────────────────────────
+-- 추천 로직 테스트 환경
+-- 초5 순위 후보 4권(content_id 순 = 순위 순):
+--   1순위 content 2  나의 라임오렌지나무 (분류 04, 장르 01)
+--   2순위 content 10 간송 선생님이 다시 찾은 우리 문화유산 이야기 (분류 없음, 장르 09)
+--   3순위 content 21 거상 김만덕 (분류 없음, 장르 09)
+--   4순위 content 30 곰의 아이들 (분류 없음, 장르 01)
+-- ────────────────────────────────────────────────────────
+
+-- 실물도서 마스터 (content 2는 위에서 이미 등록됨)
+INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url) VALUES
+('TESTBOOK0010', 10, '간송 선생님이 다시 찾은 우리 문화유산 이야기', '한상남', NULL, NULL),
+('TESTBOOK0021', 21, '거상 김만덕', '민병덕', NULL, NULL),
+('TESTBOOK0030', 30, '곰의 아이들', '류화선', NULL, NULL);
+
+-- 센터별 재고 시나리오
+--   PUS001(본사): 4권 전부 재고 있음 → 신규 학생은 1순위(라임오렌지)부터 정상 추천
+--   PUS002:      4권 전부 재고 있음 (라임오렌지 재고는 기존 시드에 있음)
+--   DAE001:      1순위 라임오렌지 재고 없음 → "재고 없음 스킵" 확인용
+--   ULS001:      1순위는 전량 대여중, 2순위는 재고 자체가 없음 → 3순위(김만덕) 추천 확인용
+INSERT INTO erp_bookstore_item_center (bcode, center_code, quantity, loaned_qty, lost_qty, state) VALUES
+('9788972976196', 'PUS001', 2, 0, 0, 'S'),
+('TESTBOOK0010',  'PUS001', 1, 0, 0, 'S'),
+('TESTBOOK0021',  'PUS001', 1, 0, 0, 'S'),
+('TESTBOOK0030',  'PUS001', 1, 0, 0, 'S'),
+('TESTBOOK0010',  'PUS002', 1, 0, 0, 'S'),
+('TESTBOOK0021',  'PUS002', 1, 0, 0, 'S'),
+('TESTBOOK0030',  'PUS002', 1, 0, 0, 'S'),
+('TESTBOOK0010',  'DAE001', 1, 0, 0, 'S'),
+('TESTBOOK0021',  'DAE001', 1, 0, 0, 'S'),
+('TESTBOOK0030',  'DAE001', 1, 0, 0, 'S'),
+('9788972976196', 'ULS001', 1, 1, 0, 'S'),   -- 전량 대여중 (사용가능 0)
+('TESTBOOK0021',  'ULS001', 1, 0, 0, 'S'),
+('TESTBOOK0030',  'ULS001', 1, 0, 0, 'S');
+
+-- ULS001 라임오렌지 대여중 상태의 원장 기록 (loaned_qty=1과 짝)
+INSERT INTO erp_bookstore_item_loan (bcode, center_code, student_id, status) VALUES
+('9788972976196', 'ULS001', 'ULS001T01', 'LOANED');
+
+-- 테스트 학생: 센터별 3명 (동일 학년(초5) 2명 + 다른 학년(초2) 1명) / app_id로 /student/login 에서 로그인
+-- 초5(grade_key='05') 학생은 위 "추천 로직 테스트 환경" 재고/이력 시나리오 대상, 초2(grade_key='02')는 신규 학년 분리 확인용
+INSERT INTO erp_student (center_code, grade_key, status_key, school, student_id, student_name, app_id, gender, student_privacy_agree, sub_book) VALUES
+('PUS001', '05', 'ACTIVE', N'호호 초등학교', 'PUS001T01', N'박본사', '1001', 1, 1, 1),
+('PUS001', '02', 'ACTIVE', N'호호 초등학교', 'PUS001T02', N'이본사', '1002', 0, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T01', N'김남천', '2001', 1, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T02', N'최남천', '2002', 0, 1, 1),
+('PUS002', '02', 'ACTIVE', N'남천 초등학교', 'PUS002T03', N'윤남천', '2003', 1, 1, 1),
+('DAE001', '05', 'ACTIVE', N'월성 초등학교', 'DAE001T01', N'정월성', '3001', 1, 1, 1),
+('DAE001', '05', 'ACTIVE', N'월성 초등학교', 'DAE001T02', N'한월성', '3002', 0, 1, 1),
+('DAE001', '02', 'ACTIVE', N'월성 초등학교', 'DAE001T03', N'서월성', '3003', 1, 1, 1),
+('ULS001', '05', 'ACTIVE', N'유곡 초등학교', 'ULS001T01', N'조유곡', '4001', 1, 1, 1),
+('ULS001', '05', 'ACTIVE', N'유곡 초등학교', 'ULS001T02', N'유유곡', '4002', 0, 1, 1),
+('ULS001', '02', 'ACTIVE', N'유곡 초등학교', 'ULS001T03', N'백유곡', '4003', 0, 1, 1);
+
+-- 학생 독서 현황 (student-main 진입에 필수 — 없으면 404)
+INSERT INTO erp_bookstore_student_info (student_id, level_no, exp, books_read) VALUES
+('PUS001T01', 1, 0, 0),
+('PUS001T02', 1, 0, 0),
+('PUS002T01', 1, 0, 0),
+('PUS002T02', 1, 0, 0),
+('PUS002T03', 1, 0, 0),
+('DAE001T01', 1, 0, 0),
+('DAE001T02', 1, 0, 0),
+('DAE001T03', 1, 0, 0),
+('ULS001T01', 1, 0, 0),
+('ULS001T02', 1, 0, 0),
+('ULS001T03', 1, 0, 0);
+
+-- 초2(grade_key='02') 순위 초안: PUS001T02/PUS002T03/DAE001T03/ULS001T03 추천 검증용
+-- 1순위 content 4 '42가지 마음의 색깔' — 센터별 재고 1권씩 등록해 정상 추천되는지 확인
+INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url) VALUES
+('TESTBOOK0004', 4, '42가지 마음의 색깔', '크리스티나 누녜스,페레이라', NULL, NULL);
+
+INSERT INTO erp_bookstore_item_center (bcode, center_code, quantity, loaned_qty, lost_qty, state) VALUES
+('TESTBOOK0004', 'PUS001', 1, 0, 0, 'S'),
+('TESTBOOK0004', 'PUS002', 1, 0, 0, 'S'),
+('TESTBOOK0004', 'DAE001', 1, 0, 0, 'S'),
+('TESTBOOK0004', 'ULS001', 1, 0, 0, 'S');
+
+INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by) VALUES
+(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '02', 'Y', 'seed');
+
+INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
+SELECT (SELECT MAX(draft_id) FROM erp_bookstore_priority_draft),
+       content_id,
+       ROW_NUMBER() OVER (ORDER BY content_id)
+FROM erp_bookstore_content
+WHERE schoolyear = '02' AND state = 'Y';
+
+-- 시나리오용 독서 기록 — 최남천(2002): 1·2순위 문제풀이 완료, 최근 완독이 장르 09
+--   → 3순위 김만덕(장르 09)은 "장르 중복 스킵" → 4순위 곰의 아이들 추천 확인용
+INSERT INTO erp_bookstore_reading (student_id, content_id, status, started_at, completed_at) VALUES
+('PUS002T02', 2,  'DONE', DATEADD(day, -6, GETDATE()), DATEADD(day, -4, GETDATE())),
+('PUS002T02', 10, 'DONE', DATEADD(day, -3, GETDATE()), DATEADD(day, -1, GETDATE()));

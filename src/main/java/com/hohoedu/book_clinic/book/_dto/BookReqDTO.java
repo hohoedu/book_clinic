@@ -25,6 +25,9 @@ public class BookReqDTO {
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
         private String difficulty;    // 난이도 (상/중/하)
+        // 분류(contentType)가 교과연계/기관추천/인증수상작일 때만 의미 있는 부가 정보
+        // (연계교과=gubun'C' / 추천기관명=gubun'R' / 수상명=gubun'A', 도서당 최대 1행)
+        private String extraDetail;
     }
 
     /** 마스터 도서 수정 요청 */
@@ -44,6 +47,9 @@ public class BookReqDTO {
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
         private String difficulty;    // 난이도 (상/중/하)
+        // 분류(contentType)가 교과연계/기관추천/인증수상작일 때만 의미 있는 부가 정보
+        // (연계교과=gubun'C' / 추천기관명=gubun'R' / 수상명=gubun'A', 도서당 최대 1행)
+        private String extraDetail;
     }
 
     /** 마스터 도서 삭제 요청 */
@@ -129,6 +135,24 @@ public class BookReqDTO {
         private String centerCode;
         private Integer quantity;
         private String state;
+    }
+
+    /** 실물 도서 대여 요청 — 학생은 앱 로그인 ID(appId)로 지정 (내부적으로 studentId로 변환해 저장) */
+    @Data
+    public static class ItemLoanReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
+        private String bcode;
+        @NotBlank(message = "센터 코드는 필수입니다.")
+        private String centerCode;
+        @NotBlank(message = "학생 앱 ID는 필수입니다.")
+        private String appId;
+    }
+
+    /** 실물 도서 반납 요청 */
+    @Data
+    public static class ItemReturnReqDTO {
+        @NotNull(message = "대여 이력 ID는 필수입니다.")
+        private Integer loanId;
     }
 
 }

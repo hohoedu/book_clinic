@@ -579,33 +579,6 @@
   height: 130px;
 }
 
-/* 수상명/추천기관 동적 폼 */
-.extra-field-buttons {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 14px;
-}
-
-.extra-field-input {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.extra-field-input input {
-  flex: 1;
-}
-
-.extra-field-remove {
-  padding: 0 8px;
-  color: #999;
-  font-size: 15px;
-}
-
-.extra-field-remove:hover {
-  color: #ff4b3f;
-}
-
 /* 비본사 우리 센터 실물도서 */
 .branch-item-panel {
   margin-top: 8px;
@@ -637,6 +610,65 @@
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+}
+
+.item-loan-panel {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed #dfe4e9;
+}
+
+.item-loan-stock {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 8px;
+}
+
+.item-loan-stock b {
+  color: #222;
+}
+
+.item-loan-form {
+  display: flex;
+  gap: 8px;
+}
+
+.item-loan-form .it-loan-appid {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-loan-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.loan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #fff;
+  border: 1px solid #eef1f4;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.loan-row-student {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loan-row-date {
+  color: #888;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* 문제 출제 */

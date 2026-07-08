@@ -1,8 +1,8 @@
-const CACHE_NAME = 'book-clinic-student-v2';
-const OFFLINE_URL = '/student/main';
+const CACHE_NAME = 'book-clinic-student-v4';
+const OFFLINE_URL = '/student/login';
 
-const PRECACHE_URLS = [ 
-  '/student/main',
+const PRECACHE_URLS = [
+  '/student/login',
   '/css/student-common.css',
   '/css/student-main.css',
   '/js/student-main.js',
@@ -43,6 +43,20 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
 
   if (request.method !== 'GET') {
+    return;
+  }
+
+  // API 응답은 항상 최신 세션/사용자 정보를 반영해야 하므로 캐시하지 않는다
+  const url = new URL(request.url);
+  if (url.pathname.startsWith('/api/')) {
+    event.respondWith(fetch(request));
+    return;
+  }
+
+  // 로그인/메인 등 페이지 이동(navigate)은 학생마다·시점마다 내용이 달라지므로
+  // 항상 네트워크에서 최신 화면을 받아오고, 오프라인일 때만 캐시된 로그인 화면으로 대체한다
+  if (request.mode === 'navigate') {
+    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
     return;
   }
 
