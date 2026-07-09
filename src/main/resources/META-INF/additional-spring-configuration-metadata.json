@@ -48,5 +48,30 @@
     "name": "GABIA_FTP_PORT",
     "type": "java.lang.String",
     "description": "A description for 'GABIA_FTP_PORT'"
+  },
+  {
+    "name": "ftp.server",
+    "type": "java.lang.String",
+    "description": "A description for 'ftp.server'"
+  },
+  {
+    "name": "ftp.port",
+    "type": "java.lang.String",
+    "description": "A description for 'ftp.port'"
+  },
+  {
+    "name": "ftp.username",
+    "type": "java.lang.String",
+    "description": "A description for 'ftp.username'"
+  },
+  {
+    "name": "ftp.password",
+    "type": "java.lang.String",
+    "description": "A description for 'ftp.password'"
+  },
+  {
+    "name": "ftp.master-book-dir",
+    "type": "java.lang.String",
+    "description": "A description for 'ftp.master-book-dir'"
   }
 ]}

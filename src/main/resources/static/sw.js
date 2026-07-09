@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-clinic-student-v4';
+const CACHE_NAME = 'book-clinic-student-v3';
 const OFFLINE_URL = '/student/login';
 
 const PRECACHE_URLS = [
@@ -60,6 +60,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // JS/CSS는 개발 중 계속 바뀌는 파일이라 캐시 우선으로 서빙하면 배포해도 예전 코드가 계속 재생된다.
+  // 항상 네트워크에서 최신 버전을 받아오고, 오프라인일 때만 캐시로 폴백한다(network-first).
+  if (url.pathname.startsWith('/js/') || url.pathname.startsWith('/css/')) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response && response.ok && response.type === 'basic') {
+            const responseClone = response.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+          }
+          return response;
+        })
+        .catch(() => caches.match(request))
+    );
+    return;
+  }
+
+  // 이미지 등 자주 안 바뀌는 정적 자산은 그대로 캐시 우선
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) {

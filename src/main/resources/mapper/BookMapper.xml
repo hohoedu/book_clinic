@@ -96,13 +96,23 @@
 
     <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 / 사용여부 복합 검색 -->
     <select id="searchContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentRespDTO">
-        SELECT bc.content_id, bc.original_title, bc.author,
-               bc.genre, g.codeNm AS genre_name,
-               bc.content_type, ct.codeNm AS content_type_name,
-               bc.schoolyear, s.codeNm AS schoolyear_name,
-               bc.summary, bc.keywords,
-               bc.state, bc.publisher, bc.image_url, bc.reading_time, bc.difficulty,
-               COALESCE(da.name, dr.name, dc.name) AS extra_detail_name
+        SELECT bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               bc.author         AS author,
+               bc.genre          AS genre,
+               g.codeNm          AS genreName,
+               bc.content_type   AS contentType,
+               ct.codeNm         AS contentTypeName,
+               bc.schoolyear     AS schoolyear,
+               s.codeNm          AS schoolyearName,
+               bc.summary        AS summary,
+               bc.keywords       AS keywords,
+               bc.state          AS state,
+               bc.publisher      AS publisher,
+               bc.image_url      AS imageUrl,
+               bc.reading_time   AS readingTime,
+               bc.difficulty     AS difficulty,
+               COALESCE(da.name, dr.name, dc.name) AS extraDetailName
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_code g ON g.gubun = 'G' AND g.code = bc.genre
         LEFT JOIN erp_bookstore_code s ON s.gubun = 'S' AND s.code = bc.schoolyear
@@ -128,7 +138,14 @@
 
     <!-- 6: 바코드로 단건 조회 -->
     <select id="findItemByBcode" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
-        SELECT i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, bc.center_code, bc.state
+        SELECT i.bcode         AS bcode,
+               i.content_id    AS contentId,
+               i.book_title    AS bookTitle,
+               i.author        AS author,
+               i.publisher     AS publisher,
+               i.image_url     AS imageUrl,
+               bc.center_code  AS centerCode,
+               bc.state        AS state
         FROM erp_bookstore_item i
         LEFT JOIN erp_bookstore_item_center bc ON i.bcode = bc.bcode
         WHERE i.bcode = #{bcode}
@@ -136,7 +153,14 @@
 
     <!-- 7~9: contentId / 상태 / 출판사 복합 검색 -->
     <select id="searchItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
-        SELECT i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, bc.center_code, bc.state
+        SELECT i.bcode         AS bcode,
+               i.content_id    AS contentId,
+               i.book_title    AS bookTitle,
+               i.author        AS author,
+               i.publisher     AS publisher,
+               i.image_url     AS imageUrl,
+               bc.center_code  AS centerCode,
+               bc.state        AS state
         FROM erp_bookstore_item i
         LEFT JOIN erp_bookstore_item_center bc ON i.bcode = bc.bcode
         <where>
@@ -174,14 +198,36 @@
 
     <!-- 삭제된 실물도서 목록 -->
     <select id="findDeletedItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemDelRespDTO">
-        SELECT del_id, deleted_at, deleted_by, bcode, content_id, book_title, author, publisher, image_url, center_code, quantity, state
+        SELECT del_id       AS delId,
+               deleted_at   AS deletedAt,
+               deleted_by   AS deletedBy,
+               bcode        AS bcode,
+               content_id   AS contentId,
+               book_title   AS bookTitle,
+               author       AS author,
+               publisher    AS publisher,
+               image_url    AS imageUrl,
+               center_code  AS centerCode,
+               quantity     AS quantity,
+               state        AS state
         FROM erp_bookstore_item_del
         ORDER BY deleted_at DESC
     </select>
 
     <!-- 센터별 보유 도서 목록 -->
     <select id="findItemsByCenter" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemCenterRespDTO">
-        SELECT ic.bcode, ic.center_code, ic.quantity, ic.loaned_qty, ic.lost_qty, ic.state, ic.registered_at, i.content_id, i.book_title, i.author, i.publisher, i.image_url
+        SELECT ic.bcode          AS bcode,
+               ic.center_code    AS centerCode,
+               ic.quantity       AS quantity,
+               ic.loaned_qty     AS loanedQty,
+               ic.lost_qty       AS lostQty,
+               ic.state          AS state,
+               ic.registered_at  AS registeredAt,
+               i.content_id      AS contentId,
+               i.book_title      AS bookTitle,
+               i.author          AS author,
+               i.publisher       AS publisher,
+               i.image_url       AS imageUrl
         FROM erp_bookstore_item_center ic
         JOIN erp_bookstore_item i ON ic.bcode = i.bcode
         WHERE ic.center_code = #{centerCode}
@@ -190,7 +236,17 @@
 
     <!-- 10: 삭제된 도서 목록 -->
     <select id="findDeletedContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentDelRespDTO">
-        SELECT del_id, deleted_at, deleted_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords
+        SELECT del_id         AS delId,
+               deleted_at     AS deletedAt,
+               deleted_by     AS deletedBy,
+               content_id     AS contentId,
+               original_title AS originalTitle,
+               author         AS author,
+               genre          AS genre,
+               content_type   AS contentType,
+               schoolyear     AS schoolyear,
+               summary        AS summary,
+               keywords       AS keywords
         FROM erp_bookstore_content_del
         ORDER BY deleted_at DESC
     </select>
@@ -225,14 +281,27 @@
 
     <!-- 대여 이력 단건 조회 -->
     <select id="findLoanById" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemLoanRespDTO">
-        SELECT loan_id, bcode, center_code, student_id, loaned_at, returned_at, status
+        SELECT loan_id      AS loanId,
+               bcode        AS bcode,
+               center_code  AS centerCode,
+               student_id   AS studentId,
+               loaned_at    AS loanedAt,
+               returned_at  AS returnedAt,
+               status       AS status
         FROM erp_bookstore_item_loan
         WHERE loan_id = #{loanId}
     </select>
 
     <!-- 특정 실물도서(bcode+센터)의 대여 중(LOANED) 이력 (학생명 포함) -->
     <select id="findActiveLoansByItem" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemLoanRespDTO">
-        SELECT l.loan_id, l.bcode, l.center_code, l.student_id, s.student_name, l.loaned_at, l.returned_at, l.status
+        SELECT l.loan_id      AS loanId,
+               l.bcode        AS bcode,
+               l.center_code  AS centerCode,
+               l.student_id   AS studentId,
+               s.student_name AS studentName,
+               l.loaned_at    AS loanedAt,
+               l.returned_at  AS returnedAt,
+               l.status       AS status
         FROM erp_bookstore_item_loan l
         LEFT JOIN erp_student s ON s.student_id = l.student_id
         WHERE l.bcode = #{bcode} AND l.center_code = #{centerCode} AND l.status = 'LOANED'
@@ -241,7 +310,14 @@
 
     <!-- 학생의 현재 대여 중(LOANED) 이력 1건 -->
     <select id="findActiveLoanByStudent" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemLoanRespDTO">
-        SELECT TOP 1 loan_id, bcode, center_code, student_id, loaned_at, returned_at, status
+        SELECT TOP 1
+               loan_id      AS loanId,
+               bcode        AS bcode,
+               center_code  AS centerCode,
+               student_id   AS studentId,
+               loaned_at    AS loanedAt,
+               returned_at  AS returnedAt,
+               status       AS status
         FROM erp_bookstore_item_loan
         WHERE student_id = #{studentId} AND status = 'LOANED'
         ORDER BY loaned_at DESC

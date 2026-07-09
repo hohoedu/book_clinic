@@ -24,7 +24,7 @@ public class SecurityConfig {
                         .csrfTokenRepository(new StaticCsrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload",
-                                "/api/notification/**"))
+                                "/api/notification/**", "/clinic/recommend", "/clinic/quiz/submit"))
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
@@ -38,6 +38,9 @@ public class SecurityConfig {
                                 "/temp-upload.html",
                                 "/question/upload/template",
                                 "/question/upload",
+                                "/question/search",
+                                "/clinic/recommend",
+                                "/clinic/quiz/submit",
                                 "/student/**")
                         .permitAll()
                         .anyRequest().authenticated())

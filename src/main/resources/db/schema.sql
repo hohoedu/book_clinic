@@ -1,31 +1,18 @@
 -- DROP (FK 역순)
-IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE erp_bookstore_recommend_log;
-IF OBJECT_ID('erp_bookstore_reading',               'U') IS NOT NULL DROP TABLE erp_bookstore_reading;
-IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
-IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
 IF OBJECT_ID('erp_bookstore_student_info',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_info;
-IF OBJECT_ID('erp_bookstore_character',             'U') IS NOT NULL DROP TABLE erp_bookstore_character;
-IF OBJECT_ID('erp_bookstore_exp_rule',              'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;
-IF OBJECT_ID('erp_bookstore_level',                 'U') IS NOT NULL DROP TABLE erp_bookstore_level;
+IF OBJECT_ID('erp_bookstore_exp_rule',               'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;
+IF OBJECT_ID('erp_bookstore_level',                  'U') IS NOT NULL DROP TABLE erp_bookstore_level;
+IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE erp_bookstore_recommend_log;
 IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
-IF OBJECT_ID('erp_bookstore_itempool_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_itempool_del;
-IF OBJECT_ID('erp_bookstore_itempool',              'U') IS NOT NULL DROP TABLE erp_bookstore_itempool;
-IF OBJECT_ID('erp_bookstore_item_del',              'U') IS NOT NULL DROP TABLE erp_bookstore_item_del;
 IF OBJECT_ID('erp_bookstore_item_loan',             'U') IS NOT NULL DROP TABLE erp_bookstore_item_loan;
 IF OBJECT_ID('erp_bookstore_item_center',           'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
-IF OBJECT_ID('erp_bookstore_item',                  'U') IS NOT NULL DROP TABLE erp_bookstore_item;
 IF OBJECT_ID('erp_bookstore_priority_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_priority_del;
 IF OBJECT_ID('erp_bookstore_priority',              'U') IS NOT NULL DROP TABLE erp_bookstore_priority;
 IF OBJECT_ID('erp_bookstore_priority_draft_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft_del;
 IF OBJECT_ID('erp_bookstore_priority_draft',        'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft;
-IF OBJECT_ID('erp_bookstore_content_detail_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_content_detail_del;
-IF OBJECT_ID('erp_bookstore_content_detail',        'U') IS NOT NULL DROP TABLE erp_bookstore_content_detail;
-IF OBJECT_ID('erp_bookstore_content_del',           'U') IS NOT NULL DROP TABLE erp_bookstore_content_del;
-IF OBJECT_ID('erp_bookstore_content',               'U') IS NOT NULL DROP TABLE erp_bookstore_content;
 IF OBJECT_ID('erp_student',                         'U') IS NOT NULL DROP TABLE erp_student;
 IF OBJECT_ID('erp_user',                            'U') IS NOT NULL DROP TABLE erp_user;
-IF OBJECT_ID('erp_center',                          'U') IS NOT NULL DROP TABLE erp_center;
 
 
 -- CREATE
@@ -46,6 +33,7 @@ CREATE TABLE erp_bookstore_code (
     ON [PRIMARY];
 
 -- 센터(지점) 마스터
+IF OBJECT_ID('erp_center', 'U') IS NULL
 CREATE TABLE erp_center (
     id              INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     opened_at       DATE,           -- 개원일
@@ -114,6 +102,7 @@ CREATE TABLE erp_student (
 );
 
 -- 도서(콘텐츠) 마스터 — 본사(HQ_CENTER_CODE)만 편집 가능한 표준 도서 정보
+IF OBJECT_ID('erp_bookstore_content', 'U') IS NULL
 CREATE TABLE erp_bookstore_content (
     content_id     INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     original_title VARCHAR(255),  -- 원제(도서명)
@@ -131,6 +120,7 @@ CREATE TABLE erp_bookstore_content (
 );
 
 -- 삭제된 도서(erp_bookstore_content) 이력 — 복구용 스냅샷
+IF OBJECT_ID('erp_bookstore_content_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_content_del (
     del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     deleted_at     DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
@@ -151,6 +141,7 @@ CREATE TABLE erp_bookstore_content_del (
 );
 
 -- 분류별 전용 상세 (소분류) — content_type이 정하는 부가 값 1개 (교과연계=연계교과, 기관추천=추천기관명, 인증수상작=수상명)
+IF OBJECT_ID('erp_bookstore_content_detail', 'U') IS NULL
 CREATE TABLE erp_bookstore_content_detail (
     content_id     INT          NOT NULL,  -- erp_bookstore_content.content_id
     gubun          VARCHAR(1)   NOT NULL,  -- C(교과연계) / R(기관추천) / A(인증수상작)
@@ -160,6 +151,7 @@ CREATE TABLE erp_bookstore_content_detail (
 );
 
 -- 삭제된 도서 상세(erp_bookstore_content_detail) 이력
+IF OBJECT_ID('erp_bookstore_content_detail_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_content_detail_del (
     del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     deleted_at     DATETIME2 DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
@@ -214,6 +206,7 @@ CREATE TABLE erp_bookstore_priority_del (
 );
 
 -- 실물도서 마스터 — 센터에 배포되는 물리적 도서 단위 (도서 1권 = bcode 1개)
+IF OBJECT_ID('erp_bookstore_item', 'U') IS NULL
 CREATE TABLE erp_bookstore_item (
     bcode          VARCHAR(50)  PRIMARY KEY,  -- 실물도서 바코드(고유 식별자)
     content_id     INT,           -- erp_bookstore_content.content_id (어느 마스터 도서인지)
@@ -225,6 +218,7 @@ CREATE TABLE erp_bookstore_item (
 );
 
 -- 센터별 실물도서 재고 — bcode 1건당 센터별 보유 수량을 집계로 관리 (개별 사본 단위 추적은 안 함)
+IF OBJECT_ID('erp_bookstore_item_center', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_center (
     bcode          VARCHAR(50)  NOT NULL,  -- erp_bookstore_item.bcode
     center_code    VARCHAR(20)  NOT NULL,  -- erp_center.center_code
@@ -239,6 +233,7 @@ CREATE TABLE erp_bookstore_item_center (
 );
 
 -- 실물도서 대여 이력 — loaned_qty/lost_qty 집계의 원장(대여/반납/분실 시 함께 갱신)
+IF OBJECT_ID('erp_bookstore_item_loan', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_loan (
     loan_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     bcode        VARCHAR(50)   NOT NULL,  -- 대여한 실물도서 바코드
@@ -251,6 +246,7 @@ CREATE TABLE erp_bookstore_item_loan (
 );
 
 -- 삭제된 실물도서(erp_bookstore_item/erp_bookstore_item_center) 이력
+IF OBJECT_ID('erp_bookstore_item_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_del (
     del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     deleted_at     DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
@@ -267,6 +263,7 @@ CREATE TABLE erp_bookstore_item_del (
 );
 
 -- 문제은행 — 도서(content_id)별 독후활동 문제 (관리자가 book-data 화면에서 직접 등록/편집)
+IF OBJECT_ID('erp_bookstore_itempool', 'U') IS NULL
 CREATE TABLE erp_bookstore_itempool (
     content_id     INT,            -- erp_bookstore_content.content_id
     qlevel         VARCHAR(20),    -- 난이도 (01=기본, 02=심화)
@@ -287,6 +284,7 @@ CREATE TABLE erp_bookstore_itempool (
 );
 
 -- 삭제된 문제(erp_bookstore_itempool) 이력
+IF OBJECT_ID('erp_bookstore_itempool_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_itempool_del (
     del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     deleted_at     DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
@@ -322,84 +320,50 @@ CREATE TABLE erp_notification (
 
 
 -- ────────────────────────────────────────────────────────
--- 학생 독서 클리닉 (student-main 화면)
+-- 학생 독서 클리닉 (student-main 화면) — 1단계(책 추천)부터 재설계 (2026-07-09)
 -- 참고: erp_student.student_id 에 UNIQUE 제약이 없어 학생 연결은 FK 없이
 --       student_id VARCHAR 값으로만 연결한다 (erp_notification.target_id와 같은 방식)
 -- ────────────────────────────────────────────────────────
 
--- 레벨 마스터 — 누적 EXP 기준으로 레벨이 정해지고, 레벨마다 단계/칭호/특징이 있다
-CREATE TABLE erp_bookstore_level (
-    level_no      INT           PRIMARY KEY,      -- 1 ~ 10
-    level_name    NVARCHAR(50)  NOT NULL,         -- 단계명 (입문 / 성장 / 마스터)
-    title         NVARCHAR(50),                   -- 칭호 (독서 씨앗, 독서 새싹 ...)
-    feature       NVARCHAR(300),                  -- 단계별 특징 문구
-    required_exp  INT           NOT NULL          -- 이 레벨에서 다음 레벨로 올라가는 데 필요한 누적 EXP (레벨10은 만렙 기준치)
-);
-
--- 학년별 권당 EXP — 읽은 "책의 학년(content.schoolyear)"에 따라 획득 EXP가 다르다
--- (예: 초1~2 책 = 20EXP, 초5~6 책 = 80EXP)
-CREATE TABLE erp_bookstore_exp_rule (
-    schoolyear    VARCHAR(20)   PRIMARY KEY,      -- 학년 코드 (S코드)
-    exp_per_book  INT           NOT NULL          -- 해당 학년 도서 1권 완독 시 획득 EXP
-);
-
--- 캐릭터 마스터 — 레벨과 무관하게 학생이 직접 선택
-CREATE TABLE erp_bookstore_character (
-    character_id   INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    character_name NVARCHAR(50)  NOT NULL,  -- 캐릭터명
-    image_url      VARCHAR(255)  NOT NULL   -- 캐릭터 이미지 URL
-);
-
--- 학생 독서 현황 (erp_student 1:1) — 현재 상태 스냅샷
-CREATE TABLE erp_bookstore_student_info (
-    student_id    VARCHAR(100)  PRIMARY KEY,      -- erp_student.student_id
-    level_no      INT           NOT NULL DEFAULT 1,  -- 현재 레벨
-    exp           INT           NOT NULL DEFAULT 0,  -- 누적 경험치
-    books_read    INT           NOT NULL DEFAULT 0,  -- 누적 완독 수 (reading에서 파생되는 캐시)
-    character_id  INT,                               -- 학생이 선택한 캐릭터
-    updated_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 갱신일시
-    FOREIGN KEY (level_no)     REFERENCES erp_bookstore_level(level_no),
-    FOREIGN KEY (character_id) REFERENCES erp_bookstore_character(character_id)
-);
-
--- 뱃지 마스터
-CREATE TABLE erp_bookstore_badge (
-    badge_id        INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    badge_name      NVARCHAR(50)  NOT NULL,       -- '독서 탐험가'
-    description     NVARCHAR(200),                -- '첫 번째 정독을 완료했어요!'
-    image_url       VARCHAR(255),                 -- 뱃지 이미지 URL
-    condition_type  VARCHAR(30),                  -- 획득 조건 유형 (FIRST_DONE / FRIEND_CNT / KING_CNT / MONTHLY_ALL ...)
-    condition_value INT                           -- 조건 수치 (5번, 1회 등)
-);
-
--- 학생-뱃지 매핑 (N:N)
-CREATE TABLE erp_bookstore_student_badge (
-    student_id   VARCHAR(100)  NOT NULL,  -- erp_student.student_id
-    badge_id     INT           NOT NULL,  -- erp_bookstore_badge.badge_id
-    acquired_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 획득일시
-    PRIMARY KEY (student_id, badge_id),
-    FOREIGN KEY (badge_id) REFERENCES erp_bookstore_badge(badge_id)
-);
-
--- 독서 기록 — "이번 달에 읽은 책", 추천 제외 조건(분류/장르/문제풀이 완료), EXP 적립의 원천
--- status='DONE'은 책을 다 읽었을 뿐 아니라 딸린 문제까지 풀어 제출을 완료한 시점을 의미한다
-CREATE TABLE erp_bookstore_reading (
-    reading_id    INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    student_id    VARCHAR(100)  NOT NULL,  -- erp_student.student_id
-    content_id    INT           NOT NULL,  -- erp_bookstore_content.content_id
-    status        VARCHAR(20)   NOT NULL DEFAULT 'READING',  -- READING / DONE(문제풀이까지 완료)
-    started_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 독서 시작일시
-    completed_at  DATETIME2,                       -- 문제풀이 완료 시각 (월별 조회 및 EXP 적립 기준)
-    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
-);
-
--- 추천 이력 — 로그인/'다른 도서 추천' 클릭 시마다 순위표를 처음부터 훑어
--- (문제풀이 완료 여부 · 대여가능 여부 · 직전 독서와의 분류/장르 중복) 조건을 만족하는
--- 첫 도서를 추천하고, 그 결과를 시퀀셜 로그로 남긴다 (조회용 이력, 추천 판정에는 쓰지 않음)
+-- 추천 이력 — "이미 추천받은 책" 판정(재추천 방지)과 "직전 추천 도서의 분류/장르" 조회의 기준이 되는
+-- 핵심 테이블. 추천이 확정되는 순간(=실물 대여 확정) 함께 기록된다.
+-- status='PENDING'인 동안은 재로그인해도 같은 책이 그대로 나온다(재도전 포함). 기본 문제풀이(qlevel=01)에서
+-- 합격선을 넘어 status='DONE'이 되면, 다음 추천 때부터 이 책은 후보에서 계속 제외되고 새 책이 추천된다.
 CREATE TABLE erp_bookstore_recommend_log (
     recommend_id    INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     student_id      VARCHAR(100)  NOT NULL,  -- erp_student.student_id
     content_id      INT           NOT NULL,  -- 추천된 도서 (erp_bookstore_content.content_id)
     recommended_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 추천일시
+    status          VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(문제풀이 전/재도전 대기) / DONE(합격)
+    correct_count   INT,      -- 기본 문제풀이(qlevel=01) 최근 제출 정답 수
+    total_count     INT,      -- 기본 문제풀이 총 문항 수
+    grade           VARCHAR(20),   -- KING(독서왕) / FRIEND(독서친구) — 합격 시에만 값 존재
+    completed_at    DATETIME2,     -- 합격(DONE) 처리 시각
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+
+-- 레벨 마스터 — 누적 EXP 기준으로 레벨이 정해지고, 레벨마다 단계/칭호/특징이 있다
+-- required_exp는 "그 레벨에서 다음 레벨로 올라가는 데 필요한 누적 EXP" (레벨10은 만렙 기준치)
+CREATE TABLE erp_bookstore_level (
+    level_no      INT           PRIMARY KEY,      -- 1 ~ 10
+    level_name    NVARCHAR(50)  NOT NULL,         -- 단계명 (입문 / 성장 / 마스터)
+    title         NVARCHAR(50),                   -- 칭호 (독서 씨앗, 독서 새싹 ...)
+    feature       NVARCHAR(300),                  -- 단계별 특징 문구
+    required_exp  INT           NOT NULL
+);
+
+-- 학년별 권당 EXP — 읽은 "책의 학년(content.schoolyear)"에 따라 획득 EXP가 다르다
+CREATE TABLE erp_bookstore_exp_rule (
+    schoolyear    VARCHAR(20)   PRIMARY KEY,
+    exp_per_book  INT           NOT NULL
+);
+
+-- 학생 독서 현황 (erp_student 1:1) — 현재 상태 스냅샷
+CREATE TABLE erp_bookstore_student_info (
+    student_id    VARCHAR(100)  PRIMARY KEY,
+    level_no      INT           NOT NULL DEFAULT 1,
+    exp           INT           NOT NULL DEFAULT 0,
+    books_read    INT           NOT NULL DEFAULT 0,
+    updated_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (level_no) REFERENCES erp_bookstore_level(level_no)
 );

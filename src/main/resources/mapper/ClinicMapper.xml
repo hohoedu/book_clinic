@@ -4,80 +4,6 @@
 
 <mapper namespace="com.hohoedu.book_clinic.clinic.ClinicRepository">
 
-    <select id="findStudentInfo" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$StudentInfoDTO">
-        SELECT s.student_id, s.student_name,
-               si.level_no, si.exp, si.books_read,
-               lv.level_name, lv.title, lv.feature, lv.required_exp,
-               ch.image_url AS character_img
-        FROM erp_student s
-        JOIN erp_bookstore_student_info si ON si.student_id = s.student_id
-        JOIN erp_bookstore_level lv        ON lv.level_no = si.level_no
-        LEFT JOIN erp_bookstore_character ch ON ch.character_id = si.character_id
-        WHERE s.student_id = #{studentId}
-    </select>
-
-    <select id="findAllLevels" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LevelDTO">
-        SELECT level_no, required_exp
-        FROM erp_bookstore_level
-        ORDER BY level_no ASC
-    </select>
-
-    <select id="findExpPerBook" resultType="java.lang.Integer">
-        SELECT exp_per_book
-        FROM erp_bookstore_exp_rule
-        WHERE schoolyear = #{schoolyear}
-    </select>
-
-    <select id="findBadges" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BadgeDTO">
-        SELECT b.badge_name, b.description, b.image_url, sb.acquired_at
-        FROM erp_bookstore_student_badge sb
-        JOIN erp_bookstore_badge b ON b.badge_id = sb.badge_id
-        WHERE sb.student_id = #{studentId}
-        ORDER BY sb.acquired_at DESC
-    </select>
-
-    <!-- 완독(DONE)은 이번 달 완독 건만, 읽는 중(READING)은 항상 포함 -->
-    <select id="findMonthBooks" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$MonthBookDTO">
-        SELECT r.content_id, bc.original_title, bc.image_url, r.status
-        FROM erp_bookstore_reading r
-        JOIN erp_bookstore_content bc ON bc.content_id = r.content_id
-        WHERE r.student_id = #{studentId}
-          AND (
-                r.status = 'READING'
-             OR (r.status = 'DONE'
-                 AND r.completed_at &gt;= DATEADD(day, 1 - DAY(GETDATE()), CAST(GETDATE() AS DATE)))
-          )
-        ORDER BY CASE WHEN r.status = 'READING' THEN 0 ELSE 1 END, r.completed_at DESC
-    </select>
-
-    <select id="findTodayRecommend" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
-        SELECT TOP 1
-               bc.content_id, bc.original_title, bc.author, bc.publisher, bc.summary, bc.keywords, bc.image_url,
-               ct.codeNm AS content_type_name,
-               g.codeNm  AS genre_name,
-               dc.name AS curriculum_name,
-               dr.name AS recommend_org_name,
-               da.name AS award_name
-        FROM erp_bookstore_recommend_log rl
-        JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
-        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
-        LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
-        LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
-        LEFT JOIN erp_bookstore_content_detail dr ON dr.content_id = bc.content_id AND dr.gubun = 'R'
-        LEFT JOIN erp_bookstore_content_detail da ON da.content_id = bc.content_id AND da.gubun = 'A'
-        WHERE rl.student_id = #{studentId}
-          AND CAST(rl.recommended_at AS DATE) = CAST(GETDATE() AS DATE)
-        ORDER BY rl.recommend_id DESC
-    </select>
-
-    <select id="findLastRead" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LastReadDTO">
-        SELECT TOP 1 bc.content_type, bc.genre
-        FROM erp_bookstore_reading r
-        JOIN erp_bookstore_content bc ON bc.content_id = r.content_id
-        WHERE r.student_id = #{studentId} AND r.status = 'DONE'
-        ORDER BY r.completed_at DESC
-    </select>
-
     <select id="findCenterCode" resultType="java.lang.String">
         SELECT TOP 1 center_code
         FROM erp_student
@@ -90,13 +16,21 @@
         WHERE student_id = #{studentId}
     </select>
 
+    <select id="findLastRecommend" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LastRecommendDTO">
+        SELECT TOP 1
+               bc.content_type AS contentType,
+               bc.genre        AS genre
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
+        WHERE rl.student_id = #{studentId}
+        ORDER BY rl.recommend_id DESC
+    </select>
+
     <!--
-      추천 후보 1건을 단일 쿼리로 확정 (순위표를 sort_order 순으로 스캔하며 아래 4개 조건을
-      모두 만족하는 첫 도서를 고르는 것과 동일 — 결과 0건이면 "추천할 책 없음")
-        1) 문제풀이 완료(erp_bookstore_reading.status='DONE') 이력이 없을 것
-        2) 학생 소속 센터에 사용 가능한 실물 재고(quantity - loaned_qty - lost_qty > 0)가 있을 것
-        3) 직전 완독 도서와 분류(content_type)가 다를 것 (lastType이 없으면 조건 생략)
-        4) 직전 완독 도서와 장르(genre)가 다를 것 (lastGenre가 없으면 조건 생략)
+      우선순위(sort_order) 순으로 스캔하며 아래 조건을 모두 만족하는 첫 도서를 단일 쿼리로 선택
+        1) 이 학생에게 아직 추천된 적 없을 것 (recommend_log 기준)
+        2) 학생 소속 센터에 대여 가능한 실물 재고(quantity - loaned_qty - lost_qty > 0)가 있을 것
+        3) applyDedup=true일 때만: 직전 추천 도서와 분류·장르가 모두 같으면 제외
     -->
     <select id="pickNextContentId" resultType="java.lang.Integer">
         SELECT TOP 1 c.content_id
@@ -107,8 +41,8 @@
         JOIN erp_bookstore_content c
             ON c.content_id = p.content_id AND c.state = 'Y'
         WHERE NOT EXISTS (
-            SELECT 1 FROM erp_bookstore_reading r
-            WHERE r.student_id = #{studentId} AND r.content_id = c.content_id AND r.status = 'DONE'
+            SELECT 1 FROM erp_bookstore_recommend_log rl
+            WHERE rl.student_id = #{studentId} AND rl.content_id = c.content_id
         )
         AND EXISTS (
             SELECT 1 FROM erp_bookstore_item i
@@ -117,16 +51,30 @@
             GROUP BY i.content_id
             HAVING SUM(ic.quantity - ic.loaned_qty - ic.lost_qty) > 0
         )
+        <if test="applyDedup">
+        AND NOT (
+            #{lastType} IS NOT NULL AND #{lastGenre} IS NOT NULL
+            AND c.content_type = #{lastType} AND c.genre = #{lastGenre}
+        )
+        </if>
         ORDER BY p.sort_order ASC
     </select>
 
     <select id="findBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
-        SELECT bc.content_id, bc.original_title, bc.author, bc.publisher, bc.summary, bc.keywords, bc.image_url,
-               ct.codeNm AS content_type_name,
-               g.codeNm  AS genre_name,
-               dc.name AS curriculum_name,
-               dr.name AS recommend_org_name,
-               da.name AS award_name
+        SELECT bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               bc.author         AS author,
+               bc.publisher      AS publisher,
+               bc.summary        AS summary,
+               bc.keywords       AS keywords,
+               bc.image_url      AS imageUrl,
+               bc.content_type   AS contentType,
+               ct.codeNm         AS contentTypeName,
+               bc.genre          AS genre,
+               g.codeNm          AS genreName,
+               dc.name           AS curriculumName,
+               dr.name           AS recommendOrgName,
+               da.name           AS awardName
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
@@ -136,19 +84,105 @@
         WHERE bc.content_id = #{contentId}
     </select>
 
-    <insert id="insertRecommendLog">
-        INSERT INTO erp_bookstore_recommend_log (student_id, content_id)
-        VALUES (#{studentId}, #{contentId})
-    </insert>
+    <!-- status='PENDING'인 추천만 조회 — DONE 처리된 책은 다시 보여주지 않고 새 추천으로 넘어간다 -->
+    <select id="findPendingRecommendBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
+        SELECT TOP 1
+               bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               bc.author         AS author,
+               bc.publisher      AS publisher,
+               bc.summary        AS summary,
+               bc.keywords       AS keywords,
+               bc.image_url      AS imageUrl,
+               bc.content_type   AS contentType,
+               ct.codeNm         AS contentTypeName,
+               bc.genre          AS genre,
+               g.codeNm          AS genreName,
+               dc.name           AS curriculumName,
+               dr.name           AS recommendOrgName,
+               da.name           AS awardName
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
+        LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
+        LEFT JOIN erp_bookstore_content_detail dr ON dr.content_id = bc.content_id AND dr.gubun = 'R'
+        LEFT JOIN erp_bookstore_content_detail da ON da.content_id = bc.content_id AND da.gubun = 'A'
+        WHERE rl.student_id = #{studentId} AND rl.status = 'PENDING'
+        ORDER BY rl.recommend_id DESC
+    </select>
 
-    <!-- 추천된 도서(contentId)의 실물 재고 중 센터에서 대여 가능한(quantity-loaned_qty-lost_qty > 0) bcode 1건 (오래 등록된 재고 우선) -->
     <select id="pickAvailableBcode" resultType="java.lang.String">
         SELECT TOP 1 i.bcode
         FROM erp_bookstore_item i
         JOIN erp_bookstore_item_center ic ON ic.bcode = i.bcode AND ic.center_code = #{centerCode}
         WHERE i.content_id = #{contentId}
-          AND ic.quantity - ic.loaned_qty - ic.lost_qty > 0
-        ORDER BY ic.registered_at ASC
+          AND (ic.quantity - ic.loaned_qty - ic.lost_qty) > 0
+        ORDER BY i.bcode ASC
     </select>
+
+    <insert id="insertRecommendLog">
+        INSERT INTO erp_bookstore_recommend_log (student_id, content_id)
+        VALUES (#{studentId}, #{contentId})
+    </insert>
+
+    <select id="findRecommendLogStatus" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendLogStatusDTO">
+        SELECT TOP 1
+               recommend_id AS recommendId,
+               status       AS status,
+               grade        AS grade
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId} AND content_id = #{contentId}
+        ORDER BY recommend_id DESC
+    </select>
+
+    <update id="updateRecommendResult">
+        UPDATE erp_bookstore_recommend_log
+        SET correct_count = #{correctCount},
+            total_count   = #{totalCount},
+            grade         = #{grade},
+            status        = #{status}
+            <if test="status == 'DONE'">, completed_at = CURRENT_TIMESTAMP</if>
+        WHERE recommend_id = #{recommendId}
+    </update>
+
+    <select id="findContentSchoolyear" resultType="java.lang.String">
+        SELECT schoolyear
+        FROM erp_bookstore_content
+        WHERE content_id = #{contentId}
+    </select>
+
+    <select id="findExpPerBook" resultType="java.lang.Integer">
+        SELECT exp_per_book
+        FROM erp_bookstore_exp_rule
+        WHERE schoolyear = #{schoolyear}
+    </select>
+
+    <select id="findAllLevels" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LevelDTO">
+        SELECT level_no     AS levelNo,
+               required_exp AS requiredExp
+        FROM erp_bookstore_level
+        ORDER BY level_no ASC
+    </select>
+
+    <select id="findStudentExp" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$StudentExpDTO">
+        SELECT exp AS exp, level_no AS levelNo
+        FROM erp_bookstore_student_info
+        WHERE student_id = #{studentId}
+    </select>
+
+    <!-- student_info 행이 없으면 새로 만들고, 있으면 exp를 더하고 level_no/books_read를 갱신 -->
+    <update id="upsertStudentExp">
+        MERGE erp_bookstore_student_info AS target
+        USING (SELECT #{studentId} AS student_id) AS source
+        ON target.student_id = source.student_id
+        WHEN MATCHED THEN UPDATE SET
+            exp = target.exp + #{expGained},
+            level_no = #{levelNo},
+            books_read = target.books_read + 1,
+            updated_at = CURRENT_TIMESTAMP
+        WHEN NOT MATCHED THEN INSERT (student_id, exp, level_no, books_read)
+            VALUES (#{studentId}, #{expGained}, #{levelNo}, 1);
+    </update>
 
 </mapper>

@@ -24,21 +24,32 @@
     </delete>
 
     <select id="findByGroupCode" resultType="com.hohoedu.book_clinic.common.code._dto.CodeRespDTO$CodeDTO">
-        SELECT code_id, group_code, code, code_name, sort_order, use_yn
+        SELECT code_id     AS codeId,
+               group_code  AS groupCode,
+               code        AS code,
+               code_name   AS codeName,
+               sort_order  AS sortOrder,
+               use_yn      AS useYn
         FROM erp_code
         WHERE group_code = #{groupCode}
         ORDER BY sort_order ASC
     </select>
 
     <select id="findAll" resultType="com.hohoedu.book_clinic.common.code._dto.CodeRespDTO$CodeDTO">
-        SELECT code_id, group_code, code, code_name, sort_order, use_yn
+        SELECT code_id     AS codeId,
+               group_code  AS groupCode,
+               code        AS code,
+               code_name   AS codeName,
+               sort_order  AS sortOrder,
+               use_yn      AS useYn
         FROM erp_code
         ORDER BY group_code ASC, sort_order ASC
     </select>
 
     <!-- 도서 코드(erp_bookstore_code) gubun별 목록 -->
     <select id="findBookstoreCodesByGubun" resultType="com.hohoedu.book_clinic.common.code._dto.CodeRespDTO$BookstoreCodeDTO">
-        SELECT code, codeNm AS code_name
+        SELECT code            AS code,
+               codeNm          AS codeName
         FROM erp_bookstore_code
         WHERE gubun = #{gubun}
         ORDER BY code ASC

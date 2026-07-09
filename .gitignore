@@ -361,6 +361,8 @@ application.yml
 application-*.yml
 application.properties
 application-*.properties
+docker-compose.yml
+
 
 # Firebase 서비스 계정 키 (절대 커밋 금지)
 firebase-service-account.json

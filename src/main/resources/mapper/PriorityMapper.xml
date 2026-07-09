@@ -23,10 +23,14 @@
 
     <!-- 현재 적용 중인 초안의 순위를 조인 - 순위가 없으면(초안 자체가 없거나, 초안에 없는 신간 도서) 목록 뒤로 -->
     <select id="findRankedBooks" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$RankedBookDTO">
-        SELECT bc.content_id, bc.original_title,
-               ct.codeNm AS content_type_name,
-               bc.keywords, bc.difficulty, bc.state, bc.image_url,
-               p.sort_order
+        SELECT bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               ct.codeNm         AS contentTypeName,
+               bc.keywords       AS keywords,
+               bc.difficulty     AS difficulty,
+               bc.state          AS state,
+               bc.image_url      AS imageUrl,
+               p.sort_order      AS sortOrder
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_priority_draft d
@@ -37,8 +41,13 @@
     </select>
 
     <select id="findDrafts" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$DraftDTO">
-        SELECT d.draft_id, d.year, d.schoolyear, d.is_active, d.created_by, d.created_at,
-               (SELECT COUNT(*) FROM erp_bookstore_priority p WHERE p.draft_id = d.draft_id) AS book_count
+        SELECT d.draft_id    AS draftId,
+               d.year        AS year,
+               d.schoolyear  AS schoolyear,
+               d.is_active   AS isActive,
+               d.created_by  AS createdBy,
+               d.created_at  AS createdAt,
+               (SELECT COUNT(*) FROM erp_bookstore_priority p WHERE p.draft_id = d.draft_id) AS bookCount
         FROM erp_bookstore_priority_draft d
         WHERE d.year = #{year} AND d.schoolyear = #{schoolYear}
         ORDER BY d.created_at DESC
@@ -46,10 +55,14 @@
 
     <!-- 특정 초안의 순위 미리보기 (예약 목록에서 펼쳐보기) -->
     <select id="findBooksByDraftId" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$RankedBookDTO">
-        SELECT bc.content_id, bc.original_title,
-               ct.codeNm AS content_type_name,
-               bc.keywords, bc.difficulty, bc.state, bc.image_url,
-               p.sort_order
+        SELECT bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               ct.codeNm         AS contentTypeName,
+               bc.keywords       AS keywords,
+               bc.difficulty     AS difficulty,
+               bc.state          AS state,
+               bc.image_url      AS imageUrl,
+               p.sort_order      AS sortOrder
         FROM erp_bookstore_priority p
         JOIN erp_bookstore_content bc ON bc.content_id = p.content_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
@@ -58,7 +71,11 @@
     </select>
 
     <select id="findDraftById" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$DraftDTO">
-        SELECT draft_id, year, schoolyear, is_active, created_at
+        SELECT draft_id    AS draftId,
+               year        AS year,
+               schoolyear  AS schoolyear,
+               is_active   AS isActive,
+               created_at  AS createdAt
         FROM erp_bookstore_priority_draft
         WHERE draft_id = #{draftId}
     </select>
@@ -98,16 +115,16 @@
 
     <!-- 엑셀 다운로드 — 해당 연도에 적용(is_active='Y') 중인 초안의 전체 학년 순위를 한 번에 조회 -->
     <select id="findExcelRows" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$ExcelRowDTO">
-        SELECT bc.schoolyear,
-               sc.codeNm AS schoolyear_name,
-               ct.codeNm AS content_type_name,
-               bc.original_title,
-               gc.codeNm AS genre_name,
-               bc.difficulty,
-               cd_c.name AS curriculum_name,
-               cd_r.name AS recommend_org_name,
-               cd_a.name AS award_name,
-               p.sort_order
+        SELECT bc.schoolyear     AS schoolyear,
+               sc.codeNm         AS schoolyearName,
+               ct.codeNm         AS contentTypeName,
+               bc.original_title AS originalTitle,
+               gc.codeNm         AS genreName,
+               bc.difficulty     AS difficulty,
+               cd_c.name         AS curriculumName,
+               cd_r.name         AS recommendOrgName,
+               cd_a.name         AS awardName,
+               p.sort_order      AS sortOrder
         FROM erp_bookstore_priority_draft d
         JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id
         JOIN erp_bookstore_content bc ON bc.content_id = p.content_id

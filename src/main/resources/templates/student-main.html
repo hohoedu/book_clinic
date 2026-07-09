@@ -25,76 +25,75 @@
 
 <body>
   <div class="app-viewport">
-    <main class="page">
+    <main class="page" id="mainPage" th:attr="data-student-id=${studentId}">
       <header class="topbar">
         <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
         <div class="top-actions">
-          <div class="student-pill" th:text="|${student.studentName} 학생|">김호호 학생</div>
+          <div class="student-pill" th:text="|${studentName} 학생|">김호호 학생</div>
           <button type="button" class="logout-btn"><i class="fa-solid fa-arrow-right-from-bracket"
               aria-hidden="true"></i>로그아웃</button>
         </div>
       </header>
 
       <section class="layout">
-        <article class="card book-card">
-          <div class="book-content">
-            <div class="book-info">
-              <div class="eyebrow"><span class="star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>오늘의 추천
-                도서</div>
-              <h1 class="book-title" th:text="${recommend.originalTitle}">프린들 주세요</h1>
-              <p class="book-author" th:text="${recommend.author} + ' | ' + (${recommend.publisher} ?: '-')">윌리엄 스타이그 | 비룡소</p>
-              <p class="book-desc" th:text="${recommend.summary}">
-                전 세계가 인정한 인증수상작이자 교과서 수록도서인
-                이 작품은 위기 상황에서 빛나는 주인공의 지혜를 통해
-                문제 해결 능력을 길러줍니다.
-              </p>
+        <div class="book-slot">
+          <!-- 추천 도서 로딩 -->
+          <article class="card book-card state-card" id="recommendLoading">
+            <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
+            <p>오늘의 추천 도서를 고르고 있어요...</p>
+          </article>
 
-              <dl class="book-meta">
-                <dt class="meta-label"><span class="ico"><i class="fa-solid fa-bookmark"
-                      aria-hidden="true"></i></span>분류</dt>
-                <dd class="meta-value green" th:text="${recommend.contentTypeName ?: recommend.genreName}">교과연계, 인증수상작</dd>
-                <th:block th:if="${recommend.awardName != null}">
-                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-award"
-                        aria-hidden="true"></i></span>수상정보</dt>
-                  <dd class="meta-value" th:text="${recommend.awardName}">뉴베리명예상</dd>
-                </th:block>
-                <th:block th:if="${recommend.curriculumName != null}">
-                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-square-check"
-                        aria-hidden="true"></i></span>수록</dt>
-                  <dd class="meta-value" th:text="${recommend.curriculumName}">국어2-1</dd>
-                </th:block>
-                <th:block th:if="${recommend.recommendOrgName != null}">
-                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-square-check"
-                        aria-hidden="true"></i></span>추천</dt>
-                  <dd class="meta-value" th:text="${recommend.recommendOrgName}">도서관추천도서</dd>
-                </th:block>
-                <dd class="book-tags" th:if="${!#strings.isEmpty(recommend.keywords)}">
-                  <th:block th:each="kw : ${#strings.arraySplit(recommend.keywords, ',')}"
-                    th:text="|#${#strings.trim(kw)} |">#태그 </th:block>
-                </dd>
-              </dl>
-            </div>
+          <!-- 추천 도서 없음/에러 -->
+          <article class="card book-card state-card" id="recommendEmpty" hidden>
+            <i class="fa-solid fa-circle-info" aria-hidden="true"></i>
+            <p id="recommendEmptyMsg">추천할 수 있는 도서를 찾지 못했어요.</p>
+          </article>
 
-            <div class="book-visual" aria-label="추천 도서 표지 영역">
-              <span class="sparkle s1"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-              <span class="sparkle s2"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-              <span class="sparkle s3"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-              <div class="book-mockup">
-                <div class="book-cover">
-                  <img class="main-book-img" th:src="${recommend.imageUrl ?: '/images/book-sample.png'}"
-                    th:alt="|${recommend.originalTitle} 표지|" alt="추천 도서 표지" />
-                  <span class="book-spine-line" aria-hidden="true"></span>
-                </div>
-                <div class="book-pages" aria-hidden="true"></div>
-                <div class="book-bottom-pages" aria-hidden="true"></div>
+          <!-- 추천 도서 카드 (JS로 채움) -->
+          <article class="card book-card" id="recommendCard" hidden>
+            <div class="book-content">
+              <div class="book-info">
+                <div class="eyebrow"><span class="star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>오늘의 추천
+                  도서</div>
+                <h1 class="book-title" id="bookTitle">-</h1>
+                <p class="book-author" id="bookAuthor">-</p>
+                <p class="book-desc" id="bookDesc"></p>
+
+                <dl class="book-meta" id="bookMeta">
+                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-bookmark" aria-hidden="true"></i></span>분류</dt>
+                  <dd class="meta-value green" id="bookMetaType">-</dd>
+                  <dt class="meta-label" id="bookMetaAwardLabel" hidden><span class="ico"><i class="fa-solid fa-award" aria-hidden="true"></i></span>수상정보</dt>
+                  <dd class="meta-value" id="bookMetaAward" hidden></dd>
+                  <dt class="meta-label" id="bookMetaCurriculumLabel" hidden><span class="ico"><i class="fa-solid fa-square-check" aria-hidden="true"></i></span>수록</dt>
+                  <dd class="meta-value" id="bookMetaCurriculum" hidden></dd>
+                  <dt class="meta-label" id="bookMetaOrgLabel" hidden><span class="ico"><i class="fa-solid fa-square-check" aria-hidden="true"></i></span>추천</dt>
+                  <dd class="meta-value" id="bookMetaOrg" hidden></dd>
+                  <dd class="book-tags" id="bookMetaTags" hidden></dd>
+                </dl>
               </div>
-              <div class="book-stand"></div>
-            </div>
-          </div>
 
-          <button type="button" class="solve-btn"><span class="book-icon"><i class="fa-solid fa-book-open"
-                aria-hidden="true"></i></span>문제 풀기</button>
-        </article>
+              <div class="book-visual" aria-label="추천 도서 표지 영역">
+                <span class="sparkle s1"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+                <span class="sparkle s2"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+                <span class="sparkle s3"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+                <div class="book-mockup">
+                  <div class="book-cover">
+                    <img class="main-book-img" id="bookImg" src="/images/book-sample.png" alt="추천 도서 표지" />
+                    <span class="book-spine-line" aria-hidden="true"></span>
+                  </div>
+                  <div class="book-pages" aria-hidden="true"></div>
+                  <div class="book-bottom-pages" aria-hidden="true"></div>
+                </div>
+                <div class="book-stand"></div>
+              </div>
+            </div>
+
+            <button type="button" class="solve-btn" id="mainActionBtn">
+              <span class="book-icon"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
+              <span id="mainActionLabel">문제 풀기</span>
+            </button>
+          </article>
+        </div>
 
         <aside class="side">
           <section class="card level-card">
@@ -102,18 +101,18 @@
               <p class="section-title">나의 독서 레벨</p>
             </div>
             <div class="level-mascot">
-              <img th:src="${student.characterImg ?: '/images/img-my-ch01.png'}" alt="레벨 캐릭터" />
+              <img th:src="${characterImg ?: '/images/img-my-ch01.png'}" alt="레벨 캐릭터" />
             </div>
             <div class="level-name">
-              <span class="level-pill" th:text="|Lv. ${student.levelNo}|">Lv. 3</span>
-              <h2 th:text="|${student.levelName} 단계|">이해 확장 단계</h2>
-              <p th:text="${student.feature}">다양한 주제의 독서를 하고 생각을 넓혀가는 단계예요!</p>
+              <span class="level-pill" th:text="|Lv. ${levelNo}|">Lv. 3</span>
+              <h2 th:text="|${levelName} 단계|">이해 확장 단계</h2>
+              <p th:text="${feature}">다양한 주제의 독서를 하고 생각을 넓혀가는 단계예요!</p>
             </div>
             <div class="level-progress">
               <div class="progress-label">다음 레벨까지</div>
-              <div class="progress-count" th:text="|${student.booksToNextLevel ?: '-'}권|">2권</div>
+              <div class="progress-count" th:text="|${booksToNextLevel ?: '-'}권|">2권</div>
               <div class="progress-track">
-                <div class="progress-bar" th:style="|width:${student.progressPercent}%|"></div>
+                <div class="progress-bar" th:style="|width:${progressPercent}%|"></div>
               </div>
             </div>
           </section>
@@ -129,6 +128,7 @@
                 <strong th:text="${badge.badgeName}">독서 탐험가</strong>
                 <span th:text="${badge.description}">첫 번째 정독을 완료했어요!</span>
               </div>
+              <p class="panel-empty" th:if="${badges.isEmpty()}">아직 획득한 뱃지가 없어요</p>
             </div>
           </section>
 

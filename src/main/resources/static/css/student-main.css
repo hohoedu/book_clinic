@@ -1,3 +1,7 @@
+[hidden] {
+  display: none !important;
+}
+
 .topbar {
   height: 44px;
   display: flex;
@@ -57,6 +61,33 @@
   grid-template-columns: 720px 482px;
   gap: 22px;
   align-items: stretch;
+}
+
+/* 3단계(채점/보상) 재설계 전까지 레벨/뱃지/이달의 책 패널 없이 추천 카드 하나만 중앙에 표시 */
+.layout-single {
+  display: flex;
+  justify-content: center;
+}
+
+.layout-single .book-card {
+  width: 720px;
+}
+
+.state-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.state-card i {
+  font-size: 40px;
+  color: var(--blue);
 }
 
 .card {
@@ -530,6 +561,13 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 16px;
   text-align: center;
+}
+.panel-empty {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 12px 0;
 }
 .badge-item img {
   width: min(86px, 100%);

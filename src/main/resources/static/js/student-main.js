@@ -20,15 +20,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     setAppScale();
-
-    const solveButton = document.querySelector('.solve-btn');
-
-    if (solveButton) {
-      solveButton.addEventListener('click', () => {
-        solveButton.classList.add('is-pressed');
-        window.setTimeout(() => solveButton.classList.remove('is-pressed'), 180);
-      });
-    }
+    initRecommend();
 
     const logoutButton = document.querySelector('.logout-btn');
 
@@ -37,10 +29,99 @@
         localStorage.clear();
         sessionStorage.clear();
         // replace()로 이동해 뒤로가기로 메인 화면에 다시 들어올 수 없게 한다
-        window.location.replace('/student/login');
+        window.location.replace('/student');
       });
     }
   });
+
+  // student-main.html(#mainPage)에서만 동작 — 로그인하면 무조건 책 한 권을 보여준다
+  // (이미 추천받은 책이 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정 — /clinic/recommend가 멱등 처리)
+  function initRecommend() {
+    const page = document.getElementById('mainPage');
+    if (!page) return;
+
+    const studentId = page.getAttribute('data-student-id');
+
+    const loadingEl = document.getElementById('recommendLoading');
+    const emptyEl = document.getElementById('recommendEmpty');
+    const emptyMsgEl = document.getElementById('recommendEmptyMsg');
+    const cardEl = document.getElementById('recommendCard');
+    const titleEl = document.getElementById('bookTitle');
+    const authorEl = document.getElementById('bookAuthor');
+    const descEl = document.getElementById('bookDesc');
+    const imgEl = document.getElementById('bookImg');
+    const actionBtn = document.getElementById('mainActionBtn');
+    const actionLabel = document.getElementById('mainActionLabel');
+    const metaTypeEl = document.getElementById('bookMetaType');
+    const metaAwardLabelEl = document.getElementById('bookMetaAwardLabel');
+    const metaAwardEl = document.getElementById('bookMetaAward');
+    const metaCurriculumLabelEl = document.getElementById('bookMetaCurriculumLabel');
+    const metaCurriculumEl = document.getElementById('bookMetaCurriculum');
+    const metaOrgLabelEl = document.getElementById('bookMetaOrgLabel');
+    const metaOrgEl = document.getElementById('bookMetaOrg');
+    const metaTagsEl = document.getElementById('bookMetaTags');
+
+    function showState(name) {
+      loadingEl.hidden = name !== 'loading';
+      emptyEl.hidden = name !== 'empty';
+      cardEl.hidden = name !== 'card';
+    }
+
+    function setMeta(labelEl, valueEl, text) {
+      const has = Boolean(text);
+      labelEl.hidden = !has;
+      valueEl.hidden = !has;
+      valueEl.textContent = text || '';
+    }
+
+    function renderBook(book) {
+      titleEl.textContent = book.originalTitle ?? '-';
+      authorEl.textContent = [book.author, book.publisher].filter(Boolean).join(' | ') || '-';
+      descEl.textContent = book.summary ?? '';
+      imgEl.src = book.imageUrl || '/images/book-sample.png';
+      imgEl.alt = `${book.originalTitle ?? ''} 표지`;
+
+      metaTypeEl.textContent = [book.contentTypeName, book.genreName].filter(Boolean).join(', ') || '-';
+
+      setMeta(metaAwardLabelEl, metaAwardEl, book.awardName);
+      setMeta(metaCurriculumLabelEl, metaCurriculumEl, book.curriculumName);
+      setMeta(metaOrgLabelEl, metaOrgEl, book.recommendOrgName);
+
+      if (book.keywords) {
+        metaTagsEl.textContent = book.keywords.split(',').map((kw) => `#${kw.trim()}`).join(' ');
+        metaTagsEl.hidden = false;
+      } else {
+        metaTagsEl.hidden = true;
+      }
+
+      actionLabel.textContent = '문제 풀기';
+      actionBtn.onclick = () => {
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
+      };
+
+      showState('card');
+    }
+
+    async function fetchRecommend() {
+      showState('loading');
+      try {
+        const res = await fetch('/clinic/recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message ?? '추천에 실패했어요.');
+        renderBook(data.response);
+      } catch (err) {
+        console.error(err);
+        emptyMsgEl.textContent = err.message || '추천할 수 있는 도서를 찾지 못했어요.';
+        showState('empty');
+      }
+    }
+
+    fetchRecommend();
+  }
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

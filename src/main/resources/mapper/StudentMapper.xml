@@ -5,19 +5,61 @@
 <mapper namespace="com.hohoedu.book_clinic.student.StudentRepository">
 
     <select id="findById" resultType="com.hohoedu.book_clinic.student.model.Student">
-        SELECT id, created_at, updated_at, center_code, grade_key, status_key, school,
-               student_id, student_name, address, address_detail, app_id, app_password,
-               app_token, birth, profile_img, consult_key, billing_phone, serial_num,
-               gender, student_privacy_agree, is_hoho, sub_han, sub_book, sub_hoho
+        SELECT id                     AS id,
+               created_at             AS createdAt,
+               updated_at             AS updatedAt,
+               center_code            AS centerCode,
+               grade_key              AS gradeKey,
+               status_key             AS statusKey,
+               school                 AS school,
+               student_id             AS studentId,
+               student_name           AS studentName,
+               address                AS address,
+               address_detail         AS addressDetail,
+               app_id                 AS appId,
+               app_password           AS appPassword,
+               app_token              AS appToken,
+               birth                  AS birth,
+               profile_img            AS profileImg,
+               consult_key            AS consultKey,
+               billing_phone          AS billingPhone,
+               serial_num             AS serialNum,
+               gender                 AS gender,
+               student_privacy_agree  AS studentPrivacyAgree,
+               is_hoho                AS isHoho,
+               sub_han                AS subHan,
+               sub_book               AS subBook,
+               sub_hoho               AS subHoho
         FROM erp_student
         WHERE student_id = #{studentId}
     </select>
 
     <select id="findByAppId" resultType="com.hohoedu.book_clinic.student.model.Student">
-        SELECT id, created_at, updated_at, center_code, grade_key, status_key, school,
-               student_id, student_name, address, address_detail, app_id, app_password,
-               app_token, birth, profile_img, consult_key, billing_phone, serial_num,
-               gender, student_privacy_agree, is_hoho, sub_han, sub_book, sub_hoho
+        SELECT id                     AS id,
+               created_at             AS createdAt,
+               updated_at             AS updatedAt,
+               center_code            AS centerCode,
+               grade_key              AS gradeKey,
+               status_key             AS statusKey,
+               school                 AS school,
+               student_id             AS studentId,
+               student_name           AS studentName,
+               address                AS address,
+               address_detail         AS addressDetail,
+               app_id                 AS appId,
+               app_password           AS appPassword,
+               app_token              AS appToken,
+               birth                  AS birth,
+               profile_img            AS profileImg,
+               consult_key            AS consultKey,
+               billing_phone          AS billingPhone,
+               serial_num             AS serialNum,
+               gender                 AS gender,
+               student_privacy_agree  AS studentPrivacyAgree,
+               is_hoho                AS isHoho,
+               sub_han                AS subHan,
+               sub_book               AS subBook,
+               sub_hoho               AS subHoho
         FROM erp_student
         WHERE app_id = #{appId}
     </select>

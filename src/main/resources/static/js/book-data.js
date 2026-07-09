@@ -34,7 +34,7 @@ const CSRF_HEADER = "X-XSRF-TOKEN";
 const CSRF_TOKEN = "hohoedu-master-csrf-token";
 const DEFAULT_BOOK_IMAGE = "/images/book-sample.png";
 
-// 본사 센터 코드 — 이 센터만 마스터 도서(content) 편집 가능, 그 외는 실물도서(item) 등록
+// 본사 센터 코드 — 이 센터만 마스터 도서(content) 편집 가능, 그 외는 하위 도서(item) 등록
 const HQ_CENTER_CODE = "PUS001";
 let currentUser = null;
 let isHq = true; // 사용자 조회 실패 시 기본 본사
@@ -185,7 +185,7 @@ function applyRoleUi() {
     return;
   }
 
-  // 비본사: 마스터 도서 정보 read-only, 신규 등록 = 우리 센터 실물도서 등록
+  // 비본사: 마스터 도서 정보 read-only, 신규 등록 = 하위 도서 등록
   if (newBtn) newBtn.textContent = "+ 우리 센터 도서 등록";
   ["btnSaveBook", "btnDeleteSelected"].forEach((id) => {
     const el = document.getElementById(id);
@@ -194,7 +194,7 @@ function applyRoleUi() {
   setBookFormReadonly(true);
 }
 
-/* 마스터 도서 정보 폼 읽기전용 처리 (실물도서 등록 폼 입력칸은 제외) */
+/* 마스터 도서 정보 폼 읽기전용 처리 (하위 도서 등록 폼 입력칸은 제외) */
 const MASTER_FIELD_IDS = [
   "bookInfoTitleInput", "bookInfoAuthorInput", "bookInfoPublisherInput",
   "bookInfoGradeSelect", "bookInfoGenreSelect", "bookInfoReadingTime", "bookInfoDifficulty",
@@ -280,12 +280,12 @@ function initUnsavedChangesGuard() {
   });
 }
 
-/* ===================== 비본사: 우리 센터 실물도서 ===================== */
+/* ===================== 비본사: 하위 도서 ===================== */
 
-// 우리 센터 실물도서 캐시 (contentId → item[])
+// 하위 도서 캐시 (contentId → item[])
 let branchItemsByContent = {};
 
-/* 우리 센터 실물도서 전체 로드 후 contentId별로 그룹핑 */
+/* 하위 도서 전체 로드 후 contentId별로 그룹핑 */
 async function loadBranchCenterItems() {
   branchItemsByContent = {};
 
@@ -294,7 +294,7 @@ async function loadBranchCenterItems() {
   try {
     const response = await fetch(`/book/item/center/${encodeURIComponent(currentUser.centerCode)}`);
     const data = await response.json();
-    if (!data.success) throw new Error(data.error?.message ?? "실물도서 조회에 실패했습니다.");
+    if (!data.success) throw new Error(data.error?.message ?? "하위 도서 조회에 실패했습니다.");
 
     (data.response ?? []).forEach((it) => {
       (branchItemsByContent[it.contentId] ??= []).push(it);
@@ -304,7 +304,7 @@ async function loadBranchCenterItems() {
   }
 }
 
-/* 선택된 마스터의 우리 센터 실물도서 패널 렌더링 (캐시 기준) */
+/* 선택된 마스터의 하위 도서 패널 렌더링 (캐시 기준) */
 function renderBranchPanel() {
   const panel = document.getElementById("branchItemPanel");
   const list = document.getElementById("branchItemList");
@@ -321,20 +321,20 @@ function renderBranchPanel() {
 
   const items = branchItemsByContent[currentContentId] ?? [];
   if (!items.length) {
-    list.innerHTML = '<p class="empty-hint">우리 센터에 등록된 실물도서가 없습니다.</p>';
+    list.innerHTML = '<p class="empty-hint">우리 센터에 등록된 하위 도서가 없습니다.</p>';
   } else {
     items.forEach((it) => list.appendChild(buildItemCard(it, null)));
   }
 }
 
-/* CRUD 후 센터 실물도서 재조회 → 패널 + 목록 갱신 */
+/* CRUD 후 센터 하위 도서 재조회 → 패널 + 목록 갱신 */
 async function refreshBranchItems() {
   await loadBranchCenterItems();
   renderBranchPanel();
   renderBookList(bookListCache);
 }
 
-/* 새 실물도서 입력 카드 추가 (마스터 값으로 기본 채움) */
+/* 새 하위 도서 입력 카드 추가 (마스터 값으로 기본 채움) */
 function addBranchItemForm() {
   if (currentContentId == null) {
     alert("먼저 등록할 마스터 도서를 목록에서 선택해주세요.");
@@ -351,7 +351,7 @@ function addBranchItemForm() {
   card.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
-/* 실물도서 카드 (기존 item=수정/삭제, 신규=취소/등록) */
+/* 하위 도서 카드 (기존 item=수정/삭제, 신규=취소/등록) */
 function buildItemCard(item, master) {
   const isExisting = !!item;
   const card = document.createElement("div");
@@ -538,7 +538,7 @@ function readItemCard(card) {
   };
 }
 
-/* 신규 실물도서 등록 (bcode는 서버에서 숫자 UUID 자동 생성) */
+/* 신규 하위 도서 등록 (bcode는 서버에서 숫자 UUID 자동 생성) */
 async function registerBranchItem(card) {
   const v = readItemCard(card);
   if (!v.bookTitle) {
@@ -564,7 +564,7 @@ async function registerBranchItem(card) {
   }
 }
 
-/* 기존 실물도서 수정 */
+/* 기존 하위 도서 수정 */
 async function updateBranchItem(card) {
   const v = readItemCard(card);
   if (!v.bookTitle) {
@@ -587,11 +587,11 @@ async function updateBranchItem(card) {
   }
 }
 
-/* 기존 실물도서 삭제 */
+/* 기존 하위 도서 삭제 */
 async function deleteBranchItem(card) {
   if (!confirm("우리 센터 보유에서 삭제하시겠습니까?")) return;
   try {
-    // item_del로 이관 후 우리 센터 매핑만 해제 (실물 레코드는 유지 → 삭제 도서함에서 복구 가능)
+    // item_del로 이관 후 우리 센터 매핑만 해제 (하위 레코드는 유지 → 삭제 도서함에서 복구 가능)
     await postJson("/book/item/delete", { bcode: card.dataset.bcode, centerCode: currentUser?.centerCode });
     alert("삭제되었습니다.");
     await refreshBranchItems();
@@ -722,7 +722,7 @@ async function loadDeletedBooks() {
 
   listEl.innerHTML = '<li class="deleted-empty">불러오는 중...</li>';
 
-  // 본사=삭제된 마스터 도서(content_del), 비본사=삭제된 실물도서(item_del)
+  // 본사=삭제된 마스터 도서(content_del), 비본사=삭제된 하위 도서(item_del)
   const url = isHq ? "/book/deleted" : "/book/item/deleted";
 
   try {
@@ -731,7 +731,7 @@ async function loadDeletedBooks() {
     if (!data.success) throw new Error(data.error?.message ?? "삭제 도서 조회에 실패했습니다.");
 
     let list = data.response ?? [];
-    // 비본사는 우리 센터에서 삭제한 실물도서만 표시
+    // 비본사는 우리 센터에서 삭제한 하위 도서만 표시
     if (!isHq) list = list.filter((it) => it.centerCode === currentUser?.centerCode);
 
     deletedBooksCache = list;
@@ -780,8 +780,8 @@ function renderDeletedBooks(books) {
 
 async function restoreBook(delId) {
   const message = isHq
-    ? "이 도서를 복구하시겠습니까?\n연결된 실물도서·문제도 함께 복구됩니다."
-    : "이 실물도서를 복구하시겠습니까?";
+    ? "이 도서를 복구하시겠습니까?\n연결된 하위 도서·문제도 함께 복구됩니다."
+    : "이 하위 도서를 복구하시겠습니까?";
   if (!confirm(message)) return;
 
   const modal = document.getElementById("deletedModal");
@@ -825,7 +825,7 @@ async function loadBookList(params = {}) {
 
     bookListCache = data.response ?? [];
 
-    // 비본사면 목록 들여쓰기용으로 우리 센터 실물도서 캐시 로드
+    // 비본사면 목록 들여쓰기용으로 우리 센터 하위 도서 캐시 로드
     await loadBranchCenterItems();
 
     if (bookListCache.length) {
@@ -881,7 +881,7 @@ function renderBookList(books) {
     li.append(img, info, grade);
     listEl.appendChild(li);
 
-    // 비본사: 마스터 하위로 우리 센터 실물도서 들여쓰기 표시
+    // 비본사: 마스터 하위로 우리 센터 하위 도서 들여쓰기 표시
     if (!isHq) {
       (branchItemsByContent[book.contentId] ?? []).forEach((it) => {
         const sub = document.createElement("li");
@@ -913,7 +913,7 @@ function initBookListSelection() {
   if (!listEl) return;
 
   listEl.addEventListener("click", (event) => {
-    // 마스터 항목 또는 하위 실물도서 항목 클릭 → 해당 마스터 선택
+    // 마스터 항목 또는 하위 도서 항목 클릭 → 해당 마스터 선택
     const target = event.target.closest(".book-item, .book-subitem");
     if (!target) return;
 
@@ -941,7 +941,7 @@ function initDeleteSelectedButton() {
 
     const title = document.getElementById("bookInfoTitleInput")?.value.trim() || "선택한 도서";
 
-    if (!confirm(`[${title}]를 삭제하시겠습니까?\n연결된 실물도서·문제도 함께 삭제됩니다.`)) return;
+    if (!confirm(`[${title}]를 삭제하시겠습니까?\n연결된 하위 도서·문제도 함께 삭제됩니다.`)) return;
 
     try {
       await postJson("/book/delete", { contentId: currentContentId });
@@ -1158,7 +1158,7 @@ function initNewBookButton() {
   if (!button) return;
 
   button.addEventListener("click", () => {
-    // 비본사는 '신규 등록'이 우리 센터 실물도서 입력 카드 추가
+    // 비본사는 '신규 등록'이 하위 도서 입력 카드 추가
     if (!isHq) {
       addBranchItemForm();
       return;
