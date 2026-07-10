@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-clinic-student-v3';
+const CACHE_NAME = 'book-clinic-student-v4';
 const OFFLINE_URL = '/student/login';
 
 const PRECACHE_URLS = [
@@ -43,6 +43,12 @@ self.addEventListener('fetch', (event) => {
   const request = event.request;
 
   if (request.method !== 'GET') {
+    return;
+  }
+
+  // http(s) 외 스킴(chrome-extension:// 등)은 Cache API에 저장할 수 없어 무시한다
+  // (일부 브라우저 확장이 자체 요청을 이 서비스워커의 스코프로 흘려보내는 경우가 있음)
+  if (!request.url.startsWith('http')) {
     return;
   }
 

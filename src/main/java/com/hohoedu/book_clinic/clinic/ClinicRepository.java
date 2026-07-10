@@ -5,6 +5,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import com.hohoedu.book_clinic.clinic._dto.ClinicReqDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 
 /**
@@ -50,6 +51,13 @@ public interface ClinicRepository {
     ClinicRespDTO.RecommendLogStatusDTO findRecommendLogStatus(@Param("studentId") String studentId,
                                                                 @Param("contentId") Integer contentId);
 
+    /** 문제 풀이 이력 저장 — 제출 1회분의 문항별 선택 답안을 한 번에 적재 (재도전 제출도 모두 남긴다) */
+    void insertQuizAnswerLogs(@Param("recommendId") Integer recommendId,
+                               @Param("studentId") String studentId,
+                               @Param("contentId") Integer contentId,
+                               @Param("qlevel") String qlevel,
+                               @Param("answerLogs") List<ClinicReqDTO.AnswerLogDTO> answerLogs);
+
     /** 기본 문제풀이 채점 결과 반영 (합격 시 status=DONE, 미달이면 PENDING 유지) */
     void updateRecommendResult(@Param("recommendId") Integer recommendId,
                                 @Param("correctCount") Integer correctCount,
@@ -66,11 +74,51 @@ public interface ClinicRepository {
     /** 레벨 마스터 전체 (레벨업 계산용) */
     List<ClinicRespDTO.LevelDTO> findAllLevels();
 
+    /** 레벨 마스터 1건 상세 (없는 레벨번호면 null — 레벨0 조회 시 방어용) */
+    ClinicRespDTO.LevelDetailDTO findLevelDetail(@Param("levelNo") int levelNo);
+
     /** 학생 누적 EXP/레벨 (student_info 행이 없으면 null — 최초 합격 시 upsert로 생성) */
     ClinicRespDTO.StudentExpDTO findStudentExp(@Param("studentId") String studentId);
 
     /** EXP 적립 + 레벨 갱신 + 완독 수 증가 (student_info 행이 없으면 새로 생성) */
     void upsertStudentExp(@Param("studentId") String studentId, @Param("expGained") int expGained,
                            @Param("levelNo") int levelNo);
+
+    /** 이번 달(completed_at 기준)에 합격 완료한 도서 목록 — 최신순, 최대 limit건 */
+    List<ClinicRespDTO.MonthBookDTO> findCompletedThisMonth(@Param("studentId") String studentId,
+                                                             @Param("limit") int limit);
+
+    // ── 뱃지 판정 (2026-07-10) — 카운터를 따로 쌓지 않고 매 제출마다 로그에서 재계산한다 ──
+
+    /** 뱃지 마스터 전체 (badge_id 순) */
+    List<ClinicRespDTO.BadgeDTO> findAllBadges();
+
+    /** 학생이 이미 획득한 뱃지 ID 목록 */
+    List<Integer> findEarnedBadgeIds(@Param("studentId") String studentId);
+
+    /** 뱃지 획득 기록 — 호출 전 미보유 확인 필수 (PK 중복 시 예외) */
+    void insertStudentBadge(@Param("studentId") String studentId, @Param("badgeId") Integer badgeId);
+
+    /** 완독(DONE) 총 권수 — FIRST_BOOK 판정 */
+    int countDoneBooks(@Param("studentId") String studentId);
+
+    /** 완독이 1권 이상 있는 달 목록('yyyy-MM', 중복 제거·오름차순) — MONTH_STREAK 판정 재료 */
+    List<String> findDoneMonths(@Param("studentId") String studentId);
+
+    /** 독서왕(grade='KING') 달성 횟수 — CROWN 판정 */
+    int countKingGrades(@Param("studentId") String studentId);
+
+    /**
+     * 문제유형(T코드)별 "만점 책 수" — QTYPE_PERFECT 판정.
+     * 완독(DONE) 책마다 합격을 만든 회차(합격선 이상 최초 제출) 하나만 보고, 그 회차에서
+     * 해당 유형 문항을 빠짐없이 전부 맞힌 경우만 1회로 센다 (재도전/재제출 어뷰징 차단, 책당 1회)
+     */
+    List<ClinicRespDTO.QtypePerfectDTO> countQtypePerfectBooks(@Param("studentId") String studentId);
+
+    /** 키워드가 하나라도 포함된(content.keywords LIKE) 완독 책 수 — TOPIC 판정 */
+    int countTopicBooks(@Param("studentId") String studentId, @Param("keywords") List<String> keywords);
+
+    /** 심화(qlevel=02) 전 문항 정답 회차가 있는 책 수(책당 1회) — ADV_PERFECT 판정 */
+    int countAdvancedPerfectBooks(@Param("studentId") String studentId);
 
 }

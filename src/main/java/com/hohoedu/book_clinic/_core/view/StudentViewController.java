@@ -10,6 +10,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import com.hohoedu.book_clinic.clinic.ClinicService;
+import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -29,6 +31,7 @@ import lombok.RequiredArgsConstructor;
 public class StudentViewController {
 
     private final StudentRepository studentRepository;
+    private final ClinicService clinicService;
 
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
     @GetMapping({"", "/", "/login"})
@@ -48,8 +51,8 @@ public class StudentViewController {
     }
 
     /**
-     * TODO: 레벨/뱃지/이달의 책 패널은 3단계(채점/보상) 재설계 전까지 실제 데이터가 없어 자리만
-     * 잡아둔 placeholder 값(레벨1, EXP 0, 뱃지·이달의 책 없음)을 내려준다 — 3단계에서 실제 값으로 교체.
+     * 레벨 카드는 ClinicService.getMainLevelInfo로 실제 EXP/레벨을 계산해 내려준다.
+     * 뱃지/이달의 책 패널은 관련 테이블 자체가 없어 여전히 placeholder(빈 배열)다 — 필요해지면 별도 설계.
      * 추천 도서 카드는 페이지 진입 후 JS가 /clinic/recommend를 호출해 채운다 — 이미 추천받은 책이
      * 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정한다 (ClinicService.recommend가 멱등 처리).
      */
@@ -68,21 +71,21 @@ public class StudentViewController {
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());
 
-        // placeholder — 3단계(채점/보상) 재설계 전까지 고정값
-        model.addAttribute("levelNo", 1);
-        model.addAttribute("levelName", "입문");
-        model.addAttribute("feature", "독서의 즐거움을 발견하는 시기예요!");
+        ClinicRespDTO.MainLevelInfoDTO levelInfo = clinicService.getMainLevelInfo(studentId);
+        model.addAttribute("levelNo", levelInfo.getLevelNo());
+        model.addAttribute("levelName", levelInfo.getLevelName());
+        model.addAttribute("feature", levelInfo.getFeature());
         model.addAttribute("characterImg", (String) null);
-        model.addAttribute("booksToNextLevel", (Integer) null);
-        model.addAttribute("progressPercent", 0);
+        model.addAttribute("booksToNextLevel", levelInfo.getBooksToNextLevel());
+        model.addAttribute("progressPercent", levelInfo.getProgressPercent());
         model.addAttribute("badges", List.of());
-        model.addAttribute("monthBooks", List.of());
+        model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));
         return "/student-main";
     }
 
     /**
-     * 임시 문제풀이 화면 — 정식 디자인 HTML이 넘어오기 전까지 사용하는 임시 화면
-     * 문제 데이터는 화면 로드 후 JS에서 기존 /question/search API를 호출해 채운다
+     * 문제풀이 화면 — 문제 데이터/도서 표지·제목은 화면 로드 후 JS에서
+     * 기존 /question/search, /clinic/recommend API를 호출해 채운다
      */
     /** qlevel: 01=기본(기본값), 02=심화(독서왕/독서친구가 기본 문제풀이 합격 후 추가로 도전) */
     @GetMapping("/question")
@@ -94,7 +97,13 @@ public class StudentViewController {
             return "redirect:/student/login";
         }
 
+        Student student = studentRepository.findById(studentId);
+        if (student == null) {
+            return "redirect:/student/login";
+        }
+
         model.addAttribute("studentId", studentId);
+        model.addAttribute("studentName", student.getStudentName());
         model.addAttribute("contentId", contentId);
         model.addAttribute("qlevel", qlevel);
         return "/student-question";

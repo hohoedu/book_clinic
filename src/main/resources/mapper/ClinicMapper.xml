@@ -136,6 +136,16 @@
         ORDER BY recommend_id DESC
     </select>
 
+    <!-- 제출 1회분을 다중 VALUES 한 문장으로 적재 — 같은 문장이라 submitted_at이 전부 동일해 회차 구분에 쓰인다 -->
+    <insert id="insertQuizAnswerLogs">
+        INSERT INTO erp_bookstore_quiz_answer_log
+            (recommend_id, student_id, content_id, qlevel, qnum, selected, is_correct)
+        VALUES
+        <foreach collection="answerLogs" item="a" separator=",">
+            (#{recommendId}, #{studentId}, #{contentId}, #{qlevel}, #{a.qnum}, #{a.selected}, #{a.correct})
+        </foreach>
+    </insert>
+
     <update id="updateRecommendResult">
         UPDATE erp_bookstore_recommend_log
         SET correct_count = #{correctCount},
@@ -169,6 +179,155 @@
         SELECT exp AS exp, level_no AS levelNo
         FROM erp_bookstore_student_info
         WHERE student_id = #{studentId}
+    </select>
+
+    <select id="findCompletedThisMonth" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$MonthBookDTO">
+        SELECT TOP (#{limit})
+               c.content_id     AS contentId,
+               c.original_title AS originalTitle,
+               c.image_url      AS imageUrl,
+               'DONE'           AS status
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        WHERE rl.student_id = #{studentId}
+          AND rl.status = 'DONE'
+          AND YEAR(rl.completed_at) = YEAR(GETDATE())
+          AND MONTH(rl.completed_at) = MONTH(GETDATE())
+        ORDER BY rl.completed_at DESC
+    </select>
+
+    <select id="findLevelDetail" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LevelDetailDTO">
+        SELECT level_no     AS levelNo,
+               level_name   AS levelName,
+               feature      AS feature,
+               required_exp AS requiredExp
+        FROM erp_bookstore_level
+        WHERE level_no = #{levelNo}
+    </select>
+
+    <!-- ══════════════ 뱃지 판정 (2026-07-10) ══════════════ -->
+
+    <select id="findAllBadges" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BadgeDTO">
+        SELECT badge_id   AS badgeId,
+               badge_name AS badgeName,
+               badge_desc AS badgeDesc,
+               category   AS category,
+               threshold  AS threshold,
+               param      AS param
+        FROM erp_bookstore_badge
+        ORDER BY badge_id ASC
+    </select>
+
+    <select id="findEarnedBadgeIds" resultType="java.lang.Integer">
+        SELECT badge_id
+        FROM erp_bookstore_student_badge
+        WHERE student_id = #{studentId}
+    </select>
+
+    <insert id="insertStudentBadge">
+        INSERT INTO erp_bookstore_student_badge (student_id, badge_id)
+        VALUES (#{studentId}, #{badgeId})
+    </insert>
+
+    <select id="countDoneBooks" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId} AND status = 'DONE'
+    </select>
+
+    <select id="findDoneMonths" resultType="java.lang.String">
+        SELECT DISTINCT FORMAT(completed_at, 'yyyy-MM')
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId} AND status = 'DONE' AND completed_at IS NOT NULL
+        ORDER BY 1 ASC
+    </select>
+
+    <select id="countKingGrades" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId} AND grade = 'KING'
+    </select>
+
+    <!--
+      문제유형(T코드)별 만점 책 수 — 3단계로 좁혀 간다:
+        pass_session : 완독(DONE) 책마다 "합격을 만든 회차" = 합격선(총 문항의 2/3) 이상을 처음 넘긴
+                       submitted_at 1건. DONE 이후의 재제출 회차는 자연히 제외된다.
+        per_type     : 그 회차의 답안을 유형별로 묶어 전부 정답인지(all_correct) +
+                       미제출 문항이 없는지(answered_cnt = 문제은행의 해당 유형 문항 수) 확인.
+                       미제출 문항은 답안 로그가 안 남아 "오답 없음"으로 오판될 수 있어 개수 대조가 필수.
+      recommend_log은 학생+도서당 1건이므로 회차 기준 = 책당 1회가 보장된다.
+    -->
+    <select id="countQtypePerfectBooks" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$QtypePerfectDTO">
+        WITH pass_session AS (
+            SELECT s.recommend_id, MIN(s.submitted_at) AS submitted_at
+            FROM (
+                SELECT a.recommend_id, a.submitted_at,
+                       SUM(CASE WHEN a.is_correct = 1 THEN 1 ELSE 0 END) AS correct_cnt,
+                       MAX(r.total_count) AS total_cnt
+                FROM erp_bookstore_quiz_answer_log a
+                JOIN erp_bookstore_recommend_log r
+                  ON r.recommend_id = a.recommend_id AND r.status = 'DONE'
+                WHERE a.student_id = #{studentId} AND a.qlevel = '01'
+                GROUP BY a.recommend_id, a.submitted_at
+            ) s
+            WHERE s.total_cnt IS NOT NULL
+              AND s.correct_cnt >= CEILING(s.total_cnt * 2.0 / 3)
+            GROUP BY s.recommend_id
+        ),
+        per_type AS (
+            SELECT ps.recommend_id, ip.qtype,
+                   MIN(CAST(a.is_correct AS INT)) AS all_correct,
+                   COUNT(*) AS answered_cnt,
+                   MAX(tq.qtype_total) AS qtype_total
+            FROM pass_session ps
+            JOIN erp_bookstore_quiz_answer_log a
+              ON a.recommend_id = ps.recommend_id AND a.submitted_at = ps.submitted_at AND a.qlevel = '01'
+            JOIN erp_bookstore_itempool ip
+              ON ip.content_id = a.content_id AND ip.qlevel = a.qlevel AND ip.qnum = a.qnum
+            JOIN (
+                SELECT content_id, qtype, COUNT(*) AS qtype_total
+                FROM erp_bookstore_itempool
+                WHERE qlevel = '01' AND state = 'S'
+                GROUP BY content_id, qtype
+            ) tq ON tq.content_id = a.content_id AND tq.qtype = ip.qtype
+            GROUP BY ps.recommend_id, ip.qtype
+        )
+        SELECT qtype AS qtype, COUNT(*) AS cnt
+        FROM per_type
+        WHERE all_correct = 1 AND answered_cnt >= qtype_total
+        GROUP BY qtype
+    </select>
+
+    <select id="countTopicBooks" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_recommend_log r
+        JOIN erp_bookstore_content c ON c.content_id = r.content_id
+        WHERE r.student_id = #{studentId} AND r.status = 'DONE'
+          AND (
+            <foreach collection="keywords" item="kw" separator=" OR ">
+                c.keywords LIKE '%' + #{kw} + '%'
+            </foreach>
+          )
+    </select>
+
+    <!-- 심화(02) 회차 중 문제은행 전 문항(state=S)을 빠짐없이 전부 맞힌 회차가 있는 책 수 — 책당 1회 -->
+    <select id="countAdvancedPerfectBooks" resultType="int">
+        SELECT COUNT(DISTINCT s.content_id)
+        FROM (
+            SELECT a.content_id, a.submitted_at,
+                   SUM(CASE WHEN a.is_correct = 1 THEN 1 ELSE 0 END) AS correct_cnt,
+                   MAX(t.total_cnt) AS total_cnt
+            FROM erp_bookstore_quiz_answer_log a
+            JOIN (
+                SELECT content_id, COUNT(*) AS total_cnt
+                FROM erp_bookstore_itempool
+                WHERE qlevel = '02' AND state = 'S'
+                GROUP BY content_id
+            ) t ON t.content_id = a.content_id
+            WHERE a.student_id = #{studentId} AND a.qlevel = '02'
+            GROUP BY a.content_id, a.submitted_at
+        ) s
+        WHERE s.total_cnt > 0 AND s.correct_cnt >= s.total_cnt
     </select>
 
     <!-- student_info 행이 없으면 새로 만들고, 있으면 exp를 더하고 level_no/books_read를 갱신 -->

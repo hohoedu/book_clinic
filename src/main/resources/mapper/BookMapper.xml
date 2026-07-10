@@ -66,33 +66,55 @@
         WHERE bcode = #{bcode}
     </update>
 
-    <!-- 센터 보유분(bcode + center)을 item_del로 이관 (실물 레코드는 유지) -->
+    <!-- 센터 보유분(bcode + center)의 삭제 로그를 item_del에 기록 (실물 레코드는 유지) -->
     <insert id="archiveItem">
-        INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, author, publisher, image_url, center_code, quantity, state)
-        SELECT #{deletedBy}, i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, ic.center_code, ic.quantity, ic.state
+        INSERT INTO erp_bookstore_item_del (log_type, logged_by, bcode, content_id, book_title, author, publisher, image_url, center_code, quantity, state)
+        SELECT 'DELETE', #{deletedBy}, i.bcode, i.content_id, i.book_title, i.author, i.publisher, i.image_url, ic.center_code, ic.quantity, ic.state
         FROM erp_bookstore_item i
         JOIN erp_bookstore_item_center ic ON i.bcode = ic.bcode
         WHERE i.bcode = #{bcode} AND ic.center_code = #{centerCode}
+    </insert>
+
+    <!-- 실물도서 수정 전 스냅샷을 item_del에 UPDATE 로그로 기록 -->
+    <insert id="archiveItemForUpdate">
+        INSERT INTO erp_bookstore_item_del (log_type, logged_by, bcode, content_id, book_title, author, publisher, image_url)
+        SELECT 'UPDATE', #{updatedBy}, bcode, content_id, book_title, author, publisher, image_url
+        FROM erp_bookstore_item
+        WHERE bcode = #{bcode}
+    </insert>
+
+    <!-- 마스터 도서 수정 전 스냅샷을 content_del에 UPDATE 로그로 기록 -->
+    <insert id="archiveContentForUpdate">
+        INSERT INTO erp_bookstore_content_del (log_type, logged_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
+        SELECT 'UPDATE', #{updatedBy}, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty
+        FROM erp_bookstore_content
+        WHERE content_id = #{contentId}
+    </insert>
+
+    <!-- 분류별 상세 수정 전 스냅샷을 content_detail_del에 UPDATE 로그로 기록 -->
+    <insert id="archiveContentDetailForUpdate">
+        INSERT INTO erp_bookstore_content_detail_del (log_type, logged_by, content_id, gubun, name)
+        SELECT 'UPDATE', #{updatedBy}, content_id, gubun, name
+        FROM erp_bookstore_content_detail
+        WHERE content_id = #{contentId}
     </insert>
 
     <insert id="restoreItemFromDel">
         INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url)
         SELECT bcode, content_id, book_title, author, publisher, image_url
         FROM erp_bookstore_item_del
-        WHERE del_id = #{delId}
+        WHERE log_id = #{delId}
     </insert>
 
-    <!-- 실물도서 복구 시 센터 매핑(item_center)도 함께 복원 (center_code가 보관돼 있을 때만) -->
+    <!-- 실물도서 복구 시 센터 매핑(item_center)도 함께 복원 (center_code가 보관돼 있고 아직 매핑이 없을 때만 — 로그는 지우지 않으므로 중복 복구 방지) -->
     <insert id="restoreItemCenterFromDel">
         INSERT INTO erp_bookstore_item_center (bcode, center_code, quantity, state)
-        SELECT bcode, center_code, ISNULL(quantity, 0), state
-        FROM erp_bookstore_item_del
-        WHERE del_id = #{delId} AND center_code IS NOT NULL
+        SELECT d.bcode, d.center_code, ISNULL(d.quantity, 0), d.state
+        FROM erp_bookstore_item_del d
+        WHERE d.log_id = #{delId} AND d.center_code IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM erp_bookstore_item_center ic
+                          WHERE ic.bcode = d.bcode AND ic.center_code = d.center_code)
     </insert>
-
-    <delete id="deleteItemDel">
-        DELETE FROM erp_bookstore_item_del WHERE del_id = #{delId}
-    </delete>
 
     <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 / 사용여부 복합 검색 -->
     <select id="searchContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentRespDTO">
@@ -196,22 +218,27 @@
         DELETE FROM erp_bookstore_item_center WHERE center_code = #{centerCode}
     </delete>
 
-    <!-- 삭제된 실물도서 목록 -->
+    <!-- 삭제된 실물도서 목록 — DELETE 로그 중 아직 복구되지 않은 것만 (UPDATE 로그·복구 완료 건 제외) -->
     <select id="findDeletedItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemDelRespDTO">
-        SELECT del_id       AS delId,
-               deleted_at   AS deletedAt,
-               deleted_by   AS deletedBy,
-               bcode        AS bcode,
-               content_id   AS contentId,
-               book_title   AS bookTitle,
-               author       AS author,
-               publisher    AS publisher,
-               image_url    AS imageUrl,
-               center_code  AS centerCode,
-               quantity     AS quantity,
-               state        AS state
-        FROM erp_bookstore_item_del
-        ORDER BY deleted_at DESC
+        SELECT d.log_id       AS delId,
+               d.logged_at    AS deletedAt,
+               d.logged_by    AS deletedBy,
+               d.bcode        AS bcode,
+               d.content_id   AS contentId,
+               d.book_title   AS bookTitle,
+               d.author       AS author,
+               d.publisher    AS publisher,
+               d.image_url    AS imageUrl,
+               d.center_code  AS centerCode,
+               d.quantity     AS quantity,
+               d.state        AS state
+        FROM erp_bookstore_item_del d
+        WHERE d.log_type = 'DELETE'
+          AND NOT EXISTS (SELECT 1 FROM erp_bookstore_item_center ic
+                          WHERE ic.bcode = d.bcode AND ic.center_code = d.center_code)
+          AND (d.center_code IS NOT NULL
+               OR NOT EXISTS (SELECT 1 FROM erp_bookstore_item i WHERE i.bcode = d.bcode))
+        ORDER BY d.logged_at DESC
     </select>
 
     <!-- 센터별 보유 도서 목록 -->
@@ -234,21 +261,23 @@
         ORDER BY ic.registered_at DESC
     </select>
 
-    <!-- 10: 삭제된 도서 목록 -->
+    <!-- 10: 삭제된 도서 목록 — DELETE 로그 중 아직 복구되지 않은 것만 (UPDATE 로그·복구 완료 건 제외) -->
     <select id="findDeletedContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentDelRespDTO">
-        SELECT del_id         AS delId,
-               deleted_at     AS deletedAt,
-               deleted_by     AS deletedBy,
-               content_id     AS contentId,
-               original_title AS originalTitle,
-               author         AS author,
-               genre          AS genre,
-               content_type   AS contentType,
-               schoolyear     AS schoolyear,
-               summary        AS summary,
-               keywords       AS keywords
-        FROM erp_bookstore_content_del
-        ORDER BY deleted_at DESC
+        SELECT d.log_id         AS delId,
+               d.logged_at      AS deletedAt,
+               d.logged_by      AS deletedBy,
+               d.content_id     AS contentId,
+               d.original_title AS originalTitle,
+               d.author         AS author,
+               d.genre          AS genre,
+               d.content_type   AS contentType,
+               d.schoolyear     AS schoolyear,
+               d.summary        AS summary,
+               d.keywords       AS keywords
+        FROM erp_bookstore_content_del d
+        WHERE d.log_type = 'DELETE'
+          AND NOT EXISTS (SELECT 1 FROM erp_bookstore_content c WHERE c.content_id = d.content_id)
+        ORDER BY d.logged_at DESC
     </select>
 
     <!-- 대여 가능 재고가 있을 때만 loaned_qty +1 (동시성 안전 조건부 UPDATE — 영향 행 0이면 재고 없음) -->

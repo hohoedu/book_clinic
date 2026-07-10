@@ -39,9 +39,11 @@ public class BookService {
         saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
     }
 
-    /** 마스터 도서 수정 */
+    /** 마스터 도서 수정 — 변경 전 스냅샷을 content_del/content_detail_del에 UPDATE 로그로 남긴다 */
     @Transactional
-    public void updateContent(BookReqDTO.UpdateReqDTO reqDTO) {
+    public void updateContent(BookReqDTO.UpdateReqDTO reqDTO, String updatedBy) {
+        bookRepository.archiveContentForUpdate(reqDTO.getContentId(), updatedBy);
+        bookRepository.archiveContentDetailForUpdate(reqDTO.getContentId(), updatedBy);
         bookRepository.updateContent(reqDTO);
         saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
     }
@@ -67,7 +69,7 @@ public class BookService {
         bookRepository.deleteBook(reqDTO.getContentId(), deletedBy);
     }
 
-    /** 마스터 도서 복구 - 저장 프로시저로 del 테이블에서 원본 테이블로 복원 */
+    /** 마스터 도서 복구 - 저장 프로시저로 del 테이블에서 원본 테이블로 복사 (로그는 보존) */
     public void restoreBook(BookReqDTO.RestoreReqDTO reqDTO) {
         bookRepository.restoreBook(reqDTO.getDelId());
     }
@@ -93,8 +95,10 @@ public class BookService {
         }
     }
 
-    /** 실물 도서 수정 (제목, 출판사, 키워드) */
-    public void updateItem(BookReqDTO.ItemUpdateReqDTO reqDTO) {
+    /** 실물 도서 수정 (제목, 출판사, 키워드) — 변경 전 스냅샷을 item_del에 UPDATE 로그로 남긴다 */
+    @Transactional
+    public void updateItem(BookReqDTO.ItemUpdateReqDTO reqDTO, String updatedBy) {
+        bookRepository.archiveItemForUpdate(reqDTO.getBcode(), updatedBy);
         bookRepository.updateItem(reqDTO);
     }
 
@@ -111,12 +115,11 @@ public class BookService {
 
     /**
      * 실물 도서 복구
-     * 실물 레코드는 유지되므로 item_del에 보관된 센터 매핑만 되살린다.
+     * 실물 레코드는 유지되므로 item_del에 보관된 센터 매핑만 복사해 되살린다 (로그는 보존).
      */
     @Transactional
     public void restoreItem(BookReqDTO.ItemRestoreReqDTO reqDTO) {
         bookRepository.restoreItemCenterFromDel(reqDTO.getDelId());
-        bookRepository.deleteItemDel(reqDTO.getDelId());
     }
 
     /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형/사용여부 복합 조건) */

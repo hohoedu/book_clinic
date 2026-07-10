@@ -49,29 +49,30 @@ public class QuestionService {
         questionRepository.registerQuestion(reqDTO);
     }
 
-    /** 문제 수정 */
-    public void updateQuestion(QuestionReqDTO.UpdateReqDTO reqDTO) {
+    /** 문제 수정 — 변경 전 스냅샷을 itempool_del에 UPDATE 로그로 남긴다 */
+    @Transactional
+    public void updateQuestion(QuestionReqDTO.UpdateReqDTO reqDTO, String updatedBy) {
+        questionRepository.archiveQuestion(reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getQnum(), updatedBy, "UPDATE");
         questionRepository.updateQuestion(reqDTO);
     }
 
     /**
      * 문제 삭제
-     * itempool_del로 이관 후 itempool에서 삭제
+     * itempool_del에 DELETE 로그 기록 후 itempool에서 삭제
      */
     @Transactional
     public void deleteQuestion(QuestionReqDTO.DeleteReqDTO reqDTO, String deletedBy) {
-        questionRepository.archiveQuestion(reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getQnum(), deletedBy);
+        questionRepository.archiveQuestion(reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getQnum(), deletedBy, "DELETE");
         questionRepository.deleteQuestion(reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getQnum());
     }
 
     /**
      * 문제 복구
-     * itempool_del에서 itempool로 복원 후 del 레코드 제거
+     * itempool_del에서 itempool로 복사만 하고 로그는 보존
      */
     @Transactional
     public void restoreQuestion(QuestionReqDTO.RestoreReqDTO reqDTO) {
         questionRepository.restoreQuestionFromDel(reqDTO.getDelId());
-        questionRepository.deleteQuestionDel(reqDTO.getDelId());
     }
 
     /** 도서별 문제 목록 조회 (contentId 필수, qlevel/qtype/state 선택) */
@@ -148,8 +149,8 @@ public class QuestionService {
             boolean isDup = dupKeys.contains(dto.getContentId() + "|" + dto.getQlevel() + "|" + dto.getQnum());
             if (isDup) {
                 if ("overwrite".equals(mode)) {
-                    // 기존 데이터 del 테이블에 보관 후 UPDATE
-                    questionRepository.archiveQuestion(dto.getContentId(), dto.getQlevel(), dto.getQnum(), uploadedBy);
+                    // 기존 데이터를 UPDATE 로그로 보관 후 덮어쓰기
+                    questionRepository.archiveQuestion(dto.getContentId(), dto.getQlevel(), dto.getQnum(), uploadedBy, "UPDATE");
                     questionRepository.overwriteQuestion(dto);
                 }
                 // "skip" mode면 중복은 그냥 건너뜀

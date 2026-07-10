@@ -24,17 +24,14 @@ public interface QuestionRepository {
     /** 문제 수정 */
     void updateQuestion(QuestionReqDTO.UpdateReqDTO reqDTO);
 
-    /** 문제를 itempool_del 테이블로 이관 (삭제 전 보관) */
-    void archiveQuestion(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qnum") String qnum, @Param("deletedBy") String deletedBy);
+    /** 문제 변경 전 스냅샷을 itempool_del에 기록 (logType: DELETE=삭제, UPDATE=수정) */
+    void archiveQuestion(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qnum") String qnum, @Param("loggedBy") String loggedBy, @Param("logType") String logType);
 
     /** 문제 삭제 */
     void deleteQuestion(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qnum") String qnum);
 
-    /** itempool_del에서 itempool로 복원 */
+    /** itempool_del에서 itempool로 복사 복원 (로그는 보존) */
     void restoreQuestionFromDel(@Param("delId") Integer delId);
-
-    /** itempool_del 레코드 삭제 */
-    void deleteQuestionDel(@Param("delId") Integer delId);
 
     /** 도서별 문제 목록 조회 (contentId 필수, qlevel/qtype/state 선택) */
     List<QuestionRespDTO.QuestionDTO> searchQuestions(@Param("contentId") Integer contentId, @Param("qlevel") String qlevel, @Param("qtype") String qtype, @Param("state") String state);

@@ -1,4 +1,7 @@
 -- DROP (FK 역순)
+IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
+IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
+IF OBJECT_ID('erp_bookstore_quiz_answer_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_answer_log;
 IF OBJECT_ID('erp_bookstore_student_info',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_info;
 IF OBJECT_ID('erp_bookstore_exp_rule',               'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;
 IF OBJECT_ID('erp_bookstore_level',                  'U') IS NOT NULL DROP TABLE erp_bookstore_level;
@@ -119,12 +122,13 @@ CREATE TABLE erp_bookstore_content (
     difficulty     VARCHAR(20)    -- 난이도
 );
 
--- 삭제된 도서(erp_bookstore_content) 이력 — 복구용 스냅샷
+-- 도서(erp_bookstore_content) 삭제/수정 로그 — 복구는 원본 테이블로 복사만 하고 로그는 보존
 IF OBJECT_ID('erp_bookstore_content_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_content_del (
-    del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    deleted_at     DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
-    deleted_by     VARCHAR(100),  -- 삭제한 사용자
+    log_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type       VARCHAR(10)  NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at      DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
+    logged_by      VARCHAR(100),  -- 처리한 사용자
     content_id     INT,           -- 원본 content_id
     original_title VARCHAR(255),  -- 원제(도서명)
     author         VARCHAR(100),  -- 저자
@@ -150,16 +154,27 @@ CREATE TABLE erp_bookstore_content_detail (
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
--- 삭제된 도서 상세(erp_bookstore_content_detail) 이력
+-- 도서 상세(erp_bookstore_content_detail) 삭제/수정 로그
 IF OBJECT_ID('erp_bookstore_content_detail_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_content_detail_del (
-    del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    deleted_at     DATETIME2 DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
-    deleted_by     VARCHAR(100),  -- 삭제한 사용자
+    log_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type       VARCHAR(10) NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at      DATETIME2 DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
+    logged_by      VARCHAR(100),  -- 처리한 사용자
     content_id     INT,           -- 원본 content_id
     gubun          VARCHAR(1),    -- C/R/A 구분
     name           VARCHAR(200)   -- gubun별 값
 );
+
+-- 구버전 _del 테이블 마이그레이션 — 매 기동 시 리셋되지 않는 테이블은 컬럼이 옛 이름이면 개명하고 log_type을 추가한다
+IF COL_LENGTH('erp_bookstore_content_del', 'del_id') IS NOT NULL EXEC sp_rename 'erp_bookstore_content_del.del_id', 'log_id', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_content_del', 'deleted_at') IS NOT NULL EXEC sp_rename 'erp_bookstore_content_del.deleted_at', 'logged_at', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_content_del', 'deleted_by') IS NOT NULL EXEC sp_rename 'erp_bookstore_content_del.deleted_by', 'logged_by', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_content_del', 'log_type') IS NULL ALTER TABLE erp_bookstore_content_del ADD log_type VARCHAR(10) NOT NULL DEFAULT 'DELETE';
+IF COL_LENGTH('erp_bookstore_content_detail_del', 'del_id') IS NOT NULL EXEC sp_rename 'erp_bookstore_content_detail_del.del_id', 'log_id', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_content_detail_del', 'deleted_at') IS NOT NULL EXEC sp_rename 'erp_bookstore_content_detail_del.deleted_at', 'logged_at', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_content_detail_del', 'deleted_by') IS NOT NULL EXEC sp_rename 'erp_bookstore_content_detail_del.deleted_by', 'logged_by', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_content_detail_del', 'log_type') IS NULL ALTER TABLE erp_bookstore_content_detail_del ADD log_type VARCHAR(10) NOT NULL DEFAULT 'DELETE';
 
 -- 권장도서 순위 초안 (연도+학년별로 여러 건 저장 가능, 그중 하나만 적용 상태)
 -- 학년탭을 각각 편집/저장하므로 초안 선택도 학년별로 독립적이어야 해서 schoolyear를 둔다 (content_detail과 달리 여긴 학년이 '어느 편집 세션인지'를 나타내는 키라 중복 저장 아님)
@@ -183,11 +198,12 @@ CREATE TABLE erp_bookstore_priority (
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
--- 순위 초안 삭제 이력 (복구 기능 없음 — 삭제 시 그대로 이관만 하고 끝)
+-- 순위 초안 삭제 로그 (복구 기능 없음 — 삭제 시 로그만 남기고 끝)
 CREATE TABLE erp_bookstore_priority_draft_del (
-    del_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    deleted_at  DATETIME2   DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
-    deleted_by  VARCHAR(100),  -- 삭제한 사용자
+    log_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type    VARCHAR(10) NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at   DATETIME2   DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
+    logged_by   VARCHAR(100),  -- 처리한 사용자
     draft_id    INT,           -- 원본 draft_id
     year        VARCHAR(4),    -- 노출 연도
     schoolyear  VARCHAR(20),   -- 학년 코드
@@ -196,10 +212,11 @@ CREATE TABLE erp_bookstore_priority_draft_del (
     created_at  DATETIME2      -- 원본 저장일시
 );
 
--- 삭제된 순위(erp_bookstore_priority) 이력
+-- 순위(erp_bookstore_priority) 삭제 로그
 CREATE TABLE erp_bookstore_priority_del (
-    del_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    deleted_at  DATETIME2   DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
+    log_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type    VARCHAR(10) NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at   DATETIME2   DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
     draft_id    INT,        -- 원본 draft_id
     content_id  INT,        -- 원본 content_id
     sort_order  INT         -- 원본 순위
@@ -245,12 +262,13 @@ CREATE TABLE erp_bookstore_item_loan (
     FOREIGN KEY (bcode, center_code) REFERENCES erp_bookstore_item_center(bcode, center_code)
 );
 
--- 삭제된 실물도서(erp_bookstore_item/erp_bookstore_item_center) 이력
+-- 실물도서(erp_bookstore_item/erp_bookstore_item_center) 삭제/수정 로그
 IF OBJECT_ID('erp_bookstore_item_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_del (
-    del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    deleted_at     DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
-    deleted_by     VARCHAR(100),  -- 삭제한 사용자
+    log_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type       VARCHAR(10)  NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at      DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
+    logged_by      VARCHAR(100),  -- 처리한 사용자
     bcode          VARCHAR(50),   -- 원본 바코드
     content_id     INT,           -- 원본 content_id
     book_title     VARCHAR(255),  -- 도서명
@@ -258,9 +276,14 @@ CREATE TABLE erp_bookstore_item_del (
     publisher      VARCHAR(100),  -- 출판사
     image_url      VARCHAR(500),  -- 표지 이미지 URL
     center_code    VARCHAR(20),   -- 원본 센터 코드
-    quantity       INT,           -- 삭제 시점 수량
-    state          VARCHAR(20)    -- 삭제 시점 상태
+    quantity       INT,           -- 로그 시점 수량
+    state          VARCHAR(20)    -- 로그 시점 상태
 );
+
+IF COL_LENGTH('erp_bookstore_item_del', 'del_id') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.del_id', 'log_id', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_item_del', 'deleted_at') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.deleted_at', 'logged_at', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_item_del', 'deleted_by') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.deleted_by', 'logged_by', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_item_del', 'log_type') IS NULL ALTER TABLE erp_bookstore_item_del ADD log_type VARCHAR(10) NOT NULL DEFAULT 'DELETE';
 
 -- 문제은행 — 도서(content_id)별 독후활동 문제 (관리자가 book-data 화면에서 직접 등록/편집)
 IF OBJECT_ID('erp_bookstore_itempool', 'U') IS NULL
@@ -283,12 +306,13 @@ CREATE TABLE erp_bookstore_itempool (
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
--- 삭제된 문제(erp_bookstore_itempool) 이력
+-- 문제(erp_bookstore_itempool) 삭제/수정 로그
 IF OBJECT_ID('erp_bookstore_itempool_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_itempool_del (
-    del_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    deleted_at     DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 삭제일시
-    deleted_by     VARCHAR(100),  -- 삭제한 사용자
+    log_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type       VARCHAR(10)  NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at      DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
+    logged_by      VARCHAR(100),  -- 처리한 사용자
     content_id     INT,           -- 원본 content_id
     qnum           VARCHAR(20),   -- 문제 번호
     q              NVARCHAR(2000), -- 문제 지문
@@ -301,8 +325,13 @@ CREATE TABLE erp_bookstore_itempool_del (
     qtype          VARCHAR(20),   -- 문제 유형
     qlevel         VARCHAR(20),   -- 난이도
     qexgb          VARCHAR(20),   -- 보기 구분
-    state          VARCHAR(20)    -- 삭제 시점 사용 여부
+    state          VARCHAR(20)    -- 로그 시점 사용 여부
 );
+
+IF COL_LENGTH('erp_bookstore_itempool_del', 'del_id') IS NOT NULL EXEC sp_rename 'erp_bookstore_itempool_del.del_id', 'log_id', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_itempool_del', 'deleted_at') IS NOT NULL EXEC sp_rename 'erp_bookstore_itempool_del.deleted_at', 'logged_at', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_itempool_del', 'deleted_by') IS NOT NULL EXEC sp_rename 'erp_bookstore_itempool_del.deleted_by', 'logged_by', 'COLUMN';
+IF COL_LENGTH('erp_bookstore_itempool_del', 'log_type') IS NULL ALTER TABLE erp_bookstore_itempool_del ADD log_type VARCHAR(10) NOT NULL DEFAULT 'DELETE';
 
 -- 알림 발송 이력 (FCM 등)
 CREATE TABLE erp_notification (
@@ -342,10 +371,27 @@ CREATE TABLE erp_bookstore_recommend_log (
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
+-- 문제 풀이 이력 — 학생이 문항별로 몇 번 보기를 선택했는지 기록 (2026-07-10)
+-- 채점 제출(/clinic/quiz/submit) 1회당 답안 문항 수만큼 적재하며, 재도전 제출도 지우지 않고
+-- 모두 남긴다(submitted_at으로 회차 구분). is_correct는 서버 채점 결과 스냅샷.
+CREATE TABLE erp_bookstore_quiz_answer_log (
+    answer_id     INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    recommend_id  INT           NOT NULL,  -- 어느 추천(도전)에 대한 제출인지 (erp_bookstore_recommend_log)
+    student_id    VARCHAR(100)  NOT NULL,  -- erp_student.student_id (FK 없이 값으로만 연결)
+    content_id    INT           NOT NULL,  -- 풀이한 도서
+    qlevel        VARCHAR(20)   NOT NULL DEFAULT '01',  -- 난이도 (01=기본, 02=심화)
+    qnum          VARCHAR(20)   NOT NULL,  -- 문제 번호 (erp_bookstore_itempool.qnum)
+    selected      INT           NOT NULL,  -- 학생이 선택한 보기 번호 (1~4)
+    is_correct    BIT           NOT NULL,  -- 서버 채점 결과 (제출 시점 itempool.ans 기준)
+    submitted_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 제출일시 (같은 값 = 같은 회차)
+    FOREIGN KEY (recommend_id) REFERENCES erp_bookstore_recommend_log(recommend_id),
+    FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id)
+);
+
 -- 레벨 마스터 — 누적 EXP 기준으로 레벨이 정해지고, 레벨마다 단계/칭호/특징이 있다
--- required_exp는 "그 레벨에서 다음 레벨로 올라가는 데 필요한 누적 EXP" (레벨10은 만렙 기준치)
+-- required_exp는 "그 레벨에서 다음 레벨로 올라가는 데 필요한 누적 EXP" (레벨30은 만렙 기준치)
 CREATE TABLE erp_bookstore_level (
-    level_no      INT           PRIMARY KEY,      -- 1 ~ 10
+    level_no      INT           PRIMARY KEY,      -- 1 ~ 30 (1~10 입문 / 11~20 성장 / 21~30 마스터)
     level_name    NVARCHAR(50)  NOT NULL,         -- 단계명 (입문 / 성장 / 마스터)
     title         NVARCHAR(50),                   -- 칭호 (독서 씨앗, 독서 새싹 ...)
     feature       NVARCHAR(300),                  -- 단계별 특징 문구
@@ -366,4 +412,31 @@ CREATE TABLE erp_bookstore_student_info (
     books_read    INT           NOT NULL DEFAULT 0,
     updated_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (level_no) REFERENCES erp_bookstore_level(level_no)
+);
+
+-- 뱃지 마스터 (2026-07-10) — 달성 조건을 category+threshold+param 3개 값으로 데이터화한다.
+-- 판정 로직은 조건별 if문이 아니라 category 단위 쿼리 하나씩으로 처리 (ClinicService.checkAndAwardBadges)
+--   FIRST_BOOK    : 완독(DONE) 권수 >= threshold
+--   MONTH_STREAK  : 역대 최장 "연속 완독 개월 수"(달력 월 기준, 매달 1권 이상) >= threshold
+--   CROWN         : 독서왕(grade=KING) 달성 횟수 >= threshold
+--   QTYPE_PERFECT : param=문제유형 T코드. 합격 회차에서 해당 유형 전 문항 정답인 책 수 >= threshold (책당 1회)
+--   TOPIC         : param=콤마 구분 키워드. content.keywords에 키워드가 포함된 완독 책 수 >= threshold
+--   ADV_PERFECT   : 심화(qlevel=02) 전 문항 정답 달성 책 수 >= threshold (책당 1회)
+--   META          : 다른 뱃지 threshold개 전부 보유 시
+CREATE TABLE erp_bookstore_badge (
+    badge_id    INT            PRIMARY KEY,      -- 1~22 고정 번호 (기획 문서 순서)
+    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (독서 탐험가 ...)
+    badge_desc  NVARCHAR(200),                   -- 달성 조건 문구 (화면 표시용)
+    category    VARCHAR(20)    NOT NULL,         -- 판정 유형 (위 주석 참고)
+    threshold   INT            NOT NULL,         -- 달성 기준치
+    param       VARCHAR(100)                     -- QTYPE_PERFECT=T코드 / TOPIC=키워드 목록
+);
+
+-- 학생별 뱃지 획득 이력 — PK로 중복 획득을 원천 차단, 판정은 매 제출마다 로그 재계산(멱등)
+CREATE TABLE erp_bookstore_student_badge (
+    student_id  VARCHAR(100)  NOT NULL,
+    badge_id    INT           NOT NULL,
+    earned_at   DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (student_id, badge_id),
+    FOREIGN KEY (badge_id) REFERENCES erp_bookstore_badge(badge_id)
 );

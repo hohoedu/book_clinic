@@ -13,8 +13,8 @@ import lombok.RequiredArgsConstructor;
  * SQL Server는 SET IDENTITY_INSERT가 세션 단위로 동작하므로,
  * 동일 세션 내에서 실행을 보장하기 위해 저장 프로시저를 사용
  *
- * - sp_delete_book: 마스터 도서 삭제 (item_center → itempool → item → content_detail(분류별 상세) → content 순서로 del 테이블 이관)
- * - sp_restore_book: 마스터 도서 복구 (content_del → content 복원 시 IDENTITY_INSERT 사용, content_detail도 함께 복원)
+ * - sp_delete_book: 마스터 도서 삭제 (item_center → itempool → item → content_detail(분류별 상세) → content 순서로 del 테이블에 DELETE 로그 기록)
+ * - sp_restore_book: 마스터 도서 복구 (content_del → content 복원 시 IDENTITY_INSERT 사용, content_detail도 함께 복원 — 로그는 지우지 않고 복사만)
  */
 @Component
 @RequiredArgsConstructor
@@ -49,8 +49,8 @@ public class StoredProcedureInitializer implements ApplicationRunner {
             BEGIN
                 SET NOCOUNT ON;
 
-                INSERT INTO erp_bookstore_itempool_del (deleted_by, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
-                SELECT @deletedBy, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
+                INSERT INTO erp_bookstore_itempool_del (log_type, logged_by, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
+                SELECT 'DELETE', @deletedBy, content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
                 FROM erp_bookstore_itempool WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_itempool WHERE content_id = @contentId;
@@ -58,20 +58,20 @@ public class StoredProcedureInitializer implements ApplicationRunner {
                 DELETE FROM erp_bookstore_item_center
                 WHERE bcode IN (SELECT bcode FROM erp_bookstore_item WHERE content_id = @contentId);
 
-                INSERT INTO erp_bookstore_item_del (deleted_by, bcode, content_id, book_title, author, publisher, image_url)
-                SELECT @deletedBy, bcode, content_id, book_title, author, publisher, image_url
+                INSERT INTO erp_bookstore_item_del (log_type, logged_by, bcode, content_id, book_title, author, publisher, image_url)
+                SELECT 'DELETE', @deletedBy, bcode, content_id, book_title, author, publisher, image_url
                 FROM erp_bookstore_item WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_item WHERE content_id = @contentId;
 
-                INSERT INTO erp_bookstore_content_detail_del (deleted_by, content_id, gubun, name)
-                SELECT @deletedBy, content_id, gubun, name
+                INSERT INTO erp_bookstore_content_detail_del (log_type, logged_by, content_id, gubun, name)
+                SELECT 'DELETE', @deletedBy, content_id, gubun, name
                 FROM erp_bookstore_content_detail WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_content_detail WHERE content_id = @contentId;
 
-                INSERT INTO erp_bookstore_content_del (deleted_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
-                SELECT @deletedBy, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty
+                INSERT INTO erp_bookstore_content_del (log_type, logged_by, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
+                SELECT 'DELETE', @deletedBy, content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty
                 FROM erp_bookstore_content WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_content WHERE content_id = @contentId;
@@ -82,6 +82,7 @@ public class StoredProcedureInitializer implements ApplicationRunner {
     /**
      * 마스터 도서 복구 프로시저 생성
      * content_id 원본 유지를 위해 IDENTITY_INSERT ON/OFF 사용
+     * 로그는 지우지 않고 원본 테이블로 복사만 한다 — 로그가 누적되므로 자식 테이블은 키별 최신 DELETE 로그만 복원
      */
     private void createRestoreBookProcedure() {
         jdbcTemplate.execute("""
@@ -91,39 +92,39 @@ public class StoredProcedureInitializer implements ApplicationRunner {
             BEGIN
                 SET NOCOUNT ON;
 
+                DECLARE @contentId INT = (SELECT content_id FROM erp_bookstore_content_del WHERE log_id = @delId);
+                IF @contentId IS NULL RETURN;
+                IF EXISTS (SELECT 1 FROM erp_bookstore_content WHERE content_id = @contentId) RETURN;
+
                 SET IDENTITY_INSERT erp_bookstore_content ON;
 
                 INSERT INTO erp_bookstore_content (content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
                 SELECT content_id, original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty
-                FROM erp_bookstore_content_del WHERE del_id = @delId;
+                FROM erp_bookstore_content_del WHERE log_id = @delId;
 
                 SET IDENTITY_INSERT erp_bookstore_content OFF;
 
                 INSERT INTO erp_bookstore_content_detail (content_id, gubun, name)
                 SELECT content_id, gubun, name
-                FROM erp_bookstore_content_detail_del
-                WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
-
-                DELETE FROM erp_bookstore_content_detail_del
-                WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
+                FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY gubun ORDER BY log_id DESC) AS rn
+                      FROM erp_bookstore_content_detail_del
+                      WHERE content_id = @contentId AND log_type = 'DELETE') t
+                WHERE rn = 1;
 
                 INSERT INTO erp_bookstore_item (bcode, content_id, book_title, author, publisher, image_url)
                 SELECT bcode, content_id, book_title, author, publisher, image_url
-                FROM erp_bookstore_item_del
-                WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
+                FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY bcode ORDER BY log_id DESC) AS rn
+                      FROM erp_bookstore_item_del
+                      WHERE content_id = @contentId AND log_type = 'DELETE') t
+                WHERE rn = 1
+                  AND NOT EXISTS (SELECT 1 FROM erp_bookstore_item i WHERE i.bcode = t.bcode);
 
                 INSERT INTO erp_bookstore_itempool (content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state)
                 SELECT content_id, qlevel, qnum, q, qex, e1, e2, e3, e4, ans, qtype, qexgb, state
-                FROM erp_bookstore_itempool_del
-                WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
-
-                DELETE FROM erp_bookstore_itempool_del
-                WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
-
-                DELETE FROM erp_bookstore_item_del
-                WHERE content_id = (SELECT content_id FROM erp_bookstore_content_del WHERE del_id = @delId);
-
-                DELETE FROM erp_bookstore_content_del WHERE del_id = @delId;
+                FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY qlevel, qnum ORDER BY log_id DESC) AS rn
+                      FROM erp_bookstore_itempool_del
+                      WHERE content_id = @contentId AND log_type = 'DELETE') t
+                WHERE rn = 1;
             END
         """);
     }

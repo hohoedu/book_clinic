@@ -39,17 +39,23 @@ public interface BookRepository {
     /** 실물 도서 수정 */
     void updateItem(BookReqDTO.ItemUpdateReqDTO reqDTO);
 
-    /** 센터 보유분(bcode + center)을 item_del 테이블로 이관 (삭제 전 보관, 실물 레코드는 유지) */
+    /** 센터 보유분(bcode + center)의 삭제 로그를 item_del에 기록 (실물 레코드는 유지) */
     void archiveItem(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("deletedBy") String deletedBy);
 
-    /** item_del에서 item으로 복원 */
+    /** 실물 도서 수정 전 스냅샷을 item_del에 UPDATE 로그로 기록 */
+    void archiveItemForUpdate(@Param("bcode") String bcode, @Param("updatedBy") String updatedBy);
+
+    /** 마스터 도서 수정 전 스냅샷을 content_del에 UPDATE 로그로 기록 */
+    void archiveContentForUpdate(@Param("contentId") Integer contentId, @Param("updatedBy") String updatedBy);
+
+    /** 분류별 상세 수정 전 스냅샷을 content_detail_del에 UPDATE 로그로 기록 */
+    void archiveContentDetailForUpdate(@Param("contentId") Integer contentId, @Param("updatedBy") String updatedBy);
+
+    /** item_del에서 item으로 복사 복원 (로그는 보존) */
     void restoreItemFromDel(@Param("delId") Integer delId);
 
-    /** item_del에 보관된 센터 매핑(item_center) 복원 */
+    /** item_del에 보관된 센터 매핑(item_center) 복사 복원 (로그는 보존) */
     void restoreItemCenterFromDel(@Param("delId") Integer delId);
-
-    /** item_del 레코드 삭제 */
-    void deleteItemDel(@Param("delId") Integer delId);
 
     /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형/사용여부 복합 조건) */
     List<BookRespDTO.ContentRespDTO> searchContents(@Param("title") String title, @Param("author") String author, @Param("genre") String genre, @Param("schoolYear") String schoolYear, @Param("keyword") String keyword, @Param("contentType") String contentType, @Param("state") String state);

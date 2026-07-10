@@ -43,10 +43,11 @@ public class BookController {
         return ResponseEntity.ok(ApiUtils.success(reqDTO.getContentId()));
     }
 
-    /** 마스터 도서 수정 */
+    /** 마스터 도서 수정 (수정 전 스냅샷을 del 테이블에 UPDATE 로그로 기록) */
     @PostMapping("/update")
-    public ResponseEntity<?> updateContent(@RequestBody @Valid BookReqDTO.UpdateReqDTO reqDTO) {
-        bookService.updateContent(reqDTO);
+    public ResponseEntity<?> updateContent(@RequestBody @Valid BookReqDTO.UpdateReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        bookService.updateContent(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
@@ -94,10 +95,11 @@ public class BookController {
         return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
     }
 
-    /** 실물 도서 수정 (도서 제목, 출판사, 키워드) */
+    /** 실물 도서 수정 (도서 제목, 출판사, 키워드 — 수정 전 스냅샷을 del 테이블에 UPDATE 로그로 기록) */
     @PostMapping("/item/update")
-    public ResponseEntity<?> updateItem(@RequestBody @Valid BookReqDTO.ItemUpdateReqDTO reqDTO) {
-        bookService.updateItem(reqDTO);
+    public ResponseEntity<?> updateItem(@RequestBody @Valid BookReqDTO.ItemUpdateReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        bookService.updateItem(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 

@@ -90,17 +90,17 @@
         WHERE draft_id = #{draftId}
     </update>
 
-    <!-- 초안 삭제 — 복구 기능이 없으므로 _del 테이블로 그대로 이관만 하고 원본은 삭제한다 -->
+    <!-- 초안 삭제 — 복구 기능이 없으므로 _del 테이블에 DELETE 로그만 남기고 원본은 삭제한다 -->
     <insert id="insertDraftDel">
-        INSERT INTO erp_bookstore_priority_draft_del (deleted_by, draft_id, year, schoolyear, is_active, created_by, created_at)
-        SELECT #{deletedBy}, draft_id, year, schoolyear, is_active, created_by, created_at
+        INSERT INTO erp_bookstore_priority_draft_del (log_type, logged_by, draft_id, year, schoolyear, is_active, created_by, created_at)
+        SELECT 'DELETE', #{deletedBy}, draft_id, year, schoolyear, is_active, created_by, created_at
         FROM erp_bookstore_priority_draft
         WHERE draft_id = #{draftId}
     </insert>
 
     <insert id="insertPriorityDelRows">
-        INSERT INTO erp_bookstore_priority_del (draft_id, content_id, sort_order)
-        SELECT draft_id, content_id, sort_order
+        INSERT INTO erp_bookstore_priority_del (log_type, draft_id, content_id, sort_order)
+        SELECT 'DELETE', draft_id, content_id, sort_order
         FROM erp_bookstore_priority
         WHERE draft_id = #{draftId}
     </insert>

@@ -44,14 +44,15 @@ public class QuestionController {
         return ResponseEntity.ok(ApiUtils.success("등록되었습니다."));
     }
 
-    /** 문제 수정 */
+    /** 문제 수정 (수정 전 스냅샷을 itempool_del에 UPDATE 로그로 기록) */
     @PostMapping("/update")
-    public ResponseEntity<?> updateQuestion(@RequestBody @Valid QuestionReqDTO.UpdateReqDTO reqDTO) {
-        questionService.updateQuestion(reqDTO);
+    public ResponseEntity<?> updateQuestion(@RequestBody @Valid QuestionReqDTO.UpdateReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        questionService.updateQuestion(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success("수정되었습니다."));
     }
 
-    /** 문제 삭제 (itempool_del로 이관) */
+    /** 문제 삭제 (itempool_del에 DELETE 로그 기록) */
     @PostMapping("/delete")
     public ResponseEntity<?> deleteQuestion(@RequestBody @Valid QuestionReqDTO.DeleteReqDTO reqDTO,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
