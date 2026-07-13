@@ -213,7 +213,7 @@
   display: flex;
   flex-direction: column;
   padding: 44px 52px;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .quiz-head {
@@ -283,16 +283,6 @@
   text-align: left;
   color: var(--text);
   transition: border-color .15s ease, background .15s ease;
-}
-
-/* 지문/예시를 최소 글자 크기까지 줄여도 넘칠 때의 마지막 여유 공간 확보 (JS fitQuestionText가 토글) */
-.quiz-card.compact .choice-list {
-  gap: 8px;
-}
-
-.quiz-card.compact .choice-item {
-  padding: 12px 48px 12px 20px;
-  font-size: 15px;
 }
 
 .choice-mark {

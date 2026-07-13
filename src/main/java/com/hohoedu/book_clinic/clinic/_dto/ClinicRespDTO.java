@@ -115,4 +115,11 @@ public class ClinicRespDTO {
         private Integer cnt;
     }
 
+    /** 월별 완독(DONE) 권수 (MONTH_STREAK 판정용) — yearMonth는 'yyyy-MM' */
+    @Data
+    public static class MonthCompletionDTO {
+        private String yearMonth;
+        private Integer count;
+    }
+
 }

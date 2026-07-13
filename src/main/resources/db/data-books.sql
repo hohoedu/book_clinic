@@ -1,6 +1,6 @@
 -- ===================== 최초 1회만 수동 실행 (DBeaver 등). schema.sql/data.sql 자동 실행 대상에서 제외되어 재기동해도 안 건드림 =====================
 
--- 센터 마스터 (erp_bookstore_item_center가 참조하므로 함께 리셋 제외)
+-- 센터 마스터 (erp_bookstore_item.center_code가 참조하므로 함께 리셋 제외)
 SET IDENTITY_INSERT erp_center ON;
 INSERT INTO erp_center (id, opened_at, biz_no, center_code, region_key, center_tel, director_name, center_address, center_email, center_name, status, manager_name, manager_tel, manager_email, registration_no, biz_name) VALUES
 (1, '2026-01-01', '3208800028', 'PUS001', 'PUS', '07052226240', '임무화', '부산시 해운대구 센텀중앙로 97, 센텀스카이비즈 A동 2810호', 'st8898ds@gmail.com', '호호에듀',            'open', '이종열', '010-9161-9291', 'st8898@naver.com', null,               null),

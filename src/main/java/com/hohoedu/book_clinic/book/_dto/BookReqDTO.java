@@ -67,8 +67,8 @@ public class BookReqDTO {
     }
 
     /**
-     * 실물 도서 등록 요청
-     * ISBN 최초 등록 시 센터 매핑 정보(centerCode, quantity, state)도 함께 전달
+     * 실물 도서(사본) 등록 요청 — quantity만큼 같은 bcode를 공유하는 사본 행을 센터에 등록한다
+     * (2026-07-13 재설계: item_center 통합으로 센터 지정이 필수가 됨)
      */
     @Data
     public static class ItemRegisterReqDTO {
@@ -80,9 +80,9 @@ public class BookReqDTO {
         private String author;
         private String publisher;
         private String imageUrl;
+        @NotBlank(message = "센터 코드는 필수입니다.")
         private String centerCode;
-        private Integer quantity;
-        private String state;
+        private Integer quantity;  // 등록할 사본 수 (기본 1)
     }
 
     /** 실물 도서 수정 요청 */
@@ -96,7 +96,7 @@ public class BookReqDTO {
         private String imageUrl;
     }
 
-    /** 실물 도서(센터 보유) 삭제 요청 — 실물 레코드는 유지, 해당 센터 매핑만 해제 */
+    /** 실물 도서(센터 보유) 삭제 요청 — 해당 (bcode+센터)의 사본 전체를 삭제한다 */
     @Data
     public static class ItemDeleteReqDTO {
         @NotBlank(message = "실물 도서 식별자(bcode)는 필수입니다.")
@@ -113,8 +113,8 @@ public class BookReqDTO {
     }
 
     /**
-     * 센터 도서 매핑 등록 요청
-     * 이미 등록된 ISBN을 다른 센터에서 보유할 때 사용
+     * 센터 도서 매핑 등록 요청 — 이미 등록된 바코드를 다른 센터에서도 보유할 때,
+     * 그 바코드의 도서 정보를 그대로 복사해 quantity만큼 사본 행을 추가한다
      */
     @Data
     public static class ItemCenterRegisterReqDTO {
@@ -123,18 +123,17 @@ public class BookReqDTO {
         @NotBlank(message = "센터 코드는 필수입니다.")
         private String centerCode;
         private Integer quantity;
-        private String state;
     }
 
-    /** 센터 도서 수량/상태 수정 요청 */
+    /** 센터 보유 사본 수량 조정 요청 — 목표 수량이 현재보다 많으면 추가 등록, 적으면 대여 중이 아닌 사본부터 제거 */
     @Data
     public static class ItemCenterUpdateReqDTO {
         @NotBlank(message = "바코드(ISBN)는 필수입니다.")
         private String bcode;
         @NotBlank(message = "센터 코드는 필수입니다.")
         private String centerCode;
+        @NotNull(message = "목표 수량은 필수입니다.")
         private Integer quantity;
-        private String state;
     }
 
     /** 실물 도서 대여 요청 — 학생은 앱 로그인 ID(appId)로 지정 (내부적으로 studentId로 변환해 저장) */

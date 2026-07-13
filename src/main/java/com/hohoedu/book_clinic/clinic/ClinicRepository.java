@@ -41,9 +41,6 @@ public interface ClinicRepository {
     /** 이 학생이 아직 풀지 않은(PENDING) 추천 도서 카드 — 있으면 재로그인해도 같은 책을 그대로 보여준다 */
     ClinicRespDTO.RecommendBookDTO findPendingRecommendBookCard(@Param("studentId") String studentId);
 
-    /** 추천된 마스터 도서(contentId)의 실물 재고 중 센터에서 대여 가능한 bcode 1건 선택 (없으면 null) */
-    String pickAvailableBcode(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
-
     /** 추천 이력 기록 (신규 추천 시 status='PENDING'으로 생성됨) */
     void insertRecommendLog(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
 
@@ -96,14 +93,17 @@ public interface ClinicRepository {
     /** 학생이 이미 획득한 뱃지 ID 목록 */
     List<Integer> findEarnedBadgeIds(@Param("studentId") String studentId);
 
+    /** 학생이 획득한 뱃지 상세 목록(이름/설명 포함) — 메인화면 뱃지 패널용, 획득 최신순 */
+    List<ClinicRespDTO.BadgeDTO> findEarnedBadges(@Param("studentId") String studentId);
+
     /** 뱃지 획득 기록 — 호출 전 미보유 확인 필수 (PK 중복 시 예외) */
     void insertStudentBadge(@Param("studentId") String studentId, @Param("badgeId") Integer badgeId);
 
     /** 완독(DONE) 총 권수 — FIRST_BOOK 판정 */
     int countDoneBooks(@Param("studentId") String studentId);
 
-    /** 완독이 1권 이상 있는 달 목록('yyyy-MM', 중복 제거·오름차순) — MONTH_STREAK 판정 재료 */
-    List<String> findDoneMonths(@Param("studentId") String studentId);
+    /** 월별 완독(DONE) 권수('yyyy-MM' 오름차순) — MONTH_STREAK 판정 재료(월별 목표 권수 충족 여부 판단용) */
+    List<ClinicRespDTO.MonthCompletionDTO> findMonthlyDoneCounts(@Param("studentId") String studentId);
 
     /** 독서왕(grade='KING') 달성 횟수 — CROWN 판정 */
     int countKingGrades(@Param("studentId") String studentId);

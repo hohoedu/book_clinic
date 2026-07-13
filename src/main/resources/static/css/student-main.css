@@ -569,12 +569,17 @@
   text-align: center;
   padding: 12px 0;
 }
-.badge-item img {
-  width: min(86px, 100%);
-  height: 86px;
-  object-fit: contain;
-  display: block;
+.badge-item .badge-icon {
+  width: min(64px, 100%);
+  height: 64px;
   margin: 0 auto 8px;
+  border-radius: 50%;
+  background: rgba(9, 136, 216, .1);
+  color: var(--blue);
+  font-size: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .badge-item strong {
   display: block;

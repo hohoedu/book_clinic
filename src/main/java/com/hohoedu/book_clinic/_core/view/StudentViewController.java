@@ -1,7 +1,5 @@
 package com.hohoedu.book_clinic._core.view;
 
-import java.util.List;
-
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -34,7 +32,7 @@ public class StudentViewController {
     private final ClinicService clinicService;
 
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
-    @GetMapping({"", "/", "/login"})
+    @GetMapping({ "", "/", "/login" })
     public String getLoginPage() {
         return "/student-login";
     }
@@ -52,13 +50,13 @@ public class StudentViewController {
 
     /**
      * 레벨 카드는 ClinicService.getMainLevelInfo로 실제 EXP/레벨을 계산해 내려준다.
-     * 뱃지/이달의 책 패널은 관련 테이블 자체가 없어 여전히 placeholder(빈 배열)다 — 필요해지면 별도 설계.
+     * 뱃지 패널은 ClinicService.getEarnedBadges로 획득한 뱃지 전체(최근 획득순)를 내려준다.
      * 추천 도서 카드는 페이지 진입 후 JS가 /clinic/recommend를 호출해 채운다 — 이미 추천받은 책이
      * 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정한다 (ClinicService.recommend가 멱등 처리).
      */
     @GetMapping("/main")
     public String getStudentMainPage(@RequestParam(value = "studentId", required = false) String studentId,
-                                     Model model) {
+            Model model) {
         if (studentId == null || studentId.isBlank()) {
             return "redirect:/student/login";
         }
@@ -78,7 +76,7 @@ public class StudentViewController {
         model.addAttribute("characterImg", (String) null);
         model.addAttribute("booksToNextLevel", levelInfo.getBooksToNextLevel());
         model.addAttribute("progressPercent", levelInfo.getProgressPercent());
-        model.addAttribute("badges", List.of());
+        model.addAttribute("badges", clinicService.getEarnedBadges(studentId));
         model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));
         return "/student-main";
     }
@@ -90,9 +88,9 @@ public class StudentViewController {
     /** qlevel: 01=기본(기본값), 02=심화(독서왕/독서친구가 기본 문제풀이 합격 후 추가로 도전) */
     @GetMapping("/question")
     public String getQuestionPage(@RequestParam(value = "studentId", required = false) String studentId,
-                                  @RequestParam(value = "contentId", required = false) Integer contentId,
-                                  @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
-                                  Model model) {
+            @RequestParam(value = "contentId", required = false) Integer contentId,
+            @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
+            Model model) {
         if (studentId == null || studentId.isBlank()) {
             return "redirect:/student/login";
         }

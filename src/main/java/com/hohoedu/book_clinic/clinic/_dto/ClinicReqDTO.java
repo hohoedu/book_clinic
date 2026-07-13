@@ -51,6 +51,7 @@ public class ClinicReqDTO {
         private String qnum;
         private Integer selected;
         private boolean correct;
+        private String qtype;
     }
 
 }

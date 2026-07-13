@@ -123,10 +123,22 @@
               <a class="more-link" href="#">더보기 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>
             </div>
             <div class="badge-list">
+              <!-- 뱃지 전용 이미지 에셋이 아직 없어 카테고리별 플레이스홀더 아이콘으로 대체 표시 -->
               <div class="badge-item" th:each="badge, st : ${badges}" th:if="${st.index < 4}">
-                <img th:src="@{${badge.imageUrl}}" th:alt="|${badge.badgeName} 뱃지|" alt="뱃지" />
+                <div class="badge-icon">
+                  <i aria-hidden="true" th:class="${
+                    badge.category == 'FIRST_BOOK' ? 'fa-solid fa-book' :
+                    badge.category == 'MONTH_STREAK' ? 'fa-solid fa-calendar-check' :
+                    badge.category == 'CROWN' ? 'fa-solid fa-crown' :
+                    badge.category == 'QTYPE_PERFECT' ? 'fa-solid fa-star' :
+                    badge.category == 'TOPIC' ? 'fa-solid fa-compass' :
+                    badge.category == 'ADV_PERFECT' ? 'fa-solid fa-medal' :
+                    badge.category == 'META' ? 'fa-solid fa-trophy' :
+                    'fa-solid fa-award'
+                  }"></i>
+                </div>
                 <strong th:text="${badge.badgeName}">독서 탐험가</strong>
-                <span th:text="${badge.description}">첫 번째 정독을 완료했어요!</span>
+                <span th:text="${badge.badgeDesc}">첫 번째 정독을 완료했어요!</span>
               </div>
               <p class="panel-empty" th:if="${badges.isEmpty()}">아직 획득한 뱃지가 없어요</p>
             </div>

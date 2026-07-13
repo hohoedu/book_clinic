@@ -157,38 +157,6 @@
 
     updateNextButton();
     updateSelectedVisual();
-    fitQuestionText();
-  }
-
-  // quiz-card는 크기 고정(스크롤 없음) — 지문/예시가 길어 넘치면 박스 크기 대신 글자 크기를 줄여서 맞춘다
-  const Q_TEXT_MAX = 26, Q_TEXT_MIN = 14;
-  const QEX_TEXT_MAX = 16, QEX_TEXT_MIN = 11;
-
-  function fitQuestionText() {
-    let qFont = Q_TEXT_MAX;
-    let qexFont = QEX_TEXT_MAX;
-    qText.style.fontSize = `${qFont}px`;
-    qexText.style.fontSize = `${qexFont}px`;
-    quizCard.classList.remove('compact');
-
-    let guard = 200; // 무한루프 방지 안전장치
-    while (quizCard.scrollHeight > quizCard.clientHeight && guard > 0) {
-      if (qexFont > QEX_TEXT_MIN) {
-        qexFont -= 1;
-        qexText.style.fontSize = `${qexFont}px`;
-      } else if (qFont > Q_TEXT_MIN) {
-        qFont -= 1;
-        qText.style.fontSize = `${qFont}px`;
-      } else {
-        break;
-      }
-      guard -= 1;
-    }
-
-    // 지문/예시를 최소 크기까지 줄여도 여전히 넘치면 선택지 영역을 좁혀 마지막 여유 공간을 확보한다
-    if (quizCard.scrollHeight > quizCard.clientHeight) {
-      quizCard.classList.add('compact');
-    }
   }
 
   function renderProgressDots() {

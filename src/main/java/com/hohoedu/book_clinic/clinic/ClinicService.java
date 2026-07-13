@@ -60,6 +60,10 @@ public class ClinicService {
     // 문제풀이 합격선 = 전체 문항 수의 2/3 (12문항→8개, 15문항→10개 기준으로 확정)
     private static final double QUIZ_PASS_RATIO = 2.0 / 3;
 
+    // MONTH_STREAK 뱃지 판정용 월간 완독 목표 권수 — 1·2학년은 8권, 그 외 학년은 4권 (완독 = 문제풀이 합격)
+    private static final int MONTH_QUOTA_LOW_GRADE = 8;
+    private static final int MONTH_QUOTA_DEFAULT = 4;
+
     private final ClinicRepository clinicRepository;
     private final BookRepository bookRepository;
     private final QuestionRepository questionRepository;
@@ -86,15 +90,12 @@ public class ClinicService {
         Integer picked = pickWithFallback(studentId, centerCode, year, schoolyear);
         if (picked == null) throw new Exception404("추천할 수 있는 도서가 더 이상 없습니다.");
         log.info("학생 {}에게 추천할 도서 content_id: {}", studentId, picked);
-        String bcode = clinicRepository.pickAvailableBcode(picked, centerCode);
-        if (bcode == null) throw new Exception404("대여 가능한 실물 도서가 없습니다.");
-        log.info("학생 {}에게 대여할 도서 bcode: {}", studentId, bcode);
 
-        int updated = bookRepository.incrementLoanedQty(bcode, centerCode);
-        if (updated == 0) throw new Exception400("대여 가능한 재고가 없습니다.");
-        log.info("학생 {}에게 대여할 도서 재고 업데이트: {}", studentId, updated);
-        
-        bookRepository.insertItemLoan(bcode, centerCode, studentId);
+        Integer itemId = bookRepository.loanAvailableItemByContent(picked, centerCode, studentId);
+        if (itemId == null) throw new Exception400("대여 가능한 재고가 없습니다.");
+        log.info("학생 {}에게 대여할 도서 item_id: {}", studentId, itemId);
+
+        bookRepository.insertItemLoan(itemId, studentId);
         clinicRepository.insertRecommendLog(studentId, picked);
         log.info("학생 {}에게 추천된 도서 정보: {}", studentId, clinicRepository.findBookCard(picked));
         return clinicRepository.findBookCard(picked);
@@ -171,6 +172,7 @@ public class ClinicService {
             logRow.setQnum(q.getQnum());
             logRow.setSelected(selected);
             logRow.setCorrect(correct);
+            logRow.setQtype(q.getQtype());
             answerLogs.add(logRow);
         }
 
@@ -278,6 +280,11 @@ public class ClinicService {
         return result;
     }
 
+    /** student-main 뱃지 패널 — 학생이 획득한 뱃지 전체(이름/설명), 최근 획득순 */
+    public List<ClinicRespDTO.BadgeDTO> getEarnedBadges(String studentId) {
+        return clinicRepository.findEarnedBadges(studentId);
+    }
+
     /**
      * student-main "이번 달에 읽은 책" 패널 — 현재 읽는 중인 책(PENDING, 있으면 최대 1건, 항상 맨 앞) +
      * 이번 달에 합격 완료한 책(completed_at 기준)을 최신순으로, 합쳐서 최대 4건만 반환한다.
@@ -312,7 +319,12 @@ public class ClinicService {
         if (earned.size() >= allBadges.size()) return List.of(); // 전부 보유 — 더 볼 것 없음
 
         int doneBooks = clinicRepository.countDoneBooks(studentId);
-        int maxMonthStreak = calcMaxMonthStreak(clinicRepository.findDoneMonths(studentId));
+        int monthlyQuota = resolveMonthlyQuota(studentId);
+        List<String> qualifiedMonths = clinicRepository.findMonthlyDoneCounts(studentId).stream()
+                .filter(m -> m.getCount() >= monthlyQuota)
+                .map(ClinicRespDTO.MonthCompletionDTO::getYearMonth)
+                .toList();
+        int maxMonthStreak = calcMaxMonthStreak(qualifiedMonths);
         int kingCount = clinicRepository.countKingGrades(studentId);
         int advPerfect = clinicRepository.countAdvancedPerfectBooks(studentId);
         Map<String, Integer> perfectByQtype = clinicRepository.countQtypePerfectBooks(studentId).stream()
@@ -351,9 +363,17 @@ public class ClinicService {
         return newlyEarned;
     }
 
+    /** 학생 학년 기준 월간 완독 목표 권수 — 1·2학년은 8권, 그 외 학년은 4권 */
+    private int resolveMonthlyQuota(String studentId) {
+        String schoolyear = resolveSchoolyear(studentId);
+        return ("01".equals(schoolyear) || "02".equals(schoolyear)) ? MONTH_QUOTA_LOW_GRADE : MONTH_QUOTA_DEFAULT;
+    }
+
     /**
-     * 역대 최장 "연속 완독 개월 수" — 완독이 있는 달('yyyy-MM' 오름차순 목록)에서 달력상 연달아
-     * 이어진 가장 긴 구간의 길이. 업적 뱃지라 한 번 찍은 최장 기록은 이후 공백이 생겨도 유지된다.
+     * 역대 최장 "연속 월간 목표 달성 개월 수" — 그 달의 완독 권수가 학년별 월간 목표(resolveMonthlyQuota)
+     * 이상인 달('yyyy-MM' 오름차순 목록)만 모아, 달력상 연달아 이어진 가장 긴 구간의 길이를 구한다.
+     * 목표 미달 달은 완전히 제외되므로 그 달에서 스트릭이 끊기고 다음 목표 달성 달부터 다시 1로 시작한다.
+     * 업적 뱃지라 한 번 찍은 최장 기록은 이후 공백이 생겨도 유지된다.
      */
     private int calcMaxMonthStreak(List<String> sortedMonths) {
         int best = 0, run = 0;

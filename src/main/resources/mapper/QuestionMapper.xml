@@ -95,12 +95,17 @@
         WHERE content_id=#{contentId} AND qlevel=#{qlevel} AND qnum=#{qnum}
     </update>
 
-    <!-- 삭제된 문제 목록 조회 — DELETE 로그 중 아직 복구되지 않은 것만 (UPDATE 로그·복구 완료 건 제외) -->
+    <!-- 삭제된 문제 목록 조회 — (content_id, qlevel, qnum)별 최신 로그 1건만 보고, 그게 DELETE이고 아직 복구 안 됐을 때만 표시
+         (삭제→복구→삭제 반복 시 예전 DELETE 로그가 중복 노출되는 것을 막기 위해 최신 로그로만 판단) -->
     <select id="findDeletedQuestions" resultType="com.hohoedu.book_clinic.question._dto.QuestionRespDTO$QuestionDelDTO">
         SELECT d.log_id AS delId, d.logged_at AS deletedAt, d.logged_by AS deletedBy, d.content_id AS contentId,
                d.qlevel, d.qnum, d.q, d.qex, d.e1, d.e2, d.e3, d.e4, d.ans, d.qtype, d.qexgb, d.state
-        FROM erp_bookstore_itempool_del d
+        FROM (
+            SELECT *, ROW_NUMBER() OVER (PARTITION BY content_id, qlevel, qnum ORDER BY log_id DESC) AS rn
+            FROM erp_bookstore_itempool_del
+        ) d
         WHERE d.content_id = #{contentId}
+          AND d.rn = 1
           AND d.log_type = 'DELETE'
           AND NOT EXISTS (SELECT 1 FROM erp_bookstore_itempool p
                           WHERE p.content_id = d.content_id AND p.qlevel = d.qlevel AND p.qnum = d.qnum)

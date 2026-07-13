@@ -8,21 +8,25 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = lombok.AccessLevel.PROTECTED)
 public class BookstoreItem {
 
+    private Integer itemId;
     private String bcode;
     private Integer contentId;
+    private String centerCode;
     private String bookTitle;
     private String publisher;
-    private String state;
+    private String status;
     private String imageUrl;
 
     @Builder
-    public BookstoreItem(String bcode, Integer contentId, String bookTitle,
-                         String publisher, String state, String imageUrl) {
+    public BookstoreItem(Integer itemId, String bcode, Integer contentId, String centerCode, String bookTitle,
+                         String publisher, String status, String imageUrl) {
+        this.itemId = itemId;
         this.bcode = bcode;
         this.contentId = contentId;
+        this.centerCode = centerCode;
         this.bookTitle = bookTitle;
         this.publisher = publisher;
-        this.state = state;
+        this.status = status;
         this.imageUrl = imageUrl;
     }
 }

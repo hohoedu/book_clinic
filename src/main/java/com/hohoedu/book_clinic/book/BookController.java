@@ -23,8 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * 도서 관련 API 컨트롤러
  * - 마스터 도서(content): 도서 원본 정보 관리
- * - 실물 도서(item): ISBN 단위 실물 도서 관리
- * - 센터 도서(item_center): 센터별 도서 보유 현황 관리
+ * - 실물 도서(item): 사본 1행 = 실물 1권, center_code를 직접 보유 (2026-07-13: item_center 통합)
  */
 @Slf4j
 @RestController
@@ -174,14 +173,14 @@ public class BookController {
 
     // ===================== 대여 관리 =====================
 
-    /** 실물 도서 대여 처리 (재고 확인 후 loaned_qty 증가 + 대여 이력 등록) */
+    /** 실물 도서 대여 처리 (대여 가능한 실물도서 1권을 찾아 상태를 LOANED로 바꾸고 대여 이력 등록) */
     @PostMapping("/item/loan")
     public ResponseEntity<?> loanItem(@RequestBody @Valid BookReqDTO.ItemLoanReqDTO reqDTO) {
         bookService.loanItem(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("대여 처리되었습니다."));
     }
 
-    /** 실물 도서 반납 처리 (대여 이력 반납 처리 + loaned_qty 감소) */
+    /** 실물 도서 반납 처리 (대여 이력 반납 처리 + 해당 실물도서 상태를 AVAILABLE로 되돌림) */
     @PostMapping("/item/loan/return")
     public ResponseEntity<?> returnItem(@RequestBody @Valid BookReqDTO.ItemReturnReqDTO reqDTO) {
         bookService.returnItem(reqDTO);

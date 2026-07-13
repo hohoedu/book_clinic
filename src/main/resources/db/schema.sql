@@ -9,6 +9,7 @@ IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
 IF OBJECT_ID('erp_bookstore_item_loan',             'U') IS NOT NULL DROP TABLE erp_bookstore_item_loan;
+-- 2026-07-13: item_center를 item에 통합하는 구조 변경으로 폐지된 구버전 테이블 — 남아 있으면 정리
 IF OBJECT_ID('erp_bookstore_item_center',           'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
 IF OBJECT_ID('erp_bookstore_priority_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_priority_del;
 IF OBJECT_ID('erp_bookstore_priority',              'U') IS NOT NULL DROP TABLE erp_bookstore_priority;
@@ -110,9 +111,9 @@ CREATE TABLE erp_bookstore_content (
     content_id     INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     original_title VARCHAR(255),  -- 원제(도서명)
     author         VARCHAR(100),  -- 저자
-    genre          VARCHAR(50),   -- 장르 (code gubun='G') — 모든 도서가 1개씩 가지므로 detail이 아닌 컬럼으로 관리
-    content_type   VARCHAR(50),   -- 분류 (code gubun='C', 예: 교과연계/기관추천/인증수상작)
-    schoolyear     VARCHAR(20),   -- 권장 학년 (code gubun='S')
+    genre          VARCHAR(2),    -- 장르 코드 (erp_bookstore_code gubun='G') — 모든 도서가 1개씩 가지므로 detail이 아닌 컬럼으로 관리
+    content_type   VARCHAR(2),    -- 분류 코드 (erp_bookstore_code gubun='C', 예: 교과연계/기관추천/인증수상작)
+    schoolyear     VARCHAR(2),    -- 권장 학년 코드 (erp_bookstore_code gubun='S')
     summary        VARCHAR(2000), -- 줄거리 요약
     keywords       VARCHAR(1000), -- 키워드 (콤마 구분, 화면에서 태그로 변환)
     state          VARCHAR(20),   -- 사용 여부 (Y/N)
@@ -132,9 +133,9 @@ CREATE TABLE erp_bookstore_content_del (
     content_id     INT,           -- 원본 content_id
     original_title VARCHAR(255),  -- 원제(도서명)
     author         VARCHAR(100),  -- 저자
-    genre          VARCHAR(50),   -- 장르
-    content_type   VARCHAR(50),   -- 분류
-    schoolyear     VARCHAR(20),   -- 권장 학년
+    genre          VARCHAR(2),    -- 장르 코드
+    content_type   VARCHAR(2),    -- 분류 코드
+    schoolyear     VARCHAR(2),    -- 권장 학년 코드
     summary        VARCHAR(2000), -- 줄거리 요약
     keywords       VARCHAR(1000), -- 키워드
     state          VARCHAR(20),   -- 사용 여부
@@ -182,7 +183,7 @@ IF COL_LENGTH('erp_bookstore_content_detail_del', 'log_type') IS NULL ALTER TABL
 CREATE TABLE erp_bookstore_priority_draft (
     draft_id    INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     year        VARCHAR(4)  NOT NULL,  -- 노출 연도 (예: '2026', '2027')
-    schoolyear  VARCHAR(20) NOT NULL,  -- 학년 코드 (S코드) — 이 초안이 어느 학년 탭 편집본인지
+    schoolyear  VARCHAR(2)  NOT NULL,  -- 학년 코드 (S코드) — 이 초안이 어느 학년 탭 편집본인지
     is_active   VARCHAR(1)  NOT NULL DEFAULT 'N',  -- 이 연도+학년에 실제 적용할 초안인지 (연도+학년당 최대 1건 'Y')
     created_by  VARCHAR(100),  -- 저장한 사용자 이름
     created_at  DATETIME2   DEFAULT CURRENT_TIMESTAMP  -- 저장일시
@@ -206,7 +207,7 @@ CREATE TABLE erp_bookstore_priority_draft_del (
     logged_by   VARCHAR(100),  -- 처리한 사용자
     draft_id    INT,           -- 원본 draft_id
     year        VARCHAR(4),    -- 노출 연도
-    schoolyear  VARCHAR(20),   -- 학년 코드
+    schoolyear  VARCHAR(2),    -- 학년 코드
     is_active   VARCHAR(1),    -- 적용 여부(삭제 시점 값)
     created_by  VARCHAR(100),  -- 저장한 사용자 이름
     created_at  DATETIME2      -- 원본 저장일시
@@ -222,62 +223,59 @@ CREATE TABLE erp_bookstore_priority_del (
     sort_order  INT         -- 원본 순위
 );
 
--- 실물도서 마스터 — 센터에 배포되는 물리적 도서 단위 (도서 1권 = bcode 1개)
+-- 실물도서 마스터 (2026-07-13 재설계) — 개별 사본 1권 = 1행으로 관리 (erp_bookstore_item_center 통합, 수량 집계 컬럼 폐지)
+-- bcode는 같은 도서의 여러 사본이 공유하는 도서 식별 바코드이며, 사본 자체의 식별자는 item_id다.
+-- 보유수량이 필요하면 COUNT(*)/status 집계로 조회하고, 최근 대여자/대여일시는 스냅샷 컬럼으로 바로 노출한다.
 IF OBJECT_ID('erp_bookstore_item', 'U') IS NULL
 CREATE TABLE erp_bookstore_item (
-    bcode          VARCHAR(50)  PRIMARY KEY,  -- 실물도서 바코드(고유 식별자)
-    content_id     INT,           -- erp_bookstore_content.content_id (어느 마스터 도서인지)
-    book_title     VARCHAR(255),  -- 도서명 (등록 시점 스냅샷)
-    author         VARCHAR(100),  -- 저자
-    publisher      VARCHAR(100),  -- 출판사
-    image_url      VARCHAR(500),  -- 표지 이미지 URL
-    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
-);
-
--- 센터별 실물도서 재고 — bcode 1건당 센터별 보유 수량을 집계로 관리 (개별 사본 단위 추적은 안 함)
-IF OBJECT_ID('erp_bookstore_item_center', 'U') IS NULL
-CREATE TABLE erp_bookstore_item_center (
-    bcode          VARCHAR(50)  NOT NULL,  -- erp_bookstore_item.bcode
-    center_code    VARCHAR(20)  NOT NULL,  -- erp_center.center_code
-    quantity       INT          NOT NULL DEFAULT 0,  -- 센터 보유 총 수량
-    loaned_qty     INT          NOT NULL DEFAULT 0,  -- 대여 중 수량 (사용가능수량 = quantity - loaned_qty - lost_qty)
-    lost_qty       INT          NOT NULL DEFAULT 0,  -- 분실/파손 등으로 사용 불가 처리된 수량
-    state          VARCHAR(20),   -- 재고 상태
-    registered_at  DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 등록일시
-    PRIMARY KEY (bcode, center_code),
-    FOREIGN KEY (bcode)        REFERENCES erp_bookstore_item(bcode),
+    item_id          INT IDENTITY(1,1) PRIMARY KEY,  -- 사본 내부 PK
+    bcode            VARCHAR(50)  NOT NULL,  -- 도서 바코드 (동일 도서의 여러 사본이 공유)
+    content_id       INT,           -- erp_bookstore_content.content_id (어느 마스터 도서인지)
+    center_code      VARCHAR(20)  NOT NULL DEFAULT 'PUS002',  -- 사본이 속한 센터 (data-books.sql처럼 센터를 지정하지 않는 시딩 스크립트 호환용 기본값)
+    book_title       VARCHAR(255),  -- 도서명 (등록 시점 스냅샷)
+    author           VARCHAR(100),  -- 저자
+    publisher        VARCHAR(100),  -- 출판사
+    image_url        VARCHAR(500),  -- 표지 이미지 URL
+    status           VARCHAR(20)  NOT NULL DEFAULT 'AVAILABLE',  -- AVAILABLE(대여가능) / LOANED(대여중) / LOST(분실·파손)
+    last_student_id  VARCHAR(100),  -- 마지막으로 대여한 학생 (erp_student.student_id, FK 없이 값으로만 연결)
+    last_loaned_at   DATETIME2,     -- 마지막 대여일시
+    last_returned_at DATETIME2,     -- 마지막 반납일시
+    registered_at    DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 등록일시
+    FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id),
     FOREIGN KEY (center_code)  REFERENCES erp_center(center_code)
 );
 
--- 실물도서 대여 이력 — loaned_qty/lost_qty 집계의 원장(대여/반납/분실 시 함께 갱신)
+-- 실물도서 대여 이력 — 사본(item)의 status/last_* 스냅샷의 원장(대여/반납/분실 시 함께 갱신)
 IF OBJECT_ID('erp_bookstore_item_loan', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_loan (
     loan_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    bcode        VARCHAR(50)   NOT NULL,  -- 대여한 실물도서 바코드
-    center_code  VARCHAR(20)   NOT NULL,  -- 대여가 발생한 센터
+    item_id      INT           NOT NULL,  -- 대여한 실물도서 사본 (erp_bookstore_item.item_id)
     student_id   VARCHAR(100)  NOT NULL,  -- 대여한 학생 (erp_student.student_id)
     loaned_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 대여일시
     returned_at  DATETIME2,     -- 반납일시 (미반납이면 NULL)
     status       VARCHAR(20)   NOT NULL DEFAULT 'LOANED',  -- LOANED / RETURNED / LOST
-    FOREIGN KEY (bcode, center_code) REFERENCES erp_bookstore_item_center(bcode, center_code)
+    FOREIGN KEY (item_id) REFERENCES erp_bookstore_item(item_id)
 );
 
--- 실물도서(erp_bookstore_item/erp_bookstore_item_center) 삭제/수정 로그
+-- 실물도서(erp_bookstore_item) 삭제/수정 로그
 IF OBJECT_ID('erp_bookstore_item_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_del (
-    log_id         INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    log_type       VARCHAR(10)  NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
-    logged_at      DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
-    logged_by      VARCHAR(100),  -- 처리한 사용자
-    bcode          VARCHAR(50),   -- 원본 바코드
-    content_id     INT,           -- 원본 content_id
-    book_title     VARCHAR(255),  -- 도서명
-    author         VARCHAR(100),  -- 저자
-    publisher      VARCHAR(100),  -- 출판사
-    image_url      VARCHAR(500),  -- 표지 이미지 URL
-    center_code    VARCHAR(20),   -- 원본 센터 코드
-    quantity       INT,           -- 로그 시점 수량
-    state          VARCHAR(20)    -- 로그 시점 상태
+    log_id           INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    log_type         VARCHAR(10)  NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
+    logged_at        DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 로그 일시
+    logged_by        VARCHAR(100),  -- 처리한 사용자
+    item_id          INT,           -- 원본 item_id
+    bcode            VARCHAR(50),   -- 원본 바코드
+    content_id       INT,           -- 원본 content_id
+    book_title       VARCHAR(255),  -- 도서명
+    author           VARCHAR(100),  -- 저자
+    publisher        VARCHAR(100),  -- 출판사
+    image_url        VARCHAR(500),  -- 표지 이미지 URL
+    center_code      VARCHAR(20),   -- 원본 센터 코드
+    status           VARCHAR(20),   -- 로그 시점 상태
+    last_student_id  VARCHAR(100),  -- 로그 시점 마지막 대여 학생
+    last_loaned_at   DATETIME2,     -- 로그 시점 마지막 대여일시
+    last_returned_at DATETIME2      -- 로그 시점 마지막 반납일시
 );
 
 IF COL_LENGTH('erp_bookstore_item_del', 'del_id') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.del_id', 'log_id', 'COLUMN';
@@ -289,7 +287,7 @@ IF COL_LENGTH('erp_bookstore_item_del', 'log_type') IS NULL ALTER TABLE erp_book
 IF OBJECT_ID('erp_bookstore_itempool', 'U') IS NULL
 CREATE TABLE erp_bookstore_itempool (
     content_id     INT,            -- erp_bookstore_content.content_id
-    qlevel         VARCHAR(20),    -- 난이도 (01=기본, 02=심화)
+    qlevel         VARCHAR(2),     -- 난이도 코드 (erp_bookstore_code gubun='L', 01=기본/02=심화)
     qnum           VARCHAR(20),    -- 문제 번호 (도서+난이도 내 순번)
     q              NVARCHAR(2000), -- 문제 지문
     qex            NVARCHAR(2000), -- 보기/추가 지문
@@ -298,7 +296,7 @@ CREATE TABLE erp_bookstore_itempool (
     e3             NVARCHAR(500),  -- 선택지 3
     e4             NVARCHAR(500),  -- 선택지 4
     ans            VARCHAR(100),   -- 정답
-    qtype          VARCHAR(20),    -- 문제 유형 (이해/표현/논리/사고/감정/어휘/지식/문법)
+    qtype          VARCHAR(2),     -- 문제 유형 코드 (erp_bookstore_code gubun='T', 이해/표현/논리/사고/감정/어휘/지식/문법)
     qexgb          VARCHAR(20),    -- 보기 구분
     state          VARCHAR(20),    -- 사용 여부
 
@@ -322,8 +320,8 @@ CREATE TABLE erp_bookstore_itempool_del (
     e3             NVARCHAR(500), -- 선택지 3
     e4             NVARCHAR(500), -- 선택지 4
     ans            VARCHAR(100),  -- 정답
-    qtype          VARCHAR(20),   -- 문제 유형
-    qlevel         VARCHAR(20),   -- 난이도
+    qtype          VARCHAR(2),    -- 문제 유형 코드
+    qlevel         VARCHAR(2),    -- 난이도 코드
     qexgb          VARCHAR(20),   -- 보기 구분
     state          VARCHAR(20)    -- 로그 시점 사용 여부
 );
@@ -379,8 +377,9 @@ CREATE TABLE erp_bookstore_quiz_answer_log (
     recommend_id  INT           NOT NULL,  -- 어느 추천(도전)에 대한 제출인지 (erp_bookstore_recommend_log)
     student_id    VARCHAR(100)  NOT NULL,  -- erp_student.student_id (FK 없이 값으로만 연결)
     content_id    INT           NOT NULL,  -- 풀이한 도서
-    qlevel        VARCHAR(20)   NOT NULL DEFAULT '01',  -- 난이도 (01=기본, 02=심화)
+    qlevel        VARCHAR(2)    NOT NULL DEFAULT '01',  -- 난이도 코드 (erp_bookstore_code gubun='L', 01=기본/02=심화)
     qnum          VARCHAR(20)   NOT NULL,  -- 문제 번호 (erp_bookstore_itempool.qnum)
+    qtype         VARCHAR(2),   -- 문제 유형 코드 스냅샷 (erp_bookstore_code gubun='T') — 제출 시점 itempool.qtype, 이후 문제가 수정/삭제돼도 이력 보존
     selected      INT           NOT NULL,  -- 학생이 선택한 보기 번호 (1~4)
     is_correct    BIT           NOT NULL,  -- 서버 채점 결과 (제출 시점 itempool.ans 기준)
     submitted_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 제출일시 (같은 값 = 같은 회차)
@@ -400,7 +399,7 @@ CREATE TABLE erp_bookstore_level (
 
 -- 학년별 권당 EXP — 읽은 "책의 학년(content.schoolyear)"에 따라 획득 EXP가 다르다
 CREATE TABLE erp_bookstore_exp_rule (
-    schoolyear    VARCHAR(20)   PRIMARY KEY,
+    schoolyear    VARCHAR(2)    PRIMARY KEY,
     exp_per_book  INT           NOT NULL
 );
 
