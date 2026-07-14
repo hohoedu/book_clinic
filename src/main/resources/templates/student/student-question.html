@@ -18,8 +18,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
-  <link rel="stylesheet" th:href="@{/css/student-common.css}" />
-  <link rel="stylesheet" th:href="@{/css/student-question.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/student-question.css}" />
 </head>
 
 <body>
@@ -96,34 +96,11 @@
           <button type="button" class="btn-ghost" id="prevBtn">이전 문제</button>
           <button type="button" class="btn-primary" id="nextBtn" disabled>다음 문제</button>
         </div>
-        <!-- 결과 카드 -->
-        <div class="card result-card" id="resultCard" hidden>
-          <div class="result-mascot" id="resultMascot"><i class="fa-solid fa-trophy" aria-hidden="true"></i></div>
-          <span class="result-grade-pill" id="resultGradePill">독서친구</span>
-          <h2 id="resultTitle">문제를 다 풀었어요!</h2>
-          <p class="result-score"><span id="scoreCorrect">0</span> / <span id="scoreTotal">0</span>개 정답 <span
-              id="passLineText" class="result-passline"></span></p>
-          <p class="result-exp" id="resultExp" hidden></p>
-          <!-- 이번 제출로 새로 획득한 뱃지 (서버 newBadges) -->
-          <div class="result-badges" id="resultBadges" hidden>
-            <p class="result-badges-title"><i class="fa-solid fa-medal" aria-hidden="true"></i> 새로운 뱃지를 획득했어요!</p>
-            <ul class="result-badge-list" id="resultBadgeList"></ul>
-          </div>
-          <div class="result-actions">
-            <button type="button" class="btn-ghost" id="retryBtn" hidden><i class="fa-solid fa-rotate-right"
-                aria-hidden="true"></i>다시 풀기</button>
-            <a class="btn-secondary" id="advancedBtn" hidden
-              th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='02')}">
-              <i class="fa-solid fa-star" aria-hidden="true"></i>심화문제 풀기</a>
-            <a class="btn-primary" id="goMainBtn" th:href="@{/student/main(studentId=${studentId})}">메인으로
-              돌아가기</a>
-          </div>
-        </div>
       </section>
     </main>
   </div>
-  <script th:src="@{/js/student-main.js}"></script>
-  <script th:src="@{/js/student-question.js}"></script>
+  <script th:src="@{/js/student/student-main.js}"></script>
+  <script th:src="@{/js/student/student-question.js}"></script>
 </body>
 
 </html>

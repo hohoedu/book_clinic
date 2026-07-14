@@ -9,7 +9,7 @@ IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
 IF OBJECT_ID('erp_bookstore_item_loan',             'U') IS NOT NULL DROP TABLE erp_bookstore_item_loan;
--- 2026-07-13: item_center를 item에 통합하는 구조 변경으로 폐지된 구버전 테이블 — 남아 있으면 정리
+IF OBJECT_ID('erp_bookstore_item',                  'U') IS NOT NULL DROP TABLE erp_bookstore_item;
 IF OBJECT_ID('erp_bookstore_item_center',           'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
 IF OBJECT_ID('erp_bookstore_priority_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_priority_del;
 IF OBJECT_ID('erp_bookstore_priority',              'U') IS NOT NULL DROP TABLE erp_bookstore_priority;
@@ -226,7 +226,9 @@ CREATE TABLE erp_bookstore_priority_del (
 -- 실물도서 마스터 (2026-07-13 재설계) — 개별 사본 1권 = 1행으로 관리 (erp_bookstore_item_center 통합, 수량 집계 컬럼 폐지)
 -- bcode는 같은 도서의 여러 사본이 공유하는 도서 식별 바코드이며, 사본 자체의 식별자는 item_id다.
 -- 보유수량이 필요하면 COUNT(*)/status 집계로 조회하고, 최근 대여자/대여일시는 스냅샷 컬럼으로 바로 노출한다.
-IF OBJECT_ID('erp_bookstore_item', 'U') IS NULL
+-- 재기동마다 DROP 후 재생성한다 (2026-07-14) — status가 리셋 안 되는 대여이력(recommend_log/item_loan)과
+-- 어긋나면서 반납 안 된 LOANED 상태가 영구히 남아 추천이 계속 다음 순위 책으로 밀리는 문제가 있었다.
+-- 데이터는 data-items.sql이 매 기동 자동으로 다시 채운다.
 CREATE TABLE erp_bookstore_item (
     item_id          INT IDENTITY(1,1) PRIMARY KEY,  -- 사본 내부 PK
     bcode            VARCHAR(50)  NOT NULL,  -- 도서 바코드 (동일 도서의 여러 사본이 공유)

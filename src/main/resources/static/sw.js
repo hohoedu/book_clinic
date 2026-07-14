@@ -1,11 +1,11 @@
-const CACHE_NAME = 'book-clinic-student-v5';
+const CACHE_NAME = 'book-clinic-student-v2';
 const OFFLINE_URL = '/student/login';
 
 const PRECACHE_URLS = [
   '/student/login',
-  '/css/student-common.css',
-  '/css/student-main.css',
-  '/js/student-main.js',
+  '/css/student/student-common.css',
+  '/css/student/student-main.css',
+  '/js/student/student-main.js',
   '/manifest.json',
   '/images/logo_chaekbang.png',
   '/images/book-sample.png',

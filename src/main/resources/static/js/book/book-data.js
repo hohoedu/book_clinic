@@ -1592,7 +1592,7 @@ function buildQuestionCard(q, qnum) {
   card.innerHTML = `
     <div class="question-card-head">
       <h3>문제</h3>
-      <button type="button" class="btn danger-outline small btn-delete-question">삭제</button>
+      <button type="button" class="btn danger-outline small btn-delete-question">초기화</button>
     </div>
     <div class="form-row">
       <label>문제 영역</label>
@@ -1702,6 +1702,9 @@ function refreshQuestionNumbers() {
     numbers.appendChild(buildNumberButton(no, card));
   });
 
+  // 옵저버가 붙기 전 기본값 — 1번을 먼저 활성화해둔다 (없으면 옵저버 초기 배치 처리 전까지 아무 번호도 active가 아님)
+  numbers.querySelector("button")?.classList.add("active");
+
   bindQuestionObserver(cards);
 }
 
@@ -1733,12 +1736,17 @@ function bindQuestionObserver(cards) {
 
   questionObserver = new IntersectionObserver(
     (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        document.querySelectorAll(".question-numbers button").forEach((b) => b.classList.remove("active"));
-        const activeButton = document.querySelector(`.question-numbers button[data-target="${entry.target.id}"]`);
-        activeButton?.classList.add("active");
-      });
+      // 카드 여러 개가 한 번에 걸쳐 있으면(특히 목록을 처음 그릴 때) entries가 한 배치로 같이 들어오는데,
+      // 여기서 하나씩 순서대로 active를 지웠다 켰다 하면 화면상 가장 위 카드가 아니라 배치 안에서
+      // "나중에 처리된" 카드(예: 2번)가 이겨버린다. 배치 안에서 가장 위쪽 카드 하나만 골라 활성화한다.
+      const visible = entries.filter((entry) => entry.isIntersecting);
+      if (!visible.length) return;
+      const topEntry = visible.reduce((a, b) =>
+        a.boundingClientRect.top <= b.boundingClientRect.top ? a : b
+      );
+      document.querySelectorAll(".question-numbers button").forEach((b) => b.classList.remove("active"));
+      const activeButton = document.querySelector(`.question-numbers button[data-target="${topEntry.target.id}"]`);
+      activeButton?.classList.add("active");
     },
     { root: editor, threshold: 0.45 }
   );
@@ -1762,14 +1770,14 @@ async function deleteQuestion(card) {
     return;
   }
 
-  if (!confirm("이 문제를 삭제하시겠습니까?")) return;
+  if (!confirm("이 문제를 초기화하시겠습니까?")) return;
 
   try {
     await postJson("/question/delete", { contentId: currentContentId, qlevel: activeLevel, qnum: card.dataset.qnum });
     await loadQuestions(currentContentId);
   } catch (error) {
     console.error(error);
-    alert(error.message ?? "문제 삭제 중 오류가 발생했습니다.");
+    alert(error.message ?? "초기화 중 오류가 발생했습니다.");
   }
 }
 

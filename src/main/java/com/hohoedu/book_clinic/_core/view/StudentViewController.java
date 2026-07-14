@@ -34,7 +34,7 @@ public class StudentViewController {
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
     @GetMapping({ "", "/", "/login" })
     public String getLoginPage() {
-        return "/student-login";
+        return "/student/student-login";
     }
 
     /** appId로 로그인 → 성공 시 메인 화면으로 이동 */
@@ -78,7 +78,7 @@ public class StudentViewController {
         model.addAttribute("progressPercent", levelInfo.getProgressPercent());
         model.addAttribute("badges", clinicService.getEarnedBadges(studentId));
         model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));
-        return "/student-main";
+        return "/student/student-main";
     }
 
     /**
@@ -104,7 +104,33 @@ public class StudentViewController {
         model.addAttribute("studentName", student.getStudentName());
         model.addAttribute("contentId", contentId);
         model.addAttribute("qlevel", qlevel);
-        return "/student-question";
+        return "/student/student-question";
+    }
+
+    /**
+     * 결과 화면 — 채점 결과(독서왕/독서친구/재도전)는 student-question.js가 채점 직후
+     * sessionStorage에 담아 이 화면으로 넘긴다. 새로고침/직접 접근 등으로 결과가 없으면
+     * student-result.js가 메인으로 되돌려보낸다.
+     */
+    @GetMapping("/result")
+    public String getResultPage(@RequestParam(value = "studentId", required = false) String studentId,
+            @RequestParam(value = "contentId", required = false) Integer contentId,
+            @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
+            Model model) {
+        if (studentId == null || studentId.isBlank()) {
+            return "redirect:/student/login";
+        }
+
+        Student student = studentRepository.findById(studentId);
+        if (student == null) {
+            return "redirect:/student/login";
+        }
+
+        model.addAttribute("studentId", studentId);
+        model.addAttribute("studentName", student.getStudentName());
+        model.addAttribute("contentId", contentId);
+        model.addAttribute("qlevel", qlevel);
+        return "/student/student-result";
     }
 
 }

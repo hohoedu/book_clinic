@@ -19,11 +19,11 @@ public class AdminViewController {
         // 분류(대분류)·장르 코드 - 화면 chip/셀렉트/필터 렌더링용
         model.addAttribute("contentTypeCodes", codeService.findBookstoreCodes("C"));
         model.addAttribute("genreCodes", codeService.findBookstoreCodes("G"));
-        return "book-data";
+        return "book/book-data";
     }
 
     @GetMapping("/admin/book-priority")
     public String bookPriority() {
-        return "book-priority";
+        return "book/book-priority";
     }
 }

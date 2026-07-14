@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방 결과</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+  <meta name="theme-color" content="#0988d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/student-result.css}" />
+</head>
+
+<body>
+  <div class="app-viewport">
+    <main class="page" id="resultPage" th:data-student-id="${studentId}" th:data-content-id="${contentId}"
+      th:data-qlevel="${qlevel}">
+      <header class="topbar">
+        <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
+        <div class="top-actions">
+          <div class="student-pill" th:text="|${studentName} 학생|">김호호 학생</div>
+          <button type="button" class="logout-btn"><i class="fa-solid fa-arrow-right-from-bracket"
+              aria-hidden="true"></i>로그아웃</button>
+        </div>
+      </header>
+
+      <section class="result-layout">
+        <article class="card result-hero">
+          <span class="confetti c1"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+          <span class="confetti c2"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+          <span class="confetti c3"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+          <span class="confetti c4"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+
+          <div class="result-crown" id="resultMascot"><i class="fa-solid fa-crown" aria-hidden="true"></i></div>
+          <h1 class="result-grade-title" id="resultGradePill">독서친구</h1>
+          <p class="result-subtitle" id="resultTitle">문제를 다 풀었어요!</p>
+
+          <div class="result-character">
+            <img th:src="@{/images/img-my-ch01.png}" alt="호호책방 캐릭터" />
+          </div>
+
+          <p class="result-exp" id="resultExp" hidden></p>
+
+          <!-- 이번 제출로 새로 획득한 뱃지 (서버 newBadges) -->
+          <div class="result-badges" id="resultBadges" hidden>
+            <p class="result-badges-title"><i class="fa-solid fa-medal" aria-hidden="true"></i> 새로운 뱃지를 획득했어요!</p>
+            <ul class="result-badge-list" id="resultBadgeList"></ul>
+          </div>
+
+          <div class="result-stats-bar">
+            <div class="stat-item">
+              <span class="stat-label">맞힌 개수</span>
+              <span class="stat-value"><span id="scoreCorrect">0</span>개</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">틀린 개수</span>
+              <span class="stat-value"><span id="scoreWrong">0</span>개</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">결과</span>
+              <span class="stat-value" id="resultStatusText">통과!</span>
+            </div>
+          </div>
+        </article>
+
+        <aside class="side">
+          <section class="card panel">
+            <div class="panel-head">
+              <h3 class="panel-title">나의 독서 성향</h3>
+            </div>
+          </section>
+          <section class="card panel placeholder-panel"></section>
+          <section class="card panel placeholder-panel"></section>
+        </aside>
+      </section>
+
+      <div class="result-fab-actions">
+        <a class="btn-ghost" id="retryBtn" hidden
+          th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
+          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>다시 풀기</a>
+        <a class="btn-ghost" id="wrongRetryBtn" hidden
+          th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
+          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 풀기</a>
+        <a class="btn-secondary fab-advanced" id="advancedBtn" hidden
+          th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='02')}">
+          <i class="fa-solid fa-book" aria-hidden="true"></i>심화 문제 풀기</a>
+        <a class="btn-primary" id="recommendBtn" hidden th:href="@{/student/main(studentId=${studentId})}">
+          <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>책 추천 받기</a>
+      </div>
+
+      <!-- 책 추천 받기 확인 모달 — 남은 시간 문구는 출석/퇴실 시각 기능이 붙기 전까지는 뺀다 -->
+      <div class="confirm-modal" id="recommendConfirmModal" hidden>
+        <div class="confirm-modal-backdrop"></div>
+        <div class="confirm-modal-card">
+          <div class="confirm-modal-icon"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></div>
+          <p class="confirm-modal-text">새로운 책을 추천받으시겠어요?</p>
+          <div class="confirm-modal-actions">
+            <button type="button" class="btn-ghost" id="confirmNoBtn">아니오</button>
+            <button type="button" class="btn-primary" id="confirmYesBtn">예</button>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script th:src="@{/js/student/student-main.js}"></script>
+  <script th:src="@{/js/student/student-result.js}"></script>
+</body>
+
+</html>

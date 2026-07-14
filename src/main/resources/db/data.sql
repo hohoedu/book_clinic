@@ -71,10 +71,9 @@ INSERT INTO erp_user (center_code, role_key, user_code, user_id, user_name, pass
 INSERT INTO erp_student (gender, student_privacy_agree, created_at, updated_at, app_id, center_code, grade_key, status_key, school, student_id, student_name, address, address_detail, app_password, app_token, birth, is_hoho, billing_phone, sub_han, sub_book, sub_hoho, serial_num)
 VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880', 'PUS001', '05', 'ACTIVE', '호호 초등학교', 'PUS001251202FDA6E', '김호이', '부산 해운대구 센텀중앙로 97', 'A동 2810호', '62da5956da04fdedd0ff08a3f8c812793ef4219cd0405d44bf5412f3264fecf0', 'el7jugjIxU2ikFMRCZyTK8:APA91bE2fkQ6TDmwXcy7sHIdScsIMJ7mGrkixZxYLwpVuDWogq3aXHxbAStlasw7h1VeByp0Ey0iU9MUiiiMCqyOGwNpYOqDOHeq7A4rwp17ATklirE2oOU', '2015-12-12',  0, '01062954886', 1, 1, 0, '002260002');
 
--- 센터별 재고 더미 (2026-07-13 재설계) — data-books.sql이 적재한 사본(기본 center_code='PUS002')을
--- DAE001에도 1권씩 복제 (총 2개 센터 재고). erp_bookstore_item은 재기동해도 리셋되지 않는 테이블이라
--- 매 기동 이 스크립트가 다시 실행돼도 중복 적재되지 않도록 IF NOT EXISTS로 감싼다.
-IF NOT EXISTS (SELECT 1 FROM erp_bookstore_item WHERE center_code = 'DAE001')
+-- 센터별 재고 더미 (2026-07-13 재설계) — data-items.sql이 적재한 사본(기본 center_code='PUS002')을
+-- DAE001에도 1권씩 복제 (총 2개 센터 재고). erp_bookstore_item은 이제 매 기동 DROP 후 재생성되고
+-- data-items.sql이 그 직후 자동으로 다시 채우므로, 이 시점엔 DAE001 재고가 없는 게 항상 보장된다.
 INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url)
 SELECT bcode, content_id, 'DAE001', book_title, author, publisher, image_url
 FROM erp_bookstore_item WHERE center_code = 'PUS002';

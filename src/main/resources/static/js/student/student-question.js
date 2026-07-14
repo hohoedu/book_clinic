@@ -9,12 +9,6 @@
   const loadingState = document.getElementById('loadingState');
   const gradingState = document.getElementById('gradingState');
   const quizLayout = document.getElementById('quizLayout');
-  const resultCard = document.getElementById('resultCard');
-  const resultMascot = document.getElementById('resultMascot');
-  const resultGradePill = document.getElementById('resultGradePill');
-  const resultTitle = document.getElementById('resultTitle');
-  const passLineText = document.getElementById('passLineText');
-  const resultExp = document.getElementById('resultExp');
 
   const sideBookImg = document.getElementById('sideBookImg');
   const sideBookTitle = document.getElementById('sideBookTitle');
@@ -33,11 +27,6 @@
   const quizActions = document.getElementById('quizActions');
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
-  const retryBtn = document.getElementById('retryBtn');
-  const advancedBtn = document.getElementById('advancedBtn');
-  const goMainBtn = document.getElementById('goMainBtn');
-  const scoreCorrectEl = document.getElementById('scoreCorrect');
-  const scoreTotalEl = document.getElementById('scoreTotal');
 
   // 문제 유형(erp_bookstore_code gubun='T') 코드별 아이콘/설명 — 서버 데이터에 없는 화면용 고정 문구
   const QTYPE_INFO = {
@@ -61,7 +50,6 @@
     gradingState.hidden = name !== 'grading';
     quizLayout.hidden = name !== 'quiz';
     quizActions.hidden = name !== 'quiz';
-    resultCard.hidden = name !== 'result';
   }
 
   // 사이드바 도서 표지/제목 — 이미 추천/대여 확정된 책이므로 멱등 API를 그대로 재사용해 정보만 조회
@@ -98,6 +86,16 @@
       if (!data.success) throw new Error(data.error?.message ?? '문제를 불러오지 못했어요.');
 
       questions = (data.response ?? []).filter((q) => q.q);
+
+      // 결과 화면의 "틀린 문제 풀기"에서 넘어온 경우 — 지난 시도에서 틀린 문항만 추려서 다시 낸다
+      const retryQnumsRaw = sessionStorage.getItem('retryQnums');
+      if (retryQnumsRaw) {
+        sessionStorage.removeItem('retryQnums');
+        const retryQnums = JSON.parse(retryQnumsRaw);
+        const filtered = questions.filter((q) => retryQnums.includes(q.qnum));
+        if (filtered.length > 0) questions = filtered;
+      }
+
       if (questions.length === 0) {
         document.getElementById('emptyStateMsg').textContent = '이 책에 등록된 문제가 아직 없어요.';
         showState('empty');
@@ -219,9 +217,14 @@
 
   async function showResult() {
     // 풀이 중에는 정답 여부를 계산하지 않으므로, 결과 시점에 문항별 선택과 itempool.ans를 대조해 집계한다
-    // (qlevel=01은 어차피 서버가 다시 채점하고, 이 값은 심화문제 결과와 서버 오류 폴백 표시에만 쓰인다)
+    // (qlevel=01은 어차피 서버가 다시 채점하고, 이 값은 서버 오류 폴백 표시에만 쓰인다)
     const correctCount = questions.filter((q, i) => answered[i] && Number(q.ans) === answered[i].selected).length;
     const totalCount = questions.length;
+    // "틀린 문제 풀기"(독서친구 등급)에서 쓸 오답 문항 번호 — 서버가 문항별 정오답을 내려주지 않으므로
+    // 방금 푼 문제 목록(q.ans)과 대조한 클라이언트 집계값을 그대로 넘긴다
+    const wrongQnums = questions
+      .filter((q, i) => answered[i] && Number(q.ans) !== answered[i].selected)
+      .map((q) => q.qnum);
 
     showState('grading');
 
@@ -233,6 +236,7 @@
       .filter((a) => a)
       .map((a) => ({ qnum: a.qnum, selected: a.selected }));
 
+    let result;
     try {
       const res = await fetch('/clinic/quiz/submit', {
         method: 'POST',
@@ -241,130 +245,33 @@
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');
-      if (isAdvanced) {
-        renderAdvancedResult(data.response.correctCount, data.response.totalCount, data.response.newBadges);
-      } else {
-        renderResult(data.response);
-      }
+      result = isAdvanced
+        ? { advanced: true, correctCount: data.response.correctCount, totalCount: data.response.totalCount, newBadges: data.response.newBadges }
+        : { advanced: false, wrongQnums, ...data.response };
     } catch (err) {
       console.error(err);
       // 채점 서버 호출이 실패해도 학생이 결과를 볼 수 있도록 클라이언트 집계값으로 대체 표시(재도전 취급)
-      if (isAdvanced) {
-        renderAdvancedResult(correctCount, totalCount);
-        return;
-      }
-      renderResult({
-        passed: false,
-        grade: null,
-        correctCount,
-        totalCount,
-        passLine: Math.ceil(totalCount * (2 / 3)),
-        expGained: null,
-      });
-    }
-  }
-
-  function renderAdvancedResult(correctCount, totalCount, newBadges) {
-    scoreCorrectEl.textContent = correctCount;
-    scoreTotalEl.textContent = totalCount;
-    passLineText.textContent = '';
-    resultExp.hidden = true;
-
-    resultGradePill.classList.remove('king', 'retry');
-    resultGradePill.textContent = '심화문제';
-    resultMascot.innerHTML = '<i class="fa-solid fa-star" aria-hidden="true"></i>';
-    resultTitle.textContent = '심화문제까지 다 풀었어요!';
-
-    renderNewBadges(newBadges);
-
-    retryBtn.hidden = true;
-    advancedBtn.hidden = true;
-    goMainBtn.hidden = false;
-
-    showState('result');
-  }
-
-  // 이번 제출로 새로 획득한 뱃지 목록 (서버가 로그 재계산으로 판정해서 내려준다)
-  function renderNewBadges(newBadges) {
-    const box = document.getElementById('resultBadges');
-    const list = document.getElementById('resultBadgeList');
-    list.innerHTML = '';
-    if (!newBadges || newBadges.length === 0) {
-      box.hidden = true;
-      return;
-    }
-    newBadges.forEach((b) => {
-      const li = document.createElement('li');
-      li.className = 'result-badge-item';
-      const name = document.createElement('strong');
-      name.textContent = b.badgeName;
-      const desc = document.createElement('span');
-      desc.textContent = b.badgeDesc;
-      li.append(name, desc);
-      list.appendChild(li);
-    });
-    box.hidden = false;
-  }
-
-  function renderResult(result) {
-    scoreCorrectEl.textContent = result.correctCount;
-    scoreTotalEl.textContent = result.totalCount;
-    passLineText.textContent = `(합격선 ${result.passLine}개)`;
-
-    resultGradePill.classList.remove('king', 'retry');
-    if (result.grade === 'KING') {
-      resultGradePill.textContent = '독서왕';
-      resultGradePill.classList.add('king');
-      resultMascot.innerHTML = '<i class="fa-solid fa-crown" aria-hidden="true"></i>';
-      resultTitle.textContent = '독서왕이 됐어요!';
-      retryBtn.hidden = true;
-      advancedBtn.hidden = false;
-      goMainBtn.hidden = false;
-    } else if (result.grade === 'FRIEND') {
-      resultGradePill.textContent = '독서친구';
-      resultMascot.innerHTML = '<i class="fa-solid fa-trophy" aria-hidden="true"></i>';
-      resultTitle.textContent = '독서친구가 됐어요!';
-      retryBtn.hidden = false;
-      advancedBtn.hidden = false;
-      goMainBtn.hidden = false;
-    } else {
-      resultGradePill.textContent = '재도전 필요';
-      resultGradePill.classList.add('retry');
-      resultMascot.innerHTML = '<i class="fa-solid fa-rotate-right" aria-hidden="true"></i>';
-      resultTitle.textContent = '합격선에 조금 못 미쳤어요. 다시 풀어볼까요?';
-      retryBtn.hidden = false;
-      advancedBtn.hidden = true;
-      goMainBtn.hidden = false;
+      result = isAdvanced
+        ? { advanced: true, correctCount, totalCount, newBadges: null }
+        : {
+            advanced: false,
+            passed: false,
+            grade: null,
+            correctCount,
+            totalCount,
+            passLine: Math.ceil(totalCount * (2 / 3)),
+            expGained: null,
+            wrongQnums,
+          };
     }
 
-    if (result.alreadyCompleted) {
-      resultTitle.textContent = '이미 완독한 책이에요!';
-      resultExp.textContent = '다시 풀어도 추가 경험치는 없어요.';
-      resultExp.hidden = false;
-    } else if (result.expGained != null && result.expGained > 0) {
-      resultExp.textContent = result.leveledUp
-        ? `EXP +${result.expGained} 획득! 레벨 ${result.levelNo}(으)로 레벨업했어요 🎉`
-        : `EXP +${result.expGained} 획득!`;
-      resultExp.hidden = false;
-    } else {
-      resultExp.hidden = true;
-    }
-
-    renderNewBadges(result.newBadges);
-
-    showState('result');
-  }
-
-  function retry() {
-    answered = new Array(questions.length).fill(null);
-    current = 0;
-    showState('quiz');
-    renderQuestion();
+    // 결과 화면(student-result.html)이 읽어갈 채점 결과를 세션 저장소에 담아두고 이동한다
+    sessionStorage.setItem('quizResult', JSON.stringify(result));
+    window.location.href = `/student/result?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${encodeURIComponent(qlevel)}`;
   }
 
   nextBtn.addEventListener('click', goNext);
   prevBtn.addEventListener('click', goPrev);
-  retryBtn.addEventListener('click', retry);
 
   loadQuestions();
 })();

@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic.book.BookRepository;
+import com.hohoedu.book_clinic.book._dto.BookRespDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicReqDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.question.QuestionRepository;
@@ -77,6 +78,16 @@ public class ClinicService {
         ClinicRespDTO.RecommendBookDTO existing = clinicRepository.findPendingRecommendBookCard(studentId);
         if (existing != null) return existing;
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
+
+        // 새로 추천한다는 건 이전 추천이 이미 DONE 처리됐다는 뜻(PENDING이면 위에서 그대로 반환됨) —
+        // 이전 책이 아직 대여(LOANED) 상태로 남아있으면 여기서 반납 처리해 재고를 돌려준다
+        BookRespDTO.ItemLoanRespDTO activeLoan = bookRepository.findActiveLoanByStudent(studentId);
+        if (activeLoan != null) {
+            bookRepository.updateLoanReturned(activeLoan.getLoanId());
+            bookRepository.markItemReturned(activeLoan.getItemId());
+            log.info("학생 {}의 이전 대여 도서를 반납 처리했습니다: loanId={}, itemId={}",
+                    studentId, activeLoan.getLoanId(), activeLoan.getItemId());
+        }
 
         String centerCode = clinicRepository.findCenterCode(studentId);
         if (centerCode == null) throw new Exception404("학생의 소속 센터를 찾을 수 없습니다: " + studentId);
