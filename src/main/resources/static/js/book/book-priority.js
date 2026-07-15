@@ -105,6 +105,7 @@ async function loadBooks() {
     originalOrder = gradeBooks.map((b) => String(b.contentId));
     renderStats(gradeBooks);
     renderList(gradeBooks);
+    resetSearch();
   } catch (error) {
     console.error(error);
     listEl.innerHTML = '<li class="ranking-empty">조회 중 오류가 발생했습니다.</li>';
@@ -121,7 +122,7 @@ function renderStats(books) {
   document.getElementById("statInactive").textContent = `${inactive}권`;
 }
 
-/* 순위 목록 렌더링 (검색어가 있으면 필터링만 하고, 원래 순번은 유지) */
+/* 순위 목록 렌더링 (검색어와 무관하게 항상 전체 목록을 그린다 — 검색은 필터가 아니라 스크롤 이동) */
 /*
  * 이 학년에 저장된 순위가 하나도 없으면(=아직 초안을 한 번도 저장 안 함) 전부 순위가 매겨진 것처럼
  * 번호를 매기고 바로 드래그할 수 있게 보여준다. "순위 없음" 구분선은 이미 순위가 있는 초안에
@@ -129,32 +130,26 @@ function renderStats(books) {
  */
 function renderList(books) {
   const listEl = document.getElementById("rankingList");
-  const keyword = document.getElementById("rankingSearch").value.trim().toLowerCase();
-  const isFiltered = keyword.length > 0;
 
   listEl.innerHTML = "";
 
-  const visible = books.filter(
-    (book) => !isFiltered || (book.originalTitle ?? "").toLowerCase().includes(keyword)
-  );
-
-  if (!visible.length) {
+  if (!books.length) {
     listEl.innerHTML = '<li class="ranking-empty">등록된 도서가 없습니다.</li>';
     return;
   }
 
-  const hasAnyRanked = visible.some((book) => book.sortOrder != null);
+  const hasAnyRanked = books.some((book) => book.sortOrder != null);
 
   if (!hasAnyRanked) {
-    visible.forEach((book, index) => listEl.appendChild(buildRankingRow(book, index + 1, isFiltered)));
+    books.forEach((book, index) => listEl.appendChild(buildRankingRow(book, index + 1, false)));
     refreshRowDividers(listEl);
     return;
   }
 
-  const ranked = visible.filter((book) => book.sortOrder != null);
-  const unranked = visible.filter((book) => book.sortOrder == null);
+  const ranked = books.filter((book) => book.sortOrder != null);
+  const unranked = books.filter((book) => book.sortOrder == null);
 
-  ranked.forEach((book, index) => listEl.appendChild(buildRankingRow(book, index + 1, isFiltered)));
+  ranked.forEach((book, index) => listEl.appendChild(buildRankingRow(book, index + 1, false)));
 
   if (unranked.length) {
     const divider = document.createElement("li");
@@ -389,9 +384,91 @@ function initUnsavedOrderGuard() {
   });
 }
 
-/* 도서명 검색 */
+/* 도서명 검색 — 목록을 필터링하지 않고, 일치하는 도서들의 위치로 순서대로 스크롤 이동 + 하이라이트 (Ctrl+F 찾기 방식) */
+let searchMatches = [];
+let searchMatchIndex = -1;
+
 function initSearch() {
-  document.getElementById("rankingSearch")?.addEventListener("input", () => renderList(gradeBooks));
+  const input = document.getElementById("rankingSearch");
+  if (!input) return;
+
+  let debounceTimer;
+  input.addEventListener("input", () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => updateSearchMatches(input.value), 200);
+  });
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    goToSearchMatch(event.shiftKey ? -1 : 1);
+  });
+
+  document.getElementById("btnSearchPrev")?.addEventListener("click", () => goToSearchMatch(-1));
+  document.getElementById("btnSearchNext")?.addEventListener("click", () => goToSearchMatch(1));
+}
+
+/* 학년/연도 전환으로 목록이 새로 그려질 때, 이전 검색 결과(과거 DOM row 참조)를 정리 */
+function resetSearch() {
+  const input = document.getElementById("rankingSearch");
+  if (input) input.value = "";
+  searchMatches = [];
+  searchMatchIndex = -1;
+  const navEl = document.getElementById("searchNav");
+  if (navEl) navEl.hidden = true;
+}
+
+function updateSearchMatches(keyword) {
+  const listEl = document.getElementById("rankingList");
+  const navEl = document.getElementById("searchNav");
+
+  listEl.querySelectorAll(".ranking-row.search-highlight").forEach((el) => el.classList.remove("search-highlight"));
+
+  const trimmed = keyword.trim().toLowerCase();
+  if (!trimmed) {
+    searchMatches = [];
+    searchMatchIndex = -1;
+    navEl.hidden = true;
+    return;
+  }
+
+  // DOM 렌더링 순서(위→아래) 그대로 매치를 모아야 "다음/이전"이 화면 스크롤 방향과 일치한다
+  searchMatches = [...listEl.querySelectorAll(".ranking-row")].filter((row) => {
+    const title = row.querySelector(".rank-title")?.textContent ?? "";
+    return title.toLowerCase().includes(trimmed);
+  });
+  searchMatchIndex = searchMatches.length ? 0 : -1;
+
+  navEl.hidden = false;
+  updateSearchNavUi();
+  focusSearchMatch();
+}
+
+function goToSearchMatch(step) {
+  if (!searchMatches.length) return;
+  searchMatchIndex = (searchMatchIndex + step + searchMatches.length) % searchMatches.length;
+  updateSearchNavUi();
+  focusSearchMatch();
+}
+
+function focusSearchMatch() {
+  const listEl = document.getElementById("rankingList");
+  listEl.querySelectorAll(".ranking-row.search-highlight").forEach((el) => el.classList.remove("search-highlight"));
+
+  const row = searchMatches[searchMatchIndex];
+  if (!row) return;
+
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  row.classList.add("search-highlight");
+}
+
+function updateSearchNavUi() {
+  const countEl = document.getElementById("searchNavCount");
+  const hasMatches = searchMatches.length > 0;
+
+  countEl.textContent = hasMatches ? `${searchMatchIndex + 1}/${searchMatches.length}` : "0/0";
+  document.getElementById("btnSearchPrev").disabled = !hasMatches;
+  document.getElementById("btnSearchNext").disabled = !hasMatches;
 }
 
 /* 엑셀 다운로드(올해 적용 중인 순위, 초1~중등 7개 시트) / 순위 저장 / 예약(초안) 목록 보기 */

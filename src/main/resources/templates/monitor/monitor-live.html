@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>실시간 모니터링</title>
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/monitor/monitor-live.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- 관리자 브라우저가 Firestore를 직접 구독(onSnapshot)하기 위한 Firebase Web SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, collection, query, where, onSnapshot }
+      from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    window.__monitorFirebase = { initializeApp, getAuth, signInWithCustomToken, getFirestore, collection, query, where, onSnapshot };
+  </script>
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+</head>
+
+<body th:attr="data-firebase-api-key=${firebaseWebApiKey},
+               data-firebase-auth-domain=${firebaseWebAuthDomain},
+               data-firebase-project-id=${firebaseWebProjectId},
+               data-firebase-storage-bucket=${firebaseWebStorageBucket},
+               data-firebase-messaging-sender-id=${firebaseWebMessagingSenderId},
+               data-firebase-app-id=${firebaseWebAppId}">
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content monitor-content">
+
+      <header class="page-header">
+        <h1>실시간 모니터링</h1>
+        <button class="guide-btn">
+          <i class="fa-regular fa-circle-question"></i>
+          사용 가이드
+        </button>
+      </header>
+
+      <section class="monitor-toolbar">
+        <div class="monitor-date-picker">
+          <i class="fa-regular fa-calendar"></i>
+          <input type="date" id="monitorDate" />
+        </div>
+
+        <!-- 교시 목록은 아직 별도 마스터 데이터가 없어 monitor-live.js에 고정 목록으로 둔다 -->
+        <select class="monitor-slot-picker" id="monitorSlot"></select>
+
+        <!-- 필터 chip은 monitor-live.js가 카운트와 함께 렌더링 -->
+        <div class="monitor-filters" id="monitorFilters"></div>
+      </section>
+
+      <section class="monitor-body">
+        <div class="monitor-grid" id="monitorGrid">
+          <!-- 카드는 monitor-live.js에서 렌더링 -->
+        </div>
+
+        <!-- 독서일지 패널 — 카드의 말풍선 아이콘을 클릭하면 그 학생 기준으로 채워진다 -->
+        <aside class="reading-log-panel" id="readingLogPanel" hidden>
+          <h3><span id="readingLogStudentName"></span> 독서일지 등록</h3>
+
+          <div class="log-section">
+            <div class="log-section-title">독서 태도</div>
+            <div class="log-checkbox-group" id="attitudeCheckboxGroup"></div>
+          </div>
+
+          <div class="log-section">
+            <div class="log-section-title">도움 필요</div>
+            <div class="log-checkbox-group help-needed-group" id="helpNeededCheckboxGroup"></div>
+          </div>
+
+          <div class="log-section">
+            <div class="log-section-title">기타 전달사항</div>
+            <textarea id="readingLogNote" placeholder="기타 전달사항을 입력해 주세요."></textarea>
+          </div>
+
+          <button type="button" id="btnSaveReadingLog" class="btn primary">저장</button>
+        </aside>
+      </section>
+
+    </main>
+
+  </div>
+
+  <script th:src="@{/js/monitor/monitor-live.js}"></script>
+</body>
+
+</html>

@@ -1,0 +1,351 @@
+.monitor-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.monitor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 28px 0;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid #e8ecef;
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.monitor-date-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  color: #555;
+}
+
+.monitor-date-picker input[type="date"] {
+  border: none;
+  outline: none;
+  font-size: 14px;
+}
+
+.monitor-slot-picker {
+  padding: 8px 12px;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #555;
+  background: #fff;
+}
+
+.monitor-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e0e4e7;
+  background: #f7f8f9;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 비활성 상태에서도 카테고리별 색을 살짝 보여준다(텍스트/보더만) */
+.filter-chip.chip-reading { color: #2f9e6e; border-color: #cfe9dc; }
+.filter-chip.chip-quiz { color: #3b82f6; border-color: #cddcfb; }
+.filter-chip.chip-timeover { color: #b8620a; border-color: #f6ddb4; }
+.filter-chip.chip-retry { color: #c8353a; border-color: #f4c6c8; }
+.filter-chip.chip-logmissing { color: #4a5568; border-color: #dbe1e6; }
+
+.filter-chip.active { color: #fff; border-color: transparent; }
+.filter-chip.chip-all.active { background: #2f9e6e; }
+.filter-chip.chip-reading.active { background: #2f9e6e; }
+.filter-chip.chip-quiz.active { background: #3b82f6; }
+.filter-chip.chip-timeover.active { background: #f5a524; }
+.filter-chip.chip-retry.active { background: #e5484d; }
+.filter-chip.chip-logmissing.active { background: #64748b; }
+
+.filter-count {
+  font-weight: 700;
+}
+
+.monitor-body {
+  flex: 1;
+  display: flex;
+  gap: 20px;
+  padding: 20px 28px;
+  overflow-y: auto;
+}
+
+.monitor-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  align-content: start;
+}
+
+.monitor-card {
+  position: relative;
+  background: #fff;
+  border: 2px solid #eceff1;
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.monitor-card.status-retry {
+  border-color: #e5484d;
+}
+
+.monitor-card.status-timeover {
+  border-color: #f5a524;
+}
+
+.monitor-card.status-quiz {
+  border-color: #3b82f6;
+}
+
+.monitor-card.status-exited {
+  opacity: 0.6;
+}
+
+.help-flag {
+  position: absolute;
+  top: -14px;
+  left: 16px;
+  background: #2f9e6e;
+  color: #fff;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.student-name {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.status-badge {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-reading .status-badge { background: #2f9e6e; }
+.status-quiz .status-badge { background: #3b82f6; }
+.status-retry .status-badge { background: #e5484d; }
+.status-timeover .status-badge { background: #f5a524; }
+.status-exited .status-badge { background: #9aa5ab; }
+
+.book-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.book-cover {
+  width: 48px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f0f2f3;
+  flex-shrink: 0;
+}
+
+.book-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.book-title {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.book-sub {
+  font-size: 12px;
+  color: #8a9297;
+  margin-top: 2px;
+}
+
+.archive-chip {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border: 1px solid #e0e4e7;
+  border-radius: 999px;
+  font-size: 11px;
+  color: #8a9297;
+  background: #f7f8f9;
+}
+
+.archive-chip.archive-done {
+  color: #b7bec3;
+  border-color: #eceff1;
+  background: #f2f4f5;
+}
+
+.log-open-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #eef6f1;
+  color: #2f9e6e;
+  flex-shrink: 0;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  text-align: center;
+  background: #f7f8f9;
+  border-radius: 8px;
+  padding: 10px 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #8a9297;
+}
+
+.stat-value {
+  font-size: 15px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.stat-value.value-danger {
+  color: #e5484d;
+}
+
+.stat-sub {
+  font-size: 11px;
+  margin-top: 4px;
+  min-height: 16px;
+}
+
+.stat-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.stat-pill.pill-pass { background: #2f9e6e; }
+.stat-pill.pill-retry { background: #e5484d; }
+
+.card-bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.entered-at {
+  font-size: 12px;
+  color: #8a9297;
+}
+
+.reading-log-panel {
+  width: 280px;
+  flex-shrink: 0;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e8ecef;
+  padding: 20px;
+  height: fit-content;
+}
+
+.reading-log-panel h3 {
+  margin: 0 0 16px;
+  font-size: 15px;
+}
+
+.log-section {
+  margin-bottom: 16px;
+}
+
+.log-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: #555;
+}
+
+.log-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.log-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.log-checkbox:has(input:checked) {
+  background: #fff4e5;
+  color: #b8620a;
+}
+
+/* 도움 필요는 항목이 1개뿐이라 체크박스 목록보다 토글 버튼처럼 보이게 강조한다 */
+.help-needed-group .log-checkbox {
+  border: 1px solid #f0d9b0;
+  font-weight: 600;
+}
+
+.help-needed-group .log-checkbox:has(input:checked) {
+  background: #f5a524;
+  color: #fff;
+  border-color: #f5a524;
+}
+
+.reading-log-panel textarea {
+  width: 100%;
+  min-height: 80px;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.reading-log-panel .btn {
+  width: 100%;
+  margin-top: 8px;
+}

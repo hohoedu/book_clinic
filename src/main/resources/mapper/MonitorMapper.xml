@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.monitor.MonitorRepository">
+
+    <select id="findOpenSessionId" resultType="java.lang.Integer">
+        SELECT TOP 1 session_id
+        FROM erp_bookstore_clinic_session
+        WHERE student_id = #{studentId} AND session_date = #{date} AND status = 'ENTERED'
+        ORDER BY session_id DESC
+    </select>
+
+    <insert id="insertSession">
+        INSERT INTO erp_bookstore_clinic_session (student_id, session_date)
+        VALUES (#{studentId}, #{date})
+    </insert>
+
+    <update id="updateSessionExit">
+        UPDATE erp_bookstore_clinic_session
+        SET status = 'EXITED', exited_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <update id="markQuizStarted">
+        UPDATE erp_bookstore_clinic_session
+        SET quiz_started_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <update id="clearQuizStarted">
+        UPDATE erp_bookstore_clinic_session
+        SET quiz_started_at = NULL
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <!--
+      카드 1건 조립: 세션 + 학생 + "이 학생의 최신 추천 도서"(recommend_id DESC 1건) + 도서 정보 +
+      심화(qlevel=02) 최신 제출 배치 집계 + 획득 뱃지 수/최근 뱃지명 + 독서일지(있으면).
+      OUTER/CROSS APPLY로 상관 서브쿼리를 묶어 세션당 1행으로 평탄화한다.
+
+      elapsedMinutes는 Java의 LocalDateTime.now()가 아니라 DB 자체의 CURRENT_TIMESTAMP로 계산한다
+      (recommended_at도 CURRENT_TIMESTAMP 기준으로 저장된 값이라, 같은 시계로 뺄셈해야 DB 서버의
+      OS 타임존이 무엇이든 상관없이 "실제 경과 분"이 정확하게 나온다 — 서로 다른 시계(JVM vs DB)로
+      비교하면 두 시계의 타임존 차이만큼 그대로 오차가 생긴다).
+    -->
+    <sql id="cardColumns">
+        SELECT
+            cs.session_id      AS sessionId,
+            cs.student_id      AS studentId,
+            st.student_name    AS studentName,
+            cs.status          AS sessionStatus,
+            cs.session_date    AS sessionDate,
+            cs.entered_at      AS enteredAt,
+            cs.exited_at       AS exitedAt,
+            cs.quiz_started_at AS quizStartedAt,
+
+            rl.recommend_id    AS recommendId,
+            rl.content_id      AS contentId,
+            c.original_title   AS bookTitle,
+            c.author           AS author,
+            c.publisher        AS publisher,
+            c.image_url        AS imageUrl,
+            c.reading_time     AS readingTimeText,
+            rl.recommended_at  AS recommendedAt,
+            rl.correct_count   AS basicCorrectCount,
+            rl.total_count     AS basicTotalCount,
+            rl.status          AS basicStatus,
+            DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS elapsedMinutes,
+
+            adv.correctCount AS advancedCorrectCount,
+            adv.totalCount   AS advancedTotalCount,
+
+            badge.badgeCount      AS badgeCount,
+            badge.latestBadgeName AS latestBadgeName,
+
+            rlog.log_id         AS readingLogId,
+            rlog.attitude_codes AS attitudeCodes,
+            rlog.help_needed    AS helpNeeded,
+            rlog.note           AS note
+        FROM erp_bookstore_clinic_session cs
+        JOIN erp_student st ON st.student_id = cs.student_id
+        OUTER APPLY (
+            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, total_count, status
+            FROM erp_bookstore_recommend_log
+            WHERE student_id = cs.student_id
+            ORDER BY recommend_id DESC
+        ) rl
+        LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS totalCount,
+                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
+            FROM erp_bookstore_quiz_answer_log q
+            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
+              AND q.submitted_at = (
+                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
+                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
+              )
+        ) adv
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS badgeCount,
+                (SELECT TOP 1 b.badge_name
+                 FROM erp_bookstore_student_badge sb2
+                 JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
+                 WHERE sb2.student_id = cs.student_id
+                 ORDER BY sb2.earned_at DESC) AS latestBadgeName
+            FROM erp_bookstore_student_badge sb
+            WHERE sb.student_id = cs.student_id
+        ) badge
+        LEFT JOIN erp_bookstore_reading_log rlog ON rlog.session_id = cs.session_id
+    </sql>
+
+    <select id="findSessionCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
+        <include refid="cardColumns" />
+        WHERE cs.session_date = #{date}
+        ORDER BY cs.entered_at ASC
+    </select>
+
+    <select id="findCardBySessionId" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
+        <include refid="cardColumns" />
+        WHERE cs.session_id = #{sessionId}
+    </select>
+
+    <update id="upsertReadingLog">
+        MERGE erp_bookstore_reading_log AS target
+        USING (SELECT #{sessionId} AS session_id) AS source
+        ON target.session_id = source.session_id
+        WHEN MATCHED THEN UPDATE SET
+            attitude_codes = #{attitudeCodes},
+            help_needed    = #{helpNeeded},
+            note           = #{note},
+            created_by     = #{createdBy},
+            updated_at     = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT (session_id, student_id, attitude_codes, help_needed, note, created_by)
+            VALUES (#{sessionId}, #{studentId}, #{attitudeCodes}, #{helpNeeded}, #{note}, #{createdBy});
+    </update>
+
+</mapper>

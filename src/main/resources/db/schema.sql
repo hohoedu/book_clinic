@@ -1,4 +1,6 @@
 -- DROP (FK 역순)
+IF OBJECT_ID('erp_bookstore_reading_log',           'U') IS NOT NULL DROP TABLE erp_bookstore_reading_log;
+IF OBJECT_ID('erp_bookstore_clinic_session',        'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_session;
 IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
 IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
 IF OBJECT_ID('erp_bookstore_quiz_answer_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_answer_log;
@@ -440,4 +442,35 @@ CREATE TABLE erp_bookstore_student_badge (
     earned_at   DATETIME2     DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (student_id, badge_id),
     FOREIGN KEY (badge_id) REFERENCES erp_bookstore_badge(badge_id)
+);
+
+-- 클리닉 입실/퇴실 세션 (2026-07-15 실시간 모니터링) — 학생이 로그인하는 시점에 자동으로
+-- 입실 기록이 생긴다. 같은 날 이미 ENTERED 상태 세션이 있으면 재사용하고(재로그인은 새 세션이
+-- 아님), 직원이 "퇴실 처리"를 눌러야 EXITED로 바뀐다.
+-- 시각 컬럼은 CURRENT_TIMESTAMP 대신 DATEADD(HOUR,9,GETUTCDATE())를 쓴다 — CURRENT_TIMESTAMP는
+-- DB 서버 OS의 로컬 타임존을 그대로 따라가서(개발 DB가 UTC로 떠 있으면 그 값이 그대로 저장됨)
+-- 화면에 "입실 시각"으로 그대로 노출하면 실제 한국 시각과 어긋난다. GETUTCDATE()는 서버
+-- 타임존 설정과 무관하게 항상 UTC를 반환하므로 +9시간 하면 서버 설정에 상관없이 KST가 된다.
+CREATE TABLE erp_bookstore_clinic_session (
+    session_id      INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    student_id      VARCHAR(100)  NOT NULL,   -- erp_student.student_id (FK 없이 값으로만 연결)
+    session_date    DATE          NOT NULL,   -- 입실일 (조회 필터 기준)
+    entered_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 입실(로그인)일시(KST)
+    exited_at       DATETIME2,    -- 퇴실 처리일시(KST)
+    status          VARCHAR(20)   NOT NULL DEFAULT 'ENTERED',  -- ENTERED(입실중) / EXITED(퇴실완료)
+    quiz_started_at DATETIME2     -- 문제풀이 화면 진입 시각(KST) — 채점 제출 시 다시 NULL로 초기화
+);
+
+-- 독서일지 — 직원이 실시간 모니터링 화면에서 입실 세션 1건당 직접 작성(태도/도움필요/전달사항)
+CREATE TABLE erp_bookstore_reading_log (
+    log_id         INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    session_id     INT           NOT NULL,  -- erp_bookstore_clinic_session.session_id
+    student_id     VARCHAR(100)  NOT NULL,  -- erp_student.student_id
+    attitude_codes VARCHAR(200),  -- 독서 태도 체크(콤마 구분 코드, 복수 선택)
+    help_needed    VARCHAR(50),   -- 도움 필요 코드 (예: ALONE_HARD=혼자 읽기 어려워요)
+    note           VARCHAR(1000), -- 기타 전달사항
+    created_by     VARCHAR(100),  -- 작성한 직원
+    created_at     DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at     DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    FOREIGN KEY (session_id) REFERENCES erp_bookstore_clinic_session(session_id)
 );

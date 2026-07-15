@@ -10,6 +10,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
+import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -30,6 +31,7 @@ public class StudentViewController {
 
     private final StudentRepository studentRepository;
     private final ClinicService clinicService;
+    private final MonitorService monitorService;
 
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
     @GetMapping({ "", "/", "/login" })
@@ -45,6 +47,8 @@ public class StudentViewController {
             redirectAttributes.addFlashAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. 다시 확인해주세요.");
             return "redirect:/student/login";
         }
+        // 로그인 성공 = 실시간 모니터링 기준 "입실" (오늘 이미 열린 세션이 있으면 그대로 재사용)
+        monitorService.enterSession(student.getStudentId());
         return "redirect:/student/main?studentId=" + student.getStudentId();
     }
 
@@ -99,6 +103,9 @@ public class StudentViewController {
         if (student == null) {
             return "redirect:/student/login";
         }
+
+        // 문제풀이 화면 진입 = 실시간 모니터링 기준 "문제 푸는 중" 시작 (제출하면 해제됨)
+        monitorService.markQuizStarted(studentId);
 
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());

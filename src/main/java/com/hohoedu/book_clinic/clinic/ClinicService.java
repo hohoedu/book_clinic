@@ -19,6 +19,7 @@ import com.hohoedu.book_clinic.book.BookRepository;
 import com.hohoedu.book_clinic.book._dto.BookRespDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicReqDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
+import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.question.QuestionRepository;
 import com.hohoedu.book_clinic.question._dto.QuestionRespDTO;
 
@@ -68,6 +69,7 @@ public class ClinicService {
     private final ClinicRepository clinicRepository;
     private final BookRepository bookRepository;
     private final QuestionRepository questionRepository;
+    private final MonitorService monitorService;
 
     /**
      * 책 확인 — 멱등 처리. 이미 추천받은 책이 있으면 그 책 그대로 반환(재추천/재대여 없음),
@@ -207,6 +209,7 @@ public class ClinicService {
             resp.setPassed(false);
             resp.setGrade(null);
             resp.setNewBadges(checkAndAwardBadges(studentId));
+            syncMonitorSafely(studentId);
             return resp;
         }
 
@@ -217,6 +220,7 @@ public class ClinicService {
             resp.setExpGained(0);
             resp.setLeveledUp(false);
             resp.setNewBadges(checkAndAwardBadges(studentId));
+            syncMonitorSafely(studentId);
             return resp;
         }
 
@@ -249,8 +253,21 @@ public class ClinicService {
         // 합격/불합격과 무관하게 매 제출마다 뱃지 판정 — 지표는 로그에서 재계산하므로
         // 뱃지 오픈 이전의 과거 이력도 이 시점에 자동으로 소급 획득된다
         resp.setNewBadges(checkAndAwardBadges(studentId));
+        syncMonitorSafely(studentId);
 
         return resp;
+    }
+
+    /**
+     * 문제풀이 제출로 바뀐 카드 상태(정답 수/합격 여부/뱃지 등)를 실시간 모니터링(Firestore)에
+     * 반영한다. 모니터링 동기화 실패가 채점 응답에 영향을 주면 안 되므로 여기서 삼킨다.
+     */
+    private void syncMonitorSafely(String studentId) {
+        try {
+            monitorService.syncStudentToday(studentId);
+        } catch (Exception e) {
+            log.warn("실시간 모니터링 동기화 실패 — 채점 결과는 정상 반영됨: studentId={}", studentId, e);
+        }
     }
 
     /**
