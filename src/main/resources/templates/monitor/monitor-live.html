@@ -48,34 +48,402 @@
 
       <section class="monitor-toolbar">
         <div class="monitor-date-picker">
-          <i class="fa-regular fa-calendar"></i>
-          <input type="date" id="monitorDate" />
+          <span class="monitor-date-display" id="monitorDateDisplay">2026. 07. 14</span>
+          <div class="monitor-date-trigger">
+            <i class="fa-regular fa-calendar"></i>
+            <input type="date" id="monitorDate" value="2026-07-14" />
+          </div>
         </div>
 
         <!-- 교시 목록은 아직 별도 마스터 데이터가 없어 monitor-live.js에 고정 목록으로 둔다 -->
-        <select class="monitor-slot-picker" id="monitorSlot"></select>
+        <select class="monitor-slot-picker" id="monitorSlot">
+          <option>1교시(14:00~15:00)</option>
+          <option>2교시(15:00~16:00)</option>
+        </select>
 
-        <!-- 필터 chip은 monitor-live.js가 카운트와 함께 렌더링 -->
-        <div class="monitor-filters" id="monitorFilters"></div>
+        <!-- 필터 chip은 monitor-live.js가 카운트와 함께 렌더링 (아래는 레이아웃 확인용 더미) -->
+        <div class="monitor-filters" id="monitorFilters">
+          <button type="button" class="filter-chip chip-all active">전체 <span class="filter-count">7</span></button>
+          <button type="button" class="filter-chip chip-reading">독서 중 <span class="filter-count">6</span></button>
+          <button type="button" class="filter-chip chip-not-entered">미 입실 <span class="filter-count">1</span></button>
+          <button type="button" class="filter-chip chip-timeover">시간 초과 <span class="filter-count">1</span></button>
+          <button type="button" class="filter-chip chip-retry">재도전 필요 <span class="filter-count">1</span></button>
+          <button type="button" class="filter-chip chip-logmissing">독서일지 미등록 <span
+              class="filter-count">3</span></button>
+        </div>
       </section>
 
       <section class="monitor-body">
         <div class="monitor-grid" id="monitorGrid">
-          <!-- 카드는 monitor-live.js에서 렌더링 -->
+          <!-- 카드는 monitor-live.js에서 렌더링 (아래는 레이아웃 확인용 더미 카드) -->
+
+          <div class="monitor-card status-reading">
+            <div class="card-top">
+              <span class="student-name">김호호</span>
+              <span class="status-badge"><i class="fa-solid fa-book-open"></i> 독서 중</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip">아카이브 카드 발급</span>
+
+              </div>
+              <button type="button" class="log-open-btn" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">10/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">통과</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">3/10</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">완료</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value badge-value"><img class="badge-icon" th:src="@{/images/badge-1-01.png}" alt="" /></div>
+              </div>
+            </div>
+            <div class="book-dots"><span class="dot active"></span><span class="dot"></span></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn primary small">퇴실 처리</button>
+            </div>
+          </div>
+
+          <div class="monitor-card status-retry">
+            <div class="help-flag"><i class="fa-solid fa-seedling"></i> 혼자 읽기 어려워요!</div>
+            <div class="card-top">
+              <span class="student-name">이하영 <i class="fa-solid fa-seedling name-flair"></i></span>
+              <span class="status-badge"><i class="fa-solid fa-triangle-exclamation"></i> 재도전 필요</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip">아카이브 카드 발급</span>
+              </div>
+              <button type="button" class="log-open-btn filled" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">3/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-retry">재도전</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">-</div>
+                <div class="stat-sub"></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value">-</div>
+                <div class="stat-sub"></div>
+              </div>
+            </div>
+            <div class="book-dots"></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn primary small">퇴실 처리</button>
+            </div>
+          </div>
+
+          <div class="monitor-card status-reading">
+            <div class="card-top">
+              <span class="student-name">김호호</span>
+              <span class="status-badge"><i class="fa-solid fa-book-open"></i> 독서 중</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip">아카이브 카드 발급</span>
+              </div>
+              <button type="button" class="log-open-btn" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">10/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">통과</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">3/10</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">완료</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value badge-value"><img class="badge-icon" th:src="@{/images/badge-1-01.png}" alt="" /></div>
+              </div>
+            </div>
+            <div class="book-dots"></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn primary small">퇴실 처리</button>
+            </div>
+          </div>
+
+          <div class="monitor-card status-timeover">
+            <div class="card-top">
+              <span class="student-name">신하율</span>
+              <span class="status-badge"><i class="fa-solid fa-hourglass-end"></i> 권장시간 초과</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip">아카이브 카드 발급</span>
+              </div>
+              <button type="button" class="log-open-btn" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value value-danger">22분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">-</div>
+                <div class="stat-sub"></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">-</div>
+                <div class="stat-sub"></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value">-</div>
+                <div class="stat-sub"></div>
+              </div>
+            </div>
+            <div class="book-dots"></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn primary small">퇴실 처리</button>
+            </div>
+          </div>
+
+          <div class="monitor-card status-reading">
+            <div class="card-top">
+              <span class="student-name">김호호</span>
+              <span class="status-badge"><i class="fa-solid fa-book-open"></i> 독서 중</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip">아카이브 카드 발급</span>
+              </div>
+              <button type="button" class="log-open-btn filled" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">12/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-star">독서왕!</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">3/10</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">완료</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value badge-value"><img class="badge-icon" th:src="@{/images/badge-1-02.png}" alt="" /></div>
+              </div>
+            </div>
+            <div class="book-dots"><span class="dot"></span><span class="dot active"></span></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn primary small">퇴실 처리</button>
+            </div>
+          </div>
+
+          <div class="monitor-card status-exited">
+            <div class="card-top">
+              <span class="student-name">김호호</span>
+              <span class="status-badge"><i class="fa-solid fa-right-from-bracket"></i> 퇴실</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip archive-done">아카이브 카드 발급 완료</span>
+              </div>
+              <button type="button" class="log-open-btn filled" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">10/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">통과</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">3/10</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">완료</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value badge-value"><img class="badge-icon" th:src="@{/images/badge-1-03.png}" alt="" /></div>
+              </div>
+            </div>
+            <div class="book-dots"></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn outline small" disabled>퇴실 완료</button>
+            </div>
+          </div>
+          <div class="monitor-card status-exited">
+            <div class="card-top">
+              <span class="student-name">김호호</span>
+              <span class="status-badge"><i class="fa-solid fa-right-from-bracket"></i> 퇴실</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip archive-done">아카이브 카드 발급 완료</span>
+              </div>
+              <button type="button" class="log-open-btn filled" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">10/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">통과</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">3/10</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">완료</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value badge-value"><img class="badge-icon" th:src="@{/images/badge-1-03.png}" alt="" /></div>
+              </div>
+            </div>
+            <div class="book-dots"></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn outline small" disabled>퇴실 완료</button>
+            </div>
+          </div>
+          <div class="monitor-card status-exited">
+            <div class="card-top">
+              <span class="student-name">김호호</span>
+              <span class="status-badge"><i class="fa-solid fa-right-from-bracket"></i> 퇴실</span>
+            </div>
+            <div class="book-row">
+              <img class="book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="book-info">
+                <div class="book-title">해와 달이 된 오누이</div>
+                <div class="book-sub">노란돼지 | 양혜원</div>
+                <span class="archive-chip archive-done">아카이브 카드 발급 완료</span>
+              </div>
+              <button type="button" class="log-open-btn" title="독서일지 등록"><i
+                  class="fa-solid fa-comment-dots"></i></button>
+            </div>
+            <div class="stat-row">
+              <div class="stat-cell">
+                <div class="stat-label">독서 시간</div>
+                <div class="stat-value">15분</div>
+                <div class="stat-sub">권장 20분</div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">기본 문제</div>
+                <div class="stat-value">10/12</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">통과</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">심화 문제</div>
+                <div class="stat-value">3/10</div>
+                <div class="stat-sub"><span class="stat-pill pill-pass">완료</span></div>
+              </div>
+              <div class="stat-cell">
+                <div class="stat-label">획득 뱃지</div>
+                <div class="stat-value badge-value"><img class="badge-icon" th:src="@{/images/badge-1-03.png}" alt="" /></div>
+              </div>
+            </div>
+            <div class="book-dots"></div>
+            <div class="card-bottom">
+              <span class="entered-at">14:02 입실</span>
+              <button type="button" class="btn outline small" disabled>퇴실 완료</button>
+            </div>
+          </div>
         </div>
 
         <!-- 독서일지 패널 — 카드의 말풍선 아이콘을 클릭하면 그 학생 기준으로 채워진다 -->
-        <aside class="reading-log-panel" id="readingLogPanel" hidden>
-          <h3><span id="readingLogStudentName"></span> 독서일지 등록</h3>
+        <aside class="reading-log-panel" id="readingLogPanel">
+          <h3><span id="readingLogStudentName">[김호호]</span> 독서일지 등록</h3>
 
           <div class="log-section">
             <div class="log-section-title">독서 태도</div>
-            <div class="log-checkbox-group" id="attitudeCheckboxGroup"></div>
+            <div class="log-checkbox-group" id="attitudeCheckboxGroup">
+              <label class="log-checkbox"><input type="checkbox" checked /> 바른 자세로 차분하게 정독했어요.</label>
+              <label class="log-checkbox"><input type="checkbox" /> 스스로 책 읽기를 끝까지 이어갔어요.</label>
+              <label class="log-checkbox"><input type="checkbox" /> 집중력이 자주 흐트러졌어요.</label>
+              <label class="log-checkbox"><input type="checkbox" /> 책장을 빠르게 넘기며 서둘러 읽었어요.</label>
+              <label class="log-checkbox"><input type="checkbox" /> 산만한 모습을 보였어요.</label>
+            </div>
           </div>
 
           <div class="log-section">
             <div class="log-section-title">도움 필요</div>
-            <div class="log-checkbox-group help-needed-group" id="helpNeededCheckboxGroup"></div>
+            <div class="log-checkbox-group help-needed-group" id="helpNeededCheckboxGroup">
+              <label class="log-checkbox"><input type="checkbox" checked /> 혼자 읽기 어려워요!</label>
+            </div>
           </div>
 
           <div class="log-section">
@@ -91,7 +459,22 @@
 
   </div>
 
-  <script th:src="@{/js/monitor/monitor-live.js}"></script>
+  <!-- html/css 레이아웃 작업 중: JS가 더미 마크업을 덮어쓰지 않도록 임시로 include를 꺼둔다 -->
+  <!-- <script th:src="@{/js/monitor/monitor-live.js}"></script> -->
+
+  <!-- 레이아웃 작업 중 날짜 피커만 우선 연결 (본 로직은 monitor-live.js 켤 때 합친다) -->
+  <script>
+    const dateInput = document.getElementById("monitorDate");
+    const dateDisplay = document.getElementById("monitorDateDisplay");
+    const dateTrigger = document.querySelector(".monitor-date-trigger");
+
+    dateTrigger.addEventListener("click", () => dateInput.showPicker());
+
+    dateInput.addEventListener("change", () => {
+      const [y, m, d] = dateInput.value.split("-");
+      dateDisplay.textContent = `${y}. ${m}. ${d}`;
+    });
+  </script>
 </body>
 
 </html>

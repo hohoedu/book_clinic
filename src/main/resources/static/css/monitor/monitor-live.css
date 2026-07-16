@@ -16,19 +16,43 @@
 }
 
 .monitor-date-picker {
-  display: flex;
+  position: relative;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 20px;
   padding: 8px 12px;
   border: 1px solid #e0e4e7;
   border-radius: 8px;
   color: #555;
+  flex-shrink: 0;
 }
 
-.monitor-date-picker input[type="date"] {
+.monitor-date-display {
+  font-size: 13px;
+  color: #555;
+}
+
+/* 캘린더 아이콘 영역에만 네이티브 피커 input을 겹쳐 둔다 — 클릭은 JS의 showPicker()로 처리 */
+.monitor-date-trigger {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a9297;
+  cursor: pointer;
+}
+
+.monitor-date-trigger input[type="date"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   border: none;
   outline: none;
-  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .monitor-slot-picker {
@@ -62,6 +86,7 @@
 /* 비활성 상태에서도 카테고리별 색을 살짝 보여준다(텍스트/보더만) */
 .filter-chip.chip-reading { color: #2f9e6e; border-color: #cfe9dc; }
 .filter-chip.chip-quiz { color: #3b82f6; border-color: #cddcfb; }
+.filter-chip.chip-not-entered { color: #4a5568; border-color: #dbe1e6; }
 .filter-chip.chip-timeover { color: #b8620a; border-color: #f6ddb4; }
 .filter-chip.chip-retry { color: #c8353a; border-color: #f4c6c8; }
 .filter-chip.chip-logmissing { color: #4a5568; border-color: #dbe1e6; }
@@ -70,6 +95,7 @@
 .filter-chip.chip-all.active { background: #2f9e6e; }
 .filter-chip.chip-reading.active { background: #2f9e6e; }
 .filter-chip.chip-quiz.active { background: #3b82f6; }
+.filter-chip.chip-not-entered.active { background: #64748b; }
 .filter-chip.chip-timeover.active { background: #f5a524; }
 .filter-chip.chip-retry.active { background: #e5484d; }
 .filter-chip.chip-logmissing.active { background: #64748b; }
@@ -89,7 +115,7 @@
 .monitor-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   align-content: start;
 }
@@ -124,8 +150,8 @@
 .help-flag {
   position: absolute;
   top: -14px;
-  left: 16px;
-  background: #2f9e6e;
+  left: 20px;
+  background: #b5d002;
   color: #fff;
   font-size: 12px;
   padding: 4px 10px;
@@ -133,6 +159,24 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  z-index: 1;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* 말풍선 꼬리 — border로 만든 삼각형은 pill의 둥근 모서리와 이어지는 지점에서
+   서브픽셀 안티앨리어싱 때문에 흰 선이 보였다 안 보였다 함. 같은 배경색 정사각형을
+   45도 회전시켜 pill 뒤(z-index:-1)에 겹쳐두면 완전히 같은 색으로 이어져 이음새가 없다. */
+.help-flag::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  margin-left: -5px;
+  bottom: -4px;
+  width: 10px;
+  height: 10px;
+  background: #b5d002;
+  transform: rotate(45deg);
+  z-index: -1;
 }
 
 .card-top {
@@ -142,19 +186,27 @@
 }
 
 .student-name {
-  font-size: 17px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.name-flair {
+  font-size: 13px;
+  color: #b5d002;
 }
 
 .status-badge {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
-  padding: 4px 10px;
+  padding: 6px 14px;
   border-radius: 999px;
   color: #fff;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .status-reading .status-badge { background: #2f9e6e; }
@@ -206,6 +258,9 @@
   font-size: 11px;
   color: #8a9297;
   background: #f7f8f9;
+  /* 아카이브 카드 발급 여부가 아직 미확정이라 우선 숨겨둔다 — visibility만 꺼서
+     레이아웃 자리는 그대로 유지(display:none 쓰면 옆 요소들이 밀려 레이아웃이 깨짐) */
+  visibility: hidden;
 }
 
 .archive-chip.archive-done {
@@ -215,12 +270,35 @@
 }
 
 .log-open-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: #eef6f1;
-  color: #2f9e6e;
+  background: transparent;
+  border: none;
+  color: #b7bec3;
+  font-size: 32px;
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+.log-open-btn.filled {
+  color: #3b82f6;
+}
+
+.book-dots {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  min-height: 5px;
+}
+
+.book-dots .dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #dfe3e6;
+}
+
+.book-dots .dot.active {
+  background: #2f9e6e;
 }
 
 .stat-row {
@@ -228,9 +306,12 @@
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
   text-align: center;
+}
+
+.stat-cell {
   background: #f7f8f9;
   border-radius: 8px;
-  padding: 10px 4px;
+  padding: 10px;
 }
 
 .stat-label {
@@ -265,6 +346,22 @@
 
 .stat-pill.pill-pass { background: #2f9e6e; }
 .stat-pill.pill-retry { background: #e5484d; }
+.stat-pill.pill-star { background: #3b82f6; }
+
+/* stat-sub 한 줄을 안 쓰는 대신, badge-icon이 stat-value + stat-sub 두 줄 영역을 통째로 차지하고
+   그 안에서 세로 중앙 정렬되게 한다 (다른 셀들과 전체 높이를 맞추기 위함) */
+.badge-value {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.badge-icon {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
 
 .card-bottom {
   display: flex;
@@ -290,6 +387,12 @@
 .reading-log-panel h3 {
   margin: 0 0 16px;
   font-size: 15px;
+  font-weight: 900;
+  color: #000;
+}
+
+.reading-log-panel h3 #readingLogStudentName {
+  color: #07645a;
 }
 
 .log-section {
@@ -313,26 +416,63 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px;
-  padding: 6px 8px;
+  font-size: 10px;
+  padding: 4px;
   border-radius: 6px;
+  border: 1px solid #e0e4e7;
 }
 
 .log-checkbox:has(input:checked) {
-  background: #fff4e5;
-  color: #b8620a;
-}
-
-/* 도움 필요는 항목이 1개뿐이라 체크박스 목록보다 토글 버튼처럼 보이게 강조한다 */
-.help-needed-group .log-checkbox {
-  border: 1px solid #f0d9b0;
-  font-weight: 600;
-}
-
-.help-needed-group .log-checkbox:has(input:checked) {
   background: #f5a524;
   color: #fff;
+}
+
+/* 체크박스는 항상 흰 배경 유지, 체크 표시만 강조색으로 — 네이티브 accent-color로는
+   배경까지 색이 채워져 버려서 border-trick으로 체크 모양을 직접 그린다 */
+.log-checkbox input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.log-checkbox input[type="checkbox"]:checked {
   border-color: #f5a524;
+  background: #fff;
+}
+
+.log-checkbox input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border: solid #f5a524;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+
+
+.help-needed-group .log-checkbox:has(input:checked) {
+  background: #b5d002;
+  color: #fff;
+  border-color: #b5d002;
+}
+
+.help-needed-group input[type="checkbox"]:checked {
+  border-color: #b5d002;
+}
+
+.help-needed-group input[type="checkbox"]:checked::after {
+  border-color: #b5d002;
 }
 
 .reading-log-panel textarea {

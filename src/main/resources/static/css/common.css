@@ -105,6 +105,13 @@ button {
   color: #ff4b3f;
 }
 
+.btn:disabled {
+  background: #eceff1;
+  border-color: #eceff1;
+  color: #b7bec3;
+  cursor: not-allowed;
+}
+
 input,
 select,
 textarea {

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-clinic-student-v2';
+const CACHE_NAME = 'book-clinic-student-v3';
 const OFFLINE_URL = '/student/login';
 
 const PRECACHE_URLS = [
