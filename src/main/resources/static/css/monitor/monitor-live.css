@@ -363,6 +363,14 @@
   object-fit: contain;
 }
 
+/* 뱃지별 아이콘 이미지 세트가 아직 준비되지 않아 fa-shield-halved 아이콘으로 임시 표시한다 */
+i.badge-icon {
+  width: auto;
+  height: auto;
+  font-size: 28px;
+  color: #f5a524;
+}
+
 .card-bottom {
   display: flex;
   justify-content: space-between;

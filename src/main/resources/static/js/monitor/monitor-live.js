@@ -80,11 +80,24 @@ function todayStr() {
 
 function initDatePicker() {
   const input = document.getElementById("monitorDate");
+  const display = document.getElementById("monitorDateDisplay");
+  const trigger = document.querySelector(".monitor-date-trigger");
+
   input.value = todayStr();
+  updateDateDisplay(input, display);
+
+  trigger.addEventListener("click", () => input.showPicker());
+
   input.addEventListener("change", async () => {
+    updateDateDisplay(input, display);
     await loadLiveView();
     connectFirestore(); // 날짜가 바뀌면 구독 쿼리도 그 날짜로 다시 건다
   });
+}
+
+function updateDateDisplay(input, display) {
+  const [y, m, d] = input.value.split("-");
+  display.textContent = `${y}. ${m}. ${d}`;
 }
 
 function selectedDate() {
@@ -257,13 +270,13 @@ function buildCardEl(card) {
       <span class="status-badge"><i class="fa-solid ${badge.icon}"></i> ${badge.text}</span>
     </div>
     <div class="book-row">
-      <img class="book-cover" src="${card.imageUrl ?? ""}" alt="" onerror="this.style.visibility='hidden'" />
+      <img class="book-cover" src="${card.imageUrl || "/images/book-sample.png"}" alt="" onerror="this.src='/images/book-sample.png'" />
       <div class="book-info">
         <div class="book-title">${card.bookTitle ?? "추천 도서 없음"}</div>
         <div class="book-sub">${[card.publisher, card.author].filter(Boolean).join(" | ")}</div>
         ${archiveBadge}
       </div>
-      <button type="button" class="log-open-btn" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>
+      <button type="button" class="log-open-btn${card.readingLogId != null ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>
     </div>
     <div class="stat-row">
       <div class="stat-cell">
@@ -283,7 +296,7 @@ function buildCardEl(card) {
       </div>
       <div class="stat-cell">
         <div class="stat-label">획득 뱃지</div>
-        <div class="stat-value"><i class="fa-solid fa-shield-halved"></i></div>
+        <div class="stat-value badge-value">${card.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-"}</div>
         <div class="stat-sub">${card.latestBadgeName ?? ""}</div>
       </div>
     </div>
