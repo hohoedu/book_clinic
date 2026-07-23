@@ -200,3 +200,12 @@ INSERT INTO erp_student (center_code, grade_key, status_key, school, student_id,
 ('PUS002', '03', 'ACTIVE', N'남천 초등학교', 'PUS002T07', N'테스트생7', '8007', 1, 1, 1),
 ('PUS002', '04', 'ACTIVE', N'남천 초등학교', 'PUS002T08', N'테스트생8', '8008', 0, 1, 1);
 
+-- ────────────────────────────────────────────────────────
+-- 클리닉 예약 테스트 데이터: DAE001T01~04(테스트생1~4)를 오늘 1~4교시로 예약 (매 재기동마다 자동 등록)
+-- ────────────────────────────────────────────────────────
+INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time_slot) VALUES
+('DAE001T01', CAST(GETDATE() AS DATE), '1'),
+('DAE001T02', CAST(GETDATE() AS DATE), '2'),
+('DAE001T03', CAST(GETDATE() AS DATE), '3'),
+('DAE001T04', CAST(GETDATE() AS DATE), '4');
+

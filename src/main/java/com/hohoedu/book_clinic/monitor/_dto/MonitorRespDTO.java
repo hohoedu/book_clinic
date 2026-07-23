@@ -18,8 +18,9 @@ public class MonitorRespDTO {
         private Integer sessionId;
         private String studentId;
         private String studentName;
-        private String sessionStatus;   // ENTERED / EXITED (raw)
-        private LocalDate sessionDate;  // 입실일 (Firestore 구독 시 날짜 필터 기준)
+        private String sessionStatus;   // ENTERED / EXITED (raw, 미입실이면 null)
+        private LocalDate sessionDate;  // 예약일(=입실일, Firestore 구독 시 날짜 필터 기준)
+        private String timeSlot;        // 예약 교시('1'~'4') — monitor-live.js 슬롯 필터 기준
         private LocalDateTime enteredAt;
         private LocalDateTime exitedAt;
         private LocalDateTime quizStartedAt; // null이 아니면 지금 문제풀이 화면에 진입해 있는 상태
@@ -54,13 +55,44 @@ public class MonitorRespDTO {
         // MonitorService가 계산해서 채운다.
         private Integer readingTimeMinutes; // readingTimeText에서 파싱한 권장 분(파싱 실패 시 null)
         private Integer elapsedMinutes;     // DB에서 DATEDIFF로 계산된 경과 분 (recommendedAt 없으면 null)
-        private String cardStatus;          // READING / QUIZ_IN_PROGRESS / RETRY_NEEDED / TIME_OVER / EXITED
+        private String cardStatus;          // NOT_ENTERED / READING / QUIZ_IN_PROGRESS / RETRY_NEEDED / TIME_OVER / EXITED
+
+        // 오늘 이 학생이 추천받은 책 전체(완료분 포함) — 카드 안 도서 캐러셀용 (2026-07-23).
+        // 위쪽 root의 bookTitle 등은 그중 최신 1건과 항상 같은 값이며, 구버전 Firestore 문서 호환을
+        // 위해 계속 채워둔다. books가 비어있으면(예: 미입실) 프론트가 root 필드로 폴백한다.
+        private List<BookPageDTO> books;
+    }
+
+    /**
+     * 카드 캐러셀의 책 1페이지 — CardDTO의 book 관련 필드와 동일한 의미를 그날 추천받은 책마다
+     * 각각 갖는다(획득 뱃지처럼 학생 단위 통계는 여기 없고 CardDTO에만 있다).
+     */
+    @Data
+    public static class BookPageDTO {
+        private Integer contentId;
+        private String bookTitle;
+        private String author;
+        private String publisher;
+        private String imageUrl;
+        private String readingTimeText;
+        private LocalDateTime recommendedAt;
+
+        private Integer basicCorrectCount;
+        private Integer basicTotalCount;
+        private String basicStatus;
+
+        private Integer advancedCorrectCount;
+        private Integer advancedTotalCount;
+
+        private Integer readingTimeMinutes; // MonitorService가 readingTimeText에서 파싱
+        private Integer elapsedMinutes;     // DB DATEDIFF
     }
 
     /** 필터 chip 카운트 */
     @Data
     public static class CountsDTO {
         private int total;
+        private int notEntered;
         private int reading;
         private int quizInProgress;
         private int timeOver;

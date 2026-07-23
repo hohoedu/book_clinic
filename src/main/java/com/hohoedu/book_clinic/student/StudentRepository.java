@@ -16,4 +16,7 @@ public interface StudentRepository {
     List<String> findTokensByCenter(@Param("centerCode") String centerCode);
 
     List<String> findAllTokens();
+
+    /** 이름 또는 appId로 학생 검색 (예약 등록 화면의 학생 선택용, 최대 20건) */
+    List<Student> searchByKeyword(@Param("keyword") String keyword);
 }

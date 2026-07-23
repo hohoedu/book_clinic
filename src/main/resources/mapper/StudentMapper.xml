@@ -79,4 +79,19 @@
           AND app_token != ''
     </select>
 
+    <select id="searchByKeyword" resultType="com.hohoedu.book_clinic.student.model.Student">
+        SELECT TOP 20
+               id                     AS id,
+               center_code            AS centerCode,
+               grade_key              AS gradeKey,
+               school                 AS school,
+               student_id             AS studentId,
+               student_name           AS studentName,
+               app_id                 AS appId
+        FROM erp_student
+        WHERE student_name LIKE '%' + #{keyword} + '%'
+           OR app_id LIKE '%' + #{keyword} + '%'
+        ORDER BY student_name ASC
+    </select>
+
 </mapper>

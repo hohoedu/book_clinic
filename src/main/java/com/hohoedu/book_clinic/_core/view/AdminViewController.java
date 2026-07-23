@@ -52,4 +52,10 @@ public class AdminViewController {
         model.addAttribute("firebaseWebAppId", firebaseWebAppId);
         return "monitor/monitor-live";
     }
+
+    /** 클리닉 예약 등록 — 학생을 날짜+타임슬롯에 배정하는 화면 (2026-07-23) */
+    @GetMapping("/admin/monitor/reservation-view")
+    public String reservation() {
+        return "monitor/reservation";
+    }
 }

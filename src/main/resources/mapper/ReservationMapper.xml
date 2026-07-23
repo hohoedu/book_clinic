@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.reservation.ReservationRepository">
+
+    <select id="existsReservation" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM erp_bookstore_clinic_reservation
+            WHERE student_id = #{studentId} AND reservation_date = #{date} AND time_slot = #{timeSlot}
+        ) THEN 1 ELSE 0 END
+    </select>
+
+    <insert id="insertReservation">
+        INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time_slot)
+        VALUES (#{studentId}, #{date}, #{timeSlot})
+    </insert>
+
+    <delete id="deleteReservation">
+        DELETE FROM erp_bookstore_clinic_reservation WHERE reservation_id = #{reservationId}
+    </delete>
+
+    <select id="findByDate" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationRowDTO">
+        SELECT
+            r.reservation_id AS reservationId,
+            r.student_id     AS studentId,
+            st.student_name  AS studentName,
+            st.school        AS school,
+            st.grade_key     AS gradeKey,
+            r.time_slot      AS timeSlot
+        FROM erp_bookstore_clinic_reservation r
+        JOIN erp_student st ON st.student_id = r.student_id
+        WHERE r.reservation_date = #{date}
+        ORDER BY r.time_slot ASC, st.student_name ASC
+    </select>
+
+</mapper>

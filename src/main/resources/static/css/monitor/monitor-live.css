@@ -147,6 +147,12 @@
   opacity: 0.6;
 }
 
+.monitor-card.status-not-entered {
+  border-color: #dbe1e6;
+  background: #fafbfc;
+  opacity: 0.85;
+}
+
 .help-flag {
   position: absolute;
   top: -14px;
@@ -214,6 +220,7 @@
 .status-retry .status-badge { background: #e5484d; }
 .status-timeover .status-badge { background: #f5a524; }
 .status-exited .status-badge { background: #9aa5ab; }
+.status-not-entered .status-badge { background: #64748b; }
 
 .book-row {
   display: flex;
@@ -295,6 +302,7 @@
   height: 5px;
   border-radius: 50%;
   background: #dfe3e6;
+  cursor: pointer;
 }
 
 .book-dots .dot.active {
@@ -382,18 +390,47 @@ i.badge-icon {
   color: #8a9297;
 }
 
+/* 바깥 껍데기는 width/opacity/transform만 담당 — 콘텐츠는 안쪽(.reading-log-panel-inner)에
+   항상 최종 너비(280px)로 고정해 둔다. 안쪽까지 같이 너비를 움직이면 좁아진 상태에서 텍스트가
+   줄바꿈되며 리플로우돼서 등장할 때 들쭉날쭉해 보이는 문제가 있었음 — 그래서 바깥만 움직이고
+   overflow:hidden으로 잘라 보여주는 방식으로 분리했다. */
 .reading-log-panel {
-  width: 280px;
+  width: 0;
   flex-shrink: 0;
+  height: fit-content;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateX(16px);
+  pointer-events: none;
+  transition: width 0.25s ease, opacity 0.2s ease, transform 0.25s ease;
+}
+
+.reading-log-panel.open {
+  width: 280px;
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.reading-log-panel-inner {
+  width: 280px;
   background: #fff;
   border-radius: 12px;
   border: 1px solid #e8ecef;
   padding: 20px;
-  height: fit-content;
+  box-sizing: border-box;
+}
+
+.reading-log-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 16px;
 }
 
 .reading-log-panel h3 {
-  margin: 0 0 16px;
+  margin: 0;
   font-size: 15px;
   font-weight: 900;
   color: #000;
@@ -401,6 +438,20 @@ i.badge-icon {
 
 .reading-log-panel h3 #readingLogStudentName {
   color: #07645a;
+}
+
+.log-panel-close {
+  border: none;
+  background: transparent;
+  color: #9aa5ab;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.log-panel-close:hover {
+  color: #4a5568;
 }
 
 .log-section {

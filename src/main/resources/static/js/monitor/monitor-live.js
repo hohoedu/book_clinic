@@ -5,7 +5,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   connectFirestore();
   initReadingLogPanel();
   // Firestore 미설정/연결 끊김 대비 백업 polling — 경과시간/상태는 항상 서버(DB 시계) 계산값을
-  // 그대로 신뢰한다(클라이언트에서 timestamp로 재계산하면 브라우저-DB 타임존 차이만큼 오차가 생김)
+  // 그대로 신뢰한다(클라이언트에서 timestamp로 재계산하면 브라우저-DB 타임존 차이만큼 오차가 생김).
+  // 실시간 반영은 Firestore push가 담당하므로(2026-07-23 FcmConfig 수정으로 정상화) 이 폴링은
+  // 어디까지나 백업 안전장치 — DB 부하를 고려해 주기를 짧게 잡지 않는다.
   setInterval(loadLiveView, 30000);
 });
 
@@ -22,17 +24,19 @@ const ATTITUDE_CODES = [
 
 const HELP_NEEDED_CODES = [{ code: "ALONE_HARD", label: "혼자 읽기 어려워요!" }];
 
-// 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — entered_at 시(hour) 기준으로만 카드를 거른다
+// 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — 예약(erp_bookstore_clinic_reservation)의
+// time_slot 값('1'~'4')과 그대로 매칭한다
 const TIME_SLOTS = [
   { key: "ALL", label: "타임 선택" },
-  { key: "1", label: "1교시(14:00~15:00)", startHour: 14, endHour: 15 },
-  { key: "2", label: "2교시(15:00~16:00)", startHour: 15, endHour: 16 },
-  { key: "3", label: "3교시(16:00~17:00)", startHour: 16, endHour: 17 },
-  { key: "4", label: "4교시(17:00~18:00)", startHour: 17, endHour: 18 },
+  { key: "1", label: "1교시(14:00~15:00)" },
+  { key: "2", label: "2교시(15:00~16:00)" },
+  { key: "3", label: "3교시(16:00~17:00)" },
+  { key: "4", label: "4교시(17:00~18:00)" },
 ];
 
 const FILTERS = [
   { key: "ALL", label: "전체", countKey: "total", cls: "chip-all" },
+  { key: "NOT_ENTERED", label: "미입실", countKey: "notEntered", cls: "chip-not-entered" },
   { key: "READING", label: "독서 중", countKey: "reading", cls: "chip-reading" },
   { key: "QUIZ_IN_PROGRESS", label: "문제 푸는 중", countKey: "quizInProgress", cls: "chip-quiz" },
   { key: "TIME_OVER", label: "시간 초과", countKey: "timeOver", cls: "chip-timeover" },
@@ -41,6 +45,7 @@ const FILTERS = [
 ];
 
 const STATUS_BADGE = {
+  NOT_ENTERED: { text: "미입실", icon: "fa-clock", cls: "status-not-entered" },
   READING: { text: "독서 중", icon: "fa-book-open", cls: "status-reading" },
   QUIZ_IN_PROGRESS: { text: "문제 푸는 중", icon: "fa-pen", cls: "status-quiz" },
   RETRY_NEEDED: { text: "재도전 필요", icon: "fa-triangle-exclamation", cls: "status-retry" },
@@ -53,6 +58,9 @@ let activeFilter = "ALL";
 let activeSlot = "ALL";
 let selectedCard = null;
 let firestoreUnsubscribe = null;
+// 카드 캐러셀에서 학생이 지금 보고 있는 책 페이지 인덱스 — studentId 기준으로 렌더링을 넘나들며
+// 유지된다(안 그러면 Firestore/폴링 갱신이 올 때마다 보고 있던 페이지가 최신 책으로 리셋됨)
+let selectedBookPage = {};
 
 /* 공통 요청 헬퍼 */
 async function getJson(url) {
@@ -121,10 +129,7 @@ function initSlotPicker() {
 
 function matchesSlot(card) {
   if (activeSlot === "ALL") return true;
-  const slot = TIME_SLOTS.find((s) => s.key === activeSlot);
-  if (!slot || !card.enteredAt) return true;
-  const hour = new Date(card.enteredAt).getHours();
-  return hour >= slot.startHour && hour < slot.endHour;
+  return card.timeSlot === activeSlot;
 }
 
 /* 최초 진입(또는 날짜 변경) 시 1회 조회 — 이후 갱신은 Firestore 구독으로 받는다 */
@@ -138,9 +143,11 @@ async function loadLiveView() {
   }
 }
 
-/* Firestore 문서 변경 → 카드 배열에 반영 (없으면 추가, 있으면 갱신) */
+/* Firestore 문서 변경 → 카드 배열에 반영 (없으면 추가, 있으면 갱신).
+   studentId로 매칭한다 — 미입실 카드는 sessionId가 없어서(null) sessionId로 매칭하면 미입실
+   →입실 전환 시 기존 카드를 못 찾고 중복으로 추가돼 버린다. */
 function applyFirestoreCard(doc) {
-  const idx = cards.findIndex((c) => c.sessionId === doc.sessionId);
+  const idx = cards.findIndex((c) => c.studentId === doc.studentId);
   if (idx === -1) cards.push(doc);
   else cards[idx] = doc;
   render();
@@ -174,12 +181,18 @@ async function connectFirestore() {
 
     const db = fb.getFirestore(app);
     const q = fb.query(fb.collection(db, "clinic_monitor"), fb.where("sessionDate", "==", selectedDate()));
-    firestoreUnsubscribe = fb.onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "removed") return;
-        applyFirestoreCard(change.doc.data());
-      });
-    });
+    firestoreUnsubscribe = fb.onSnapshot(
+      q,
+      (snapshot) => {
+        console.info(`[monitor] Firestore 스냅샷 수신 (${new Date().toLocaleTimeString()}): 변경 ${snapshot.docChanges().length}건`);
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "removed") return;
+          applyFirestoreCard(change.doc.data());
+        });
+      },
+      (err) => console.warn("[monitor] Firestore 구독 중 에러 — 이후 갱신은 30초 폴백 폴링에만 의존합니다", err)
+    );
+    console.info("[monitor] Firestore 실시간 구독 연결 성공 — sessionDate =", selectedDate());
   } catch (e) {
     console.warn("Firestore 실시간 구독 연결 실패 — 초기 목록만 표시됩니다", e);
   }
@@ -195,13 +208,14 @@ function render() {
 
 function computeCounts() {
   const slotCards = cards.filter(matchesSlot);
-  const counts = { total: slotCards.length, reading: 0, quizInProgress: 0, timeOver: 0, retryNeeded: 0, readingLogMissing: 0 };
+  const counts = { total: slotCards.length, notEntered: 0, reading: 0, quizInProgress: 0, timeOver: 0, retryNeeded: 0, readingLogMissing: 0 };
   slotCards.forEach((c) => {
+    if (c.cardStatus === "NOT_ENTERED") counts.notEntered++;
     if (c.cardStatus === "READING") counts.reading++;
     if (c.cardStatus === "QUIZ_IN_PROGRESS") counts.quizInProgress++;
     if (c.cardStatus === "TIME_OVER") counts.timeOver++;
     if (c.cardStatus === "RETRY_NEEDED") counts.retryNeeded++;
-    if (!c.readingLogId) counts.readingLogMissing++;
+    if (!c.readingLogId && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;
   });
   return counts;
 }
@@ -238,90 +252,150 @@ function renderGrid() {
   });
 }
 
+/* 카드 캐러셀의 페이지 목록 — books가 있으면 그대로, 없으면(구버전 Firestore 문서·미입실 등)
+   카드 root의 단일 책 필드를 페이지 1개짜리 배열로 흉내내서 기존 카드도 그대로 렌더링되게 한다 */
+function bookPages(card) {
+  if (card.books && card.books.length > 0) return card.books;
+  return [{
+    bookTitle: card.bookTitle,
+    author: card.author,
+    publisher: card.publisher,
+    imageUrl: card.imageUrl,
+    readingTimeMinutes: card.readingTimeMinutes,
+    elapsedMinutes: card.elapsedMinutes,
+    basicCorrectCount: card.basicCorrectCount,
+    basicTotalCount: card.basicTotalCount,
+    basicStatus: card.basicStatus,
+    advancedCorrectCount: card.advancedCorrectCount,
+    advancedTotalCount: card.advancedTotalCount,
+  }];
+}
+
+/* 학생이 보고 있던 페이지를 기억한다 — 지정 안 돼있으면 마지막(최신) 책을 기본으로 보여준다 */
+function currentPageIndex(card, pages) {
+  if (selectedBookPage[card.studentId] == null) {
+    selectedBookPage[card.studentId] = pages.length - 1;
+  }
+  return Math.min(selectedBookPage[card.studentId], pages.length - 1);
+}
+
 function buildCardEl(card) {
   const el = document.createElement("div");
   const badge = STATUS_BADGE[card.cardStatus] ?? STATUS_BADGE.READING;
   el.className = "monitor-card " + badge.cls;
 
-  const basicText = card.basicTotalCount ? `${card.basicCorrectCount ?? 0}/${card.basicTotalCount}` : "-";
-  const advancedText = card.advancedTotalCount ? `${card.advancedCorrectCount ?? 0}/${card.advancedTotalCount}` : "-";
-  const readingTimeText = card.elapsedMinutes != null ? `${card.elapsedMinutes}분` : "-";
-  const recommendedText = card.readingTimeMinutes != null ? `권장 ${card.readingTimeMinutes}분` : "";
+  const notEntered = card.cardStatus === "NOT_ENTERED";
   const exited = card.sessionStatus === "EXITED";
-
-  // 기본 문제풀이 통과/재도전 pill — 아직 안 풀었으면(basicCorrectCount null) 표시 없음
-  const basicPill = card.basicStatus === "DONE"
-    ? `<span class="stat-pill pill-pass">통과</span>`
-    : card.basicCorrectCount != null ? `<span class="stat-pill pill-retry">재도전</span>` : "";
-  // 심화 문제는 완독 개념이 없어 "제출 이력이 있으면" 완료 표시
-  const advancedPill = card.advancedCorrectCount != null ? `<span class="stat-pill pill-pass">완료</span>` : "";
-
-  // 아카이브 카드는 이번 범위에서 실제 발급 조건이 정해지지 않아, 기본 문제 통과 여부로만
-  // 잠정 표시한다(발급 로직은 별도 작업으로 남겨둠)
-  const archiveIssued = card.basicStatus === "DONE";
-  const archiveBadge = archiveIssued
-    ? `<span class="archive-chip archive-done">아카이브 카드 발급 완료</span>`
-    : `<span class="archive-chip">아카이브 카드 발급</span>`;
+  const pages = bookPages(card);
+  const pageIndex = currentPageIndex(card, pages);
+  const page = pages[pageIndex];
 
   el.innerHTML = `
     ${card.helpNeeded ? `<div class="help-flag"><i class="fa-solid fa-seedling"></i> 혼자 읽기 어려워요!</div>` : ""}
     <div class="card-top">
-      <span class="student-name">${card.studentName ?? ""}</span>
+      <span class="student-name">${card.studentName ?? ""}${card.helpNeeded ? `<i class="fa-solid fa-seedling name-flair"></i>` : ""}</span>
       <span class="status-badge"><i class="fa-solid ${badge.icon}"></i> ${badge.text}</span>
     </div>
-    <div class="book-row">
-      <img class="book-cover" src="${card.imageUrl || "/images/book-sample.png"}" alt="" onerror="this.src='/images/book-sample.png'" />
-      <div class="book-info">
-        <div class="book-title">${card.bookTitle ?? "추천 도서 없음"}</div>
-        <div class="book-sub">${[card.publisher, card.author].filter(Boolean).join(" | ")}</div>
-        ${archiveBadge}
-      </div>
-      <button type="button" class="log-open-btn${card.readingLogId != null ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>
-    </div>
-    <div class="stat-row">
-      <div class="stat-cell">
-        <div class="stat-label">독서 시간</div>
-        <div class="stat-value ${card.cardStatus === "TIME_OVER" ? "value-danger" : ""}">${readingTimeText}</div>
-        <div class="stat-sub">${recommendedText}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-label">기본 문제</div>
-        <div class="stat-value">${basicText}</div>
-        <div class="stat-sub">${basicPill}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-label">심화 문제</div>
-        <div class="stat-value">${advancedText}</div>
-        <div class="stat-sub">${advancedPill}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-label">획득 뱃지</div>
-        <div class="stat-value badge-value">${card.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-"}</div>
-        <div class="stat-sub">${card.latestBadgeName ?? ""}</div>
-      </div>
-    </div>
+    <div class="book-row"></div>
+    <div class="stat-row"></div>
     <div class="card-bottom">
-      <span class="entered-at">${formatTime(card.enteredAt)} 입실</span>
-      <button type="button" class="btn ${exited ? "outline" : "primary"} small exit-btn" ${exited ? "disabled" : ""}>
+      <span class="entered-at">${notEntered ? "미입실" : `${formatTime(card.enteredAt)} 입실`}</span>
+      ${notEntered ? "" : `
+      <button type="button" class="btn outline small exit-btn" ${exited ? "disabled" : ""}>
         ${exited ? "퇴실 완료" : "퇴실 처리"}
-      </button>
+      </button>`}
     </div>
   `;
 
-  el.querySelector(".log-open-btn").addEventListener("click", () => openReadingLogPanel(card));
-  const exitBtn = el.querySelector(".exit-btn");
-  if (!exited) {
-    exitBtn.addEventListener("click", async () => {
-      try {
-        await postJson("/admin/monitor/exit", { studentId: card.studentId });
-        await loadLiveView();
-      } catch (e) {
-        alert(e.message);
-      }
-    });
+  renderBookRow(el, card, pages, pageIndex);
+  renderStatRow(el, card, page);
+
+  if (!notEntered) {
+    const exitBtn = el.querySelector(".exit-btn");
+    if (!exited) {
+      exitBtn.addEventListener("click", async () => {
+        try {
+          await postJson("/admin/monitor/exit", { studentId: card.studentId });
+          await loadLiveView();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    }
   }
 
   return el;
+}
+
+/* book-row(표지/제목/아카이브 배지/독서일지 버튼) + 페이지가 여러 장이면 하단에 점 페이지네이션 */
+function renderBookRow(el, card, pages, pageIndex) {
+  const page = pages[pageIndex];
+  const notEntered = card.cardStatus === "NOT_ENTERED";
+  const archiveIssued = page.basicStatus === "DONE";
+  const archiveBadge = archiveIssued
+    ? `<span class="archive-chip archive-done">아카이브 카드 발급 완료</span>`
+    : `<span class="archive-chip">아카이브 카드 발급</span>`;
+
+  const bookRow = el.querySelector(".book-row");
+  bookRow.innerHTML = `
+    <img class="book-cover" src="${page.imageUrl || "/images/book-sample.png"}" alt="" onerror="this.src='/images/book-sample.png'" />
+    <div class="book-info">
+      <div class="book-title">${page.bookTitle ?? "추천 도서 없음"}</div>
+      <div class="book-sub">${[page.publisher, page.author].filter(Boolean).join(" | ")}</div>
+      <div class="book-info-bottom">
+        ${archiveBadge}
+        ${pages.length > 1 ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>` : ""}
+      </div>
+    </div>
+    ${notEntered ? "" : `<button type="button" class="log-open-btn${card.readingLogId != null ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+  `;
+
+  if (!notEntered) {
+    bookRow.querySelector(".log-open-btn").addEventListener("click", () => toggleReadingLogPanel(card));
+  }
+  bookRow.querySelectorAll(".dot").forEach((dot) => {
+    dot.addEventListener("click", () => {
+      selectedBookPage[card.studentId] = Number(dot.dataset.idx);
+      render();
+    });
+  });
+}
+
+/* stat-row(독서시간/기본문제/심화문제는 선택된 책 페이지 기준, 획득뱃지는 학생 단위라 카드 고정값) */
+function renderStatRow(el, card, page) {
+  const basicText = page.basicTotalCount ? `${page.basicCorrectCount ?? 0}/${page.basicTotalCount}` : "-";
+  const advancedText = page.advancedTotalCount ? `${page.advancedCorrectCount ?? 0}/${page.advancedTotalCount}` : "-";
+  const readingTimeText = page.elapsedMinutes != null ? `${page.elapsedMinutes}분` : "-";
+  const recommendedText = page.readingTimeMinutes != null ? `권장 ${page.readingTimeMinutes}분` : "";
+  const isOverTime = page.readingTimeMinutes != null && page.elapsedMinutes != null && page.elapsedMinutes > page.readingTimeMinutes;
+
+  const basicPill = page.basicStatus === "DONE"
+    ? `<span class="stat-pill pill-pass">통과</span>`
+    : page.basicCorrectCount != null ? `<span class="stat-pill pill-retry">재도전</span>` : "";
+  const advancedPill = page.advancedCorrectCount != null ? `<span class="stat-pill pill-pass">완료</span>` : "";
+
+  el.querySelector(".stat-row").innerHTML = `
+    <div class="stat-cell">
+      <div class="stat-label">독서 시간</div>
+      <div class="stat-value ${isOverTime ? "value-danger" : ""}">${readingTimeText}</div>
+      <div class="stat-sub">${recommendedText}</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">기본 문제</div>
+      <div class="stat-value">${basicText}</div>
+      <div class="stat-sub">${basicPill}</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">심화 문제</div>
+      <div class="stat-value">${advancedText}</div>
+      <div class="stat-sub">${advancedPill}</div>
+    </div>
+    <div class="stat-cell">
+      <div class="stat-label">획득 뱃지</div>
+      <div class="stat-value badge-value">${card.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-"}</div>
+      <div class="stat-sub">${card.latestBadgeName ?? ""}</div>
+    </div>
+  `;
 }
 
 function formatTime(isoString) {
@@ -338,6 +412,7 @@ function initReadingLogPanel() {
   renderCheckboxGroup("helpNeededCheckboxGroup", HELP_NEEDED_CODES, false);
 
   document.getElementById("btnSaveReadingLog").addEventListener("click", saveReadingLog);
+  document.getElementById("btnCloseReadingLog").addEventListener("click", closeReadingLogPanel);
 }
 
 function renderCheckboxGroup(containerId, options, multiple) {
@@ -350,6 +425,17 @@ function renderCheckboxGroup(containerId, options, multiple) {
     item.innerHTML = `<input type="checkbox" ${multiple ? "" : 'name="helpNeeded"'} value="${code}" /> ${label}`;
     wrap.appendChild(item);
   });
+}
+
+/* 같은 카드의 아이콘을 다시 누르면 닫고, 다른 카드면 그 카드로 전환해서 연다 */
+function toggleReadingLogPanel(card) {
+  const panel = document.getElementById("readingLogPanel");
+  const alreadyOpenForThisCard = panel.classList.contains("open") && selectedCard?.sessionId === card.sessionId;
+  if (alreadyOpenForThisCard) {
+    closeReadingLogPanel();
+  } else {
+    openReadingLogPanel(card);
+  }
 }
 
 function openReadingLogPanel(card) {
@@ -365,7 +451,12 @@ function openReadingLogPanel(card) {
   });
   document.getElementById("readingLogNote").value = card.note ?? "";
 
-  document.getElementById("readingLogPanel").hidden = false;
+  document.getElementById("readingLogPanel").classList.add("open");
+}
+
+function closeReadingLogPanel() {
+  selectedCard = null;
+  document.getElementById("readingLogPanel").classList.remove("open");
 }
 
 async function saveReadingLog() {

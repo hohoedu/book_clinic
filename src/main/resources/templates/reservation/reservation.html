@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>클리닉 예약 등록</title>
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/monitor/reservation.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content reservation-content">
+
+      <header class="page-header">
+        <h1>클리닉 예약 등록</h1>
+      </header>
+
+      <section class="reservation-toolbar">
+        <div class="monitor-date-picker">
+          <span class="monitor-date-display" id="reservationDateDisplay">2026. 07. 23</span>
+          <div class="monitor-date-trigger">
+            <i class="fa-regular fa-calendar"></i>
+            <input type="date" id="reservationDate" value="2026-07-23" />
+          </div>
+        </div>
+      </section>
+
+      <section class="reservation-body">
+
+        <aside class="reservation-search-panel">
+          <h3>학생 검색 · 등록</h3>
+
+          <div class="search-row">
+            <input type="text" id="studentKeyword" placeholder="학생 이름 또는 앱 아이디로 검색" />
+            <button type="button" id="btnSearchStudent" class="btn primary small">검색</button>
+          </div>
+
+          <ul class="student-search-results" id="studentSearchResults"></ul>
+
+          <div class="selected-student" id="selectedStudentBox" hidden>
+            <div class="selected-student-name" id="selectedStudentName"></div>
+            <select class="monitor-slot-picker" id="reservationSlot"></select>
+            <button type="button" id="btnRegisterReservation" class="btn primary small">예약 등록</button>
+          </div>
+        </aside>
+
+        <div class="reservation-list-panel">
+          <h3>선택한 날짜의 예약 현황</h3>
+          <table class="reservation-table">
+            <thead>
+              <tr>
+                <th>타임</th>
+                <th>학생명</th>
+                <th>학교</th>
+                <th>학년</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="reservationListBody"></tbody>
+          </table>
+        </div>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <script th:src="@{/js/monitor/reservation.js}"></script>
+</body>
+
+</html>

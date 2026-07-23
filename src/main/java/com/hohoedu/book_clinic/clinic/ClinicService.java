@@ -78,7 +78,12 @@ public class ClinicService {
     @Transactional
     public ClinicRespDTO.RecommendBookDTO recommendBook(String studentId) {
         ClinicRespDTO.RecommendBookDTO existing = clinicRepository.findPendingRecommendBookCard(studentId);
-        if (existing != null) return existing;
+        if (existing != null) {
+            // 실시간 모니터링 기준 "입실" 시점 — 이미 추천받은 책이 있는 재로그인도 여기서 입실 처리한다
+            // (오늘 이미 열린 세션이 있으면 그대로 재사용하는 멱등 로직)
+            monitorService.enterSession(studentId);
+            return existing;
+        }
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
 
         // 새로 추천한다는 건 이전 추천이 이미 DONE 처리됐다는 뜻(PENDING이면 위에서 그대로 반환됨) —
@@ -111,6 +116,8 @@ public class ClinicService {
         bookRepository.insertItemLoan(itemId, studentId);
         clinicRepository.insertRecommendLog(studentId, picked);
         log.info("학생 {}에게 추천된 도서 정보: {}", studentId, clinicRepository.findBookCard(picked));
+        // 실시간 모니터링 기준 "입실" 시점 — 미입실 예약 카드가 여기서 입실로 전환된다
+        monitorService.enterSession(studentId);
         return clinicRepository.findBookCard(picked);
     }
 

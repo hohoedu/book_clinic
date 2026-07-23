@@ -51,6 +51,7 @@
             st.student_name    AS studentName,
             cs.status          AS sessionStatus,
             cs.session_date    AS sessionDate,
+            r.time_slot        AS timeSlot,
             cs.entered_at      AS enteredAt,
             cs.exited_at       AS exitedAt,
             cs.quiz_started_at AS quizStartedAt,
@@ -80,6 +81,8 @@
             rlog.note           AS note
         FROM erp_bookstore_clinic_session cs
         JOIN erp_student st ON st.student_id = cs.student_id
+        LEFT JOIN erp_bookstore_clinic_reservation r
+            ON r.student_id = cs.student_id AND r.reservation_date = cs.session_date
         OUTER APPLY (
             SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, total_count, status
             FROM erp_bookstore_recommend_log
@@ -112,15 +115,134 @@
         LEFT JOIN erp_bookstore_reading_log rlog ON rlog.session_id = cs.session_id
     </sql>
 
-    <select id="findSessionCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
-        <include refid="cardColumns" />
-        WHERE cs.session_date = #{date}
-        ORDER BY cs.entered_at ASC
-    </select>
-
     <select id="findCardBySessionId" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
         <include refid="cardColumns" />
         WHERE cs.session_id = #{sessionId}
+    </select>
+
+    <!--
+      예약 기준 카드 목록 — cardColumns와 달리 erp_bookstore_clinic_reservation을 루트로 두고,
+      세션은 OUTER APPLY로 그 학생·그 날짜의 최신 세션 1건만 붙인다(재입실로 같은 날 세션이
+      여러 건 생겨도 최신 1건만 반영). 세션이 없으면(아직 미입실) 세션/추천/독서일지 관련
+      컬럼이 전부 NULL로 내려오고, MonitorService가 sessionId==null을 NOT_ENTERED로 해석한다.
+    -->
+    <sql id="reservationCardColumns">
+        SELECT
+            cs.session_id      AS sessionId,
+            r.student_id       AS studentId,
+            st.student_name    AS studentName,
+            cs.status          AS sessionStatus,
+            r.reservation_date AS sessionDate,
+            r.time_slot        AS timeSlot,
+            cs.entered_at      AS enteredAt,
+            cs.exited_at       AS exitedAt,
+            cs.quiz_started_at AS quizStartedAt,
+
+            rl.recommend_id    AS recommendId,
+            rl.content_id      AS contentId,
+            c.original_title   AS bookTitle,
+            c.author           AS author,
+            c.publisher        AS publisher,
+            c.image_url        AS imageUrl,
+            c.reading_time     AS readingTimeText,
+            rl.recommended_at  AS recommendedAt,
+            rl.correct_count   AS basicCorrectCount,
+            rl.total_count     AS basicTotalCount,
+            rl.status          AS basicStatus,
+            DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS elapsedMinutes,
+
+            adv.correctCount AS advancedCorrectCount,
+            adv.totalCount   AS advancedTotalCount,
+
+            badge.badgeCount      AS badgeCount,
+            badge.latestBadgeName AS latestBadgeName,
+
+            rlog.log_id         AS readingLogId,
+            rlog.attitude_codes AS attitudeCodes,
+            rlog.help_needed    AS helpNeeded,
+            rlog.note           AS note
+        FROM erp_bookstore_clinic_reservation r
+        JOIN erp_student st ON st.student_id = r.student_id
+        OUTER APPLY (
+            SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at
+            FROM erp_bookstore_clinic_session
+            WHERE student_id = r.student_id AND session_date = r.reservation_date
+            ORDER BY session_id DESC
+        ) cs
+        OUTER APPLY (
+            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, total_count, status
+            FROM erp_bookstore_recommend_log
+            WHERE student_id = r.student_id
+            ORDER BY recommend_id DESC
+        ) rl
+        LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS totalCount,
+                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
+            FROM erp_bookstore_quiz_answer_log q
+            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
+              AND q.submitted_at = (
+                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
+                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
+              )
+        ) adv
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS badgeCount,
+                (SELECT TOP 1 b.badge_name
+                 FROM erp_bookstore_student_badge sb2
+                 JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
+                 WHERE sb2.student_id = r.student_id
+                 ORDER BY sb2.earned_at DESC) AS latestBadgeName
+            FROM erp_bookstore_student_badge sb
+            WHERE sb.student_id = r.student_id
+        ) badge
+        LEFT JOIN erp_bookstore_reading_log rlog ON rlog.session_id = cs.session_id
+    </sql>
+
+    <select id="findReservationCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
+        <include refid="reservationCardColumns" />
+        WHERE r.reservation_date = #{date}
+        ORDER BY r.time_slot ASC, st.student_name ASC
+    </select>
+
+    <!--
+      카드 캐러셀(책 여러 권 페이지네이션)용 — 오늘 추천받은 책 전체(완료분 포함) + 날짜 상관없이
+      아직 PENDING인 책(전날 받아서 이어서 읽는 중인 경우) 하나. recommend_id 오름차순이라 화면에서는
+      마지막 페이지가 항상 "최신/현재 진행 중인 책"이 된다.
+    -->
+    <select id="findTodayBooks" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$BookPageDTO">
+        SELECT
+            rl.content_id      AS contentId,
+            c.original_title   AS bookTitle,
+            c.author           AS author,
+            c.publisher        AS publisher,
+            c.image_url        AS imageUrl,
+            c.reading_time     AS readingTimeText,
+            rl.recommended_at  AS recommendedAt,
+            rl.correct_count   AS basicCorrectCount,
+            rl.total_count     AS basicTotalCount,
+            rl.status          AS basicStatus,
+            DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS elapsedMinutes,
+            adv.correctCount AS advancedCorrectCount,
+            adv.totalCount   AS advancedTotalCount
+        FROM erp_bookstore_recommend_log rl
+        LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS totalCount,
+                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
+            FROM erp_bookstore_quiz_answer_log q
+            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
+              AND q.submitted_at = (
+                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
+                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
+              )
+        ) adv
+        WHERE rl.student_id = #{studentId}
+          AND (CAST(rl.recommended_at AS DATE) = #{date} OR rl.status = 'PENDING')
+        ORDER BY rl.recommend_id ASC
     </select>
 
     <update id="upsertReadingLog">

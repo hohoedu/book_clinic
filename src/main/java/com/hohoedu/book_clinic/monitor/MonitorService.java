@@ -61,9 +61,9 @@ public class MonitorService {
         syncSafely(sessionId);
     }
 
-    /** 실시간 모니터링 화면 최초 진입용 — 이후 갱신은 Firestore 구독으로 받는다 */
+    /** 실시간 모니터링 화면 최초 진입용 — 예약 기준 카드 목록. 이후 갱신은 Firestore 구독으로 받는다 */
     public MonitorRespDTO.LiveViewRespDTO getLiveView(LocalDate date) {
-        List<MonitorRespDTO.CardDTO> cards = monitorRepository.findSessionCards(date);
+        List<MonitorRespDTO.CardDTO> cards = monitorRepository.findReservationCards(date);
         cards.forEach(this::fillDerivedFields);
 
         MonitorRespDTO.LiveViewRespDTO resp = new MonitorRespDTO.LiveViewRespDTO();
@@ -128,10 +128,22 @@ public class MonitorService {
         Integer readingTimeMinutes = parseMinutes(card.getReadingTimeText());
         card.setReadingTimeMinutes(readingTimeMinutes);
         card.setCardStatus(resolveCardStatus(card, readingTimeMinutes, card.getElapsedMinutes()));
+        card.setBooks(fillBookPages(card));
     }
 
-    /** 우선순위: 퇴실 > 문제 푸는 중 > 재도전 필요 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
+    /** 카드 캐러셀용 — 그 학생이 오늘 추천받은 책 목록을 조회하고, 책마다 권장 분을 파싱해 채운다 */
+    private List<MonitorRespDTO.BookPageDTO> fillBookPages(MonitorRespDTO.CardDTO card) {
+        if (card.getSessionDate() == null) return List.of();
+        List<MonitorRespDTO.BookPageDTO> books = monitorRepository.findTodayBooks(card.getStudentId(), card.getSessionDate());
+        books.forEach(book -> book.setReadingTimeMinutes(parseMinutes(book.getReadingTimeText())));
+        return books;
+    }
+
+    /** 우선순위: 미입실 > 퇴실 > 문제 푸는 중 > 재도전 필요 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
     private String resolveCardStatus(MonitorRespDTO.CardDTO card, Integer readingTimeMinutes, Integer elapsedMinutes) {
+        if (card.getSessionId() == null) {
+            return "NOT_ENTERED";
+        }
         if ("EXITED".equals(card.getSessionStatus())) {
             return "EXITED";
         }
@@ -160,13 +172,15 @@ public class MonitorService {
         counts.setTotal(cards.size());
         for (MonitorRespDTO.CardDTO card : cards) {
             switch (card.getCardStatus()) {
+                case "NOT_ENTERED" -> counts.setNotEntered(counts.getNotEntered() + 1);
                 case "READING" -> counts.setReading(counts.getReading() + 1);
                 case "QUIZ_IN_PROGRESS" -> counts.setQuizInProgress(counts.getQuizInProgress() + 1);
                 case "TIME_OVER" -> counts.setTimeOver(counts.getTimeOver() + 1);
                 case "RETRY_NEEDED" -> counts.setRetryNeeded(counts.getRetryNeeded() + 1);
                 default -> { /* EXITED는 별도 chip 없음 */ }
             }
-            if (card.getReadingLogId() == null) {
+            // 미입실 카드는 아직 독서일지 대상이 아니므로 미등록 카운트에서 제외
+            if (card.getReadingLogId() == null && !"NOT_ENTERED".equals(card.getCardStatus())) {
                 counts.setReadingLogMissing(counts.getReadingLogMissing() + 1);
             }
         }

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-clinic-student-v4';
+const CACHE_NAME = 'book-clinic-student-v5';
 const OFFLINE_URL = '/student/login';
 
 const PRECACHE_URLS = [
@@ -53,6 +53,16 @@ self.addEventListener('fetch', (event) => {
   }
 
   const url = new URL(request.url);
+
+  // 다른 도메인으로 나가는 요청(Firestore 실시간 구독의 장시간 스트리밍 요청 등)은 절대 가로채지
+  // 않는다 — 이 서비스워커는 스코프가 '/'라 관리자 화면(실시간 모니터링 등)도 통제 대상인데,
+  // respondWith(fetch(request))로 cross-origin 스트리밍 요청을 다시 감싸면 브라우저가 스트림을
+  // 정상 처리하지 못하고 "Failed to fetch"로 끊겨버린다(Firestore onSnapshot 재연결 반복 → 실시간
+  // 반영이 30초 폴백 폴링에만 의존하게 되는 원인이었음, 2026-07-23). 그대로 두면(respondWith를
+  // 호출하지 않으면) 브라우저가 원래 하던 대로 직접 처리한다.
+  if (url.origin !== self.location.origin) {
+    return;
+  }
 
   // 로그인/메인 등 페이지 이동(navigate)은 학생마다·시점마다 내용이 달라지므로
   // 항상 네트워크에서 최신 화면을 받아오고, 오프라인일 때만 캐시된 로그인 화면으로 대체한다

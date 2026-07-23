@@ -70,9 +70,16 @@
           <!-- 카드는 monitor-live.js가 실시간으로 렌더링한다 -->
         </div>
 
-        <!-- 독서일지 패널 — 카드의 말풍선 아이콘을 클릭하면 그 학생 기준으로 채워진다 -->
-        <aside class="reading-log-panel" id="readingLogPanel" hidden>
-          <h3><span id="readingLogStudentName"></span> 독서일지 등록</h3>
+        <!-- 독서일지 패널 — 카드의 말풍선 아이콘을 클릭하면 그 학생 기준으로 채워진다.
+             바깥(reading-log-panel)은 width/opacity만 움직이는 슬라이드 껍데기이고, 안쪽
+             (reading-log-panel-inner)은 항상 최종 너비로 고정해서 애니메이션 중 콘텐츠가
+             리플로우(줄바꿈)되지 않게 한다. -->
+        <aside class="reading-log-panel" id="readingLogPanel">
+        <div class="reading-log-panel-inner">
+          <div class="reading-log-panel-header">
+            <h3><span id="readingLogStudentName"></span> 독서일지 등록</h3>
+            <button type="button" id="btnCloseReadingLog" class="log-panel-close" title="닫기"><i class="fa-solid fa-xmark"></i></button>
+          </div>
 
           <div class="log-section">
             <div class="log-section-title">독서 태도</div>
@@ -92,6 +99,7 @@
           </div>
 
           <button type="button" id="btnSaveReadingLog" class="btn primary">저장</button>
+        </div>
         </aside>
       </section>
 

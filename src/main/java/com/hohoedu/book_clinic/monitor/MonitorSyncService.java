@@ -34,6 +34,7 @@ public class MonitorSyncService {
         doc.put("studentName", card.getStudentName());
         doc.put("sessionStatus", card.getSessionStatus());
         doc.put("sessionDate", card.getSessionDate() == null ? null : card.getSessionDate().toString());
+        doc.put("timeSlot", card.getTimeSlot());
         doc.put("enteredAt", toIso(card.getEnteredAt()));
         doc.put("exitedAt", toIso(card.getExitedAt()));
         doc.put("recommendId", card.getRecommendId());
@@ -58,6 +59,7 @@ public class MonitorSyncService {
         doc.put("note", card.getNote());
         doc.put("elapsedMinutes", card.getElapsedMinutes());
         doc.put("cardStatus", card.getCardStatus());
+        doc.put("books", card.getBooks());
 
         try {
             // 동기 대기로 처리 — 실패 시 예외가 그대로 던져지도록 해서 호출부(MonitorService)의

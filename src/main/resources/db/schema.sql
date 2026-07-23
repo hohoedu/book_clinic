@@ -1,6 +1,7 @@
 -- DROP (FK 역순)
 IF OBJECT_ID('erp_bookstore_reading_log',           'U') IS NOT NULL DROP TABLE erp_bookstore_reading_log;
 IF OBJECT_ID('erp_bookstore_clinic_session',        'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_session;
+IF OBJECT_ID('erp_bookstore_clinic_reservation',    'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_reservation;
 IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
 IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
 IF OBJECT_ID('erp_bookstore_quiz_answer_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_answer_log;
@@ -459,6 +460,18 @@ CREATE TABLE erp_bookstore_clinic_session (
     exited_at       DATETIME2,    -- 퇴실 처리일시(KST)
     status          VARCHAR(20)   NOT NULL DEFAULT 'ENTERED',  -- ENTERED(입실중) / EXITED(퇴실완료)
     quiz_started_at DATETIME2     -- 문제풀이 화면 진입 시각(KST) — 채점 제출 시 다시 NULL로 초기화
+);
+
+-- 클리닉 예약 (2026-07-23 실시간 모니터링 — 예약 기준 미입실/입실 전환) — "해당 타임에 올 예정인
+-- 학생" 마스터. 상태 컬럼을 따로 두지 않는다: 같은 (student_id, reservation_date)로 매칭되는
+-- erp_bookstore_clinic_session 행이 있으면 입실, 없으면 미입실로 조회 시점에 파생시킨다.
+-- 예약 등록 화면은 별도 작업 범위라 아직 없음 — 현재는 시드/수동 INSERT로만 채워짐.
+CREATE TABLE erp_bookstore_clinic_reservation (
+    reservation_id   INT           IDENTITY(1,1) PRIMARY KEY,
+    student_id       VARCHAR(100)  NOT NULL,   -- erp_student.student_id (FK 없이 값으로만 연결)
+    reservation_date DATE          NOT NULL,   -- 예약일 (조회 필터 기준)
+    time_slot        VARCHAR(10)   NOT NULL,   -- '1'~'4' (monitor-live.js TIME_SLOTS.key와 매칭)
+    created_at       DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
 );
 
 -- 독서일지 — 직원이 실시간 모니터링 화면에서 입실 세션 1건당 직접 작성(태도/도움필요/전달사항)

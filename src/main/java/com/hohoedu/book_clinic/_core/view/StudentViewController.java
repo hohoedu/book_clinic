@@ -47,8 +47,8 @@ public class StudentViewController {
             redirectAttributes.addFlashAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. 다시 확인해주세요.");
             return "redirect:/student/login";
         }
-        // 로그인 성공 = 실시간 모니터링 기준 "입실" (오늘 이미 열린 세션이 있으면 그대로 재사용)
-        monitorService.enterSession(student.getStudentId());
+        // 실시간 모니터링 기준 "입실"은 로그인이 아니라 책 추천 시점(ClinicService.recommendBook)에
+        // 처리한다 — 예약 카드가 미입실 상태로 미리 떠 있다가 책을 추천받는 순간 입실로 전환된다.
         return "redirect:/student/main?studentId=" + student.getStudentId();
     }
 
