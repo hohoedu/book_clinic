@@ -18,6 +18,7 @@ public class MonitorRespDTO {
         private Integer sessionId;
         private String studentId;
         private String studentName;
+        private String centerCode;      // 학생 소속 센터 — 모니터링 센터별 스코핑/Firestore 구독 필터 기준
         private String sessionStatus;   // ENTERED / EXITED (raw, 미입실이면 null)
         private LocalDate sessionDate;  // 예약일(=입실일, Firestore 구독 시 날짜 필터 기준)
         private String timeSlot;        // 예약 교시('1'~'4') — monitor-live.js 슬롯 필터 기준

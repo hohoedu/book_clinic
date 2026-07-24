@@ -35,80 +35,137 @@
         </div>
       </header>
 
-      <section class="result-layout">
-        <article class="card result-hero">
-          <span class="confetti c1"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-          <span class="confetti c2"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-          <span class="confetti c3"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
-          <span class="confetti c4"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+      <!-- 상단 3단: 캐릭터/타이틀 · 문제풀이 결과 카드 · 신규 카드 -->
+      <section class="result-top">
+        <div class="hero">
+          <!-- 리본은 글자까지 그려진 이미지 한 장. 재도전 등급은 "정말 잘했어요!"가 맞지 않아
+               같은 자리에 텍스트 리본(#heroRibbonText)으로 대체한다 -->
+          <img class="ribbon-img" id="heroRibbon" th:src="@{/images/student_result/green.png}" alt="정말 잘했어요!" />
+          <span class="ribbon ribbon-green" id="heroRibbonText" hidden>조금만 더!</span>
+          <!-- 달성 문구 이미지는 독서왕(ment.png)만 있어서, 나머지 등급은 같은 자리에
+               텍스트 제목(#heroHeadlineText)으로 대체한다 (JS setHero) -->
+          <div class="hero-headline">
+            <img id="heroHeadline" data-grade="KING" th:src="@{/images/student_result/ment.png}" alt="독서왕 달성!" />
+            <h1 class="hero-headline-text" id="heroHeadlineText" hidden>달성!</h1>
+          </div>
+          <!-- 캐릭터는 아직 등급 구분 없이 한 종류(kidoc.png)만 있다 -->
+          <div class="hero-character" id="heroCharacter" data-grade="KING">
+            <img th:src="@{/images/student_result/kidoc.png}" alt="호호책방 캐릭터" />
+          </div>
+        </div>
 
-          <div class="result-crown" id="resultMascot"><i class="fa-solid fa-crown" aria-hidden="true"></i></div>
-          <h1 class="result-grade-title" id="resultGradePill">독서친구</h1>
-          <p class="result-subtitle" id="resultTitle">문제를 다 풀었어요!</p>
+        <article class="card score-card">
+          <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/purple.png}" alt="문제풀이 결과" />
 
-          <div class="result-character">
-            <img th:src="@{/images/img-my-ch01.png}" alt="호호책방 캐릭터" />
+          <div class="score-main">
+            <p class="score-num">
+              <strong id="scoreCorrect">12</strong>
+              <span class="score-slash">/</span>
+              <span class="score-total" id="scoreTotal">12</span>
+            </p>
+            <!-- 별 5개는 각각 이미지로 들어간다 — 정답률만큼 JS가 is-on을 붙이고,
+                 CSS 변수(--star-on/--star-off)에 이미지 경로만 넣으면 켜짐/꺼짐이 교체된다 -->
+            <div class="score-stars" id="scoreStars" aria-hidden="true">
+              <span class="star"></span>
+              <span class="star"></span>
+              <span class="star"></span>
+              <span class="star"></span>
+              <span class="star"></span>
+            </div>
+            <div class="score-trophy">
+              <img th:src="@{/images/student_result/trophy.png}" alt="트로피" />
+            </div>
           </div>
 
-          <p class="result-exp" id="resultExp" hidden></p>
-
-          <!-- 이번 제출로 새로 획득한 뱃지 (서버 newBadges) -->
-          <div class="result-badges" id="resultBadges" hidden>
-            <p class="result-badges-title"><i class="fa-solid fa-medal" aria-hidden="true"></i> 새로운 뱃지를 획득했어요!</p>
-            <ul class="result-badge-list" id="resultBadgeList"></ul>
-          </div>
-
-          <div class="result-stats-bar">
-            <div class="stat-item">
-              <span class="stat-label">맞힌 개수</span>
-              <span class="stat-value"><span id="scoreCorrect">0</span>개</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">틀린 개수</span>
-              <span class="stat-value"><span id="scoreWrong">0</span>개</span>
-            </div>
-            <div class="stat-item">
-              <span class="stat-label">결과</span>
-              <span class="stat-value" id="resultStatusText">통과!</span>
+          <div class="score-notes">
+            <p class="score-note" id="resultTitle">문제를 다 풀었어요!</p>
+            <div class="score-retry">
+              <span>재도전 여부</span>
+              <strong id="resultRetryText">없음</strong>
             </div>
           </div>
         </article>
 
-        <aside class="side">
-          <section class="card panel">
-            <div class="panel-head">
-              <h3 class="panel-title">나의 독서 성향</h3>
+        <div class="new-card">
+          <div class="new-card-frame">
+            <img class="new-flag" th:src="@{/images/student_result/new.png}" alt="NEW" />
+            <!-- 카드 컬렉션 기능 구현 전이라 획득 카드는 샘플 이미지(card.png) 고정 -->
+            <div class="new-card-slot">
+              <img th:src="@{/images/student_result/card.png}" alt="새로 획득한 카드" />
             </div>
-          </section>
-          <section class="card panel placeholder-panel"></section>
-          <section class="card panel placeholder-panel"></section>
-        </aside>
+          </div>
+          <p class="new-card-caption">신규 카드를 획득했어요!</p>
+        </div>
       </section>
 
-      <div class="result-fab-actions">
-        <a class="btn-ghost" id="retryBtn" hidden
-          th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
-          <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>다시 풀기</a>
-        <a class="btn-ghost" id="wrongRetryBtn" hidden
-          th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
-          <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 풀기</a>
-        <a class="btn-secondary fab-advanced" id="advancedBtn" hidden
-          th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='02')}">
-          <i class="fa-solid fa-book" aria-hidden="true"></i>심화 문제 풀기</a>
-        <a class="btn-primary" id="recommendBtn" hidden th:href="@{/student/main(studentId=${studentId})}">
-          <i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i>책 추천 받기</a>
-      </div>
-
-      <!-- 책 추천 받기 확인 모달 — 남은 시간 문구는 출석/퇴실 시각 기능이 붙기 전까지는 뺀다 -->
-      <div class="confirm-modal" id="recommendConfirmModal" hidden>
-        <div class="confirm-modal-backdrop"></div>
-        <div class="confirm-modal-card">
-          <div class="confirm-modal-icon"><i class="fa-solid fa-wand-magic-sparkles" aria-hidden="true"></i></div>
-          <p class="confirm-modal-text">새로운 책을 추천받으시겠어요?</p>
-          <div class="confirm-modal-actions">
-            <button type="button" class="btn-ghost" id="confirmNoBtn">아니오</button>
-            <button type="button" class="btn-primary" id="confirmYesBtn">예</button>
+      <!-- 획득한 보상 4종 — 카드/도장/탐험 데이터는 아직 미구현이라 자리와 문구만 잡아둔다 -->
+      <section class="card reward-panel">
+        <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/yellow.png}" alt="획득한 보상" />
+        <div class="reward-list">
+          <div class="reward-item">
+            <div class="reward-icon">
+              <img th:src="@{/images/student_result/medal.png}" alt="경험치 메달" />
+            </div>
+            <div class="reward-body">
+              <p class="reward-title orange">경험치 획득!</p>
+              <p class="reward-value"><span class="reward-lv" id="rewardLevelNo">Lv. 2</span> <span
+                  id="rewardLevelName">독서 새싹</span></p>
+              <div class="reward-progress">
+                <div class="reward-progress-bar" id="rewardProgressBar"></div>
+              </div>
+              <p class="reward-desc" id="rewardExpDesc">다음 레벨까지 2권 남았어요!</p>
+            </div>
           </div>
+
+          <div class="reward-item">
+            <div class="reward-icon">
+              <img class="rare-flag" th:src="@{/images/student_result/rare.png}" alt="RARE" />
+              <img class="reward-card-img" th:src="@{/images/student_result/treasure.png}" alt="획득한 카드" />
+            </div>
+            <div class="reward-body">
+              <p class="reward-title pink">숨겨진 보물 발견!</p>
+              <p class="reward-value" id="rewardCardName">별빛 랜턴</p>
+              <p class="reward-desc">선생님께 카드를 받으세요.</p>
+            </div>
+          </div>
+
+          <div class="reward-item">
+            <div class="reward-icon">
+              <img th:src="@{/images/student_result/passport.png}" alt="독서여권" />
+            </div>
+            <div class="reward-body">
+              <p class="reward-title blue">독서여권 도장!</p>
+              <p class="reward-value" id="rewardStampCount">1개 획득!</p>
+              <p class="reward-desc">읽은 책을 여권에 기록해 주세요.</p>
+            </div>
+          </div>
+
+          <div class="reward-item">
+            <div class="reward-icon">
+              <img th:src="@{/images/student_result/map.png}" alt="독서탐험 지도" />
+            </div>
+            <div class="reward-body">
+              <p class="reward-title blue">독서탐험 한칸 더!</p>
+              <p class="reward-value"><strong id="rewardStepNow">35</strong> <span class="reward-step-total">/ <span
+                    id="rewardStepTotal">96</span>칸</span></p>
+              <p class="reward-desc">독서탐험이 한 단계 성장했어요!</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div class="result-actions">
+        <a class="btn-home" th:href="@{/student/main(studentId=${studentId})}">홈으로</a>
+        <div class="result-actions-right">
+          <a class="btn-retry" id="retryBtn" hidden
+            th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>다시 풀기</a>
+          <a class="btn-retry" id="wrongRetryBtn" hidden
+            th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
+            틀린 문제 다시 풀기</a>
+          <a class="btn-advanced" id="advancedBtn" hidden
+            th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='02')}">
+            <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 문제 풀기</a>
         </div>
       </div>
     </main>

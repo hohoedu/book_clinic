@@ -56,316 +56,424 @@
   font-size: 14px;
 }
 
-.result-layout {
-  display: grid;
-  grid-template-columns: 720px 482px;
-  /* 암시적 행이 기본값(auto=콘텐츠 크기)으로 잡히면 카드 내용이 많을 때 이 높이를 넘어가 버려서
-     아래 result-fab-actions 버튼 줄을 페이지 밖으로 밀어내고 잘리게 만든다 — 100%로 못박아
-     자식(result-hero/side)의 height:100%가 실제로 이 값을 기준으로 stretch되게 한다 */
-  grid-template-rows: 100%;
-  gap: 22px;
-  align-items: stretch;
-  height: calc(800px - 16px - 30px - 44px - 15px - 74px);
-  margin-bottom: 18px;
+/* 리본 — 글자까지 그려진 이미지 한 장을 원본 크기 그대로 쓴다
+   (green 215x50 / purple·yellow 207x48) */
+.ribbon-img {
+  display: block;
+  width: auto;
+  height: auto;
 }
 
-/* 결과 히어로 카드 */
-.result-hero {
-  position: relative;
-  height: 100%;
-  padding: 40px 40px 30px;
+/* 리본 이미지가 없는 경우(재도전 등급)에만 쓰는 텍스트 리본 — 양 끝이 V자로 파인 띠 */
+.ribbon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 190px;
+  height: 44px;
+  padding: 0 34px;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -.4px;
+  white-space: nowrap;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 15px) 50%, 100% 100%, 0 100%, 15px 50%);
+}
+
+.ribbon-green { background-color: #2fb85f; }
+
+/* 카드 위쪽 테두리에 걸치는 리본 */
+.card-ribbon {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+}
+
+/* 상단 3단 — 캐릭터 / 문제풀이 결과 / 신규 카드 */
+.result-top {
+  display: grid;
+  grid-template-columns: 350px 1fr 250px;
+  gap: 36px;
+  margin-bottom: 50px; 
+}
+
+/* 왼쪽: 리본 / 달성 문구 이미지 / 캐릭터 이미지 — 셋 다 별도 에셋 */
+.hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  overflow: hidden;
+  gap: 12px;
 }
 
-.confetti {
-  position: absolute;
-  font-size: 20px;
-  color: var(--orange);
-  animation: confettiFloat 2.4s ease-in-out infinite;
-  pointer-events: none;
-}
-
-.confetti.c1 { left: 8%; top: 12%; color: #6fd0c2; animation-delay: 0s; }
-.confetti.c2 { right: 12%; top: 18%; color: #a593ee; font-size: 16px; animation-delay: .4s; }
-.confetti.c3 { left: 14%; bottom: 32%; color: #ff9ecf; font-size: 18px; animation-delay: .8s; }
-.confetti.c4 { right: 8%; bottom: 38%; color: var(--blue); font-size: 22px; animation-delay: 1.2s; }
-
-@keyframes confettiFloat {
-  0%, 100% { transform: translateY(0) rotate(0deg); opacity: .7; }
-  50% { transform: translateY(-8px) rotate(12deg); opacity: 1; }
-}
-
-.result-crown {
-  width: 72px;
-  height: 72px;
-  margin: 4px auto 8px;
-  border-radius: 50%;
-  background: rgba(255, 123, 26, .12);
-  color: var(--orange);
-  font-size: 32px;
+/* 달성 문구 자리(78px) 안에 문구 이미지(원본 277x62)를 비율대로 담는다 */
+.hero-headline {
+  width: 100%;
+  height: 78px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.result-grade-title {
-  margin: 0 0 8px;
+.hero-headline img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* 문구 이미지가 없는 등급(독서친구/재도전/심화)에서 같은 자리에 쓰는 텍스트 제목 */
+.hero-headline-text {
+  margin: 0;
   font-size: 46px;
   font-weight: 900;
-  color: var(--blue);
-}
-
-.result-grade-title::after {
-  content: "!";
-}
-
-.result-grade-title.king {
-  color: var(--orange);
-}
-
-.result-grade-title.retry {
+  letter-spacing: -1.6px;
   color: var(--red);
 }
 
-.result-subtitle {
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--muted);
-}
-
-.result-character {
+/* 캐릭터 자리 — 리본·문구를 뺀 남은 높이 전부. 이미지(원본 217x233)는 넘칠 때만 축소된다 */
+.hero-character {
   flex: 1;
+  width: 100%;
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.result-character img {
-  max-width: 220px;
+.hero-character img {
+  display: block;
+  max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
 }
 
-.result-exp {
-  margin: 0 0 14px;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--green);
+/* 가운데: 문제풀이 결과 카드 — 결과 화면의 주인공이라 다른 패널보다 그림자를 깊게 줘서 띄운다
+   (넓게 퍼지는 그림자 + 바닥에 닿는 짧은 그림자 + 안쪽 위 하이라이트) */
+.score-card {
+  position: relative;
+  padding: 42px 30px 26px;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  gap: 20px;
+  background: #fff;
+  border: 1px solid rgba(160, 107, 214, .16);
+  box-shadow:
+    14px 16px 28px rgba(93, 75, 36, .18),
+    6px 6px 10px rgba(93, 75, 36, .10);
 }
 
-/* 이번 제출로 새로 획득한 뱃지 목록 */
-.result-badges {
-  width: 100%;
-  margin: 0 0 16px;
-  padding: 16px 18px;
-  border-radius: 16px;
-  background: rgba(255, 123, 26, .08);
-  border: 1px dashed rgba(255, 123, 26, .4);
-  text-align: left;
+.score-main {
+  display: grid;
+  grid-template-columns: 1fr 150px;
+  align-items: center;
+  gap: 20px;
 }
 
-.result-badges-title {
-  margin: 0 0 10px;
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--orange);
-}
-
-.result-badge-list {
+.score-num {
   margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.result-badge-item {
   display: flex;
   align-items: baseline;
+  justify-content: center;
+  gap: 10px;
+  line-height: 1;
+  font-weight: 900;
+  color: #6b6b6b;
+  font-size: 56px;
+}
+
+.score-num strong {
+  font-size: 76px;
+  color: var(--purple);
+}
+
+.score-slash { color: #cfcfcf; }
+
+/* 별 5개 — 정답률만큼 JS가 is-on을 붙여 금색/회색 별 이미지를 교체한다
+   (두 이미지 모두 배경 투명 64x64로 맞춰둠) */
+.score-stars {
+  grid-column: 1;
+  grid-row: 2;
+  --star-on: url("/images/student_result/star.png");
+  --star-off: url("/images/student_result/gray_star.png");
+  display: flex;
+  justify-content: center;
   gap: 8px;
-  font-size: 13px;
+  margin-top: 14px;
 }
 
-.result-badge-item strong {
-  font-weight: 800;
-  white-space: nowrap;
+.score-stars .star {
+  width: 34px;
+  height: 34px;
+  background: var(--star-off) center / contain no-repeat;
 }
 
-.result-badge-item span {
-  font-weight: 600;
-  color: var(--muted);
+.score-stars .star.is-on {
+  background-image: var(--star-on);
 }
 
-.result-stats-bar {
-  width: 100%;
+/* 트로피 자리(150px) 안에 이미지(원본 112x132)를 비율대로 담는다 */
+.score-trophy {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-trophy img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.score-notes {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  border-radius: 18px;
-  overflow: hidden;
-  background: linear-gradient(135deg, var(--red), var(--orange));
-  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .12);
+  grid-template-columns: 1fr 150px;
+  gap: 14px;
 }
 
-.result-stats-bar.is-retry {
-  background: linear-gradient(135deg, #9a9a9a, #b7b7b7);
-}
-
-.stat-item {
-  padding: 16px 8px;
+.score-note,
+.score-retry {
+  margin: 0;
+  min-height: 82px;
+  padding: 14px 16px;
+  border: 1px solid #ece9f3;
+  border-radius: 12px;
+  background: #fff;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  color: #fff;
-  border-right: 1px solid rgba(255, 255, 255, .25);
-}
-
-.stat-item:last-child {
-  border-right: none;
-}
-
-.stat-label {
-  font-size: 13px;
+  text-align: center;
+  font-size: 15px;
   font-weight: 700;
-  opacity: .9;
+  color: #555;
+  line-height: 1.5;
+  word-break: keep-all;
 }
 
-.stat-value {
-  font-size: 22px;
+.score-retry span {
+  color: #8c8c8c;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.score-retry strong {
+  font-size: 16px;
+  font-weight: 900;
+  color: var(--red);
+}
+
+/* 오른쪽: 새로 획득한 카드 */
+.new-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.new-card-frame {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+}
+
+/* 카드 자리(영역 크기 고정) 안에 카드 이미지(원본 285x371)를 비율대로 맞춰 담는다 */
+.new-card-slot {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.new-card-slot img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+/* NEW 말풍선(원본 92x55) — 카드 왼쪽 위 모서리에 겹치는 오버레이 */
+.new-flag {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  z-index: 2;
+  width: 84px;
+  height: auto;
+  display: block;
+}
+
+.new-card-caption {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  color: #6f6a60;
+}
+
+/* 획득한 보상 패널 */
+.reward-panel {
+  position: relative;
+  height: 200px;
+  padding: 40px 22px 22px;
+  margin-bottom: 16px;
+}
+
+.reward-list {
+  height: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.reward-item {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid #eceae2;
+  border-radius: 14px;
+  background: #fff;
+}
+
+/* 보상 아이콘 칸(76x84) — 아이콘 원본 크기가 제각각이라(medal 76x78 / passport 87x85 /
+   map 83x74 / treasure 964x1337) 칸을 못박고 그 안에 비율대로 맞춰 담는다 */
+.reward-icon {
+  position: relative;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reward-icon img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.reward-card-img {
+  border-radius: 6px;
+}
+
+/* RARE 라벨(원본 91x55)은 카드 이미지 위에 겹치는 오버레이 */
+.rare-flag {
+  position: absolute;
+  left: -10px;
+  top: -8px;
+  z-index: 2;
+  width: 52px;
+  max-width: none;
+}
+
+.reward-body { min-width: 0; }
+
+.reward-title {
+  margin: 0 0 6px;
+  font-size: 14px;
   font-weight: 900;
 }
 
-/* 우측 "나의 독서 성향" 패널 — 데이터 연동 전 레이아웃 자리만 확보 */
-.side {
-  display: grid;
-  grid-template-rows: repeat(3, 1fr);
-  gap: 24px;
+.reward-title.orange { color: var(--orange); }
+.reward-title.pink { color: #e957a8; }
+.reward-title.blue { color: #0a7fc8; }
+
+.reward-value {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #444;
 }
 
-.panel {
-  padding: 17px 20px 16px;
+.reward-value strong {
+  font-size: 26px;
+  color: #0a7fc8;
 }
 
-.panel-head {
+.reward-step-total {
+  font-size: 15px;
+  color: #8c8c8c;
+}
+
+.reward-lv {
+  color: var(--orange);
+}
+
+.reward-progress {
+  margin: 8px 0 6px;
+  height: 8px;
+  border-radius: 99px;
+  background: #eee9dc;
+  overflow: hidden;
+}
+
+.reward-progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--orange);
+}
+
+.reward-desc {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #8c8c8c;
+  line-height: 1.4;
+  word-break: keep-all;
+}
+
+/* 하단 버튼 줄 */
+.result-actions {
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 16px;
 }
 
-.panel-title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 900;
-  color: var(--orange);
-}
-
-/* .placeholder-panel {
-  향후 독서 성향 데이터 연동 전까지의 빈 자리 표시자
-} */
-
-/* 결과 화면 하단 액션 버튼 (다시 풀기 / 메인으로 / 심화문제 풀기) — result-layout 아래 별도 행 */
-.result-fab-actions {
+.result-actions-right {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
+  gap: 16px;
 }
 
-.btn-ghost,
-.btn-primary,
-.btn-secondary {
+.btn-home,
+.btn-retry,
+.btn-advanced {
+  height: 56px;
+  min-width: 200px;
+  padding: 0 32px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 46px;
-  padding: 0 24px;
-  border-radius: 999px;
-  font-size: 15px;
-  font-weight: 800;
+  justify-content: center;
+  gap: 10px;
+  font-size: 20px;
+  font-weight: 900;
   box-shadow: var(--shadow);
 }
 
-.btn-ghost {
-  background: #fff;
-  color: var(--muted);
+.btn-home {
+  background: #fdfaf1;
+  color: #7d7768;
 }
 
-.btn-primary {
-  background: var(--blue);
+.btn-retry {
+  min-width: 290px;
+  background: #1aa864;
   color: #fff;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .12);
 }
 
-.btn-secondary {
-  background: var(--orange);
+.btn-advanced {
+  min-width: 310px;
+  background: var(--red);
   color: #fff;
-}
-/*
-.fab-advanced {
-  height: 56px;
-  padding: 0 32px;
-  font-size: 17px;
-} */
-
-/* "책 추천 받기" 확인 모달 — .page 안에 두고 absolute로 깔아서 앱 스케일 변환과 함께 맞춰진다 */
-.confirm-modal {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.confirm-modal-backdrop {
-  position: absolute;
-  inset: 0;
-  background: rgba(37, 37, 37, .45);
-}
-
-.confirm-modal-card {
-  position: relative;
-  width: 360px;
-  padding: 36px 32px;
-  border-radius: var(--radius-xl);
-  background: #fff;
-  box-shadow: var(--shadow);
-  text-align: center;
-}
-
-.confirm-modal-icon {
-  width: 56px;
-  height: 56px;
-  margin: 0 auto 14px;
-  border-radius: 50%;
-  background: rgba(9, 136, 216, .12);
-  color: var(--blue);
-  font-size: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.confirm-modal-text {
-  margin: 0 0 22px;
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--text);
-}
-
-.confirm-modal-actions {
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-}
-
-.confirm-modal-actions #confirmNoBtn {
-  border: 1px solid var(--muted);
+  box-shadow: inset 0 -4px 0 var(--red-dark);
 }

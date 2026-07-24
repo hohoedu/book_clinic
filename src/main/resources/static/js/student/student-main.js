@@ -53,12 +53,8 @@
     const actionBtn = document.getElementById('mainActionBtn');
     const actionLabel = document.getElementById('mainActionLabel');
     const metaTypeEl = document.getElementById('bookMetaType');
-    const metaAwardLabelEl = document.getElementById('bookMetaAwardLabel');
     const metaAwardEl = document.getElementById('bookMetaAward');
-    const metaCurriculumLabelEl = document.getElementById('bookMetaCurriculumLabel');
     const metaCurriculumEl = document.getElementById('bookMetaCurriculum');
-    const metaOrgLabelEl = document.getElementById('bookMetaOrgLabel');
-    const metaOrgEl = document.getElementById('bookMetaOrg');
     const metaTagsEl = document.getElementById('bookMetaTags');
 
     function showState(name) {
@@ -67,32 +63,21 @@
       cardEl.hidden = name !== 'card';
     }
 
-    function setMeta(labelEl, valueEl, text) {
-      const has = Boolean(text);
-      labelEl.hidden = !has;
-      valueEl.hidden = !has;
-      valueEl.textContent = text || '';
-    }
-
     function renderBook(book) {
       titleEl.textContent = book.originalTitle ?? '-';
       authorEl.textContent = [book.author, book.publisher].filter(Boolean).join(' | ') || '-';
-      descEl.textContent = book.summary ?? '';
+      descEl.textContent = book.summary ?? '-';
       imgEl.src = book.imageUrl || '/images/book-sample.png';
       imgEl.alt = `${book.originalTitle ?? ''} 표지`;
 
+      // 메타 정보는 값이 없어도 행을 숨기지 않고 "-"로 채운다 (정보 영역 높이 고정)
       metaTypeEl.textContent = [book.contentTypeName, book.genreName].filter(Boolean).join(', ') || '-';
-
-      setMeta(metaAwardLabelEl, metaAwardEl, book.awardName);
-      setMeta(metaCurriculumLabelEl, metaCurriculumEl, book.curriculumName);
-      setMeta(metaOrgLabelEl, metaOrgEl, book.recommendOrgName);
-
-      if (book.keywords) {
-        metaTagsEl.textContent = book.keywords.split(',').map((kw) => `#${kw.trim()}`).join(' ');
-        metaTagsEl.hidden = false;
-      } else {
-        metaTagsEl.hidden = true;
-      }
+      metaAwardEl.textContent = book.awardName || '-';
+      metaCurriculumEl.textContent = book.curriculumName || '-';
+      // 해시태그만 예외 — 없을 때 "-"를 찍지 않고 자리(높이)만 비워 둔다
+      metaTagsEl.textContent = book.keywords
+        ? book.keywords.split(',').map((kw) => `#${kw.trim()}`).join(' ')
+        : '';
 
       actionLabel.textContent = '문제 풀기';
       actionBtn.onclick = () => {

@@ -49,6 +49,7 @@
             cs.session_id      AS sessionId,
             cs.student_id      AS studentId,
             st.student_name    AS studentName,
+            st.center_code     AS centerCode,
             cs.status          AS sessionStatus,
             cs.session_date    AS sessionDate,
             r.time_slot        AS timeSlot,
@@ -131,6 +132,7 @@
             cs.session_id      AS sessionId,
             r.student_id       AS studentId,
             st.student_name    AS studentName,
+            st.center_code     AS centerCode,
             cs.status          AS sessionStatus,
             r.reservation_date AS sessionDate,
             r.time_slot        AS timeSlot,
@@ -204,6 +206,7 @@
     <select id="findReservationCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
         <include refid="reservationCardColumns" />
         WHERE r.reservation_date = #{date}
+          AND st.center_code = #{centerCode}
         ORDER BY r.time_slot ASC, st.student_name ASC
     </select>
 

@@ -39,6 +39,17 @@ public class StudentViewController {
         return "/student/student-login";
     }
 
+    /**
+     * PWA 설치 전용 랜딩 페이지 — 직원에게 "이 주소 열고 설치 눌러"로 안내하기 위한 화면.
+     * 브라우저 정책상 URL 접속만으로 자동 설치는 불가(prompt는 사용자 클릭 제스처 필요)라,
+     * beforeinstallprompt를 잡아 큰 "설치하기" 버튼 한 번으로 설치되게 한다. iOS는 이벤트 자체가
+     * 없어 "공유 → 홈 화면에 추가" 안내로 분기, 이미 설치된 경우도 별도 안내.
+     */
+    @GetMapping("/app/install")
+    public String getInstallPage() {
+        return "/student/app-install";
+    }
+
     /** appId로 로그인 → 성공 시 메인 화면으로 이동 */
     @PostMapping("/login")
     public String login(@RequestParam("appId") String appId, RedirectAttributes redirectAttributes) {
@@ -54,7 +65,8 @@ public class StudentViewController {
 
     /**
      * 레벨 카드는 ClinicService.getMainLevelInfo로 실제 EXP/레벨을 계산해 내려준다.
-     * 뱃지 패널은 ClinicService.getEarnedBadges로 획득한 뱃지 전체(최근 획득순)를 내려준다.
+     * 뱃지 패널은 카드 컬렉션 패널로 대체됐고, 카드 획득 기능이 미구현이라 아직 내려주는 데이터가 없다
+     * (구현 시 여기서 cards 모델을 채우면 화면이 그대로 렌더링된다).
      * 추천 도서 카드는 페이지 진입 후 JS가 /clinic/recommend를 호출해 채운다 — 이미 추천받은 책이
      * 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정한다 (ClinicService.recommend가 멱등 처리).
      */
@@ -80,7 +92,6 @@ public class StudentViewController {
         model.addAttribute("characterImg", (String) null);
         model.addAttribute("booksToNextLevel", levelInfo.getBooksToNextLevel());
         model.addAttribute("progressPercent", levelInfo.getProgressPercent());
-        model.addAttribute("badges", clinicService.getEarnedBadges(studentId));
         model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));
         return "/student/student-main";
     }

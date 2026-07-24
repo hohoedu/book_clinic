@@ -5,6 +5,7 @@ import java.util.Map;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.handler.exception.Exception500;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
@@ -30,9 +32,11 @@ public class MonitorController {
 
     /** 화면 최초 진입용 카드 목록 — 이후 갱신은 Firestore 구독으로 받는다 */
     @GetMapping("/live")
-    public ResponseEntity<?> live(@RequestParam(value = "date", required = false) String date) {
+    public ResponseEntity<?> live(@RequestParam(value = "date", required = false) String date,
+                                  @AuthenticationPrincipal CustomUserDetails userDetails) {
         LocalDate targetDate = date == null || date.isBlank() ? LocalDate.now() : LocalDate.parse(date);
-        return ResponseEntity.ok(ApiUtils.success(monitorService.getLiveView(targetDate)));
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        return ResponseEntity.ok(ApiUtils.success(monitorService.getLiveView(targetDate, centerCode)));
     }
 
     /** 퇴실 처리 */

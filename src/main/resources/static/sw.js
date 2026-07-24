@@ -64,6 +64,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // 관리자 영역은 서비스워커가 일절 관여하지 않는다 — SW는 학생 PWA(설치·오프라인)용인데 등록
+  // 스코프가 '/'라 admin 화면까지 통제 대상에 들어온다. admin은 실시간 대시보드라 오프라인/캐시
+  // 가치가 없고, 캐시가 끼면 "지금 보는 게 최신인지 캐시인지" 혼란만 준다. admin 페이지·API와
+  // admin 전용 스크립트(모니터링 JS·Firebase SDK 벤들)는 respondWith 없이 그대로 네트워크로
+  // 흘려보내(=SW 미개입) 항상 최신을 받게 한다. (2026-07-24)
+  if (url.pathname.startsWith('/admin/')
+      || url.pathname.startsWith('/js/monitor/')
+      || url.pathname.startsWith('/js/vendor/')) {
+    return;
+  }
+
   // 로그인/메인 등 페이지 이동(navigate)은 학생마다·시점마다 내용이 달라지므로
   // 항상 네트워크에서 최신 화면을 받아오고, 오프라인일 때만 캐시된 로그인 화면으로 대체한다
   if (request.mode === 'navigate') {

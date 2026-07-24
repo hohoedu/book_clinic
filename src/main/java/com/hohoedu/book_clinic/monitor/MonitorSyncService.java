@@ -1,6 +1,8 @@
 package com.hohoedu.book_clinic.monitor;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
@@ -32,6 +34,7 @@ public class MonitorSyncService {
         doc.put("sessionId", card.getSessionId());
         doc.put("studentId", card.getStudentId());
         doc.put("studentName", card.getStudentName());
+        doc.put("centerCode", card.getCenterCode());
         doc.put("sessionStatus", card.getSessionStatus());
         doc.put("sessionDate", card.getSessionDate() == null ? null : card.getSessionDate().toString());
         doc.put("timeSlot", card.getTimeSlot());
@@ -59,7 +62,11 @@ public class MonitorSyncService {
         doc.put("note", card.getNote());
         doc.put("elapsedMinutes", card.getElapsedMinutes());
         doc.put("cardStatus", card.getCardStatus());
-        doc.put("books", card.getBooks());
+        // books는 BookPageDTO POJO 리스트라 그대로 넣으면 안 된다 — 그 안의 LocalDateTime(recommendedAt)을
+        // Firestore Admin SDK가 리플렉션 직렬화하려다 JDK 모듈 시스템(java.time.chrono 미개방)에 막혀
+        // InaccessibleObjectException으로 터진다(2026-07-24 실시간 반영 전면 실패 원인). 최상위 필드처럼
+        // LocalDateTime을 ISO 문자열로 flatten한 Map 리스트로 변환해서 넣는다.
+        doc.put("books", toBookMaps(card.getBooks()));
 
         try {
             // 동기 대기로 처리 — 실패 시 예외가 그대로 던져지도록 해서 호출부(MonitorService)의
@@ -74,5 +81,35 @@ public class MonitorSyncService {
 
     private String toIso(java.time.LocalDateTime dt) {
         return dt == null ? null : dt.toString();
+    }
+
+    /**
+     * BookPageDTO 리스트를 Firestore가 안전하게 직렬화할 수 있는 Map 리스트로 변환한다.
+     * LocalDateTime(recommendedAt)은 ISO 문자열로 flatten — POJO 그대로 넘기면 SDK가 java.time을
+     * 리플렉션으로 직렬화하려다 모듈 시스템에 막힌다. 프론트(monitor-live.js bookPages)가 읽는 키와
+     * 이름을 맞춘다.
+     */
+    private List<Map<String, Object>> toBookMaps(List<MonitorRespDTO.BookPageDTO> books) {
+        if (books == null) return List.of();
+        List<Map<String, Object>> result = new ArrayList<>(books.size());
+        for (MonitorRespDTO.BookPageDTO book : books) {
+            Map<String, Object> m = new HashMap<>();
+            m.put("contentId", book.getContentId());
+            m.put("bookTitle", book.getBookTitle());
+            m.put("author", book.getAuthor());
+            m.put("publisher", book.getPublisher());
+            m.put("imageUrl", book.getImageUrl());
+            m.put("readingTimeText", book.getReadingTimeText());
+            m.put("recommendedAt", toIso(book.getRecommendedAt()));
+            m.put("basicCorrectCount", book.getBasicCorrectCount());
+            m.put("basicTotalCount", book.getBasicTotalCount());
+            m.put("basicStatus", book.getBasicStatus());
+            m.put("advancedCorrectCount", book.getAdvancedCorrectCount());
+            m.put("advancedTotalCount", book.getAdvancedTotalCount());
+            m.put("readingTimeMinutes", book.getReadingTimeMinutes());
+            m.put("elapsedMinutes", book.getElapsedMinutes());
+            result.add(m);
+        }
+        return result;
     }
 }

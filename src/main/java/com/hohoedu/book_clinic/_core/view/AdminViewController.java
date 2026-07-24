@@ -1,10 +1,12 @@
 package com.hohoedu.book_clinic._core.view;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
+import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic.common.code.CodeService;
 
 import lombok.RequiredArgsConstructor;
@@ -43,7 +45,9 @@ public class AdminViewController {
 
     /** 실시간 모니터링 — 카드 그리드는 화면 진입 시 1회 API 호출 + Firestore 구독으로 채워진다 */
     @GetMapping("/admin/monitor/live-view")
-    public String monitorLive(Model model) {
+    public String monitorLive(Model model, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        // 모니터링은 로그인 직원의 센터로만 스코핑한다 — 브라우저 Firestore 구독도 이 센터로 필터
+        model.addAttribute("centerCode", userDetails.getLoginUser().getCenterCode());
         model.addAttribute("firebaseWebApiKey", firebaseWebApiKey);
         model.addAttribute("firebaseWebAuthDomain", firebaseWebAuthDomain);
         model.addAttribute("firebaseWebProjectId", firebaseWebProjectId);

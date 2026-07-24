@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방 앱 설치</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+  <meta name="theme-color" content="#0988d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #0988d8, #0768a8);
+      font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      color: #16324a;
+      padding: 24px;
+    }
+    .install-card {
+      width: 460px;
+      max-width: 100%;
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+    }
+    .app-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      margin: 0 auto 20px;
+      display: block;
+      box-shadow: 0 8px 20px rgba(9, 136, 216, .35);
+    }
+    .install-card h1 { font-size: 22px; margin-bottom: 6px; }
+    .install-card .sub { font-size: 14px; color: #6b7c8c; margin-bottom: 28px; }
+    .install-btn {
+      width: 100%;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      background: #0988d8;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .install-btn:hover { background: #0872b8; }
+    .install-btn:disabled { background: #b6c6d3; cursor: default; }
+    /* 상황별 안내 박스 */
+    .hint {
+      margin-top: 22px;
+      padding: 18px;
+      background: #f2f7fb;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #3d5266;
+      text-align: left;
+    }
+    .hint b { color: #0988d8; }
+    .hint .step { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
+    .hint .step i { color: #0988d8; margin-top: 3px; }
+    .status {
+      margin-top: 18px;
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .status.done { color: #1a9e5f; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+
+<body>
+  <div class="install-card">
+    <img class="app-icon" th:src="@{/images/icons/icon-192.png}" alt="호호책방" />
+    <h1>호호책방 앱 설치</h1>
+    <p class="sub">아래 버튼을 눌러 홈 화면에 앱을 추가하세요.</p>
+
+    <!-- 안드로이드/데스크톱 크롬 등 beforeinstallprompt 지원 브라우저 -->
+    <button id="installBtn" class="install-btn" hidden>
+      <i class="fa-solid fa-download"></i> 설치하기
+    </button>
+
+    <!-- 아직 설치 조건이 안 갖춰졌거나 이벤트 대기 중 -->
+    <button id="waitBtn" class="install-btn" disabled>설치 준비 중…</button>
+
+    <!-- iOS 사파리 안내 (beforeinstallprompt 미지원이라 수동 설치뿐) -->
+    <div id="iosHint" class="hint" hidden>
+      <b>아이폰/아이패드</b>는 아래 순서로 설치해요.
+      <div class="step"><i class="fa-solid fa-arrow-up-from-bracket"></i><span>사파리 하단(또는 상단)의 <b>공유</b> 버튼을 누르고</span></div>
+      <div class="step"><i class="fa-solid fa-square-plus"></i><span><b>홈 화면에 추가</b>를 선택하세요.</span></div>
+    </div>
+
+    <!-- 이미 설치됨 -->
+    <div id="installedHint" class="status done" hidden>
+      <i class="fa-solid fa-circle-check"></i> 이미 설치되어 있어요.
+    </div>
+
+    <div id="statusMsg" class="status" hidden></div>
+  </div>
+
+  <script>
+    // 이 페이지는 학생 PWA 설치 전용 랜딩이다. beforeinstallprompt는 SW가 이 페이지를 통제하고
+    // manifest가 걸려 있어야 발생하므로, 여기서 직접 서비스워커를 등록한다.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch((err) => console.error('SW 등록 실패:', err));
+    }
+
+    const installBtn = document.getElementById('installBtn');
+    const waitBtn = document.getElementById('waitBtn');
+    const iosHint = document.getElementById('iosHint');
+    const installedHint = document.getElementById('installedHint');
+    const statusMsg = document.getElementById('statusMsg');
+
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches
+      || window.matchMedia('(display-mode: fullscreen)').matches
+      || window.navigator.standalone === true;
+    const isIos = /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+
+    let deferredPrompt = null;
+
+    function show(el) { el.hidden = false; }
+    function hide(el) { el.hidden = true; }
+
+    if (isStandalone) {
+      // 이미 설치된 앱으로 이 페이지를 연 경우
+      hide(waitBtn);
+      show(installedHint);
+    } else if (isIos) {
+      // iOS는 프로그램 설치 불가 — 수동 안내만
+      hide(waitBtn);
+      show(iosHint);
+    }
+
+    // 브라우저가 "설치 가능"이라고 판단하면 이 이벤트가 뜬다 — 잡아뒀다가 버튼 클릭 때 prompt() 호출.
+    // (로드 시 자동 호출은 브라우저가 막아둬서 반드시 사용자 클릭이 필요하다)
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      hide(waitBtn);
+      show(installBtn);
+    });
+
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      hide(installBtn);
+      statusMsg.textContent = outcome === 'accepted' ? '설치를 시작했어요!' : '설치가 취소됐어요. 버튼을 다시 눌러 설치할 수 있어요.';
+      statusMsg.className = 'status' + (outcome === 'accepted' ? ' done' : '');
+      show(statusMsg);
+      if (outcome !== 'accepted') { show(installBtn); }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      hide(installBtn);
+      installedHint.querySelector('i').className = 'fa-solid fa-circle-check';
+      installedHint.childNodes[installedHint.childNodes.length - 1].textContent = ' 설치가 완료됐어요!';
+      show(installedHint);
+    });
+  </script>
+</body>
+
+</html>

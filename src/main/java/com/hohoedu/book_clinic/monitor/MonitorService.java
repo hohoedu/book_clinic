@@ -61,9 +61,9 @@ public class MonitorService {
         syncSafely(sessionId);
     }
 
-    /** 실시간 모니터링 화면 최초 진입용 — 예약 기준 카드 목록. 이후 갱신은 Firestore 구독으로 받는다 */
-    public MonitorRespDTO.LiveViewRespDTO getLiveView(LocalDate date) {
-        List<MonitorRespDTO.CardDTO> cards = monitorRepository.findReservationCards(date);
+    /** 실시간 모니터링 화면 최초 진입용 — 예약 기준 카드 목록(로그인 직원의 센터로 스코핑). 이후 갱신은 Firestore 구독으로 받는다 */
+    public MonitorRespDTO.LiveViewRespDTO getLiveView(LocalDate date, String centerCode) {
+        List<MonitorRespDTO.CardDTO> cards = monitorRepository.findReservationCards(date, centerCode);
         cards.forEach(this::fillDerivedFields);
 
         MonitorRespDTO.LiveViewRespDTO resp = new MonitorRespDTO.LiveViewRespDTO();
@@ -111,9 +111,15 @@ public class MonitorService {
         if (sessionId == null) return;
         try {
             MonitorRespDTO.CardDTO card = monitorRepository.findCardBySessionId(sessionId);
-            if (card == null) return;
+            if (card == null) {
+                log.warn("Firestore 동기화 건너뜀 — sessionId={}에 해당하는 카드 없음", sessionId);
+                return;
+            }
             fillDerivedFields(card);
             monitorSyncService.syncCard(card);
+            // 성공 여부를 서버 로그에서 바로 확인할 수 있게 info로 남긴다(실시간 반영 디버깅용)
+            log.info("Firestore 동기화 성공 — sessionId={}, studentId={}, cardStatus={}, sessionDate={}",
+                    sessionId, card.getStudentId(), card.getCardStatus(), card.getSessionDate());
         } catch (Exception e) {
             log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: sessionId={}", sessionId, e);
         }

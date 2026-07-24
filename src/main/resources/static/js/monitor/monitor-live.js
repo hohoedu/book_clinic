@@ -6,9 +6,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   initReadingLogPanel();
   // Firestore 미설정/연결 끊김 대비 백업 polling — 경과시간/상태는 항상 서버(DB 시계) 계산값을
   // 그대로 신뢰한다(클라이언트에서 timestamp로 재계산하면 브라우저-DB 타임존 차이만큼 오차가 생김).
-  // 실시간 반영은 Firestore push가 담당하므로(2026-07-23 FcmConfig 수정으로 정상화) 이 폴링은
-  // 어디까지나 백업 안전장치 — DB 부하를 고려해 주기를 짧게 잡지 않는다.
+  // 실시간 반영은 Firestore push가 담당한다(입실/제출/퇴실 등 이벤트는 즉시 푸시됨). 폴링은 푸시가
+  // 끊겼을 때를 위한 백업이라 30초로 충분하다. 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에
+  // 기대지 않고 startElapsedTicker가 브라우저에서 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를
+  // 기준점으로 삼아 그 위로 초를 더하는 방식이라 DB/브라우저 시계 차이 문제가 없다.
   setInterval(loadLiveView, 30000);
+  startElapsedTicker();
 });
 
 const CSRF_HEADER = "X-XSRF-TOKEN";
@@ -137,6 +140,8 @@ async function loadLiveView() {
   try {
     const view = await getJson(`/admin/monitor/live?date=${selectedDate()}`);
     cards = view.cards ?? [];
+    const now = Date.now();
+    cards.forEach((c) => (c._syncedAt = now)); // 경과시간 로컬 카운트업 기준점
     render();
   } catch (e) {
     console.error("실시간 모니터링 초기 조회 실패", e);
@@ -147,6 +152,7 @@ async function loadLiveView() {
    studentId로 매칭한다 — 미입실 카드는 sessionId가 없어서(null) sessionId로 매칭하면 미입실
    →입실 전환 시 기존 카드를 못 찾고 중복으로 추가돼 버린다. */
 function applyFirestoreCard(doc) {
+  doc._syncedAt = Date.now(); // 경과시간 로컬 카운트업 기준점 (이 카드가 서버 값으로 갱신된 시각)
   const idx = cards.findIndex((c) => c.studentId === doc.studentId);
   if (idx === -1) cards.push(doc);
   else cards[idx] = doc;
@@ -155,7 +161,14 @@ function applyFirestoreCard(doc) {
 
 async function connectFirestore() {
   const fb = window.__monitorFirebase;
-  if (!fb) return;
+  if (!fb) {
+    // window.__monitorFirebase는 head의 <script type="module">이 gstatic CDN에서 Firebase SDK를
+    // import한 뒤 세팅한다 — 여기가 비어있으면 CDN 로드 실패(오프라인/차단망)로 실시간 구독 자체가
+    // 시작되지 못하고 30초 폴백 폴링에만 의존하게 된다. 조용히 넘어가지 말고 원인을 남긴다.
+    console.warn("[monitor] Firestore 구독 미시작 — Firebase SDK(window.__monitorFirebase) 로드 안 됨. "
+      + "head의 gstatic CDN import 실패(오프라인/차단망) 가능성 → 30초 폴백 폴링에만 의존합니다");
+    return;
+  }
   if (firestoreUnsubscribe) {
     firestoreUnsubscribe();
     firestoreUnsubscribe = null;
@@ -171,7 +184,14 @@ async function connectFirestore() {
       messagingSenderId: body.dataset.firebaseMessagingSenderId,
       appId: body.dataset.firebaseAppId,
     };
-    if (!firebaseConfig.apiKey) return; // 설정 미교체 상태(REPLACE_ME) — 초기 목록만으로 동작
+    if (!firebaseConfig.apiKey) {
+      // body data-firebase-api-key가 비어있음 — Thymeleaf가 ${firebaseWebApiKey}를 못 채운 것.
+      // 실행 프로파일에 application-secrets.yml이 안 물렸거나 FIREBASE_WEB_API_KEY 미설정. 조용히
+      // 넘어가면 원인 없이 30초 폴링만 남으므로 명시적으로 남긴다.
+      console.warn("[monitor] Firestore 구독 미시작 — body의 firebase apiKey가 비어있음. "
+        + "실행 프로파일에 application-secrets.yml 미적용/FIREBASE_WEB_API_KEY 미설정 가능성 → 30초 폴백 폴링에만 의존합니다");
+      return;
+    }
 
     const { token } = await postJson("/admin/monitor/firebase-token", {});
 
@@ -180,7 +200,15 @@ async function connectFirestore() {
     await fb.signInWithCustomToken(auth, token);
 
     const db = fb.getFirestore(app);
-    const q = fb.query(fb.collection(db, "clinic_monitor"), fb.where("sessionDate", "==", selectedDate()));
+    // 날짜 + 센터로 스코핑 — 다른 센터 학생의 푸시가 이 브라우저로 새어들어오지 않게 한다.
+    // (두 개의 등가 필터라 Firestore 복합 인덱스가 필요할 수 있음 — 없으면 구독 에러 콜백에
+    //  인덱스 생성 URL이 찍히므로 그 링크로 한 번 만들어주면 된다.)
+    const centerCode = document.body.dataset.centerCode;
+    const q = fb.query(
+      fb.collection(db, "clinic_monitor"),
+      fb.where("sessionDate", "==", selectedDate()),
+      fb.where("centerCode", "==", centerCode)
+    );
     firestoreUnsubscribe = fb.onSnapshot(
       q,
       (snapshot) => {
@@ -196,6 +224,22 @@ async function connectFirestore() {
   } catch (e) {
     console.warn("Firestore 실시간 구독 연결 실패 — 초기 목록만 표시됩니다", e);
   }
+}
+
+/* 서버가 준 경과분(baseMinutes)에, 그 값을 받은 뒤(syncedAt) 브라우저에서 흐른 시간을 더해
+   "지금 경과분"을 만든다. 절대시각(recommendedAt)을 브라우저 시계로 다시 재지 않으므로 DB-브라우저
+   타임존 차이 문제가 없다 — 서버가 계산한 값을 기준점으로만 쓰고 그 위로 초를 올린다. */
+function liveElapsed(baseMinutes, syncedAt) {
+  if (baseMinutes == null) return null;
+  if (!syncedAt) return baseMinutes;
+  return baseMinutes + Math.floor((Date.now() - syncedAt) / 60000);
+}
+
+/* 독서 경과시간은 시간이 흐르는 것만으로 바뀌는데 서버 이벤트가 없어 푸시가 안 온다 — 폴링(30초)에만
+   기대면 최대 30초 늦으므로, 화면을 주기적으로 다시 그려 경과분을 로컬로 올려준다. 표시는 '분' 단위라
+   15초 주기면 분 넘어가는 순간을 충분히 촘촘히 잡는다(초당 렌더는 불필요한 DOM 갱신). */
+function startElapsedTicker() {
+  setInterval(render, 15000);
 }
 
 /* ── 렌더링 ── */
@@ -365,9 +409,11 @@ function renderBookRow(el, card, pages, pageIndex) {
 function renderStatRow(el, card, page) {
   const basicText = page.basicTotalCount ? `${page.basicCorrectCount ?? 0}/${page.basicTotalCount}` : "-";
   const advancedText = page.advancedTotalCount ? `${page.advancedCorrectCount ?? 0}/${page.advancedTotalCount}` : "-";
-  const readingTimeText = page.elapsedMinutes != null ? `${page.elapsedMinutes}분` : "-";
+  // 경과분은 서버 값(page.elapsedMinutes)을 기준점으로 로컬에서 현재 시각까지 올려 표시한다
+  const elapsed = liveElapsed(page.elapsedMinutes, card._syncedAt);
+  const readingTimeText = elapsed != null ? `${elapsed}분` : "-";
   const recommendedText = page.readingTimeMinutes != null ? `권장 ${page.readingTimeMinutes}분` : "";
-  const isOverTime = page.readingTimeMinutes != null && page.elapsedMinutes != null && page.elapsedMinutes > page.readingTimeMinutes;
+  const isOverTime = page.readingTimeMinutes != null && elapsed != null && elapsed > page.readingTimeMinutes;
 
   const basicPill = page.basicStatus === "DONE"
     ? `<span class="stat-pill pill-pass">통과</span>`

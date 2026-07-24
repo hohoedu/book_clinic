@@ -43,6 +43,8 @@
   let questions = [];
   let current = 0;
   let answered = [];
+  // 결과 화면 문구("OO을(를) 완독하고...")에 쓸 책 제목 — loadBookInfo에서 채운다
+  let currentBookTitle = null;
 
   function showState(name) {
     emptyState.hidden = name !== 'empty';
@@ -64,6 +66,7 @@
       const data = await res.json();
       if (!data.success) return;
       const book = data.response;
+      currentBookTitle = book.originalTitle ?? null;
       sideBookTitle.textContent = book.originalTitle ?? '-';
       if (book.imageUrl) sideBookImg.src = book.imageUrl;
     } catch (err) {
@@ -247,7 +250,7 @@
       if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');
       result = isAdvanced
         ? { advanced: true, correctCount: data.response.correctCount, totalCount: data.response.totalCount, newBadges: data.response.newBadges }
-        : { advanced: false, wrongQnums, ...data.response };
+        : { advanced: false, wrongQnums, bookTitle: currentBookTitle, ...data.response };
     } catch (err) {
       console.error(err);
       // 채점 서버 호출이 실패해도 학생이 결과를 볼 수 있도록 클라이언트 집계값으로 대체 표시(재도전 취급)

@@ -207,5 +207,7 @@ INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time
 ('DAE001T01', CAST(GETDATE() AS DATE), '1'),
 ('DAE001T02', CAST(GETDATE() AS DATE), '2'),
 ('DAE001T03', CAST(GETDATE() AS DATE), '3'),
-('DAE001T04', CAST(GETDATE() AS DATE), '4');
+('DAE001T04', CAST(GETDATE() AS DATE), '4'),
+('PUS002T01', CAST(GETDATE() AS DATE), '1'),
+('PUS002T02', CAST(GETDATE() AS DATE), '3');
 
