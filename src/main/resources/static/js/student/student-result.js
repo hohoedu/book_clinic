@@ -16,7 +16,12 @@
   const resultTitle = document.getElementById('resultTitle');
   const resultRetryText = document.getElementById('resultRetryText');
   const rewardLevelNo = document.getElementById('rewardLevelNo');
+  const rewardLevelName = document.getElementById('rewardLevelName');
   const rewardExpDesc = document.getElementById('rewardExpDesc');
+  const cardReward = document.getElementById('cardReward');
+  const rewardCardImg = document.getElementById('rewardCardImg');
+  const rewardCardName = document.getElementById('rewardCardName');
+  const rewardCardDesc = document.getElementById('rewardCardDesc');
   const rewardProgressBar = document.getElementById('rewardProgressBar');
   const retryBtn = document.getElementById('retryBtn');
   const wrongRetryBtn = document.getElementById('wrongRetryBtn');
@@ -44,6 +49,7 @@
     renderRetryResult(result);
   }
   renderExp(result);
+  renderCard(result);
 
   // "틀린 문제 풀기" — 이번에 틀린 문항 번호만 세션 저장소에 담아두면 student-question.js가
   // 문제 목록을 불러온 뒤 그 번호만 걸러서 다시 낸다
@@ -135,25 +141,47 @@
     return result.bookTitle || '이 책';
   }
 
-  // 보상 패널의 경험치 칸 — 카드/독서여권/독서탐험 칸은 기능 미구현이라 화면 자리만 잡아둔 상태
+  // 보상 패널의 레벨 칸 — EXP 폐지, 완독 권수로 레벨업(카드/독서여권 칸은 기능 미구현이라 자리만 잡아둔 상태)
   function renderExp(result) {
     if (result.levelNo != null) {
       rewardLevelNo.textContent = `Lv. ${result.levelNo}`;
     }
+    rewardLevelName.textContent = result.levelTitle ?? '';
     if (result.progressPercent != null) {
       rewardProgressBar.style.width = `${result.progressPercent}%`;
     }
 
     if (result.advanced) {
-      rewardExpDesc.textContent = '심화문제는 추가 경험치가 없어요.';
+      rewardExpDesc.textContent = '심화문제는 레벨과 무관해요.';
     } else if (result.alreadyCompleted) {
-      rewardExpDesc.textContent = '이미 완독한 책이라 추가 경험치는 없어요.';
+      rewardExpDesc.textContent = '이미 완독한 책이에요.';
     } else if (result.leveledUp) {
-      rewardExpDesc.textContent = `EXP +${result.expGained} 획득! 레벨업했어요 🎉`;
-    } else if (result.expGained > 0) {
-      rewardExpDesc.textContent = `EXP +${result.expGained} 획득!`;
+      rewardExpDesc.textContent = `레벨업했어요! 🎉 Lv. ${result.levelNo} 달성`;
+    } else if (result.passed && result.booksToNextLevel != null) {
+      rewardExpDesc.textContent = `완독! 다음 레벨까지 ${result.booksToNextLevel}권 남았어요.`;
+    } else if (result.passed) {
+      rewardExpDesc.textContent = '완독했어요! 참 잘했어요 🎉';
     } else {
-      rewardExpDesc.textContent = '이번에는 획득한 경험치가 없어요.';
+      rewardExpDesc.textContent = '아직 완독하지 못했어요. 다시 도전해봐요!';
+    }
+  }
+
+  // 온라인 카드 칸 — 이번 제출로 새 완독이 되어 카드를 획득한 경우에만 노출한다(책당 1장).
+  // 카드의 정체(책 제목/표지)는 가리고(???) 진행도만 보여준다. 10장을 채우면 실물 교환 안내.
+  function renderCard(result) {
+    if (!result.cardName) {
+      cardReward.hidden = true;
+      return;
+    }
+    cardReward.hidden = false;
+    rewardCardName.textContent = '???';
+    const collected = result.totalCards != null ? ((result.totalCards - 1) % 10) + 1 : null;
+    if (result.cardRewardReached) {
+      rewardCardDesc.textContent = '카드 10장 완성! 선생님께 실물 카드를 받으세요 🎉';
+    } else if (collected != null) {
+      rewardCardDesc.textContent = `카드 ${collected}/10장을 모았어요!`;
+    } else {
+      rewardCardDesc.textContent = '카드를 모았어요!';
     }
   }
 })();

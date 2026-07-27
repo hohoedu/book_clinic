@@ -104,10 +104,10 @@
         <div class="reward-list">
           <div class="reward-item">
             <div class="reward-icon">
-              <img th:src="@{/images/student_result/medal.png}" alt="경험치 메달" />
+              <img th:src="@{/images/student_result/medal.png}" alt="레벨 메달" />
             </div>
             <div class="reward-body">
-              <p class="reward-title orange">경험치 획득!</p>
+              <p class="reward-title orange">레벨 성장!</p>
               <p class="reward-value"><span class="reward-lv" id="rewardLevelNo">Lv. 2</span> <span
                   id="rewardLevelName">독서 새싹</span></p>
               <div class="reward-progress">
@@ -117,15 +117,15 @@
             </div>
           </div>
 
-          <div class="reward-item">
+          <div class="reward-item" id="cardReward" hidden>
             <div class="reward-icon">
               <img class="rare-flag" th:src="@{/images/student_result/rare.png}" alt="RARE" />
-              <img class="reward-card-img" th:src="@{/images/student_result/treasure.png}" alt="획득한 카드" />
+              <img class="reward-card-img" id="rewardCardImg" th:src="@{/images/student_result/treasure.png}" alt="획득한 카드" />
             </div>
             <div class="reward-body">
-              <p class="reward-title pink">숨겨진 보물 발견!</p>
+              <p class="reward-title pink">카드 획득!</p>
               <p class="reward-value" id="rewardCardName">별빛 랜턴</p>
-              <p class="reward-desc">선생님께 카드를 받으세요.</p>
+              <p class="reward-desc" id="rewardCardDesc">이 책의 카드를 모았어요.</p>
             </div>
           </div>
 

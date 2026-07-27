@@ -105,7 +105,8 @@
             </div>
             <div class="level-name">
               <span class="level-pill" th:text="|Lv. ${levelNo}|">Lv. 3</span>
-              <h3 th:text="|${levelName} 단계|"></h3>
+              <h3 th:text="${levelTitle}"></h3>
+              <p class="level-stage" th:if="${levelName != null}" th:text="|${levelName} 단계|"></p>
             </div>
             <div class="level-progress">
               <div class="progress-label">다음 레벨까지</div>
@@ -125,15 +126,10 @@
           <section class="card panel">
             <div class="panel-head">
               <h3 class="panel-title">나의 카드 컬렉션</h3>
-              <a class="more-link" href="#">더보기 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>
             </div>
             <div class="collect-cards">
               <div class="collect-card" th:each="card, st : ${cards}" th:if="${st.index < 4}">
-                <img class="collect-card-img" th:src="${card.imageUrl}" th:alt="${card.cardName}" />
-                <div class="collect-card-name">
-                  <small th:text="${card.bookTitle}">드소토 선생님의</small>
-                  <strong th:text="${card.cardName}">진료 가방</strong>
-                </div>
+                <img class="collect-card-img" th:src="@{/images/student_result/card.png}" alt="획득한 카드" />
               </div>
               <th:block th:with="cardCount=${cards != null ? cards.size() : 0}">
                 <th:block th:if="${cardCount < 4}">

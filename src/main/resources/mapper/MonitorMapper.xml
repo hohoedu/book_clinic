@@ -24,13 +24,26 @@
 
     <update id="markQuizStarted">
         UPDATE erp_bookstore_clinic_session
-        SET quiz_started_at = DATEADD(HOUR, 9, GETUTCDATE())
+        SET quiz_started_at = DATEADD(HOUR, 9, GETUTCDATE()),
+            result_viewed_at = NULL
         WHERE session_id = #{sessionId}
     </update>
 
     <update id="clearQuizStarted">
         UPDATE erp_bookstore_clinic_session
         SET quiz_started_at = NULL
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <update id="markResultViewing">
+        UPDATE erp_bookstore_clinic_session
+        SET result_viewed_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE session_id = #{sessionId}
+    </update>
+
+    <update id="clearResultViewing">
+        UPDATE erp_bookstore_clinic_session
+        SET result_viewed_at = NULL
         WHERE session_id = #{sessionId}
     </update>
 
@@ -56,6 +69,7 @@
             cs.entered_at      AS enteredAt,
             cs.exited_at       AS exitedAt,
             cs.quiz_started_at AS quizStartedAt,
+            cs.result_viewed_at AS resultViewedAt,
 
             rl.recommend_id    AS recommendId,
             rl.content_id      AS contentId,
@@ -139,6 +153,7 @@
             cs.entered_at      AS enteredAt,
             cs.exited_at       AS exitedAt,
             cs.quiz_started_at AS quizStartedAt,
+            cs.result_viewed_at AS resultViewedAt,
 
             rl.recommend_id    AS recommendId,
             rl.content_id      AS contentId,
@@ -166,7 +181,7 @@
         FROM erp_bookstore_clinic_reservation r
         JOIN erp_student st ON st.student_id = r.student_id
         OUTER APPLY (
-            SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at
+            SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at, result_viewed_at
             FROM erp_bookstore_clinic_session
             WHERE student_id = r.student_id AND session_date = r.reservation_date
             ORDER BY session_id DESC

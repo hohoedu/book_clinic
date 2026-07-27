@@ -27,6 +27,12 @@ public interface MonitorRepository {
     /** 채점 제출 시 문제풀이 진행 상태 해제 */
     void clearQuizStarted(@Param("sessionId") Integer sessionId);
 
+    /** 결과 화면 진입 시각 기록 — "결과 확인중" 카드 상태의 기준 */
+    void markResultViewing(@Param("sessionId") Integer sessionId);
+
+    /** 결과 화면 이탈(홈으로 등) 시 결과 확인 상태 해제 */
+    void clearResultViewing(@Param("sessionId") Integer sessionId);
+
     /** 특정 날짜·센터의 예약 기준 전체 카드 목록 (예약 없이 입실한 세션은 포함되지 않음) */
     List<MonitorRespDTO.CardDTO> findReservationCards(@Param("date") LocalDate date, @Param("centerCode") String centerCode);
 

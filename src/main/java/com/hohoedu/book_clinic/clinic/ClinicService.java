@@ -1,13 +1,9 @@
 package com.hohoedu.book_clinic.clinic;
 
 import java.time.Year;
-import java.time.YearMonth;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -53,8 +49,8 @@ public class ClinicService {
     // erp_bookstore_code(gubun='S')에 등록된 학년 코드 범위 — 규칙 5(윗학년 순차 추천)의 상한
     private static final int MAX_SCHOOLYEAR = 7;
 
-    // erp_bookstore_level에 등록된 최고 레벨(만렙) — 1~30, 11~20 성장, 21~30 마스터
-    private static final int MAX_LEVEL = 30;
+    // 단계(학년)별 최고 레벨(만렙) — 각 학년이 레벨 1~12를 가진다
+    private static final int MAX_LEVEL = 12;
 
     // student-main "이번 달에 읽은 책" 패널이 4칸 고정 레이아웃이라 서버에서도 4건으로 맞춘다
     private static final int MONTH_BOOKS_LIMIT = 4;
@@ -62,9 +58,15 @@ public class ClinicService {
     // 문제풀이 합격선 = 전체 문항 수의 2/3 (12문항→8개, 15문항→10개 기준으로 확정)
     private static final double QUIZ_PASS_RATIO = 2.0 / 3;
 
-    // MONTH_STREAK 뱃지 판정용 월간 완독 목표 권수 — 1·2학년은 8권, 그 외 학년은 4권 (완독 = 문제풀이 합격)
-    private static final int MONTH_QUOTA_LOW_GRADE = 8;
-    private static final int MONTH_QUOTA_DEFAULT = 4;
+    // 온라인 카드 N장을 모으면 오프라인 실물 카드 1장 (시스템은 진행도/달성 표시까지만)
+    private static final int CARD_SET_SIZE = 10;
+
+    // 뱃지 id (erp_bookstore_badge) — 책마다 기본 1개(1~3 택1) + 심화 1개(4~5 택1)
+    private static final int BADGE_GREAT_JOB = 1;   // 참 잘했어요 (기본 첫 시도 불합격)
+    private static final int BADGE_FRIEND    = 2;   // 독서친구 (기본 첫 시도 합격)
+    private static final int BADGE_KING      = 3;   // 독서왕 (기본 첫 시도 만점)
+    private static final int BADGE_ADV_DONE  = 4;   // 심화 완료 (심화 첫 시도 합격)
+    private static final int BADGE_ADV_KING  = 5;   // 심화왕 (심화 첫 시도 만점)
 
     private final ClinicRepository clinicRepository;
     private final BookRepository bookRepository;
@@ -161,11 +163,11 @@ public class ClinicService {
      *   서버가 erp_bookstore_itempool.ans(해당 qlevel, state=S)와 직접 대조해 정답 수/총 문항 수를
      *   직접 계산한다(devtools로 correctCount를 조작해서 제출하는 것을 막기 위함, 2026-07-09).
      * - 기본/심화 모두 문항별 선택 답안을 풀이 이력(quiz_answer_log)으로 남긴다
-     * - 심화(02)는 여기까지만 — 완독/EXP/등급 처리 없이 채점 결과만 반환한다
-     * - 기본(01)은 합격선(전체 문항의 2/3) 이상이면 recommend_log를 DONE 처리 + EXP 적립 + 레벨 재계산
+     * - 심화(02)는 여기까지만 — 완독/등급/레벨 처리 없이 채점 결과만 반환한다
+     * - 기본(01)은 합격선(전체 문항의 2/3) 이상이면 recommend_log를 DONE 처리 + 레벨 재계산(EXP 폐지, 완독 권수 기준)
      * - 합격선 미달이면 PENDING 유지(재도전 — 재로그인해도 같은 책 그대로)
      * - 정답률 100% = 독서왕(KING), 합격선 이상 100% 미만 = 독서친구(FRIEND)
-     * - 이미 DONE 처리된 책을 재제출해도 기록/EXP를 다시 갱신하지 않는다
+     * - 이미 DONE 처리된 책을 재제출해도 기록/레벨을 다시 갱신하지 않는다
      */
     @Transactional
     public ClinicRespDTO.QuizSubmitRespDTO submitQuiz(String studentId, Integer contentId, String qlevel,
@@ -205,28 +207,32 @@ public class ClinicService {
         ClinicRespDTO.RecommendLogStatusDTO logStatus = clinicRepository.findRecommendLogStatus(studentId, contentId);
         if (logStatus == null) throw new Exception404("추천 이력을 찾을 수 없습니다: studentId=" + studentId + ", contentId=" + contentId);
 
-        // 풀이 이력 적재 — 이미 DONE 처리된 책의 재제출(EXP 없음)이든 재도전이든, 기본/심화 모두 제출은 전부 남긴다
+        // 뱃지는 "첫 시도" 결과로 등급이 정해진다(재도전 고정) — 이번 제출의 로그를 적재하기 전에
+        // 같은 책+난이도의 기존 제출이 있었는지로 첫 시도 여부를 판단한다.
+        boolean firstAttempt = clinicRepository.countPriorAttempts(studentId, contentId, resolvedQlevel) == 0;
+
+        // 풀이 이력 적재 — 이미 DONE 처리된 책의 재제출이든 재도전이든, 기본/심화 모두 제출은 전부 남긴다
         if (!answerLogs.isEmpty()) {
             clinicRepository.insertQuizAnswerLogs(logStatus.getRecommendId(), studentId, contentId, resolvedQlevel, answerLogs);
         }
 
-        // 심화문제는 완독/EXP/등급 개념이 없다 — 이력 기록/채점 결과에 더해 뱃지 판정만 수행
-        // (심화 만점 뱃지가 여기서 열리고, 과거 이력 소급 획득분도 함께 나갈 수 있다)
+        // 심화문제는 완독/등급/레벨 개념이 없다 — 이력 기록/채점 결과에 더해 뱃지(심화완료/심화왕)만 판정.
+        // 심화 불합격이면 뱃지 없음, 첫 시도가 아니면(재도전) 등급 변화 없음.
         if (advanced) {
             resp.setPassed(false);
             resp.setGrade(null);
-            resp.setNewBadges(checkAndAwardBadges(studentId));
+            resp.setNewBadges(awardAdvancedBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
             syncMonitorSafely(studentId);
             return resp;
         }
 
         if ("DONE".equals(logStatus.getStatus())) {
+            // 이미 완독한 책의 재제출 — 첫 시도가 아니므로 새 뱃지 없음
             resp.setPassed(true);
             resp.setGrade(logStatus.getGrade());
             resp.setAlreadyCompleted(true);
-            resp.setExpGained(0);
             resp.setLeveledUp(false);
-            resp.setNewBadges(checkAndAwardBadges(studentId));
+            resp.setNewBadges(List.of());
             syncMonitorSafely(studentId);
             return resp;
         }
@@ -240,26 +246,43 @@ public class ClinicService {
         resp.setGrade(grade);
 
         if (passed) {
-            String bookSchoolyear = clinicRepository.findContentSchoolyear(contentId);
-            Integer expPerBook = bookSchoolyear == null ? null : clinicRepository.findExpPerBook(bookSchoolyear);
-            int expGained = expPerBook == null ? 0 : expPerBook;
+            // 레벨은 EXP가 아니라 "그 학년 도서 완독 권수 ÷ 학년별 필요권수"로 정해진다(단계 = 학생 학년).
+            // updateRecommendResult로 이 책이 이미 DONE 처리됐으므로 doneAfter에 이번 완독이 포함된다.
+            String schoolyear = resolveSchoolyear(studentId);
+            Integer booksPerLevel = clinicRepository.findBooksPerLevel(schoolyear);
+            if (booksPerLevel != null && booksPerLevel > 0) {
+                int doneAfter = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
+                int levelBefore = levelFor(doneAfter - 1, booksPerLevel);
+                int levelAfter = levelFor(doneAfter, booksPerLevel);
+                resp.setLevelNo(levelAfter);
+                resp.setLeveledUp(levelAfter > levelBefore);
+                ClinicRespDTO.LevelDetailDTO detail = clinicRepository.findLevelDetail(schoolyear, levelAfter);
+                if (detail != null) resp.setLevelTitle(detail.getTitle());
+                if (levelAfter >= MAX_LEVEL) {
+                    resp.setProgressPercent(100);
+                    resp.setBooksToNextLevel(0);
+                } else {
+                    int inLevel = doneAfter % booksPerLevel;
+                    resp.setProgressPercent((int) Math.round(inLevel * 100.0 / booksPerLevel));
+                    resp.setBooksToNextLevel(booksPerLevel - inLevel);
+                }
+            }
 
-            ClinicRespDTO.StudentExpDTO before = clinicRepository.findStudentExp(studentId);
-            int currentExp = before == null ? 0 : before.getExp();
-            int currentLevel = before == null ? 1 : before.getLevelNo();
-
-            int newExp = currentExp + expGained;
-            int newLevel = calculateLevel(newExp);
-            clinicRepository.upsertStudentExp(studentId, expGained, newLevel);
-
-            resp.setExpGained(expGained);
-            resp.setLevelNo(newLevel);
-            resp.setLeveledUp(newLevel > currentLevel);
+            // 온라인 카드 — 새 완독(DONE)이므로 그 책의 카드를 1장 획득한다(책당 1장, 중복 없음).
+            // 카드 10장마다 오프라인 실물 1장 교환 시점(cardRewardReached) — 실물 지급은 오프라인 수동.
+            ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
+            if (card != null) {
+                int totalCards = clinicRepository.countDoneBooks(studentId); // 이번 완독 포함
+                resp.setCardName(card.getCardName());
+                resp.setCardImageUrl(card.getImageUrl());
+                resp.setTotalCards(totalCards);
+                resp.setCardRewardReached(totalCards > 0 && totalCards % CARD_SET_SIZE == 0);
+            }
         }
 
-        // 합격/불합격과 무관하게 매 제출마다 뱃지 판정 — 지표는 로그에서 재계산하므로
-        // 뱃지 오픈 이전의 과거 이력도 이 시점에 자동으로 소급 획득된다
-        resp.setNewBadges(checkAndAwardBadges(studentId));
+        // 기본 문제 뱃지 — 첫 시도 결과로 등급 확정(불합격→참잘했어요 / 합격→독서친구 / 만점→독서왕).
+        // 재도전(첫 시도 아님)이면 등급이 고정되어 새 뱃지가 나가지 않는다.
+        resp.setNewBadges(awardBasicBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
         syncMonitorSafely(studentId);
 
         return resp;
@@ -278,22 +301,34 @@ public class ClinicService {
     }
 
     /**
-     * student-main 화면 레벨 카드용 — 학생의 현재 레벨/EXP 진행률을 계산한다.
-     * student_info 행이 없으면(아직 한 번도 합격 못 한 학생) 레벨1/EXP0 취급.
-     * progressPercent는 "현재 레벨 구간"(이전 레벨 required_exp ~ 현재 레벨 required_exp) 안에서의 비율,
-     * booksToNextLevel은 남은 EXP를 학생 학년의 권당 EXP로 환산한 예상치(만렙이면 0)다.
+     * student-main 화면 레벨 카드용 — 학생의 현재 레벨/진행률을 계산한다(EXP 폐지).
+     * 단계 = 학생 학년(grade_key). 그 학년 도서 완독(DONE) 권수를 학년별 필요권수로 나눠 레벨(1~12)을 정하고,
+     * progressPercent는 현재 레벨 구간 내 완독 비율, booksToNextLevel은 다음 레벨까지 남은 완독 권수(만렙이면 0)다.
+     * 학년 규칙이 없으면(예: 미등록/중등) 레벨1·진행률0으로 취급한다.
      */
     public ClinicRespDTO.MainLevelInfoDTO getMainLevelInfo(String studentId) {
-        ClinicRespDTO.StudentExpDTO studentExp = clinicRepository.findStudentExp(studentId);
-        int exp = studentExp == null ? 0 : studentExp.getExp();
-        int levelNo = studentExp == null ? 1 : studentExp.getLevelNo();
-
-        ClinicRespDTO.LevelDetailDTO current = clinicRepository.findLevelDetail(levelNo);
+        String schoolyear = resolveSchoolyear(studentId);
+        Integer booksPerLevel = clinicRepository.findBooksPerLevel(schoolyear);
 
         ClinicRespDTO.MainLevelInfoDTO result = new ClinicRespDTO.MainLevelInfoDTO();
+
+        if (booksPerLevel == null || booksPerLevel <= 0) {
+            result.setLevelNo(1);
+            result.setProgressPercent(0);
+            result.setBooksToNextLevel(null);
+            return result;
+        }
+
+        int doneBooks = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
+        int levelNo = levelFor(doneBooks, booksPerLevel);
         result.setLevelNo(levelNo);
-        result.setLevelName(current.getLevelName());
-        result.setFeature(current.getFeature());
+
+        ClinicRespDTO.LevelDetailDTO detail = clinicRepository.findLevelDetail(schoolyear, levelNo);
+        if (detail != null) {
+            result.setLevelName(detail.getStageName());
+            result.setTitle(detail.getTitle());
+            result.setFeature(detail.getFeature());
+        }
 
         if (levelNo >= MAX_LEVEL) {
             result.setProgressPercent(100);
@@ -301,23 +336,31 @@ public class ClinicService {
             return result;
         }
 
-        int lowerBound = levelNo <= 1 ? 0 : clinicRepository.findLevelDetail(levelNo - 1).getRequiredExp();
-        int upperBound = current.getRequiredExp();
-        int span = Math.max(1, upperBound - lowerBound);
-        int progressPercent = (int) Math.min(100, Math.round((exp - lowerBound) * 100.0 / span));
-        result.setProgressPercent(Math.max(0, progressPercent));
-
-        int remainingExp = Math.max(0, upperBound - exp);
-        String schoolyear = resolveSchoolyear(studentId);
-        Integer expPerBook = clinicRepository.findExpPerBook(schoolyear);
-        result.setBooksToNextLevel(expPerBook == null || expPerBook <= 0
-                ? null : (int) Math.ceil(remainingExp / (double) expPerBook));
+        int inLevel = doneBooks % booksPerLevel;
+        result.setProgressPercent((int) Math.round(inLevel * 100.0 / booksPerLevel));
+        result.setBooksToNextLevel(booksPerLevel - inLevel);
         return result;
     }
 
     /** student-main 뱃지 패널 — 학생이 획득한 뱃지 전체(이름/설명), 최근 획득순 */
     public List<ClinicRespDTO.BadgeDTO> getEarnedBadges(String studentId) {
         return clinicRepository.findEarnedBadges(studentId);
+    }
+
+    /**
+     * student-main "나의 카드 컬렉션" 패널 — 완독한 책 = 보유 카드 목록(최신순)과
+     * 10장당 실물 1장 교환 진행도를 계산해 내려준다(카드는 recommend_log의 DONE에서 파생).
+     */
+    public ClinicRespDTO.CardCollectionDTO getCardCollection(String studentId) {
+        List<ClinicRespDTO.CardDTO> cards = clinicRepository.findEarnedCards(studentId);
+        int total = cards.size();
+
+        ClinicRespDTO.CardCollectionDTO result = new ClinicRespDTO.CardCollectionDTO();
+        result.setCards(cards);
+        result.setTotalCards(total);
+        result.setExchangeableCount(total / CARD_SET_SIZE);
+        result.setCardsToNextReward(CARD_SET_SIZE - total % CARD_SET_SIZE);
+        return result;
     }
 
     /**
@@ -343,94 +386,44 @@ public class ClinicService {
     }
 
     /**
-     * 뱃지 판정 — 매 제출마다 로그(recommend_log/quiz_answer_log)에서 지표를 재계산해서,
-     * 조건을 새로 충족한 뱃지만 획득 처리하고 그 목록을 반환한다 (결과 화면 팝업용).
-     * 카운터를 따로 쌓지 않으므로 과거 이력 소급 적용이 자동으로 이뤄지고(다음 제출 시점),
-     * (student_id, badge_id) PK + 보유 목록 선확인으로 중복 획득이 없다.
+     * 기본(01) 문제 뱃지 — 책마다 첫 시도 결과로 등급을 확정한다(재도전 고정).
+     *   불합격 → 참 잘했어요 / 합격(만점 미만) → 독서친구 / 만점 → 독서왕
+     * 첫 시도가 아니면(재도전) 등급 변화 없이 빈 목록을 반환한다.
      */
-    private List<ClinicRespDTO.BadgeDTO> checkAndAwardBadges(String studentId) {
-        List<ClinicRespDTO.BadgeDTO> allBadges = clinicRepository.findAllBadges();
-        Set<Integer> earned = new HashSet<>(clinicRepository.findEarnedBadgeIds(studentId));
-        if (earned.size() >= allBadges.size()) return List.of(); // 전부 보유 — 더 볼 것 없음
-
-        int doneBooks = clinicRepository.countDoneBooks(studentId);
-        int monthlyQuota = resolveMonthlyQuota(studentId);
-        List<String> qualifiedMonths = clinicRepository.findMonthlyDoneCounts(studentId).stream()
-                .filter(m -> m.getCount() >= monthlyQuota)
-                .map(ClinicRespDTO.MonthCompletionDTO::getYearMonth)
-                .toList();
-        int maxMonthStreak = calcMaxMonthStreak(qualifiedMonths);
-        int kingCount = clinicRepository.countKingGrades(studentId);
-        int advPerfect = clinicRepository.countAdvancedPerfectBooks(studentId);
-        Map<String, Integer> perfectByQtype = clinicRepository.countQtypePerfectBooks(studentId).stream()
-                .collect(Collectors.toMap(ClinicRespDTO.QtypePerfectDTO::getQtype,
-                                          ClinicRespDTO.QtypePerfectDTO::getCnt));
-
-        List<ClinicRespDTO.BadgeDTO> newlyEarned = new ArrayList<>();
-        ClinicRespDTO.BadgeDTO metaBadge = null; // META(모든 업적)는 나머지 판정이 끝난 뒤 마지막에 확인
-        for (ClinicRespDTO.BadgeDTO badge : allBadges) {
-            if (earned.contains(badge.getBadgeId())) continue;
-            if ("META".equals(badge.getCategory())) { metaBadge = badge; continue; }
-
-            boolean achieved = switch (badge.getCategory()) {
-                case "FIRST_BOOK" -> doneBooks >= badge.getThreshold();
-                case "MONTH_STREAK" -> maxMonthStreak >= badge.getThreshold();
-                case "CROWN" -> kingCount >= badge.getThreshold();
-                case "QTYPE_PERFECT" -> perfectByQtype.getOrDefault(badge.getParam(), 0) >= badge.getThreshold();
-                case "TOPIC" -> clinicRepository.countTopicBooks(studentId,
-                        Arrays.stream(badge.getParam().split(",")).map(String::trim).toList()) >= badge.getThreshold();
-                case "ADV_PERFECT" -> advPerfect >= badge.getThreshold();
-                default -> false;
-            };
-            if (achieved) {
-                clinicRepository.insertStudentBadge(studentId, badge.getBadgeId());
-                earned.add(badge.getBadgeId());
-                newlyEarned.add(badge);
-                log.info("학생 {} 뱃지 획득: [{}] {}", studentId, badge.getBadgeId(), badge.getBadgeName());
-            }
-        }
-
-        if (metaBadge != null && earned.size() >= metaBadge.getThreshold()) {
-            clinicRepository.insertStudentBadge(studentId, metaBadge.getBadgeId());
-            newlyEarned.add(metaBadge);
-            log.info("학생 {} 뱃지 획득: [{}] {} (모든 업적 달성)", studentId, metaBadge.getBadgeId(), metaBadge.getBadgeName());
-        }
-        return newlyEarned;
-    }
-
-    /** 학생 학년 기준 월간 완독 목표 권수 — 1·2학년은 8권, 그 외 학년은 4권 */
-    private int resolveMonthlyQuota(String studentId) {
-        String schoolyear = resolveSchoolyear(studentId);
-        return ("01".equals(schoolyear) || "02".equals(schoolyear)) ? MONTH_QUOTA_LOW_GRADE : MONTH_QUOTA_DEFAULT;
+    private List<ClinicRespDTO.BadgeDTO> awardBasicBadge(String studentId, Integer contentId,
+                                                         int correct, int total, int passLine, boolean firstAttempt) {
+        if (!firstAttempt) return List.of();
+        int badgeId = (correct >= total) ? BADGE_KING
+                    : (correct >= passLine) ? BADGE_FRIEND
+                    : BADGE_GREAT_JOB;
+        return awardBookBadge(studentId, contentId, badgeId);
     }
 
     /**
-     * 역대 최장 "연속 월간 목표 달성 개월 수" — 그 달의 완독 권수가 학년별 월간 목표(resolveMonthlyQuota)
-     * 이상인 달('yyyy-MM' 오름차순 목록)만 모아, 달력상 연달아 이어진 가장 긴 구간의 길이를 구한다.
-     * 목표 미달 달은 완전히 제외되므로 그 달에서 스트릭이 끊기고 다음 목표 달성 달부터 다시 1로 시작한다.
-     * 업적 뱃지라 한 번 찍은 최장 기록은 이후 공백이 생겨도 유지된다.
+     * 심화(02) 문제 뱃지 — 책마다 첫 시도 결과로 확정한다.
+     *   합격(만점 미만) → 심화 완료 / 만점 → 심화왕 / 불합격 → 없음
+     * 첫 시도가 아니거나 합격선 미달이면 빈 목록.
      */
-    private int calcMaxMonthStreak(List<String> sortedMonths) {
-        int best = 0, run = 0;
-        YearMonth prev = null;
-        for (String m : sortedMonths) {
-            YearMonth ym = YearMonth.parse(m);
-            run = (prev != null && prev.plusMonths(1).equals(ym)) ? run + 1 : 1;
-            best = Math.max(best, run);
-            prev = ym;
-        }
-        return best;
+    private List<ClinicRespDTO.BadgeDTO> awardAdvancedBadge(String studentId, Integer contentId,
+                                                            int correct, int total, int passLine, boolean firstAttempt) {
+        if (!firstAttempt || correct < passLine) return List.of();
+        int badgeId = (correct >= total) ? BADGE_ADV_KING : BADGE_ADV_DONE;
+        return awardBookBadge(studentId, contentId, badgeId);
     }
 
-    /** 누적 EXP로부터 현재 레벨을 재계산 (required_exp는 그 레벨에서 다음 레벨로 가는 데 필요한 누적 EXP 기준치) */
-    private int calculateLevel(int exp) {
-        int level = 1;
-        for (ClinicRespDTO.LevelDTO l : clinicRepository.findAllLevels()) {
-            if (l.getLevelNo() >= MAX_LEVEL) break;
-            if (exp >= l.getRequiredExp()) level = l.getLevelNo() + 1;
-            else break;
-        }
-        return level;
+    /** (student, content, badge) 1건 적재 후 결과화면 팝업용 뱃지 정보를 반환 */
+    private List<ClinicRespDTO.BadgeDTO> awardBookBadge(String studentId, Integer contentId, int badgeId) {
+        clinicRepository.insertStudentBadge(studentId, contentId, badgeId);
+        ClinicRespDTO.BadgeDTO badge = clinicRepository.findBadge(badgeId);
+        log.info("학생 {} 뱃지 획득: 책 {} [{}] {}", studentId, contentId, badgeId,
+                 badge == null ? "" : badge.getBadgeName());
+        return badge == null ? List.of() : List.of(badge);
+    }
+
+    /** 완독 권수 → 레벨 (필요권수마다 1레벨, 1레벨부터 시작, 만렙 MAX_LEVEL로 상한) */
+    private int levelFor(int doneBooks, int booksPerLevel) {
+        if (doneBooks <= 0 || booksPerLevel <= 0) return 1;
+        return Math.min(MAX_LEVEL, doneBooks / booksPerLevel + 1);
     }
 
     private int parseSchoolyear(String schoolyear) {

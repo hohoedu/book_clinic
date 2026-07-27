@@ -95,7 +95,36 @@ public class MonitorService {
     }
 
     /**
-     * 채점 제출 완료 후 호출(ClinicService.submitQuiz) — "문제 푸는 중" 상태를 해제하고
+     * 결과 화면 진입 시각 기록 — StudentViewController.getResultPage()가 호출한다.
+     * 채점 제출 시 "문제 푸는 중"이 이미 해제된 뒤라, 이후 카드 상태가 "결과 확인중"으로 바뀐다
+     * (홈으로/재도전 등 결과 화면을 벗어나면 해제된다).
+     */
+    @Transactional
+    public void markResultViewing(String studentId) {
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        if (sessionId == null) return;
+        monitorRepository.markResultViewing(sessionId);
+        syncSafely(sessionId);
+    }
+
+    /**
+     * 결과 화면 이탈 시 "결과 확인중" 해제 — StudentViewController.getStudentMainPage()(홈으로)가 호출한다.
+     * 재도전(문제풀이 재진입)은 markQuizStarted가 result_viewed_at을 함께 비우므로 여기서 처리하지 않는다.
+     * 열린 세션이 없으면(로그인 직후 아직 책 추천 전 등) 조용히 넘어간다.
+     */
+    @Transactional
+    public void clearResultViewing(String studentId) {
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        if (sessionId == null) return;
+        monitorRepository.clearResultViewing(sessionId);
+        syncSafely(sessionId);
+    }
+
+    /**
+     * 채점 제출 완료 후 호출(ClinicService.submitQuiz) — 채점하는 순간 바로 "결과 확인중"으로
+     * 전환한다("문제 푸는 중" 해제 + 결과 확인 시각 기록을 한 번에). 제출 직후 학생이 결과 화면으로
+     * 넘어가는데, 결과 페이지 GET(markResultViewing)만 믿으면 그 요청이 오기 전까지 "독서중"으로
+     * 잠깐 찍히므로, 채점 시점에 상태를 먼저 확정한다.
      * 세션ID를 모르는 호출부를 위해 오늘 그 학생의 열린 세션을 스스로 찾아 Firestore에 반영한다.
      * 열린 세션이 없으면(예약 없이 직접 API를 호출한 경우 등) 반영할 카드가 없으므로 조용히 넘어간다.
      */
@@ -104,6 +133,7 @@ public class MonitorService {
         Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
         if (sessionId == null) return;
         monitorRepository.clearQuizStarted(sessionId);
+        monitorRepository.markResultViewing(sessionId);
         syncSafely(sessionId);
     }
 
@@ -145,7 +175,7 @@ public class MonitorService {
         return books;
     }
 
-    /** 우선순위: 미입실 > 퇴실 > 문제 푸는 중 > 재도전 필요 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
+    /** 우선순위: 미입실 > 퇴실 > 문제 푸는 중 > 결과 확인중 > 재도전 필요 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
     private String resolveCardStatus(MonitorRespDTO.CardDTO card, Integer readingTimeMinutes, Integer elapsedMinutes) {
         if (card.getSessionId() == null) {
             return "NOT_ENTERED";
@@ -155,6 +185,11 @@ public class MonitorService {
         }
         if (card.getQuizStartedAt() != null) {
             return "QUIZ_IN_PROGRESS";
+        }
+        // 채점 제출 후 결과 화면을 보고 있는 상태 — 불합격(RETRY_NEEDED 조건)이어도 결과 화면을 보는 동안은
+        // 이 상태가 우선한다(홈으로 나가면 clearResultViewing으로 해제되어 재도전 필요로 넘어간다)
+        if (card.getResultViewedAt() != null) {
+            return "RESULT_VIEWING";
         }
         // 기본 문제풀이를 이미 한 번 제출했는데 불합격(PENDING)인 경우만 재도전 필요로 본다
         // (아직 한 번도 안 푼 경우는 correctCount가 null이라 여기 안 걸리고 READING 유지)
@@ -181,6 +216,7 @@ public class MonitorService {
                 case "NOT_ENTERED" -> counts.setNotEntered(counts.getNotEntered() + 1);
                 case "READING" -> counts.setReading(counts.getReading() + 1);
                 case "QUIZ_IN_PROGRESS" -> counts.setQuizInProgress(counts.getQuizInProgress() + 1);
+                case "RESULT_VIEWING" -> counts.setResultViewing(counts.getResultViewing() + 1);
                 case "TIME_OVER" -> counts.setTimeOver(counts.getTimeOver() + 1);
                 case "RETRY_NEEDED" -> counts.setRetryNeeded(counts.getRetryNeeded() + 1);
                 default -> { /* EXITED는 별도 chip 없음 */ }

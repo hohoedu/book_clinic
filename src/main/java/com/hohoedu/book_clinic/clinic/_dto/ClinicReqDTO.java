@@ -30,7 +30,7 @@ public class ClinicReqDTO {
         private String studentId;
         @NotNull(message = "도서 ID는 필수입니다.")
         private Integer contentId;
-        private String qlevel; // 01=기본(완독/EXP 처리), 02=심화(이력 기록만) — 생략 시 01
+        private String qlevel; // 01=기본(완독/레벨 처리), 02=심화(이력 기록만) — 생략 시 01
         @NotEmpty(message = "제출한 답안이 없습니다.")
         @Valid
         private List<AnswerDTO> answers;

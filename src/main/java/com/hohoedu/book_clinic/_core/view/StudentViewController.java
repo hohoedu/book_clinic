@@ -64,7 +64,7 @@ public class StudentViewController {
     }
 
     /**
-     * 레벨 카드는 ClinicService.getMainLevelInfo로 실제 EXP/레벨을 계산해 내려준다.
+     * 레벨 카드는 ClinicService.getMainLevelInfo로 완독 권수 기반 레벨/진행률을 계산해 내려준다.
      * 뱃지 패널은 카드 컬렉션 패널로 대체됐고, 카드 획득 기능이 미구현이라 아직 내려주는 데이터가 없다
      * (구현 시 여기서 cards 모델을 채우면 화면이 그대로 렌더링된다).
      * 추천 도서 카드는 페이지 진입 후 JS가 /clinic/recommend를 호출해 채운다 — 이미 추천받은 책이
@@ -82,17 +82,25 @@ public class StudentViewController {
             return "redirect:/student/login";
         }
 
+        // 결과 화면에서 "홈으로" 돌아온 시점 = 실시간 모니터링 기준 "결과 확인중" 종료
+        // (재도전으로 문제풀이를 다시 시작하는 경우는 markQuizStarted가 함께 해제하므로 여기선 홈 복귀만 처리)
+        monitorService.clearResultViewing(studentId);
+
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());
 
         ClinicRespDTO.MainLevelInfoDTO levelInfo = clinicService.getMainLevelInfo(studentId);
         model.addAttribute("levelNo", levelInfo.getLevelNo());
         model.addAttribute("levelName", levelInfo.getLevelName());
+        model.addAttribute("levelTitle", levelInfo.getTitle());
         model.addAttribute("feature", levelInfo.getFeature());
         model.addAttribute("characterImg", (String) null);
         model.addAttribute("booksToNextLevel", levelInfo.getBooksToNextLevel());
         model.addAttribute("progressPercent", levelInfo.getProgressPercent());
         model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));
+
+        // 카드 컬렉션 패널은 획득 카드 수만큼 카드 이미지를 노출한다(진행도/책 정보는 표시 안 함)
+        model.addAttribute("cards", clinicService.getCardCollection(studentId).getCards());
         return "/student/student-main";
     }
 
@@ -143,6 +151,9 @@ public class StudentViewController {
         if (student == null) {
             return "redirect:/student/login";
         }
+
+        // 결과 화면 진입 = 실시간 모니터링 기준 "결과 확인중" 시작 (홈으로/재도전 시 해제됨)
+        monitorService.markResultViewing(studentId);
 
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());

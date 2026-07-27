@@ -42,6 +42,7 @@ const FILTERS = [
   { key: "NOT_ENTERED", label: "미입실", countKey: "notEntered", cls: "chip-not-entered" },
   { key: "READING", label: "독서 중", countKey: "reading", cls: "chip-reading" },
   { key: "QUIZ_IN_PROGRESS", label: "문제 푸는 중", countKey: "quizInProgress", cls: "chip-quiz" },
+  { key: "RESULT_VIEWING", label: "결과 확인중", countKey: "resultViewing", cls: "chip-result" },
   { key: "TIME_OVER", label: "시간 초과", countKey: "timeOver", cls: "chip-timeover" },
   { key: "RETRY_NEEDED", label: "재도전 필요", countKey: "retryNeeded", cls: "chip-retry" },
   { key: "LOG_MISSING", label: "독서일지 미등록", countKey: "readingLogMissing", cls: "chip-logmissing" },
@@ -51,6 +52,7 @@ const STATUS_BADGE = {
   NOT_ENTERED: { text: "미입실", icon: "fa-clock", cls: "status-not-entered" },
   READING: { text: "독서 중", icon: "fa-book-open", cls: "status-reading" },
   QUIZ_IN_PROGRESS: { text: "문제 푸는 중", icon: "fa-pen", cls: "status-quiz" },
+  RESULT_VIEWING: { text: "결과 확인중", icon: "fa-clipboard-check", cls: "status-result" },
   RETRY_NEEDED: { text: "재도전 필요", icon: "fa-triangle-exclamation", cls: "status-retry" },
   TIME_OVER: { text: "권장시간 초과", icon: "fa-hourglass-end", cls: "status-timeover" },
   EXITED: { text: "퇴실", icon: "fa-right-from-bracket", cls: "status-exited" },
@@ -252,11 +254,12 @@ function render() {
 
 function computeCounts() {
   const slotCards = cards.filter(matchesSlot);
-  const counts = { total: slotCards.length, notEntered: 0, reading: 0, quizInProgress: 0, timeOver: 0, retryNeeded: 0, readingLogMissing: 0 };
+  const counts = { total: slotCards.length, notEntered: 0, reading: 0, quizInProgress: 0, resultViewing: 0, timeOver: 0, retryNeeded: 0, readingLogMissing: 0 };
   slotCards.forEach((c) => {
     if (c.cardStatus === "NOT_ENTERED") counts.notEntered++;
     if (c.cardStatus === "READING") counts.reading++;
     if (c.cardStatus === "QUIZ_IN_PROGRESS") counts.quizInProgress++;
+    if (c.cardStatus === "RESULT_VIEWING") counts.resultViewing++;
     if (c.cardStatus === "TIME_OVER") counts.timeOver++;
     if (c.cardStatus === "RETRY_NEEDED") counts.retryNeeded++;
     if (!c.readingLogId && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;

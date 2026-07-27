@@ -25,6 +25,7 @@ public class MonitorRespDTO {
         private LocalDateTime enteredAt;
         private LocalDateTime exitedAt;
         private LocalDateTime quizStartedAt; // null이 아니면 지금 문제풀이 화면에 진입해 있는 상태
+        private LocalDateTime resultViewedAt; // null이 아니면 지금 결과 화면을 보고 있는 상태(채점 제출 후)
 
         private Integer recommendId;    // 이 학생의 최신 추천 도서 (없으면 아직 추천 전)
         private Integer contentId;
@@ -56,7 +57,7 @@ public class MonitorRespDTO {
         // MonitorService가 계산해서 채운다.
         private Integer readingTimeMinutes; // readingTimeText에서 파싱한 권장 분(파싱 실패 시 null)
         private Integer elapsedMinutes;     // DB에서 DATEDIFF로 계산된 경과 분 (recommendedAt 없으면 null)
-        private String cardStatus;          // NOT_ENTERED / READING / QUIZ_IN_PROGRESS / RETRY_NEEDED / TIME_OVER / EXITED
+        private String cardStatus;          // NOT_ENTERED / READING / QUIZ_IN_PROGRESS / RESULT_VIEWING / RETRY_NEEDED / TIME_OVER / EXITED
 
         // 오늘 이 학생이 추천받은 책 전체(완료분 포함) — 카드 안 도서 캐러셀용 (2026-07-23).
         // 위쪽 root의 bookTitle 등은 그중 최신 1건과 항상 같은 값이며, 구버전 Firestore 문서 호환을
@@ -96,6 +97,7 @@ public class MonitorRespDTO {
         private int notEntered;
         private int reading;
         private int quizInProgress;
+        private int resultViewing;
         private int timeOver;
         private int retryNeeded;
         private int readingLogMissing;

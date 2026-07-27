@@ -6,8 +6,9 @@ IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
 IF OBJECT_ID('erp_bookstore_quiz_answer_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_answer_log;
 IF OBJECT_ID('erp_bookstore_student_info',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_info;
-IF OBJECT_ID('erp_bookstore_exp_rule',               'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;
-IF OBJECT_ID('erp_bookstore_level',                  'U') IS NOT NULL DROP TABLE erp_bookstore_level;
+IF OBJECT_ID('erp_bookstore_exp_rule',               'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;      -- 폐지(EXP 제거)
+IF OBJECT_ID('erp_bookstore_level',                  'U') IS NOT NULL DROP TABLE erp_bookstore_level;         -- level_rule의 자식이라 먼저 DROP
+IF OBJECT_ID('erp_bookstore_level_rule',             'U') IS NOT NULL DROP TABLE erp_bookstore_level_rule;
 IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE erp_bookstore_recommend_log;
 IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
@@ -392,30 +393,23 @@ CREATE TABLE erp_bookstore_quiz_answer_log (
     FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id)
 );
 
--- 레벨 마스터 — 누적 EXP 기준으로 레벨이 정해지고, 레벨마다 단계/칭호/특징이 있다
--- required_exp는 "그 레벨에서 다음 레벨로 올라가는 데 필요한 누적 EXP" (레벨30은 만렙 기준치)
+-- 레벨 체계 재편 (EXP 폐지) — "단계 = 학생 학년(01~06)"이고, 각 단계 안에서 레벨 1~12가 있다.
+-- 레벨은 저장하지 않고 "그 학년 도서 완독(DONE) 권수 ÷ 학년별 필요권수"로 매번 재계산한다(ClinicService).
+--   level_rule : 단계(학년)별 단계명/특징/레벨업 1회당 필요 완독 권수 — 6개 학년 전부 존재해야 계산 가능
+CREATE TABLE erp_bookstore_level_rule (
+    schoolyear      VARCHAR(2)    PRIMARY KEY,     -- 01~06 = 1~6단계
+    stage_name      NVARCHAR(50),                  -- 단계명 (입문 ...) — 2~6단계는 미정
+    feature         NVARCHAR(300),                 -- 단계 특징 문구 — 2~6단계는 미정
+    books_per_level INT           NOT NULL         -- 레벨업 1회당 필요 완독 권수 (초1·2=8, 초3=5, 초4~6=4)
+);
+
+-- 레벨 칭호 — (단계=학년, 레벨 1~12)별 칭호. 미정 학년은 행이 없어도 되며, 그 경우 화면은 Lv.N만 표시
 CREATE TABLE erp_bookstore_level (
-    level_no      INT           PRIMARY KEY,      -- 1 ~ 30 (1~10 입문 / 11~20 성장 / 21~30 마스터)
-    level_name    NVARCHAR(50)  NOT NULL,         -- 단계명 (입문 / 성장 / 마스터)
-    title         NVARCHAR(50),                   -- 칭호 (독서 씨앗, 독서 새싹 ...)
-    feature       NVARCHAR(300),                  -- 단계별 특징 문구
-    required_exp  INT           NOT NULL
-);
-
--- 학년별 권당 EXP — 읽은 "책의 학년(content.schoolyear)"에 따라 획득 EXP가 다르다
-CREATE TABLE erp_bookstore_exp_rule (
-    schoolyear    VARCHAR(2)    PRIMARY KEY,
-    exp_per_book  INT           NOT NULL
-);
-
--- 학생 독서 현황 (erp_student 1:1) — 현재 상태 스냅샷
-CREATE TABLE erp_bookstore_student_info (
-    student_id    VARCHAR(100)  PRIMARY KEY,
-    level_no      INT           NOT NULL DEFAULT 1,
-    exp           INT           NOT NULL DEFAULT 0,
-    books_read    INT           NOT NULL DEFAULT 0,
-    updated_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (level_no) REFERENCES erp_bookstore_level(level_no)
+    schoolyear    VARCHAR(2)    NOT NULL,          -- 단계 = 학년
+    level_no      INT           NOT NULL,          -- 1 ~ 12
+    title         NVARCHAR(50)  NOT NULL,          -- 칭호 (독서 씨앗, 독서 새싹 ...)
+    PRIMARY KEY (schoolyear, level_no),
+    FOREIGN KEY (schoolyear) REFERENCES erp_bookstore_level_rule(schoolyear)
 );
 
 -- 뱃지 마스터 (2026-07-10) — 달성 조건을 category+threshold+param 3개 값으로 데이터화한다.
@@ -437,12 +431,16 @@ CREATE TABLE erp_bookstore_badge (
 );
 
 -- 학생별 뱃지 획득 이력 — PK로 중복 획득을 원천 차단, 판정은 매 제출마다 로그 재계산(멱등)
+-- 학생이 획득한 뱃지 — "책(도서)마다" 부여된다. 책당 기본 1개(참잘했어요/독서친구/독서왕 중 택1) +
+-- 심화 1개(심화완료/심화왕 중 택1). 같은 학생이 같은 종류 뱃지를 여러 책에서 얻을 수 있으므로 content_id를 PK에 포함.
 CREATE TABLE erp_bookstore_student_badge (
     student_id  VARCHAR(100)  NOT NULL,
+    content_id  INT           NOT NULL,   -- 어느 책에서 얻은 뱃지인지
     badge_id    INT           NOT NULL,
     earned_at   DATETIME2     DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (student_id, badge_id),
-    FOREIGN KEY (badge_id) REFERENCES erp_bookstore_badge(badge_id)
+    PRIMARY KEY (student_id, content_id, badge_id),
+    FOREIGN KEY (badge_id)   REFERENCES erp_bookstore_badge(badge_id),
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
 -- 클리닉 입실/퇴실 세션 (2026-07-15 실시간 모니터링) — 학생이 로그인하는 시점에 자동으로
@@ -459,7 +457,8 @@ CREATE TABLE erp_bookstore_clinic_session (
     entered_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 입실(로그인)일시(KST)
     exited_at       DATETIME2,    -- 퇴실 처리일시(KST)
     status          VARCHAR(20)   NOT NULL DEFAULT 'ENTERED',  -- ENTERED(입실중) / EXITED(퇴실완료)
-    quiz_started_at DATETIME2     -- 문제풀이 화면 진입 시각(KST) — 채점 제출 시 다시 NULL로 초기화
+    quiz_started_at DATETIME2,    -- 문제풀이 화면 진입 시각(KST) — 채점 제출 시 다시 NULL로 초기화
+    result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — 홈으로/재도전 등 화면 이탈 시 NULL로 초기화. "결과 확인중" 카드 상태의 기준
 );
 
 -- 클리닉 예약 (2026-07-23 실시간 모니터링 — 예약 기준 미입실/입실 전환) — "해당 타임에 올 예정인
