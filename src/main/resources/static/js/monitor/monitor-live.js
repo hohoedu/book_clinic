@@ -262,7 +262,7 @@ function computeCounts() {
     if (c.cardStatus === "RESULT_VIEWING") counts.resultViewing++;
     if (c.cardStatus === "TIME_OVER") counts.timeOver++;
     if (c.cardStatus === "RETRY_NEEDED") counts.retryNeeded++;
-    if (!c.readingLogId && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;
+    if (!c.diaryKey && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;
   });
   return counts;
 }
@@ -286,7 +286,7 @@ function renderFilters(counts) {
 function filteredCards() {
   const slotCards = cards.filter(matchesSlot);
   if (activeFilter === "ALL") return slotCards;
-  if (activeFilter === "LOG_MISSING") return slotCards.filter((c) => !c.readingLogId);
+  if (activeFilter === "LOG_MISSING") return slotCards.filter((c) => !c.diaryKey);
   return slotCards.filter((c) => c.cardStatus === activeFilter);
 }
 
@@ -394,7 +394,7 @@ function renderBookRow(el, card, pages, pageIndex) {
         ${pages.length > 1 ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>` : ""}
       </div>
     </div>
-    ${notEntered ? "" : `<button type="button" class="log-open-btn${card.readingLogId != null ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+    ${notEntered ? "" : `<button type="button" class="log-open-btn${card.diaryKey != null ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
   `;
 
   if (!notEntered) {
@@ -495,10 +495,11 @@ function openReadingLogPanel(card) {
   document.querySelectorAll("#attitudeCheckboxGroup input").forEach((cb) => {
     cb.checked = attitudeCodes.includes(cb.value);
   });
+  // 도움 필요는 선택지가 하나뿐이라 서버에서 boolean으로 내려온다
   document.querySelectorAll("#helpNeededCheckboxGroup input").forEach((cb) => {
-    cb.checked = cb.value === card.helpNeeded;
+    cb.checked = !!card.helpNeeded;
   });
-  document.getElementById("readingLogNote").value = card.note ?? "";
+  document.getElementById("readingLogNote").value = card.memo ?? "";
 
   document.getElementById("readingLogPanel").classList.add("open");
 }
@@ -512,16 +513,16 @@ async function saveReadingLog() {
   if (!selectedCard) return;
 
   const attitudeCodes = [...document.querySelectorAll("#attitudeCheckboxGroup input:checked")].map((cb) => cb.value);
-  const checkedHelp = document.querySelector("#helpNeededCheckboxGroup input:checked");
-  const note = document.getElementById("readingLogNote").value;
+  const helpNeeded = !!document.querySelector("#helpNeededCheckboxGroup input:checked");
+  const memo = document.getElementById("readingLogNote").value;
 
   try {
-    await postJson("/admin/monitor/reading-log", {
+    await postJson("/admin/monitor/diary", {
       sessionId: selectedCard.sessionId,
       studentId: selectedCard.studentId,
       attitudeCodes,
-      helpNeeded: checkedHelp ? checkedHelp.value : null,
-      note,
+      helpNeeded,
+      memo,
     });
     await loadLiveView();
   } catch (e) {

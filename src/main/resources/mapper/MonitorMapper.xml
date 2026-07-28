@@ -90,10 +90,10 @@
             badge.badgeCount      AS badgeCount,
             badge.latestBadgeName AS latestBadgeName,
 
-            rlog.log_id         AS readingLogId,
-            rlog.attitude_codes AS attitudeCodes,
-            rlog.help_needed    AS helpNeeded,
-            rlog.note           AS note
+            dia.diary_key    AS diaryKey,
+            att.attitudeCodes AS attitudeCodes,
+            dia.help_needed  AS helpNeeded,
+            dia.memo         AS memo
         FROM erp_bookstore_clinic_session cs
         JOIN erp_student st ON st.student_id = cs.student_id
         LEFT JOIN erp_bookstore_clinic_reservation r
@@ -127,7 +127,18 @@
             FROM erp_bookstore_student_badge sb
             WHERE sb.student_id = cs.student_id
         ) badge
-        LEFT JOIN erp_bookstore_reading_log rlog ON rlog.session_id = cs.session_id
+        LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
+        OUTER APPLY (
+            -- 태도 체크는 erp_bookstore_attitude에 1선택 = 1행으로 저장돼 있어, 화면이 쓰던
+            -- 콤마 문자열 형태로 다시 묶어 내려준다 (STRING_AGG는 SQL Server 2017+ 전용이라 미사용)
+            SELECT STUFF((
+                SELECT ',' + a.attitude_code
+                FROM erp_bookstore_attitude a
+                WHERE a.diary_key = dia.diary_key
+                ORDER BY a.id
+                FOR XML PATH('')
+            ), 1, 1, '') AS attitudeCodes
+        ) att
     </sql>
 
     <select id="findCardBySessionId" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
@@ -174,10 +185,10 @@
             badge.badgeCount      AS badgeCount,
             badge.latestBadgeName AS latestBadgeName,
 
-            rlog.log_id         AS readingLogId,
-            rlog.attitude_codes AS attitudeCodes,
-            rlog.help_needed    AS helpNeeded,
-            rlog.note           AS note
+            dia.diary_key    AS diaryKey,
+            att.attitudeCodes AS attitudeCodes,
+            dia.help_needed  AS helpNeeded,
+            dia.memo         AS memo
         FROM erp_bookstore_clinic_reservation r
         JOIN erp_student st ON st.student_id = r.student_id
         OUTER APPLY (
@@ -215,7 +226,18 @@
             FROM erp_bookstore_student_badge sb
             WHERE sb.student_id = r.student_id
         ) badge
-        LEFT JOIN erp_bookstore_reading_log rlog ON rlog.session_id = cs.session_id
+        LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
+        OUTER APPLY (
+            -- 태도 체크는 erp_bookstore_attitude에 1선택 = 1행으로 저장돼 있어, 화면이 쓰던
+            -- 콤마 문자열 형태로 다시 묶어 내려준다 (STRING_AGG는 SQL Server 2017+ 전용이라 미사용)
+            SELECT STUFF((
+                SELECT ',' + a.attitude_code
+                FROM erp_bookstore_attitude a
+                WHERE a.diary_key = dia.diary_key
+                ORDER BY a.id
+                FOR XML PATH('')
+            ), 1, 1, '') AS attitudeCodes
+        ) att
     </sql>
 
     <select id="findReservationCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
@@ -263,18 +285,115 @@
         ORDER BY rl.recommend_id ASC
     </select>
 
-    <update id="upsertReadingLog">
-        MERGE erp_bookstore_reading_log AS target
-        USING (SELECT #{sessionId} AS session_id) AS source
+    <!--
+      독서일지 헤더 upsert — 세션 1건당 1행.
+      record_date/in_time/out_time은 세션에서, record_time(교시)은 같은 학생·같은 날짜의 예약에서 끌어온다.
+      세 컬럼 모두 최초 INSERT 시점 스냅샷이며, 이후 UPDATE에서는 건드리지 않는다(직원 보정값 보존).
+    -->
+    <update id="upsertDiary">
+        MERGE erp_bookstore_diary AS target
+        USING (
+            SELECT
+                cs.session_id,
+                cs.student_id,
+                cs.session_date,
+                cs.entered_at,
+                cs.exited_at,
+                (SELECT TOP 1 r.time_slot
+                 FROM erp_bookstore_clinic_reservation r
+                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                 ORDER BY r.reservation_id DESC) AS time_slot
+            FROM erp_bookstore_clinic_session cs
+            WHERE cs.session_id = #{sessionId}
+        ) AS source
         ON target.session_id = source.session_id
         WHEN MATCHED THEN UPDATE SET
-            attitude_codes = #{attitudeCodes},
-            help_needed    = #{helpNeeded},
-            note           = #{note},
-            created_by     = #{createdBy},
-            updated_at     = DATEADD(HOUR, 9, GETUTCDATE())
-        WHEN NOT MATCHED THEN INSERT (session_id, student_id, attitude_codes, help_needed, note, created_by)
-            VALUES (#{sessionId}, #{studentId}, #{attitudeCodes}, #{helpNeeded}, #{note}, #{createdBy});
+            help_needed = #{helpNeeded},
+            memo        = #{memo},
+            created_by  = #{createdBy},
+            out_time    = COALESCE(target.out_time, source.exited_at),
+            updated_at  = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT
+            (session_id, student_id, record_date, record_time, in_time, out_time, help_needed, memo, created_by)
+            VALUES (source.session_id, source.student_id, source.session_date, source.time_slot,
+                    source.entered_at, source.exited_at, #{helpNeeded}, #{memo}, #{createdBy});
+    </update>
+
+    <select id="findDiaryKeyBySessionId" resultType="java.lang.Integer">
+        SELECT diary_key FROM erp_bookstore_diary WHERE session_id = #{sessionId}
+    </select>
+
+    <!-- 태도 체크는 전량 삭제 후 재삽입한다(체크 해제까지 반영해야 해서 부분 갱신을 쓰지 않는다) -->
+    <delete id="deleteDiaryAttitudes">
+        DELETE FROM erp_bookstore_attitude WHERE diary_key = #{diaryKey}
+    </delete>
+
+    <insert id="insertDiaryAttitudes">
+        INSERT INTO erp_bookstore_attitude (diary_key, student_id, attitude_code)
+        VALUES
+        <foreach collection="attitudeCodes" item="code" separator=",">
+            (#{diaryKey}, #{studentId}, #{code})
+        </foreach>
+    </insert>
+
+    <!--
+      독서일지 헤더 자동 생성 — 학생이 문제를 제출하면 직원이 일지를 쓰기 전이라도 상세를 붙일
+      헤더가 있어야 한다. upsertDiary와 달리 INSERT만 하고 기존 행은 건드리지 않는다
+      (직원이 이미 적어둔 help_needed/memo를 덮어쓰지 않기 위함).
+    -->
+    <update id="ensureDiary">
+        MERGE erp_bookstore_diary AS target
+        USING (
+            SELECT
+                cs.session_id, cs.student_id, cs.session_date, cs.entered_at, cs.exited_at,
+                (SELECT TOP 1 r.time_slot
+                 FROM erp_bookstore_clinic_reservation r
+                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                 ORDER BY r.reservation_id DESC) AS time_slot
+            FROM erp_bookstore_clinic_session cs
+            WHERE cs.session_id = #{sessionId}
+        ) AS source
+        ON target.session_id = source.session_id
+        WHEN NOT MATCHED THEN INSERT
+            (session_id, student_id, record_date, record_time, in_time, out_time)
+            VALUES (source.session_id, source.student_id, source.session_date, source.time_slot,
+                    source.entered_at, source.exited_at);
+    </update>
+
+    <!--
+      독서일지 상세 자동 적재 — 채점 제출(ClinicService.submitQuiz)마다 호출된다.
+      도서명/표지는 제출 시점 스냅샷이고, read_minutes는 "추천받은 시각 → 제출 시각"이라
+      책을 읽은 시간에 문제 푼 시간이 포함된다(모니터링 카드의 경과 시간과 같은 기준).
+      정답 수는 제출한 난이도(qlevel)의 컬럼만 갱신해 기본/심화 결과가 서로 덮어쓰지 않게 한다.
+    -->
+    <update id="upsertDiaryDetail">
+        MERGE erp_bookstore_diary_detail AS target
+        USING (
+            SELECT
+                c.content_id,
+                c.original_title,
+                c.image_url,
+                DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS read_minutes
+            FROM erp_bookstore_content c
+            LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = #{recommendId}
+            WHERE c.content_id = #{contentId}
+        ) AS source
+        ON target.diary_key = #{diaryKey} AND target.content_id = source.content_id
+        WHEN MATCHED THEN UPDATE SET
+            recommend_id         = #{recommendId},
+            basic_correct_cnt    = CASE WHEN #{qlevel} = '01' THEN #{correctCount} ELSE target.basic_correct_cnt END,
+            basic_total_cnt      = CASE WHEN #{qlevel} = '01' THEN #{totalCount}   ELSE target.basic_total_cnt END,
+            advanced_correct_cnt = CASE WHEN #{qlevel} = '02' THEN #{correctCount} ELSE target.advanced_correct_cnt END,
+            advanced_total_cnt   = CASE WHEN #{qlevel} = '02' THEN #{totalCount}   ELSE target.advanced_total_cnt END
+        WHEN NOT MATCHED THEN INSERT
+            (diary_key, content_id, recommend_id, book_name, book_img, read_minutes,
+             basic_correct_cnt, basic_total_cnt, advanced_correct_cnt, advanced_total_cnt)
+            VALUES (#{diaryKey}, source.content_id, #{recommendId}, source.original_title, source.image_url,
+                    source.read_minutes,
+                    CASE WHEN #{qlevel} = '01' THEN #{correctCount} END,
+                    CASE WHEN #{qlevel} = '01' THEN #{totalCount}   END,
+                    CASE WHEN #{qlevel} = '02' THEN #{correctCount} END,
+                    CASE WHEN #{qlevel} = '02' THEN #{totalCount}   END);
     </update>
 
 </mapper>

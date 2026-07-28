@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>보유도서 설정</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/book/book-stock.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+  <script th:src="@{/js/book/book-stock.js}"></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content">
+
+      <header class="page-header">
+        <h1>보유도서 설정</h1>
+        <div class="page-header-actions">
+          <button id="pwaInstallBtn" class="guide-btn" hidden>
+            <i class="fa-solid fa-download"></i>
+            앱 설치
+          </button>
+          <button type="button" id="btnGuide" class="guide-btn">
+            <i class="fa-regular fa-circle-question"></i>
+            사용 가이드
+          </button>
+        </div>
+      </header>
+
+      <!-- 필터 -->
+      <section class="filter-bar">
+
+        <div class="filter-field">
+          <label for="filterGrade">학년</label>
+          <select id="filterGrade">
+            <option value="">전체</option>
+            <option th:each="s : ${schoolYearCodes}" th:value="${s.code}" th:text="${s.codeName}"></option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="filterContentType">분류</label>
+          <select id="filterContentType">
+            <option value="">전체</option>
+            <option th:each="ct : ${contentTypeCodes}" th:value="${ct.code}" th:text="${ct.codeName}"></option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="filterCategory">카테고리</label>
+          <select id="filterCategory">
+            <option value="">전체</option>
+            <option th:each="g : ${genreCodes}" th:value="${g.code}" th:text="${g.codeName}"></option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="filterHasStock">보유 여부</label>
+          <select id="filterHasStock">
+            <option value="">전체</option>
+            <option value="Y">보유</option>
+            <option value="N">미보유</option>
+          </select>
+        </div>
+
+        <div class="filter-field grow">
+          <label class="sr-only" for="filterKeyword">도서명 검색</label>
+          <div class="search-box">
+            <input type="text" id="filterKeyword" placeholder="도서명 검색" />
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </div>
+        </div>
+
+        <div class="filter-actions">
+          <button type="button" id="btnSearch" class="btn primary">조회</button>
+          <button type="button" id="btnFilterReset" class="btn outline">
+            <i class="fa-solid fa-rotate-left"></i>
+            필터 초기화
+          </button>
+        </div>
+
+      </section>
+
+      <!-- 보유 도서 목록 -->
+      <section class="stock-panel">
+        <div class="stock-table-wrap">
+          <table class="stock-table">
+            <colgroup>
+              <col style="width:70px">
+              <col>
+              <col style="width:110px">
+              <col style="width:140px">
+              <col style="width:160px">
+              <col style="width:110px">
+              <col style="width:200px">
+              <col style="width:150px">
+              <col style="width:160px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>도서명</th>
+                <th>학년</th>
+                <th>분류</th>
+                <th>카테고리</th>
+                <th>난이도</th>
+                <th>보유 수량</th>
+                <th>최근 변경일</th>
+                <th>관리</th>
+              </tr>
+            </thead>
+
+            <!-- 목록은 book-stock.js에서 렌더링 -->
+            <tbody id="stockListBody">
+              <tr class="stock-empty">
+                <td colspan="9">조회 중입니다...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- 보유 수량 변경 이력 모달 -->
+  <div class="modal-overlay" id="historyModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3 id="historyModalTitle">보유 수량 변경 이력</h3>
+        <button type="button" id="btnCloseHistory" class="modal-close" aria-label="닫기">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 이력 목록은 book-stock.js에서 렌더링 -->
+        <ul class="history-list" id="historyList"></ul>
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>

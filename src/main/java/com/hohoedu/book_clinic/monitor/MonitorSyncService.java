@@ -56,10 +56,10 @@ public class MonitorSyncService {
         doc.put("advancedTotalCount", card.getAdvancedTotalCount());
         doc.put("badgeCount", card.getBadgeCount());
         doc.put("latestBadgeName", card.getLatestBadgeName());
-        doc.put("readingLogId", card.getReadingLogId());
+        doc.put("diaryKey", card.getDiaryKey());
         doc.put("attitudeCodes", card.getAttitudeCodes());
         doc.put("helpNeeded", card.getHelpNeeded());
-        doc.put("note", card.getNote());
+        doc.put("memo", card.getMemo());
         doc.put("elapsedMinutes", card.getElapsedMinutes());
         doc.put("cardStatus", card.getCardStatus());
         // books는 BookPageDTO POJO 리스트라 그대로 넣으면 안 된다 — 그 안의 LocalDateTime(recommendedAt)을

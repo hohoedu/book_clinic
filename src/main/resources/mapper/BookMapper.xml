@@ -372,4 +372,97 @@
         ORDER BY l.loaned_at DESC
     </select>
 
+    <!-- ===================== 보유도서 설정 (센터별 보유 수량) ===================== -->
+
+    <!-- 보유도서 설정 목록 — 마스터 도서가 기준이고 우리 센터 사본 수를 붙인다 (보유 0권도 행으로 보여야 하므로 LEFT JOIN 집계).
+         절판(state='N') 도서는 더 이상 보유 수량을 조정할 대상이 아니라 제외한다. -->
+    <select id="searchCenterStocks" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$StockRespDTO">
+        SELECT bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               bc.image_url      AS imageUrl,
+               bc.schoolyear     AS schoolyear,
+               s.codeNm          AS schoolyearName,
+               ct.codeNm         AS contentTypeName,
+               g.codeNm          AS genreName,
+               bc.difficulty     AS difficulty,
+               ISNULL(q.qty, 0)       AS quantity,
+               ISNULL(q.loanedQty, 0) AS loanedQty,
+               lg.lastChangedAt       AS lastChangedAt
+        FROM erp_bookstore_content bc
+        LEFT JOIN erp_bookstore_code s  ON s.gubun  = 'S' AND s.code  = bc.schoolyear
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
+        LEFT JOIN (
+            SELECT content_id,
+                   COUNT(*) AS qty,
+                   SUM(CASE WHEN status = 'LOANED' THEN 1 ELSE 0 END) AS loanedQty
+            FROM erp_bookstore_item
+            WHERE center_code = #{centerCode}
+            GROUP BY content_id
+        ) q ON q.content_id = bc.content_id
+        LEFT JOIN (
+            SELECT content_id, MAX(changed_at) AS lastChangedAt
+            FROM erp_bookstore_item_stock_log
+            WHERE center_code = #{centerCode}
+            GROUP BY content_id
+        ) lg ON lg.content_id = bc.content_id
+        <where>
+            AND ISNULL(bc.state, 'Y') = 'Y'
+            <if test="schoolYear != null and schoolYear != ''">AND bc.schoolyear = #{schoolYear}</if>
+            <if test="contentType != null and contentType != ''">AND bc.content_type = #{contentType}</if>
+            <if test="genre != null and genre != ''">AND bc.genre = #{genre}</if>
+            <if test="title != null and title != ''">AND bc.original_title LIKE '%' + #{title} + '%'</if>
+            <if test="hasStock == 'Y'.toString()">AND ISNULL(q.qty, 0) &gt; 0</if>
+            <if test="hasStock == 'N'.toString()">AND ISNULL(q.qty, 0) = 0</if>
+        </where>
+        ORDER BY bc.schoolyear, bc.original_title
+    </select>
+
+    <!-- (content + center) 보유 사본 수 -->
+    <select id="countItemsByContentCenter" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM erp_bookstore_item WHERE content_id = #{contentId} AND center_code = #{centerCode}
+    </select>
+
+    <!-- (content + center) 대여 중 사본 수 -->
+    <select id="countLoanedItemsByContentCenter" resultType="java.lang.Integer">
+        SELECT COUNT(*) FROM erp_bookstore_item
+        WHERE content_id = #{contentId} AND center_code = #{centerCode} AND status = 'LOANED'
+    </select>
+
+    <!-- 해당 도서의 대표 bcode (같은 도서의 사본은 센터가 달라도 bcode를 공유한다) -->
+    <select id="findBcodeByContentId" resultType="java.lang.String">
+        SELECT TOP 1 bcode FROM erp_bookstore_item WHERE content_id = #{contentId} ORDER BY item_id
+    </select>
+
+    <!-- 사본이 어느 센터에도 없는 도서에 첫 사본을 만들 때 — 마스터 도서 정보를 스냅샷으로 복사 -->
+    <insert id="insertItemFromContent">
+        INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url)
+        SELECT #{bcode}, content_id, #{centerCode}, original_title, author, publisher, image_url
+        FROM erp_bookstore_content WHERE content_id = #{contentId}
+    </insert>
+
+    <!-- 수량 1 감소 — 대여 중인 사본은 건드리지 않는다 (삭제된 행이 0이면 서비스에서 감소 불가로 처리) -->
+    <delete id="deleteAvailableItemByContent">
+        DELETE TOP (1) FROM erp_bookstore_item
+        WHERE content_id = #{contentId} AND center_code = #{centerCode} AND status = 'AVAILABLE'
+    </delete>
+
+    <!-- 보유 수량 변경 로그 기록 -->
+    <insert id="insertStockLog">
+        INSERT INTO erp_bookstore_item_stock_log (content_id, center_code, before_qty, after_qty, changed_by)
+        VALUES (#{contentId}, #{centerCode}, #{beforeQty}, #{afterQty}, #{changedBy})
+    </insert>
+
+    <!-- 보유 수량 변경 이력 (최신순) -->
+    <select id="findStockLogs" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$StockLogRespDTO">
+        SELECT log_id      AS logId,
+               before_qty  AS beforeQty,
+               after_qty   AS afterQty,
+               changed_by  AS changedBy,
+               changed_at  AS changedAt
+        FROM erp_bookstore_item_stock_log
+        WHERE content_id = #{contentId} AND center_code = #{centerCode}
+        ORDER BY log_id DESC
+    </select>
+
 </mapper>

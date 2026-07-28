@@ -111,4 +111,30 @@ public class BookRespDTO {
         private String keywords;
     }
 
+    /** 보유도서 설정 화면 1행 — 마스터 도서 정보 + 우리 센터 보유 수량(사본 수) */
+    @Data
+    public static class StockRespDTO {
+        private Integer contentId;
+        private String originalTitle;
+        private String imageUrl;
+        private String schoolyear;      // 학년 코드 (뱃지 색상 매핑용)
+        private String schoolyearName;
+        private String contentTypeName;
+        private String genreName;
+        private String difficulty;      // 상/중/하
+        private Integer quantity;       // 우리 센터 보유 사본 수
+        private Integer loanedQty;      // 그중 대여 중(LOANED) — 수량을 줄일 수 없는 하한
+        private LocalDateTime lastChangedAt;  // 마지막 수량 변경일시 (stock_log 기준, 변경 이력 없으면 null)
+    }
+
+    /** 보유 수량 변경 이력 1행 */
+    @Data
+    public static class StockLogRespDTO {
+        private Integer logId;
+        private Integer beforeQty;
+        private Integer afterQty;
+        private String changedBy;
+        private LocalDateTime changedAt;
+    }
+
 }

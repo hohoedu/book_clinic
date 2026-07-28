@@ -72,13 +72,23 @@ public class MonitorService {
         return resp;
     }
 
-    /** 독서일지 저장(upsert) — 직원이 카드 우측 패널에서 입력 */
+    /**
+     * 독서일지 저장(upsert) — 직원이 카드 우측 패널에서 입력.
+     * 헤더는 세션 1건당 1행이고, 태도 체크는 체크 해제까지 반영해야 해서 전량 삭제 후 재삽입한다.
+     */
     @Transactional
-    public void saveReadingLog(MonitorReqDTO.ReadingLogReqDTO req, String staffName) {
-        String attitudeCodes = req.getAttitudeCodes() == null || req.getAttitudeCodes().isEmpty()
-                ? null : String.join(",", req.getAttitudeCodes());
-        monitorRepository.upsertReadingLog(req.getSessionId(), req.getStudentId(), attitudeCodes,
-                req.getHelpNeeded(), req.getNote(), staffName);
+    public void saveDiary(MonitorReqDTO.DiaryReqDTO req, String staffName) {
+        monitorRepository.upsertDiary(req.getSessionId(), Boolean.TRUE.equals(req.getHelpNeeded()),
+                req.getMemo(), staffName);
+
+        Integer diaryKey = monitorRepository.findDiaryKeyBySessionId(req.getSessionId());
+        if (diaryKey != null) {
+            monitorRepository.deleteDiaryAttitudes(diaryKey);
+            List<String> codes = req.getAttitudeCodes();
+            if (codes != null && !codes.isEmpty()) {
+                monitorRepository.insertDiaryAttitudes(diaryKey, req.getStudentId(), codes);
+            }
+        }
         syncSafely(req.getSessionId());
     }
 
@@ -118,6 +128,26 @@ public class MonitorService {
         if (sessionId == null) return;
         monitorRepository.clearResultViewing(sessionId);
         syncSafely(sessionId);
+    }
+
+    /**
+     * 채점 결과를 독서일지 상세에 자동 적재 — ClinicService.submitQuiz가 제출 직후 호출한다.
+     * 직원이 입력하는 값이 아니라 "그날 무슨 책을 몇 분 읽고 몇 점 맞았는지"를 시스템이 남기는 기록이다.
+     * 일지 헤더가 아직 없으면(직원이 일지를 쓰기 전) 세션 정보로 헤더부터 만든다.
+     * 오늘 열린 세션이 없으면(예약 없이 API를 직접 호출한 경우 등) 남길 일지가 없으므로 조용히 넘어간다.
+     * syncStudentToday()가 quiz_started_at을 지우기 전에 호출되어야 경과 시간 계산이 어긋나지 않는다.
+     */
+    @Transactional
+    public void recordDiaryDetail(String studentId, Integer contentId, Integer recommendId,
+                                  String qlevel, int correctCount, int totalCount) {
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        if (sessionId == null) return;
+
+        monitorRepository.ensureDiary(sessionId);
+        Integer diaryKey = monitorRepository.findDiaryKeyBySessionId(sessionId);
+        if (diaryKey == null) return;
+
+        monitorRepository.upsertDiaryDetail(diaryKey, contentId, recommendId, qlevel, correctCount, totalCount);
     }
 
     /**
@@ -222,7 +252,7 @@ public class MonitorService {
                 default -> { /* EXITED는 별도 chip 없음 */ }
             }
             // 미입실 카드는 아직 독서일지 대상이 아니므로 미등록 카운트에서 제외
-            if (card.getReadingLogId() == null && !"NOT_ENTERED".equals(card.getCardStatus())) {
+            if (card.getDiaryKey() == null && !"NOT_ENTERED".equals(card.getCardStatus())) {
                 counts.setReadingLogMissing(counts.getReadingLogMissing() + 1);
             }
         }

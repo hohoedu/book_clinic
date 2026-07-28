@@ -83,14 +83,7 @@ FROM erp_bookstore_item WHERE center_code = 'PUS002';
 -- 학생 독서 클리닉 — 1단계(책 추천)에 이어 2단계(문제풀이/채점) 재설계 (2026-07-09)
 -- ────────────────────────────────────────────────────────
 
--- 레벨 규칙 (단계 = 학년) — 단계명/특징/레벨업 필요권수. 필요권수: 초1·2=8, 초3=5, 초4~6=4
-INSERT INTO erp_bookstore_level_rule (schoolyear, stage_name, feature, books_per_level) VALUES
-('01', N'입문', N'독서와 친해지고 즐거움을 발견하는 단계',       8),
-('02', N'성장', N'책 속 지식과 생각을 모으며 성장하는 단계',      8),
-('03', N'탐구', N'스스로 질문하고 파고들며 사고를 넓히는 단계',   5),
-('04', N'심화', N'지식을 깊이 있게 이해하고 연결하는 단계',       4),
-('05', N'통찰', N'어휘와 문해력으로 글의 본질을 읽어내는 단계',   4),
-('06', N'마스터', N'폭넓은 사고로 독서를 완성하는 단계',          4);
+-- 레벨 규칙(단계명/특징/필요권수)은 ClinicService.LEVEL_RULES(Java 상수)로 관리 — DB 시딩 없음
 
 -- 레벨 칭호 (단계=학년, 레벨 1~12) — Lv.12는 각 단계의 만렙 'GRADE{n} Master'
 INSERT INTO erp_bookstore_level (schoolyear, level_no, title) VALUES
@@ -183,7 +176,7 @@ INSERT INTO erp_bookstore_badge (badge_id, badge_name, badge_desc, category, thr
 
 -- 권장도서 순위 초안: 올해 + 초5, 활성 상태
 INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by) VALUES
-(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '05', 'Y', 'seed');
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '05', 'Y', 'seed');
 
 -- 순위 내용: 초5 노출 도서 전체를 content_id 순으로 순위 부여
 INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
@@ -195,17 +188,17 @@ WHERE schoolyear = '05' AND state = 'Y';
 
 -- 권장도서 순위 초안: 초1~초4 (DAE001/PUS002 테스트 학생용)
 INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by) VALUES
-(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '01', 'Y', 'seed'),
-(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '02', 'Y', 'seed'),
-(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '03', 'Y', 'seed'),
-(CAST(YEAR(GETDATE()) AS VARCHAR(4)), '04', 'Y', 'seed');
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '01', 'Y', 'seed'),
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '02', 'Y', 'seed'),
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '03', 'Y', 'seed'),
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '04', 'Y', 'seed');
 
 INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
 SELECT d.draft_id, c.content_id, ROW_NUMBER() OVER (PARTITION BY d.draft_id ORDER BY c.content_id)
 FROM erp_bookstore_priority_draft d
 JOIN erp_bookstore_content c ON c.schoolyear = d.schoolyear AND c.state = 'Y'
 WHERE d.schoolyear IN ('01','02','03','04')
-  AND d.year = CAST(YEAR(GETDATE()) AS VARCHAR(4));
+  AND d.year = CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4));
 
 
 -- ────────────────────────────────────────────────────────
@@ -233,10 +226,14 @@ INSERT INTO erp_student (center_code, grade_key, status_key, school, student_id,
 -- 클리닉 예약 테스트 데이터: DAE001T01~04(테스트생1~4)를 오늘 1~4교시로 예약 (매 재기동마다 자동 등록)
 -- ────────────────────────────────────────────────────────
 INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time_slot) VALUES
-('DAE001T01', CAST(GETDATE() AS DATE), '1'),
-('DAE001T02', CAST(GETDATE() AS DATE), '2'),
-('DAE001T03', CAST(GETDATE() AS DATE), '3'),
-('DAE001T04', CAST(GETDATE() AS DATE), '4'),
-('PUS002T01', CAST(GETDATE() AS DATE), '1'),
-('PUS002T02', CAST(GETDATE() AS DATE), '3');
+('DAE001T01', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '1'),
+('DAE001T02', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '2'),
+('DAE001T03', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '3'),
+('DAE001T04', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '4'),
+('PUS002T01', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '1'),
+('PUS002T02', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '3');
+
+
+
+
 

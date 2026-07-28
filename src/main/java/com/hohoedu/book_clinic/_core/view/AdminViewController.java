@@ -38,6 +38,16 @@ public class AdminViewController {
         return "book/book-data";
     }
 
+    /** 보유도서 설정 — 로그인 직원 센터의 도서별 보유 수량을 조회/조정하는 화면 */
+    @GetMapping("/admin/book-stock")
+    public String bookStock(Model model) {
+        // 학년·분류·카테고리 필터 셀렉트 렌더링용
+        model.addAttribute("schoolYearCodes", codeService.findBookstoreCodes("S"));
+        model.addAttribute("contentTypeCodes", codeService.findBookstoreCodes("C"));
+        model.addAttribute("genreCodes", codeService.findBookstoreCodes("G"));
+        return "book/book-stock";
+    }
+
     @GetMapping("/admin/book-priority")
     public String bookPriority() {
         return "book/book-priority";

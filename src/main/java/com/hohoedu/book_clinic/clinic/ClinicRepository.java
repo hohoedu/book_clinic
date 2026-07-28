@@ -62,21 +62,35 @@ public interface ClinicRepository {
                                 @Param("grade") String grade,
                                 @Param("status") String status);
 
-    /** 학년(단계)별 레벨업 1회당 필요 완독 권수 (규칙 없으면 null) */
-    Integer findBooksPerLevel(@Param("schoolyear") String schoolyear);
-
     /** 특정 학년 도서의 완독(DONE) 권수 — 레벨 계산 기준 (단계 = 학생 학년) */
     int countDoneBooksByGrade(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
 
-    /** 단계(학년)+레벨의 단계명/칭호/특징/필요권수 (학년 규칙이 없으면 null, 칭호 미시딩이면 title만 null) */
-    ClinicRespDTO.LevelDetailDTO findLevelDetail(@Param("schoolyear") String schoolyear,
-                                                  @Param("levelNo") int levelNo);
+    /** 단계(학년)+레벨의 칭호 (미시딩이면 null — 화면은 Lv.N만 표시) */
+    String findLevelTitle(@Param("schoolyear") String schoolyear, @Param("levelNo") int levelNo);
 
-    /** 보유 카드 = 완독(DONE)한 책 전체 (책당 1장), 최신 완독순 — 카드 컬렉션 패널용 */
-    List<ClinicRespDTO.CardDTO> findEarnedCards(@Param("studentId") String studentId);
-
-    /** 특정 책의 카드 정보(제목/저자/표지) — 신규 완독 시 결과화면 팝업용 (없으면 null) */
+    /** 특정 책의 카드 정보(제목/저자/표지) — NORMAL 카드 지급 시 이름/이미지 조회용 (없으면 null) */
     ClinicRespDTO.CardDTO findCardByContent(@Param("contentId") Integer contentId);
+
+    // ── 카드 지급 이력 (2026-07-28, erp_bookstore_student_card) ──
+    // NORMAL(완독 시 그 책 카드, 책당 1장) / RARE(NORMAL 10장마다 추가 지급, 책과 무관) 두 종류를 관리한다.
+
+    /** 이미 그 책의 NORMAL 카드를 지급받았는지 (중복 지급 방지) */
+    boolean existsNormalCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** NORMAL 카드 1장 지급 기록 */
+    void insertNormalCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** 학생의 NORMAL 카드 보유 총 수 — 레어카드 지급 임계값(10의 배수) 판단 기준 */
+    int countNormalCards(@Param("studentId") String studentId);
+
+    /** 그 임계값(triggerCount)에서 이미 레어카드를 지급받았는지 (중복 지급 방지) */
+    boolean existsRareCard(@Param("studentId") String studentId, @Param("triggerCount") int triggerCount);
+
+    /** 레어카드 1장 지급 기록 (triggerCount = 이를 발생시킨 누적 NORMAL 카드 수: 10, 20 ...) */
+    void insertRareCard(@Param("studentId") String studentId, @Param("triggerCount") int triggerCount);
+
+    /** 보유 카드 전체(NORMAL+RARE), 최신 획득순 — 카드 컬렉션 패널용 */
+    List<ClinicRespDTO.CardDTO> findEarnedCards(@Param("studentId") String studentId);
 
     /** 이번 달(completed_at 기준)에 합격 완료한 도서 목록 — 최신순, 최대 limit건 */
     List<ClinicRespDTO.MonthBookDTO> findCompletedThisMonth(@Param("studentId") String studentId,
@@ -99,8 +113,5 @@ public interface ClinicRepository {
     int countPriorAttempts(@Param("studentId") String studentId,
                            @Param("contentId") Integer contentId,
                            @Param("qlevel") String qlevel);
-
-    /** 완독(DONE) 총 권수 — 카드 총 수 계산용 */
-    int countDoneBooks(@Param("studentId") String studentId);
 
 }

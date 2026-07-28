@@ -194,4 +194,38 @@ public class BookController {
             @PathVariable("centerCode") String centerCode) {
         return ResponseEntity.ok(ApiUtils.success(bookService.findActiveLoans(bcode, centerCode)));
     }
+
+    // ===================== 보유도서 설정 (센터별 보유 수량) =====================
+
+    /** 보유도서 설정 목록 — 센터는 로그인 직원 소속으로 고정 (다른 센터 재고는 조회/변경 대상이 아니다) */
+    @GetMapping("/stock")
+    public ResponseEntity<?> searchCenterStocks(
+            @RequestParam(value = "schoolYear", required = false) String schoolYear,
+            @RequestParam(value = "contentType", required = false) String contentType,
+            @RequestParam(value = "genre", required = false) String genre,
+            @RequestParam(value = "hasStock", required = false) String hasStock,
+            @RequestParam(value = "title", required = false) String title,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        return ResponseEntity.ok(ApiUtils
+                .success(bookService.searchCenterStocks(centerCode, schoolYear, contentType, genre, hasStock, title)));
+    }
+
+    /** 보유 수량 변경 — 저장 버튼 없이 +/- 즉시 반영. 실제 반영된 수량을 돌려주어 화면을 그 값으로 맞춘다 */
+    @PostMapping("/stock/update")
+    public ResponseEntity<?> updateCenterStock(@RequestBody @Valid BookReqDTO.StockUpdateReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        int quantity = bookService.updateCenterStock(reqDTO.getContentId(), centerCode, reqDTO.getQuantity(),
+                userDetails.getUsername());
+        return ResponseEntity.ok(ApiUtils.success(quantity));
+    }
+
+    /** 보유 수량 변경 이력 조회 */
+    @GetMapping("/stock/history/{contentId}")
+    public ResponseEntity<?> findStockLogs(@PathVariable("contentId") Integer contentId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        return ResponseEntity.ok(ApiUtils.success(bookService.findStockLogs(contentId, centerCode)));
+    }
 }

@@ -1,0 +1,372 @@
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  flex: 0 0 56px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 필터 */
+.filter-bar {
+  flex: 0 0 auto;
+  margin: 16px 28px;
+  padding: 18px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-field.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-field label {
+  font-size: 13px;
+  color: #666;
+}
+
+.filter-field select {
+  width: 160px;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-box input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.search-box i {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9aa5ab;
+}
+
+.filter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-actions .btn i {
+  margin-right: 6px;
+}
+
+/* 목록 */
+.stock-panel {
+  flex: 1;
+  min-height: 0;
+  margin: 0 28px 16px;
+  padding: 8px 20px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.stock-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.stock-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.stock-table th,
+.stock-table td {
+  padding: 14px 12px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.stock-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 18px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e6eaee;
+  color: #555;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.stock-table tbody tr:hover {
+  background: #fafcfc;
+}
+
+.stock-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.col-no {
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.col-book {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+
+.col-book img {
+  width: 46px;
+  height: 60px;
+  object-fit: cover;
+  border: 1px solid #eee;
+  border-radius: 4px;
+  flex: 0 0 46px;
+}
+
+.col-book strong {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.col-date {
+  color: #9aa5ab;
+  font-size: 14px;
+}
+
+.stock-empty td {
+  padding: 40px 0;
+  color: #9aa5ab;
+}
+
+/* 학년 뱃지 */
+.grade {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  border: 1px solid transparent;
+}
+
+.grade-presch { /* 7세 */
+  color: #338FCA;
+  background: #C3E7FE;
+  border-color: #6ABAEC;
+}
+
+.grade-01 { /* 초1 */
+  color: #DD8200;
+  background: #FFF9D0;
+  border-color: #FEC336;
+}
+
+.grade-02 { /* 초2 */
+  color: #DB6D01;
+  background: #FFE9D9;
+  border-color: #E69153;
+}
+
+.grade-03 { /* 초3 */
+  color: #90A727;
+  background: #E5F1AE;
+  border-color: #A7BE3C;
+}
+
+.grade-04 { /* 초4 */
+  color: #37AF9F;
+  background: #CAF0EB;
+  border-color: #90D9CF;
+}
+
+.grade-05 { /* 초5 */
+  color: #338FCA;
+  background: #C3E7FE;
+  border-color: #6ABAEC;
+}
+
+.grade-06 { /* 초6 */
+  color: #6A6DD9;
+  background: #CDCEFF;
+  border-color: #9091E2;
+}
+
+.grade-07 { /* 중등 */
+  color: #C05AB8;
+  background: #FFCDFB;
+  border-color: #E186DA;
+}
+
+/* 난이도 뱃지 */
+.level {
+  display: inline-block;
+  min-width: 34px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.level-low { /* 하 */
+  background: #F5B818;
+}
+
+.level-mid { /* 중 */
+  background: #E8600C;
+}
+
+.level-high { /* 상 */
+  background: #E23C7B;
+}
+
+/* 보유 수량 스테퍼 */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e0e5e9;
+  border-radius: 8px;
+  background: #fbfcfc;
+  overflow: hidden;
+}
+
+.stepper button {
+  width: 38px;
+  height: 38px;
+  font-size: 17px;
+  color: #7b868c;
+  background: transparent;
+}
+
+.stepper button:hover {
+  color: #008b7a;
+  background: #f1f5f5;
+}
+
+/* 서버 반영 중에는 조작을 막는다 (book-stock.js applyQuantity) */
+.stepper button:disabled {
+  color: #cfd6da;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.stepper-value {
+  width: 56px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-left: 1px solid #e0e5e9;
+  border-right: 1px solid #e0e5e9;
+  border-radius: 0;
+  background: #fff;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.stepper-value:focus {
+  outline: none;
+  background: #f3fbfa;
+}
+
+/* 변경 이력 모달 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.modal {
+  width: 520px;
+  max-width: 90vw;
+  max-height: 80vh;
+  background: #fff;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border-bottom: 1px solid #eee;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.modal-close {
+  font-size: 18px;
+  color: #666;
+}
+
+.modal-body {
+  padding: 8px 20px 20px;
+  overflow-y: auto;
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 4px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 14px;
+}
+
+.history-item .history-date {
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.history-empty {
+  padding: 24px;
+  text-align: center;
+  color: #999;
+}

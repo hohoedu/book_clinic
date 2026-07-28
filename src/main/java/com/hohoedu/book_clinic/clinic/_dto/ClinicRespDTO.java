@@ -40,15 +40,6 @@ public class ClinicRespDTO {
         private String grade;   // KING / FRIEND / null
     }
 
-    /** 레벨 규칙+칭호 조회 결과 (단계=학년별) — 단계명/특징은 학년 공통, 칭호는 레벨별(미정이면 null) */
-    @Data
-    public static class LevelDetailDTO {
-        private String stageName;       // 단계명 (입문 ...) — 미정 학년은 null
-        private String title;           // 레벨 칭호 (독서 씨앗 ...) — 미시딩 레벨은 null
-        private String feature;         // 단계 특징 문구 — 미정 학년은 null
-        private Integer booksPerLevel;  // 레벨업 1회당 필요 완독 권수
-    }
-
     /** student-main 화면 레벨 카드에 내려줄 최종 계산 결과 */
     @Data
     public static class MainLevelInfoDTO {
@@ -69,13 +60,17 @@ public class ClinicRespDTO {
         private String status;  // DONE(완료) / PENDING(읽는 중)
     }
 
-    /** 온라인 카드 1장 = 완독한 책 1권 (책당 고정 1종). cardName=책 제목, bookTitle=저자 */
+    /**
+     * 카드 1장 — NORMAL(완독한 책 1권, 책당 고정 1종. cardName=책 제목, bookTitle=저자) 또는
+     * RARE(NORMAL 카드 10장마다 추가 지급, 특정 책과 무관 — contentId/bookTitle 없음).
+     */
     @Data
     public static class CardDTO {
         private Integer contentId;
-        private String cardName;    // 카드명 = 책 제목 (화면 strong)
-        private String bookTitle;   // 부제 자리 = 저자 (화면 small)
-        private String imageUrl;    // 카드 이미지 = 책 표지
+        private String cardType;    // NORMAL / RARE
+        private String cardName;    // NORMAL=책 제목, RARE="레어 카드" (화면 strong)
+        private String bookTitle;   // NORMAL=저자, RARE=null (화면 small)
+        private String imageUrl;    // NORMAL=책 표지, RARE=고정 레어카드 이미지
     }
 
     /** student-main "나의 카드 컬렉션" 패널 — 보유 카드 목록 + 10장당 실물 1장 진행도 */

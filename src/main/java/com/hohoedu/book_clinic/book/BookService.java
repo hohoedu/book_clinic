@@ -224,6 +224,58 @@ public class BookService {
         return bookRepository.findActiveLoansByItem(bcode, centerCode);
     }
 
+    // ===================== 보유도서 설정 (센터별 보유 수량) =====================
+
+    /** 보유도서 설정 목록 — 우리 센터 기준 (보유 0권 도서도 함께 나온다) */
+    public List<BookRespDTO.StockRespDTO> searchCenterStocks(String centerCode, String schoolYear, String contentType,
+            String genre, String hasStock, String title) {
+        return bookRepository.searchCenterStocks(centerCode, schoolYear, contentType, genre, hasStock, title);
+    }
+
+    /**
+     * 센터 보유 수량을 목표치로 변경 — 화면에 저장 버튼이 없고 +/- 즉시 반영이라 호출 1회 = 확정 1회다.
+     * 늘릴 땐 사본 행을 추가하고, 줄일 땐 대여 중이 아닌 사본부터 지운다(대여 중인 책은 남긴다).
+     * 변경 결과는 stock_log에 before/after로 남겨 "최근 변경일 / 변경 이력" 표시의 근거가 된다.
+     *
+     * @return 실제로 반영된 보유 수량
+     */
+    @Transactional
+    public int updateCenterStock(Integer contentId, String centerCode, int target, String changedBy) {
+        if (target < 0)
+            throw new Exception400("보유 수량은 0권보다 적을 수 없습니다.");
+
+        int before = bookRepository.countItemsByContentCenter(contentId, centerCode);
+        if (target == before)
+            return before;
+
+        if (target > before) {
+            // 같은 도서의 사본은 센터가 달라도 bcode를 공유한다 — 첫 사본이면 새 bcode를 발급
+            String bcode = bookRepository.findBcodeByContentId(contentId);
+            if (bcode == null || bcode.isBlank())
+                bcode = generateNumericBcode();
+            for (int i = before; i < target; i++) {
+                bookRepository.insertItemFromContent(contentId, centerCode, bcode);
+            }
+        } else {
+            int loaned = bookRepository.countLoanedItemsByContentCenter(contentId, centerCode);
+            if (target < loaned)
+                throw new Exception400("대여 중인 " + loaned + "권은 반납 전까지 줄일 수 없습니다.");
+            for (int i = before; i > target; i--) {
+                if (bookRepository.deleteAvailableItemByContent(contentId, centerCode) == 0)
+                    throw new Exception400("줄일 수 있는 보유분이 없습니다. 잠시 후 다시 시도해 주세요.");
+            }
+        }
+
+        int after = bookRepository.countItemsByContentCenter(contentId, centerCode);
+        bookRepository.insertStockLog(contentId, centerCode, before, after, changedBy);
+        return after;
+    }
+
+    /** 보유 수량 변경 이력 조회 */
+    public List<BookRespDTO.StockLogRespDTO> findStockLogs(Integer contentId, String centerCode) {
+        return bookRepository.findStockLogs(contentId, centerCode);
+    }
+
     /**
      * 실물 도서 식별자(bcode) 생성 — ISBN을 사용하지 않으므로 숫자로만 이루어진 UUID를 발급한다.
      * (타임스탬프 13자리 + 랜덤 5자리 = 18자리 숫자, VARCHAR(50) PK에 저장)

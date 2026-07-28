@@ -46,10 +46,10 @@ public class MonitorRespDTO {
         private Integer badgeCount;
         private String latestBadgeName;
 
-        private Integer readingLogId;   // null이면 독서일지 미등록
-        private String attitudeCodes;   // 콤마 구분
-        private String helpNeeded;
-        private String note;
+        private Integer diaryKey;       // null이면 독서일지 미등록
+        private String attitudeCodes;   // attitude 행들을 콤마로 묶은 값
+        private Boolean helpNeeded;
+        private String memo;
 
         // elapsedMinutes는 SQL이 DATEDIFF(MINUTE, recommended_at, CURRENT_TIMESTAMP)로 직접 계산해서
         // 채워준다(Java의 LocalDateTime.now()를 쓰지 않음 — DB/JVM 타임존이 어긋나면 오차가 생기므로,

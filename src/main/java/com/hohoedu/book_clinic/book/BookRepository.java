@@ -119,4 +119,36 @@ public interface BookRepository {
 
     /** 학생의 현재 대여 중(LOANED) 이력 1건 (없으면 null) — 추천 갱신 시 이전 hold 반납 판단용 */
     BookRespDTO.ItemLoanRespDTO findActiveLoanByStudent(@Param("studentId") String studentId);
+
+    // ===================== 보유도서 설정 (센터별 보유 수량) =====================
+
+    /** 보유도서 설정 목록 — 마스터 도서 전체에 우리 센터 보유 수량을 붙여 조회 (보유 0권 도서도 포함) */
+    List<BookRespDTO.StockRespDTO> searchCenterStocks(@Param("centerCode") String centerCode,
+            @Param("schoolYear") String schoolYear, @Param("contentType") String contentType,
+            @Param("genre") String genre, @Param("hasStock") String hasStock, @Param("title") String title);
+
+    /** (content + center) 보유 사본 수 */
+    int countItemsByContentCenter(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
+
+    /** (content + center) 보유 사본 중 대여 중(LOANED)인 수 — 수량을 줄일 수 있는 하한 판단용 */
+    int countLoanedItemsByContentCenter(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
+
+    /** 해당 도서의 대표 bcode 1건 (센터 무관) — 사본을 추가할 때 기존 바코드를 이어 쓰기 위해 */
+    String findBcodeByContentId(@Param("contentId") Integer contentId);
+
+    /** 마스터 도서 정보를 그대로 복사해 사본 1건 신규 등록 (그 도서의 사본이 어느 센터에도 없을 때) */
+    void insertItemFromContent(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode,
+            @Param("bcode") String bcode);
+
+    /** (content + center) 사본 중 대여 중이 아닌(AVAILABLE) 1건 삭제 — 삭제된 행 수 반환 */
+    int deleteAvailableItemByContent(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
+
+    /** 보유 수량 변경 로그 기록 */
+    void insertStockLog(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode,
+            @Param("beforeQty") int beforeQty, @Param("afterQty") int afterQty,
+            @Param("changedBy") String changedBy);
+
+    /** (content + center) 보유 수량 변경 이력 (최신순) */
+    List<BookRespDTO.StockLogRespDTO> findStockLogs(@Param("contentId") Integer contentId,
+            @Param("centerCode") String centerCode);
 }

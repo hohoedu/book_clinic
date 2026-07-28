@@ -52,13 +52,27 @@ public class ClinicService {
     // 단계(학년)별 최고 레벨(만렙) — 각 학년이 레벨 1~12를 가진다
     private static final int MAX_LEVEL = 12;
 
+    /** 학년(단계)별 레벨 규칙 1건 — 단계명/특징 문구/레벨업 1회당 필요 완독 권수 */
+    private record LevelRule(String stageName, String feature, int booksPerLevel) {}
+
+    // 학년별 레벨 규칙 — 어드민 편집 화면이 없어 배포로만 바뀌는 값이라 DB(구 level_rule 테이블) 대신 상수로 관리.
+    // 필요권수: 초1·2=8, 초3=5, 초4~6=4
+    private static final Map<String, LevelRule> LEVEL_RULES = Map.of(
+            "01", new LevelRule("입문", "독서와 친해지고 즐거움을 발견하는 단계", 8),
+            "02", new LevelRule("성장", "책 속 지식과 생각을 모으며 성장하는 단계", 8),
+            "03", new LevelRule("탐구", "스스로 질문하고 파고들며 사고를 넓히는 단계", 5),
+            "04", new LevelRule("심화", "지식을 깊이 있게 이해하고 연결하는 단계", 4),
+            "05", new LevelRule("통찰", "어휘와 문해력으로 글의 본질을 읽어내는 단계", 4),
+            "06", new LevelRule("마스터", "폭넓은 사고로 독서를 완성하는 단계", 4)
+    );
+
     // student-main "이번 달에 읽은 책" 패널이 4칸 고정 레이아웃이라 서버에서도 4건으로 맞춘다
     private static final int MONTH_BOOKS_LIMIT = 4;
 
     // 문제풀이 합격선 = 전체 문항 수의 2/3 (12문항→8개, 15문항→10개 기준으로 확정)
     private static final double QUIZ_PASS_RATIO = 2.0 / 3;
 
-    // 온라인 카드 N장을 모으면 오프라인 실물 카드 1장 (시스템은 진행도/달성 표시까지만)
+    // 온라인 카드(NORMAL) N장마다 온라인 레어카드 1장 추가 지급 + 오프라인 실물 카드 1장(시스템은 진행도/달성 표시까지만)
     private static final int CARD_SET_SIZE = 10;
 
     // 뱃지 id (erp_bookstore_badge) — 책마다 기본 1개(1~3 택1) + 심화 1개(4~5 택1)
@@ -222,6 +236,7 @@ public class ClinicService {
             resp.setPassed(false);
             resp.setGrade(null);
             resp.setNewBadges(awardAdvancedBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
+            recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
             syncMonitorSafely(studentId);
             return resp;
         }
@@ -233,6 +248,7 @@ public class ClinicService {
             resp.setAlreadyCompleted(true);
             resp.setLeveledUp(false);
             resp.setNewBadges(List.of());
+            recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
             syncMonitorSafely(studentId);
             return resp;
         }
@@ -249,15 +265,15 @@ public class ClinicService {
             // 레벨은 EXP가 아니라 "그 학년 도서 완독 권수 ÷ 학년별 필요권수"로 정해진다(단계 = 학생 학년).
             // updateRecommendResult로 이 책이 이미 DONE 처리됐으므로 doneAfter에 이번 완독이 포함된다.
             String schoolyear = resolveSchoolyear(studentId);
-            Integer booksPerLevel = clinicRepository.findBooksPerLevel(schoolyear);
-            if (booksPerLevel != null && booksPerLevel > 0) {
+            LevelRule rule = LEVEL_RULES.get(schoolyear);
+            if (rule != null) {
+                int booksPerLevel = rule.booksPerLevel();
                 int doneAfter = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
                 int levelBefore = levelFor(doneAfter - 1, booksPerLevel);
                 int levelAfter = levelFor(doneAfter, booksPerLevel);
                 resp.setLevelNo(levelAfter);
                 resp.setLeveledUp(levelAfter > levelBefore);
-                ClinicRespDTO.LevelDetailDTO detail = clinicRepository.findLevelDetail(schoolyear, levelAfter);
-                if (detail != null) resp.setLevelTitle(detail.getTitle());
+                resp.setLevelTitle(clinicRepository.findLevelTitle(schoolyear, levelAfter));
                 if (levelAfter >= MAX_LEVEL) {
                     resp.setProgressPercent(100);
                     resp.setBooksToNextLevel(0);
@@ -268,24 +284,47 @@ public class ClinicService {
                 }
             }
 
-            // 온라인 카드 — 새 완독(DONE)이므로 그 책의 카드를 1장 획득한다(책당 1장, 중복 없음).
-            // 카드 10장마다 오프라인 실물 1장 교환 시점(cardRewardReached) — 실물 지급은 오프라인 수동.
-            ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
-            if (card != null) {
-                int totalCards = clinicRepository.countDoneBooks(studentId); // 이번 완독 포함
-                resp.setCardName(card.getCardName());
-                resp.setCardImageUrl(card.getImageUrl());
+            // 온라인 카드 — 새 완독(DONE)이므로 그 책의 NORMAL 카드를 1장 지급한다(책당 1장, 중복 지급 방지).
+            // NORMAL 카드가 CARD_SET_SIZE(10)의 배수를 채운 순간 온라인 레어카드도 함께 지급하고,
+            // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다(실물 지급은 오프라인 수동).
+            if (!clinicRepository.existsNormalCard(studentId, contentId)) {
+                clinicRepository.insertNormalCard(studentId, contentId);
+                ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
+                int totalCards = clinicRepository.countNormalCards(studentId); // 이번 완독 포함
+                if (card != null) {
+                    resp.setCardName(card.getCardName());
+                    resp.setCardImageUrl(card.getImageUrl());
+                }
                 resp.setTotalCards(totalCards);
-                resp.setCardRewardReached(totalCards > 0 && totalCards % CARD_SET_SIZE == 0);
+
+                boolean rewardReached = totalCards > 0 && totalCards % CARD_SET_SIZE == 0;
+                resp.setCardRewardReached(rewardReached);
+                if (rewardReached && !clinicRepository.existsRareCard(studentId, totalCards)) {
+                    clinicRepository.insertRareCard(studentId, totalCards);
+                }
             }
         }
 
         // 기본 문제 뱃지 — 첫 시도 결과로 등급 확정(불합격→참잘했어요 / 합격→독서친구 / 만점→독서왕).
         // 재도전(첫 시도 아님)이면 등급이 고정되어 새 뱃지가 나가지 않는다.
         resp.setNewBadges(awardBasicBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
+        recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
         syncMonitorSafely(studentId);
 
         return resp;
+    }
+
+    /**
+     * 독서일지 상세 자동 적재 — 읽은 책/독서 시간/채점 결과는 직원 입력이 아니라 제출 시점에 시스템이 남긴다.
+     * 일지 적재가 실패해도 채점 결과 자체는 이미 확정된 뒤이므로 제출을 되돌리지 않는다.
+     */
+    private void recordDiarySafely(String studentId, Integer contentId, Integer recommendId,
+                                   String qlevel, int correctCount, int totalCount) {
+        try {
+            monitorService.recordDiaryDetail(studentId, contentId, recommendId, qlevel, correctCount, totalCount);
+        } catch (Exception e) {
+            log.warn("독서일지 상세 적재 실패 — studentId={}, contentId={}", studentId, contentId, e);
+        }
     }
 
     /**
@@ -308,27 +347,24 @@ public class ClinicService {
      */
     public ClinicRespDTO.MainLevelInfoDTO getMainLevelInfo(String studentId) {
         String schoolyear = resolveSchoolyear(studentId);
-        Integer booksPerLevel = clinicRepository.findBooksPerLevel(schoolyear);
+        LevelRule rule = LEVEL_RULES.get(schoolyear);
 
         ClinicRespDTO.MainLevelInfoDTO result = new ClinicRespDTO.MainLevelInfoDTO();
 
-        if (booksPerLevel == null || booksPerLevel <= 0) {
+        if (rule == null) {
             result.setLevelNo(1);
             result.setProgressPercent(0);
             result.setBooksToNextLevel(null);
             return result;
         }
 
+        int booksPerLevel = rule.booksPerLevel();
         int doneBooks = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
         int levelNo = levelFor(doneBooks, booksPerLevel);
         result.setLevelNo(levelNo);
-
-        ClinicRespDTO.LevelDetailDTO detail = clinicRepository.findLevelDetail(schoolyear, levelNo);
-        if (detail != null) {
-            result.setLevelName(detail.getStageName());
-            result.setTitle(detail.getTitle());
-            result.setFeature(detail.getFeature());
-        }
+        result.setLevelName(rule.stageName());
+        result.setFeature(rule.feature());
+        result.setTitle(clinicRepository.findLevelTitle(schoolyear, levelNo));
 
         if (levelNo >= MAX_LEVEL) {
             result.setProgressPercent(100);
@@ -348,18 +384,18 @@ public class ClinicService {
     }
 
     /**
-     * student-main "나의 카드 컬렉션" 패널 — 완독한 책 = 보유 카드 목록(최신순)과
-     * 10장당 실물 1장 교환 진행도를 계산해 내려준다(카드는 recommend_log의 DONE에서 파생).
+     * student-main "나의 카드 컬렉션" 패널 — 보유 카드(NORMAL+RARE) 목록(최신 획득순)과
+     * NORMAL 카드 기준 10장당 레어카드/실물 교환 진행도를 내려준다(erp_bookstore_student_card 조회).
      */
     public ClinicRespDTO.CardCollectionDTO getCardCollection(String studentId) {
         List<ClinicRespDTO.CardDTO> cards = clinicRepository.findEarnedCards(studentId);
-        int total = cards.size();
+        int normalTotal = clinicRepository.countNormalCards(studentId);
 
         ClinicRespDTO.CardCollectionDTO result = new ClinicRespDTO.CardCollectionDTO();
         result.setCards(cards);
-        result.setTotalCards(total);
-        result.setExchangeableCount(total / CARD_SET_SIZE);
-        result.setCardsToNextReward(CARD_SET_SIZE - total % CARD_SET_SIZE);
+        result.setTotalCards(normalTotal);
+        result.setExchangeableCount(normalTotal / CARD_SET_SIZE);
+        result.setCardsToNextReward(CARD_SET_SIZE - normalTotal % CARD_SET_SIZE);
         return result;
     }
 

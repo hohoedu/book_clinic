@@ -43,8 +43,23 @@ public interface MonitorRepository {
     MonitorRespDTO.CardDTO findCardBySessionId(@Param("sessionId") Integer sessionId);
 
     /** 독서일지 upsert (세션당 1건) */
-    void upsertReadingLog(@Param("sessionId") Integer sessionId, @Param("studentId") String studentId,
-                           @Param("attitudeCodes") String attitudeCodes, @Param("helpNeeded") String helpNeeded,
-                           @Param("note") String note, @Param("createdBy") String createdBy);
+    /** 독서일지 헤더 upsert — record_date/record_time/in_time은 세션·예약에서 끌어와 최초 1회만 채운다 */
+    void upsertDiary(@Param("sessionId") Integer sessionId, @Param("helpNeeded") Boolean helpNeeded,
+                     @Param("memo") String memo, @Param("createdBy") String createdBy);
+
+    Integer findDiaryKeyBySessionId(@Param("sessionId") Integer sessionId);
+
+    void deleteDiaryAttitudes(@Param("diaryKey") Integer diaryKey);
+
+    void insertDiaryAttitudes(@Param("diaryKey") Integer diaryKey, @Param("studentId") String studentId,
+                              @Param("attitudeCodes") java.util.List<String> attitudeCodes);
+
+    /** 일지 헤더가 없으면 세션 정보로 생성만 한다(기존 행은 손대지 않음) */
+    void ensureDiary(@Param("sessionId") Integer sessionId);
+
+    /** 채점 결과를 일지 상세에 적재 — 같은 (일지, 도서)면 제출한 난이도 컬럼만 갱신 */
+    void upsertDiaryDetail(@Param("diaryKey") Integer diaryKey, @Param("contentId") Integer contentId,
+                           @Param("recommendId") Integer recommendId, @Param("qlevel") String qlevel,
+                           @Param("correctCount") Integer correctCount, @Param("totalCount") Integer totalCount);
 
 }

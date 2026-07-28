@@ -1,14 +1,17 @@
 -- DROP (FK 역순)
+IF OBJECT_ID('erp_bookstore_attitude',              'U') IS NOT NULL DROP TABLE erp_bookstore_attitude;
+IF OBJECT_ID('erp_bookstore_diary_detail',          'U') IS NOT NULL DROP TABLE erp_bookstore_diary_detail;
+IF OBJECT_ID('erp_bookstore_diary',                 'U') IS NOT NULL DROP TABLE erp_bookstore_diary;
 IF OBJECT_ID('erp_bookstore_reading_log',           'U') IS NOT NULL DROP TABLE erp_bookstore_reading_log;
 IF OBJECT_ID('erp_bookstore_clinic_session',        'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_session;
 IF OBJECT_ID('erp_bookstore_clinic_reservation',    'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_reservation;
+IF OBJECT_ID('erp_bookstore_student_card',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_card;
 IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
 IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
 IF OBJECT_ID('erp_bookstore_quiz_answer_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_answer_log;
 IF OBJECT_ID('erp_bookstore_student_info',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_info;
 IF OBJECT_ID('erp_bookstore_exp_rule',               'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;      -- 폐지(EXP 제거)
-IF OBJECT_ID('erp_bookstore_level',                  'U') IS NOT NULL DROP TABLE erp_bookstore_level;         -- level_rule의 자식이라 먼저 DROP
-IF OBJECT_ID('erp_bookstore_level_rule',             'U') IS NOT NULL DROP TABLE erp_bookstore_level_rule;
+IF OBJECT_ID('erp_bookstore_level',                  'U') IS NOT NULL DROP TABLE erp_bookstore_level;
 IF OBJECT_ID('erp_bookstore_recommend_log',         'U') IS NOT NULL DROP TABLE erp_bookstore_recommend_log;
 IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE erp_notification;
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
@@ -289,6 +292,20 @@ IF COL_LENGTH('erp_bookstore_item_del', 'deleted_at') IS NOT NULL EXEC sp_rename
 IF COL_LENGTH('erp_bookstore_item_del', 'deleted_by') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.deleted_by', 'logged_by', 'COLUMN';
 IF COL_LENGTH('erp_bookstore_item_del', 'log_type') IS NULL ALTER TABLE erp_bookstore_item_del ADD log_type VARCHAR(10) NOT NULL DEFAULT 'DELETE';
 
+-- 센터 보유 수량 변경 로그 (2026-07-28 보유도서 설정 화면) — 화면의 +/- 는 저장 버튼 없이 즉시
+-- 사본(erp_bookstore_item) 행을 추가/삭제하므로, "언제 몇 권에서 몇 권이 됐는지"는 사본 테이블만으로는
+-- 복원되지 않는다. 최근 변경일/변경 이력은 전적으로 이 로그를 근거로 표시한다.
+IF OBJECT_ID('erp_bookstore_item_stock_log', 'U') IS NULL
+CREATE TABLE erp_bookstore_item_stock_log (
+    log_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    content_id  INT           NOT NULL,  -- erp_bookstore_content.content_id (수량은 도서 단위로 관리)
+    center_code VARCHAR(20)   NOT NULL,  -- 수량이 바뀐 센터
+    before_qty  INT           NOT NULL,  -- 변경 전 보유 수량
+    after_qty   INT           NOT NULL,  -- 변경 후 보유 수량
+    changed_by  VARCHAR(100),            -- 처리한 직원 (erp_user.username)
+    changed_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())  -- 변경일시(KST)
+);
+
 -- 문제은행 — 도서(content_id)별 독후활동 문제 (관리자가 book-data 화면에서 직접 등록/편집)
 IF OBJECT_ID('erp_bookstore_itempool', 'U') IS NULL
 CREATE TABLE erp_bookstore_itempool (
@@ -395,39 +412,29 @@ CREATE TABLE erp_bookstore_quiz_answer_log (
 
 -- 레벨 체계 재편 (EXP 폐지) — "단계 = 학생 학년(01~06)"이고, 각 단계 안에서 레벨 1~12가 있다.
 -- 레벨은 저장하지 않고 "그 학년 도서 완독(DONE) 권수 ÷ 학년별 필요권수"로 매번 재계산한다(ClinicService).
---   level_rule : 단계(학년)별 단계명/특징/레벨업 1회당 필요 완독 권수 — 6개 학년 전부 존재해야 계산 가능
-CREATE TABLE erp_bookstore_level_rule (
-    schoolyear      VARCHAR(2)    PRIMARY KEY,     -- 01~06 = 1~6단계
-    stage_name      NVARCHAR(50),                  -- 단계명 (입문 ...) — 2~6단계는 미정
-    feature         NVARCHAR(300),                 -- 단계 특징 문구 — 2~6단계는 미정
-    books_per_level INT           NOT NULL         -- 레벨업 1회당 필요 완독 권수 (초1·2=8, 초3=5, 초4~6=4)
-);
+-- 단계명/특징/필요권수(구 level_rule)는 어드민 편집 화면이 없고 배포로만 바뀌는 값이라 DB 대신
+-- ClinicService.LEVEL_RULES(Java 상수)로 관리한다 — level 테이블은 칭호만 담당.
 
 -- 레벨 칭호 — (단계=학년, 레벨 1~12)별 칭호. 미정 학년은 행이 없어도 되며, 그 경우 화면은 Lv.N만 표시
 CREATE TABLE erp_bookstore_level (
     schoolyear    VARCHAR(2)    NOT NULL,          -- 단계 = 학년
     level_no      INT           NOT NULL,          -- 1 ~ 12
     title         NVARCHAR(50)  NOT NULL,          -- 칭호 (독서 씨앗, 독서 새싹 ...)
-    PRIMARY KEY (schoolyear, level_no),
-    FOREIGN KEY (schoolyear) REFERENCES erp_bookstore_level_rule(schoolyear)
+    PRIMARY KEY (schoolyear, level_no)
 );
 
--- 뱃지 마스터 (2026-07-10) — 달성 조건을 category+threshold+param 3개 값으로 데이터화한다.
--- 판정 로직은 조건별 if문이 아니라 category 단위 쿼리 하나씩으로 처리 (ClinicService.checkAndAwardBadges)
---   FIRST_BOOK    : 완독(DONE) 권수 >= threshold
---   MONTH_STREAK  : 역대 최장 "연속 완독 개월 수"(달력 월 기준, 매달 1권 이상) >= threshold
---   CROWN         : 독서왕(grade=KING) 달성 횟수 >= threshold
---   QTYPE_PERFECT : param=문제유형 T코드. 합격 회차에서 해당 유형 전 문항 정답인 책 수 >= threshold (책당 1회)
---   TOPIC         : param=콤마 구분 키워드. content.keywords에 키워드가 포함된 완독 책 수 >= threshold
---   ADV_PERFECT   : 심화(qlevel=02) 전 문항 정답 달성 책 수 >= threshold (책당 1회)
---   META          : 다른 뱃지 threshold개 전부 보유 시
+-- 뱃지 마스터 (2026-07-27 재편) — 5종 고정. id→이름/설명 조회용 룩업 테이블.
+--   1 참 잘했어요 / 2 독서친구 / 3 독서왕 / 4 심화 완료 / 5 심화왕
+-- 판정은 "책마다 첫 시도 결과"로 코드에서 badge_id를 직접 매핑한다(ClinicService.awardBasicBadge/awardAdvancedBadge).
+--   기본 첫 시도: 불합격→1 / 합격→2 / 만점→3,  심화 첫 시도: 합격→4 / 만점→5 (불합격은 없음)
+-- category/threshold/param 컬럼은 구(누적 판정) 방식의 잔재로 현재 로직에서 사용하지 않음(호환 위해 유지).
 CREATE TABLE erp_bookstore_badge (
-    badge_id    INT            PRIMARY KEY,      -- 1~22 고정 번호 (기획 문서 순서)
-    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (독서 탐험가 ...)
-    badge_desc  NVARCHAR(200),                   -- 달성 조건 문구 (화면 표시용)
-    category    VARCHAR(20)    NOT NULL,         -- 판정 유형 (위 주석 참고)
-    threshold   INT            NOT NULL,         -- 달성 기준치
-    param       VARCHAR(100)                     -- QTYPE_PERFECT=T코드 / TOPIC=키워드 목록
+    badge_id    INT            PRIMARY KEY,      -- 1~5 고정 번호
+    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (참 잘했어요 ...)
+    badge_desc  NVARCHAR(200),                   -- 특징/설명 문구 (화면 표시용)
+    category    VARCHAR(20)    NOT NULL,         -- (레거시) 판정 유형 — 현재 미사용
+    threshold   INT            NOT NULL,         -- (레거시) 달성 기준치 — 현재 미사용
+    param       VARCHAR(100)                     -- (레거시) 현재 미사용
 );
 
 -- 학생별 뱃지 획득 이력 — PK로 중복 획득을 원천 차단, 판정은 매 제출마다 로그 재계산(멱등)
@@ -442,6 +449,27 @@ CREATE TABLE erp_bookstore_student_badge (
     FOREIGN KEY (badge_id)   REFERENCES erp_bookstore_badge(badge_id),
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
+
+-- 학생별 카드 지급 이력 (2026-07-28) — NORMAL(완독 시 그 책 카드, 책당 1장) / RARE(NORMAL 카드
+-- 10장마다 추가 지급, 특정 책과 무관해서 content_id는 NULL) 두 종류를 한 테이블에서 관리한다.
+-- id를 surrogate PK로 두는 이유: RARE는 content_id가 없어 (student_id, content_id)로 유일성을 못 잡는다.
+-- NORMAL 중복 지급 방지는 UX_erp_bookstore_student_card_normal(student_id, content_id) 필터드 유니크로 막는다.
+-- RARE 중복 지급 방지는 trigger_count(그 RARE를 발생시킨 시점의 누적 NORMAL 카드 수, 10/20/30 ...)로 판단한다.
+CREATE TABLE erp_bookstore_student_card (
+    id             INT IDENTITY(1,1) PRIMARY KEY,
+    student_id     VARCHAR(100)  NOT NULL,
+    content_id     INT           NULL,      -- NORMAL만 값 있음(그 책). RARE는 NULL
+    card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / RARE
+    trigger_count  INT           NULL,      -- RARE만 값 있음(발급을 유발한 누적 NORMAL 카드 수: 10, 20 ...)
+    earned_at      DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+CREATE UNIQUE INDEX UX_erp_bookstore_student_card_normal
+    ON erp_bookstore_student_card (student_id, content_id)
+    WHERE card_type = 'NORMAL';
+CREATE UNIQUE INDEX UX_erp_bookstore_student_card_rare
+    ON erp_bookstore_student_card (student_id, trigger_count)
+    WHERE card_type = 'RARE';
 
 -- 클리닉 입실/퇴실 세션 (2026-07-15 실시간 모니터링) — 학생이 로그인하는 시점에 자동으로
 -- 입실 기록이 생긴다. 같은 날 이미 ENTERED 상태 세션이 있으면 재사용하고(재로그인은 새 세션이
@@ -473,16 +501,70 @@ CREATE TABLE erp_bookstore_clinic_reservation (
     created_at       DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
 );
 
--- 독서일지 — 직원이 실시간 모니터링 화면에서 입실 세션 1건당 직접 작성(태도/도움필요/전달사항)
-CREATE TABLE erp_bookstore_reading_log (
-    log_id         INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    session_id     INT           NOT NULL,  -- erp_bookstore_clinic_session.session_id
-    student_id     VARCHAR(100)  NOT NULL,  -- erp_student.student_id
-    attitude_codes VARCHAR(200),  -- 독서 태도 체크(콤마 구분 코드, 복수 선택)
-    help_needed    VARCHAR(50),   -- 도움 필요 코드 (예: ALONE_HARD=혼자 읽기 어려워요)
-    note           VARCHAR(1000), -- 기타 전달사항
-    created_by     VARCHAR(100),  -- 작성한 직원
-    created_at     DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
-    updated_at     DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+-- ────────────────────────────────────────────────────────
+-- 독서일지 재설계 (2026-07-28) — 구 erp_bookstore_reading_log 폐기하고 대체
+--   diary(하루 1건) → diary_detail(그날 읽은 책별) / attitude(태도 체크 복수 선택)
+-- 구 테이블은 삭제했고 상단 DROP 문만 남겨 기존 개발 DB의 잔재를 정리한다.
+--   note → diary.memo / help_needed → diary.help_needed / attitude_codes(콤마 문자열) → attitude 행 분해
+-- 세 테이블 모두 매 기동 DROP 후 재생성한다. 보존으로 두면 매 기동 리셋되는
+-- erp_bookstore_clinic_session / erp_bookstore_recommend_log를 FK로 물고 있어 그쪽 DROP이 막힌다.
+-- ────────────────────────────────────────────────────────
+
+-- 독서일지 헤더 — 학생의 하루(입실 1회)에 1건.
+-- in_time/out_time은 세션(entered_at/exited_at)과 같은 값이라 session_id로 세션을 물고,
+-- 두 컬럼은 "일지 작성 시점 스냅샷"으로 둔다(직원이 화면에서 보정할 수 있어야 해서 파생이 아닌 저장).
+-- record_time은 erp_bookstore_clinic_reservation.time_slot과 같은 도메인('1'~'4')을 쓴다.
+CREATE TABLE erp_bookstore_diary (
+    diary_key    INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK (기존 관례는 _id지만 설계안 이름을 유지)
+    session_id   INT           NOT NULL UNIQUE,  -- erp_bookstore_clinic_session.session_id (입실 세션 1건 = 일지 1건)
+    student_id   VARCHAR(20)  NOT NULL,  -- erp_student.student_id (UNIQUE 제약이 없어 FK 없이 값으로 연결)
+    record_date  DATE          NOT NULL,  -- 일지 기준일 (= 세션의 session_date)
+    record_time  VARCHAR(1),              -- 교시 '1'~'4' (clinic_reservation.time_slot과 동일 도메인)
+    in_time      DATETIME2,               -- 입실 시각(KST) — 세션 entered_at 스냅샷, 직원 보정 가능
+    out_time     DATETIME2,               -- 퇴실 시각(KST) — 세션 exited_at 스냅샷, 직원 보정 가능
+    help_needed  BIT           NOT NULL DEFAULT 0,  -- 도움 필요 여부 ("혼자 읽기 어려워요") — 선택지가 하나뿐이라 코드가 아닌 플래그로 둔다
+    memo         VARCHAR(500),            -- 전달사항 (구 reading_log.note)
+    is_send      BIT           NOT NULL DEFAULT 0,  -- 학부모 발송 여부 — 발송 결과/이력은 erp_notification에 남긴다
+    created_by   VARCHAR(50),             -- 작성한 직원 (구 reading_log.created_by)
+    created_at   DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at   DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     FOREIGN KEY (session_id) REFERENCES erp_bookstore_clinic_session(session_id)
+);
+CREATE INDEX IX_erp_bookstore_diary_student_date
+    ON erp_bookstore_diary (student_id, record_date);
+
+-- 독서일지 상세 — 그날 읽은 책 1권당 1행.
+-- basic_*/advanced_* 정답 수는 erp_bookstore_quiz_answer_log(원장)에서 집계되는 값의 스냅샷이다.
+-- 어느 도전의 결과인지는 recommend_id로 물린다. 기본(qlevel='01')은 recommend_log에도 같은 값이 있지만
+-- 심화(qlevel='02')는 recommend_log에 컬럼이 없어 quiz_answer_log 집계로만 채울 수 있다.
+-- read_minutes: erp_bookstore_content.reading_time이 이미 "예상 독서 시간"이라 이름이 겹쳐 실제 측정값은 분 단위로 따로 둔다.
+CREATE TABLE erp_bookstore_diary_detail (
+    id                   INT  IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    diary_key            INT  NOT NULL,  -- erp_bookstore_diary.diary_key
+    content_id           INT  NOT NULL,  -- erp_bookstore_content.content_id
+    recommend_id         INT,            -- erp_bookstore_recommend_log.recommend_id (어느 도전의 결과인지)
+    book_name            VARCHAR(255),   -- 도서명 (작성 시점 스냅샷 — erp_bookstore_item과 같은 규칙)
+    book_img             VARCHAR(100),   -- 표지 이미지 URL (작성 시점 스냅샷)
+    read_minutes         INT,            -- 실제 독서 시간(분) — content.reading_time(예상)과 다른 값
+    basic_correct_cnt    INT,            -- 기본(qlevel='01') 정답 수 스냅샷
+    basic_total_cnt      INT,            -- 기본 총 문항 수 스냅샷
+    advanced_correct_cnt INT,            -- 심화(qlevel='02') 정답 수 스냅샷
+    advanced_total_cnt   INT,            -- 심화 총 문항 수 스냅샷
+    CONSTRAINT UQ_erp_bookstore_diary_detail_book UNIQUE (diary_key, content_id),
+    FOREIGN KEY (diary_key)    REFERENCES erp_bookstore_diary(diary_key),
+    FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id),
+    FOREIGN KEY (recommend_id) REFERENCES erp_bookstore_recommend_log(recommend_id)
+);
+
+-- 독서태도 체크 — 일지 1건에 복수 선택되므로 1선택 = 1행으로 정규화한다(구 reading_log.attitude_codes 콤마 문자열 대체).
+-- attitude_code는 monitor-live.js ATTITUDE_CODES의 값(GOOD_POSTURE, SELF_DIRECTED, LOW_FOCUS, RUSHED, DISTRACTED).
+-- erp_bookstore_code로 옮기지 않는 이유: 그 테이블의 code가 VARCHAR(2)라 이 문자열 코드가 들어가지 않는다.
+CREATE TABLE erp_bookstore_attitude (
+    id            INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    diary_key     INT           NOT NULL,  -- erp_bookstore_diary.diary_key (어느 일지의 체크인지)
+    student_id    VARCHAR(20)   NOT NULL,  -- erp_student.student_id (조회 편의용 중복 저장, 값으로만 연결)
+    attitude_code VARCHAR(20)   NOT NULL,  -- 독서 태도 코드
+    created_at    DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    CONSTRAINT UQ_erp_bookstore_attitude_pair UNIQUE (diary_key, attitude_code),
+    FOREIGN KEY (diary_key) REFERENCES erp_bookstore_diary(diary_key)
 );

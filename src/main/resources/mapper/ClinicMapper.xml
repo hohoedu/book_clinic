@@ -144,12 +144,6 @@
         WHERE recommend_id = #{recommendId}
     </update>
 
-    <select id="findBooksPerLevel" resultType="java.lang.Integer">
-        SELECT books_per_level
-        FROM erp_bookstore_level_rule
-        WHERE schoolyear = #{schoolyear}
-    </select>
-
     <!-- 단계 = 학생 학년. 그 학년 도서(content.schoolyear)의 완독(DONE) 권수를 센다 -->
     <select id="countDoneBooksByGrade" resultType="int">
         SELECT COUNT(*)
@@ -160,18 +154,6 @@
           AND c.schoolyear = #{schoolyear}
     </select>
 
-    <!-- 보유 카드 = 완독(DONE) 책. 카드명=책 제목, 부제=저자, 이미지=표지. 최신 완독순 -->
-    <select id="findEarnedCards" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CardDTO">
-        SELECT c.content_id     AS contentId,
-               c.original_title AS cardName,
-               c.author         AS bookTitle,
-               c.image_url      AS imageUrl
-        FROM erp_bookstore_recommend_log rl
-        JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        WHERE rl.student_id = #{studentId} AND rl.status = 'DONE'
-        ORDER BY rl.completed_at DESC
-    </select>
-
     <select id="findCardByContent" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CardDTO">
         SELECT content_id     AS contentId,
                original_title AS cardName,
@@ -179,6 +161,51 @@
                image_url      AS imageUrl
         FROM erp_bookstore_content
         WHERE content_id = #{contentId}
+    </select>
+
+    <!-- ══════════════ 카드 지급 이력 (2026-07-28) ══════════════ -->
+
+    <select id="existsNormalCard" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM erp_bookstore_student_card
+            WHERE student_id = #{studentId} AND content_id = #{contentId} AND card_type = 'NORMAL'
+        ) THEN 1 ELSE 0 END
+    </select>
+
+    <insert id="insertNormalCard">
+        INSERT INTO erp_bookstore_student_card (student_id, content_id, card_type)
+        VALUES (#{studentId}, #{contentId}, 'NORMAL')
+    </insert>
+
+    <select id="countNormalCards" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_student_card
+        WHERE student_id = #{studentId} AND card_type = 'NORMAL'
+    </select>
+
+    <select id="existsRareCard" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM erp_bookstore_student_card
+            WHERE student_id = #{studentId} AND card_type = 'RARE' AND trigger_count = #{triggerCount}
+        ) THEN 1 ELSE 0 END
+    </select>
+
+    <insert id="insertRareCard">
+        INSERT INTO erp_bookstore_student_card (student_id, card_type, trigger_count)
+        VALUES (#{studentId}, 'RARE', #{triggerCount})
+    </insert>
+
+    <!-- 보유 카드 전체 — NORMAL은 그 책 표지/제목, RARE는 content_id가 없어 고정 이름/이미지. 최신 획득순 -->
+    <select id="findEarnedCards" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CardDTO">
+        SELECT sc.content_id                         AS contentId,
+               sc.card_type                          AS cardType,
+               CASE WHEN sc.card_type = 'RARE' THEN N'레어 카드' ELSE c.original_title END AS cardName,
+               CASE WHEN sc.card_type = 'RARE' THEN NULL ELSE c.author END AS bookTitle,
+               CASE WHEN sc.card_type = 'RARE' THEN '/images/student_result/rare.png' ELSE c.image_url END AS imageUrl
+        FROM erp_bookstore_student_card sc
+        LEFT JOIN erp_bookstore_content c ON c.content_id = sc.content_id
+        WHERE sc.student_id = #{studentId}
+        ORDER BY sc.earned_at DESC
     </select>
 
     <select id="findCompletedThisMonth" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$MonthBookDTO">
@@ -191,21 +218,15 @@
         JOIN erp_bookstore_content c ON c.content_id = rl.content_id
         WHERE rl.student_id = #{studentId}
           AND rl.status = 'DONE'
-          AND YEAR(rl.completed_at) = YEAR(GETDATE())
-          AND MONTH(rl.completed_at) = MONTH(GETDATE())
+          AND YEAR(rl.completed_at) = YEAR(DATEADD(HOUR, 9, GETUTCDATE()))
+          AND MONTH(rl.completed_at) = MONTH(DATEADD(HOUR, 9, GETUTCDATE()))
         ORDER BY rl.completed_at DESC
     </select>
 
-    <!-- 단계(학년) 규칙을 기준으로 하고, 해당 레벨의 칭호는 LEFT JOIN(미시딩 학년/레벨이면 title = null) -->
-    <select id="findLevelDetail" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LevelDetailDTO">
-        SELECT r.stage_name      AS stageName,
-               l.title           AS title,
-               r.feature         AS feature,
-               r.books_per_level AS booksPerLevel
-        FROM erp_bookstore_level_rule r
-        LEFT JOIN erp_bookstore_level l
-               ON l.schoolyear = r.schoolyear AND l.level_no = #{levelNo}
-        WHERE r.schoolyear = #{schoolyear}
+    <select id="findLevelTitle" resultType="java.lang.String">
+        SELECT title
+        FROM erp_bookstore_level
+        WHERE schoolyear = #{schoolyear} AND level_no = #{levelNo}
     </select>
 
     <!-- ══════════════ 뱃지 판정 (2026-07-10) ══════════════ -->
@@ -247,10 +268,5 @@
         WHERE student_id = #{studentId} AND content_id = #{contentId} AND qlevel = #{qlevel}
     </select>
 
-    <select id="countDoneBooks" resultType="int">
-        SELECT COUNT(*)
-        FROM erp_bookstore_recommend_log
-        WHERE student_id = #{studentId} AND status = 'DONE'
-    </select>
 
 </mapper>

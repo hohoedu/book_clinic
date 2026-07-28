@@ -16,16 +16,16 @@ public class MonitorReqDTO {
         private String studentId;
     }
 
-    /** 독서일지 저장 요청 — 세션 1건당 upsert */
+    /** 독서일지 저장 요청 — 세션 1건당 upsert (erp_bookstore_diary + erp_bookstore_attitude) */
     @Data
-    public static class ReadingLogReqDTO {
+    public static class DiaryReqDTO {
         @NotNull(message = "세션 ID는 필수입니다.")
         private Integer sessionId;
         @NotBlank(message = "학생 ID는 필수입니다.")
         private String studentId;
-        private List<String> attitudeCodes;  // 독서 태도 체크(복수 선택)
-        private String helpNeeded;           // 도움 필요 코드 (없으면 null)
-        private String note;                 // 기타 전달사항
+        private List<String> attitudeCodes;  // 독서 태도 체크(복수 선택) — attitude 테이블에 1행씩 저장
+        private Boolean helpNeeded;          // 도움 필요 여부 ("혼자 읽기 어려워요") — 선택지가 하나뿐이라 플래그
+        private String memo;                 // 기타 전달사항
     }
 
 }

@@ -147,6 +147,18 @@ public class BookReqDTO {
         private String appId;
     }
 
+    /**
+     * 보유도서 설정 화면의 수량 변경 요청 — 저장 버튼이 없어 +/- 한 번이 곧 확정이므로
+     * 증감분이 아닌 "변경 후 목표 수량"을 보낸다 (연타/중복 요청에도 결과가 어긋나지 않게)
+     */
+    @Data
+    public static class StockUpdateReqDTO {
+        @NotNull(message = "도서 ID는 필수입니다.")
+        private Integer contentId;
+        @NotNull(message = "보유 수량은 필수입니다.")
+        private Integer quantity;
+    }
+
     /** 실물 도서 반납 요청 */
     @Data
     public static class ItemReturnReqDTO {

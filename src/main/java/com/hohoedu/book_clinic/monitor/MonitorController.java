@@ -47,10 +47,10 @@ public class MonitorController {
     }
 
     /** 독서일지 저장(upsert) */
-    @PostMapping("/reading-log")
-    public ResponseEntity<?> saveReadingLog(@RequestBody @Valid MonitorReqDTO.ReadingLogReqDTO reqDTO,
-                                             Authentication authentication) {
-        monitorService.saveReadingLog(reqDTO, authentication.getName());
+    @PostMapping("/diary")
+    public ResponseEntity<?> saveDiary(@RequestBody @Valid MonitorReqDTO.DiaryReqDTO reqDTO,
+                                       Authentication authentication) {
+        monitorService.saveDiary(reqDTO, authentication.getName());
         return ResponseEntity.ok(ApiUtils.success(null));
     }
 
