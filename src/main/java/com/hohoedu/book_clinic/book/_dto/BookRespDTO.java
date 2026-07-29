@@ -30,7 +30,7 @@ public class BookRespDTO {
         private String extraDetailName;
     }
 
-    /** 실물 도서(사본) 조회 응답 (2026-07-13 재설계: item_center 통합) */
+    /** 실물 도서(판본) 조회 응답 (2026-07-29 재설계: bcode+센터당 1행, qty 카운터로 보유수량 관리) */
     @Data
     public static class ItemRespDTO {
         private Integer itemId;
@@ -41,7 +41,9 @@ public class BookRespDTO {
         private String publisher;
         private String imageUrl;
         private String centerCode;
-        private String status;  // AVAILABLE / LOANED / LOST
+        private Integer qty;
+        private Integer loanedQty;
+        private Integer lostQty;
     }
 
     /** 삭제된 실물 도서 조회 응답 */
@@ -58,12 +60,14 @@ public class BookRespDTO {
         private String publisher;
         private String imageUrl;
         private String centerCode;
-        private String status;
+        private Integer qty;
+        private Integer loanedQty;
+        private Integer lostQty;
     }
 
     /**
-     * 센터별 보유 도서(사본) 조회 응답 — 사본 1행 = 1건이라 quantity는 항상 1,
-     * loanedQty/lostQty는 그 사본의 현재 상태(status)를 0/1로 나타낸다 (프런트 카드가 기대하는 필드 구조는 유지)
+     * 센터별 보유 도서(판본) 조회 응답 — bcode당 1행에 qty/loanedQty/lostQty가 이미 집계돼 있다
+     * (프런트 카드가 기대하는 필드 구조는 유지)
      */
     @Data
     public static class ItemCenterRespDTO {
@@ -127,12 +131,37 @@ public class BookRespDTO {
         private LocalDateTime lastChangedAt;  // 마지막 수량 변경일시 (stock_log 기준, 변경 이력 없으면 null)
     }
 
+    /** 보유도서 설정 화면 — 마스터 도서 행을 펼쳤을 때 보이는 하위 판본(bcode) 1행 (bcode당 수량이 이미 집계돼 있다) */
+    @Data
+    public static class StockItemRespDTO {
+        private Integer itemId;
+        private String bcode;
+        private String bookTitle;
+        private String author;
+        private String publisher;
+        private String imageUrl;
+        private Integer qty;
+        private Integer loanedQty;
+        private Integer lostQty;
+        private LocalDateTime registeredAt;
+    }
+
+    /** 보유수량 일괄 등록 — 개별 항목 처리 결과 (실패해도 나머지 항목은 계속 진행되므로 항목별로 성공 여부를 담는다) */
+    @Data
+    public static class StockBulkResultRespDTO {
+        private Integer contentId;
+        private boolean success;
+        private Integer quantity;  // 성공 시 실제로 반영된 수량
+        private String message;    // 실패 시 사유
+    }
+
     /** 보유 수량 변경 이력 1행 */
     @Data
     public static class StockLogRespDTO {
         private Integer logId;
         private Integer beforeQty;
         private Integer afterQty;
+        private String memo;       // 감소 사유 (늘린 변경이면 null)
         private String changedBy;
         private LocalDateTime changedAt;
     }

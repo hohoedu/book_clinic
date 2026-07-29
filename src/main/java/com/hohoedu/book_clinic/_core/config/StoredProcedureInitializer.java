@@ -65,8 +65,8 @@ public class StoredProcedureInitializer implements ApplicationRunner {
 
                 DELETE FROM erp_bookstore_itempool WHERE content_id = @contentId;
 
-                INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, status, last_student_id, last_loaned_at, last_returned_at)
-                SELECT 'DELETE', @deletedBy, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, status, last_student_id, last_loaned_at, last_returned_at
+                INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty)
+                SELECT 'DELETE', @deletedBy, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty
                 FROM erp_bookstore_item WHERE content_id = @contentId;
 
                 DELETE FROM erp_bookstore_item WHERE content_id = @contentId;
@@ -118,9 +118,9 @@ public class StoredProcedureInitializer implements ApplicationRunner {
                       WHERE content_id = @contentId AND log_type = 'DELETE') t
                 WHERE rn = 1;
 
-                INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url, status, last_student_id, last_loaned_at, last_returned_at)
+                INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url, qty, loaned_qty, lost_qty)
                 SELECT bcode, content_id, center_code, book_title, author, publisher, image_url,
-                       ISNULL(status, 'AVAILABLE'), last_student_id, last_loaned_at, last_returned_at
+                       ISNULL(qty, 0), ISNULL(loaned_qty, 0), ISNULL(lost_qty, 0)
                 FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY bcode, center_code ORDER BY log_id DESC) AS rn
                       FROM erp_bookstore_item_del
                       WHERE content_id = @contentId AND log_type = 'DELETE') t

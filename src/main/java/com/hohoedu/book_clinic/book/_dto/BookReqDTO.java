@@ -1,6 +1,10 @@
 package com.hohoedu.book_clinic.book._dto;
 
+import java.util.List;
+
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
@@ -157,6 +161,48 @@ public class BookReqDTO {
         private Integer contentId;
         @NotNull(message = "보유 수량은 필수입니다.")
         private Integer quantity;
+    }
+
+    /** 보유수량 변경 요청 — bcode(사본 묶음) 단위. 같은 마스터 도서라도 등록된 판본(bcode)별로 수량을 따로 관리한다 */
+    @Data
+    public static class StockItemUpdateReqDTO {
+        @NotNull(message = "도서 ID는 필수입니다.")
+        private Integer contentId;
+        @NotBlank(message = "바코드는 필수입니다.")
+        private String bcode;
+        @NotNull(message = "보유 수량은 필수입니다.")
+        private Integer quantity;
+        private String memo; // 수량을 줄일 때만 필수 — 서비스 단에서 검증
+    }
+
+    /** 보유수량 일괄 등록 요청 — 마스터 도서(content) 단위 목표수량 목록을 한 번에 반영한다 */
+    @Data
+    public static class StockBulkUpdateReqDTO {
+        @NotEmpty(message = "변경할 항목이 없습니다.")
+        @Valid
+        private List<StockBulkItemReqDTO> items;
+    }
+
+    /**
+     * 보유수량 일괄 등록 — 도서(content) 1건 + 그 도서에 대해 화면에서 순서대로 확정한 단계(step) 목록.
+     * 단계가 여러 개인 건 사용자가 -를 여러 번 눌러 여러 번 감소시킨 경우이며, 각 단계는 그 시점에 받은
+     * 사유를 각각 그대로 가지고 있어서 서버에서 단계별로 순서대로 적용하면 이력도 단계별로 각각 남는다.
+     */
+    @Data
+    public static class StockBulkItemReqDTO {
+        @NotNull(message = "도서 ID는 필수입니다.")
+        private Integer contentId;
+        @NotEmpty(message = "적용할 단계가 없습니다.")
+        @Valid
+        private List<StockBulkStepReqDTO> steps;
+    }
+
+    /** 보유수량 일괄 등록 — 개별 단계 (memo는 그 단계가 감소일 때만 필수 — 서비스 단에서 검증) */
+    @Data
+    public static class StockBulkStepReqDTO {
+        @NotNull(message = "보유 수량은 필수입니다.")
+        private Integer quantity;
+        private String memo;
     }
 
     /** 실물 도서 반납 요청 */

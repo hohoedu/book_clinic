@@ -51,7 +51,7 @@ public interface BookRepository {
     /** 분류별 상세 수정 전 스냅샷을 content_detail_del에 UPDATE 로그로 기록 */
     void archiveContentDetailForUpdate(@Param("contentId") Integer contentId, @Param("updatedBy") String updatedBy);
 
-    /** item_del에 보관된 사본(bcode+center)을 item으로 복사 복원 (로그는 보존, 이미 존재하면 재복원 안 함) */
+    /** item_del에 보관된 판본(bcode+center)을 item으로 복사 복원 (로그는 보존, 이미 존재하면 재복원 안 함) */
     void restoreItemFromDel(@Param("delId") Integer delId);
 
     /** 마스터 도서 검색 (제목/작가/장르/학년/키워드/유형/사용여부 복합 조건) */
@@ -60,10 +60,10 @@ public interface BookRepository {
     /** 도서 제목으로 content_id 단건 조회 (엑셀 업로드 시 도서 선택 매핑용) */
     Integer findContentIdByTitle(@Param("title") String title);
 
-    /** 바코드(ISBN)로 실물 도서 사본 대표 1건 조회 (동일 bcode 다른 센터로 복제 등록 시 원본 정보로도 사용) */
+    /** 바코드(ISBN)로 실물 도서 판본 대표 1건 조회 (동일 bcode 다른 센터로 복제 등록 시 원본 정보로도 사용) */
     BookRespDTO.ItemRespDTO findItemByBcode(@Param("bcode") String bcode);
 
-    /** 실물 도서 검색 (마스터ID/상태/출판사 복합 조건. state 파라미터는 이제 사본 status(AVAILABLE/LOANED/LOST) 값) */
+    /** 실물 도서 검색 (마스터ID/출판사 복합 조건) */
     List<BookRespDTO.ItemRespDTO> searchItems(@Param("contentId") Integer contentId, @Param("state") String state, @Param("publisher") String publisher);
 
     /** 삭제된 마스터 도서 목록 조회 */
@@ -72,37 +72,37 @@ public interface BookRepository {
     /** 삭제된 실물 도서 목록 조회 */
     List<BookRespDTO.ItemDelRespDTO> findDeletedItems();
 
-    /** 특정 센터의 보유 도서(사본) 목록 조회 */
+    /** 특정 센터의 보유 도서(판본) 목록 조회 */
     List<BookRespDTO.ItemCenterRespDTO> findItemsByCenter(@Param("centerCode") String centerCode);
 
-    /** 특정 (bcode + center) 보유 사본 수 */
+    /** 특정 (bcode + center) 보유수량 (행이 없으면 0) */
     int countItemsByBcodeCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
 
-    /** (bcode + center)에 새 사본 1건 복제 등록 (같은 bcode의 기존 사본 도서 정보를 그대로 복사) */
-    void cloneItemToCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+    /** (bcode + center) 행에 수량 deltaQty만큼 추가 — 행이 없으면 같은 bcode의 기존 판본 정보를 복사해 새로 만든다 */
+    void cloneItemToCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("deltaQty") int deltaQty);
 
-    /** (bcode + center) 보유 사본 중 대여 중이 아닌(AVAILABLE) 사본을 최대 limit건 삭제 */
-    void deleteAvailableItems(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("limit") int limit);
+    /** (bcode + center) 보유수량을 amount만큼 축소 — 가용 수량(qty-loaned_qty-lost_qty) 부족하면 아무 것도 안 함(영향받은 행 수로 판단) */
+    int reduceItemQty(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("amount") int amount);
 
-    /** 센터 도서(사본) 매핑 삭제 (bcode + centerCode 전체 사본) */
+    /** 센터 도서(판본) 매핑 삭제 (bcode + centerCode 행 자체를 제거) */
     void deleteItemsByBcodeCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
 
-    /** 해당 centerCode의 모든 사본 삭제 */
+    /** 해당 centerCode의 모든 판본 삭제 */
     void deleteItemsByCenterCode(@Param("centerCode") String centerCode);
 
     /**
-     * (bcode + center)에서 대여 가능(AVAILABLE)한 사본 1건을 원자적으로 대여 처리(status=LOANED, last_* 갱신)하고
-     * 그 사본의 item_id를 반환한다 (없으면 null) — 관리자 화면의 수동 대여용
+     * (bcode + center)에서 가용 재고가 있으면 loaned_qty를 원자적으로 1 늘리고 그 item_id를 반환한다 (없으면 null)
+     * — 관리자 화면의 수동 대여용
      */
     Integer loanAvailableItemByBcode(@Param("bcode") String bcode, @Param("centerCode") String centerCode, @Param("studentId") String studentId);
 
     /**
-     * (content_id + center)에서 대여 가능(AVAILABLE)한 사본 1건을 원자적으로 대여 처리하고 item_id를 반환한다 (없으면 null)
+     * (content_id + center)에서 가용 재고가 있는 판본 1건의 loaned_qty를 원자적으로 1 늘리고 item_id를 반환한다 (없으면 null)
      * — 클리닉 자동 추천 확정용
      */
     Integer loanAvailableItemByContent(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode, @Param("studentId") String studentId);
 
-    /** 반납 처리 시 사본 상태를 AVAILABLE로 되돌리고 last_returned_at 갱신 */
+    /** 반납 처리 시 그 판본의 loaned_qty를 1 줄인다 */
     void markItemReturned(@Param("itemId") Integer itemId);
 
     /** 대여 이력 등록 (사본의 item_id 기준) */
@@ -127,26 +127,30 @@ public interface BookRepository {
             @Param("schoolYear") String schoolYear, @Param("contentType") String contentType,
             @Param("genre") String genre, @Param("hasStock") String hasStock, @Param("title") String title);
 
-    /** (content + center) 보유 사본 수 */
+    /** (content + center) 보유수량 총합 (여러 bcode 판본에 걸쳐 있을 수 있음) */
     int countItemsByContentCenter(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
 
-    /** (content + center) 보유 사본 중 대여 중(LOANED)인 수 — 수량을 줄일 수 있는 하한 판단용 */
+    /** 마스터 도서 행을 펼쳤을 때 보이는 하위 판본(bcode) 목록 (content + center) */
+    List<BookRespDTO.StockItemRespDTO> findStockItems(@Param("contentId") Integer contentId,
+            @Param("centerCode") String centerCode);
+
+    /** (bcode + center) 대여중 수량 — bcode 단위 수량 축소 시 하한 판단용 */
+    int countLoanedItemsByBcodeCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+
+    /** (content + center) 대여중 수량 총합 — 수량을 줄일 수 있는 하한 판단용 */
     int countLoanedItemsByContentCenter(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
 
-    /** 해당 도서의 대표 bcode 1건 (센터 무관) — 사본을 추가할 때 기존 바코드를 이어 쓰기 위해 */
+    /** 해당 도서의 대표 bcode 1건 (센터 무관) — 재고를 추가할 때 기존 바코드를 이어 쓰기 위해 */
     String findBcodeByContentId(@Param("contentId") Integer contentId);
 
-    /** 마스터 도서 정보를 그대로 복사해 사본 1건 신규 등록 (그 도서의 사본이 어느 센터에도 없을 때) */
+    /** 마스터 도서 정보를 그대로 복사해 (bcode+center) 행에 수량 deltaQty만큼 추가 (없으면 새로 생성) */
     void insertItemFromContent(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode,
-            @Param("bcode") String bcode);
+            @Param("bcode") String bcode, @Param("deltaQty") int deltaQty);
 
-    /** (content + center) 사본 중 대여 중이 아닌(AVAILABLE) 1건 삭제 — 삭제된 행 수 반환 */
-    int deleteAvailableItemByContent(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode);
-
-    /** 보유 수량 변경 로그 기록 */
+    /** 보유 수량 변경 로그 기록 — memo는 감소 사유(늘릴 땐 null) */
     void insertStockLog(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode,
             @Param("beforeQty") int beforeQty, @Param("afterQty") int afterQty,
-            @Param("changedBy") String changedBy);
+            @Param("memo") String memo, @Param("changedBy") String changedBy);
 
     /** (content + center) 보유 수량 변경 이력 (최신순) */
     List<BookRespDTO.StockLogRespDTO> findStockLogs(@Param("contentId") Integer contentId,

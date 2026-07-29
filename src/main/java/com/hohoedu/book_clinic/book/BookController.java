@@ -221,11 +221,38 @@ public class BookController {
         return ResponseEntity.ok(ApiUtils.success(quantity));
     }
 
+    /** 보유수량 일괄 등록 — 항목별 성공/실패를 각각 담아 돌려준다 */
+    @PostMapping("/stock/bulk-update")
+    public ResponseEntity<?> updateCenterStockBulk(@RequestBody @Valid BookReqDTO.StockBulkUpdateReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        return ResponseEntity.ok(ApiUtils.success(
+                bookService.updateCenterStockBulk(reqDTO.getItems(), centerCode, userDetails.getUsername())));
+    }
+
     /** 보유 수량 변경 이력 조회 */
     @GetMapping("/stock/history/{contentId}")
     public ResponseEntity<?> findStockLogs(@PathVariable("contentId") Integer contentId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         String centerCode = userDetails.getLoginUser().getCenterCode();
         return ResponseEntity.ok(ApiUtils.success(bookService.findStockLogs(contentId, centerCode)));
+    }
+
+    /** 마스터 도서 행을 펼쳤을 때 보이는 하위 사본(item) 목록 — 트리 하위 노드 조회용 */
+    @GetMapping("/stock/items/{contentId}")
+    public ResponseEntity<?> findStockItems(@PathVariable("contentId") Integer contentId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        return ResponseEntity.ok(ApiUtils.success(bookService.findStockItems(contentId, centerCode)));
+    }
+
+    /** 보유수량 변경 — bcode(사본 묶음) 단위. 저장 버튼 없이 +/- 즉시 반영, 실제 반영된 수량을 돌려준다 */
+    @PostMapping("/stock/items/update")
+    public ResponseEntity<?> updateStockItemQuantity(@RequestBody @Valid BookReqDTO.StockItemUpdateReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        int quantity = bookService.updateStockItemQuantity(reqDTO.getContentId(), reqDTO.getBcode(), centerCode,
+                reqDTO.getQuantity(), userDetails.getUsername(), reqDTO.getMemo());
+        return ResponseEntity.ok(ApiUtils.success(quantity));
     }
 }

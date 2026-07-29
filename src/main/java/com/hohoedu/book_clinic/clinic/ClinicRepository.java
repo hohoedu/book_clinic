@@ -41,6 +41,9 @@ public interface ClinicRepository {
     /** 이 학생이 아직 풀지 않은(PENDING) 추천 도서 카드 — 있으면 재로그인해도 같은 책을 그대로 보여준다 */
     ClinicRespDTO.RecommendBookDTO findPendingRecommendBookCard(@Param("studentId") String studentId);
 
+    /** 이 학생이 가장 최근에 끝낸(DONE) 추천 도서 카드 — 홈 화면 "책 추천받기" 대기 상태에 표시(없으면 null) */
+    ClinicRespDTO.RecommendBookDTO findLastDoneBookCard(@Param("studentId") String studentId);
+
     /** 추천 이력 기록 (신규 추천 시 status='PENDING'으로 생성됨) */
     void insertRecommendLog(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
 

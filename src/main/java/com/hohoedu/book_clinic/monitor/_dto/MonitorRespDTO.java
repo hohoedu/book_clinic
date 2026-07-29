@@ -88,6 +88,19 @@ public class MonitorRespDTO {
 
         private Integer readingTimeMinutes; // MonitorService가 readingTimeText에서 파싱
         private Integer elapsedMinutes;     // DB DATEDIFF
+
+        // 이 책(content_id)에서 획득한 뱃지만 집계 — 학생 전체 뱃지가 아니다(과거엔 CardDTO의
+        // badgeCount/latestBadgeName이 학생 전체 뱃지였어서, A책 카드에도 B책에서 딴 뱃지가 같이
+        // 보이는 문제가 있었다). 2026-07-29
+        private Integer badgeCount;
+        private String latestBadgeName;
+    }
+
+    /** 독서태도 코드 옵션(use_yn=1만) — 화면 체크박스 렌더링용. erp_bookstore_attitude_code 조회 결과 */
+    @Data
+    public static class AttitudeCodeDTO {
+        private String attitudeCode;
+        private String attitudeName;
     }
 
     /** 필터 chip 카운트 */
@@ -108,6 +121,8 @@ public class MonitorRespDTO {
     public static class LiveViewRespDTO {
         private List<CardDTO> cards;
         private CountsDTO counts;
+        // 독서일지 패널의 태도 체크박스 목록(use_yn=1만) — DB 값을 고치면 재배포 없이 화면에 반영된다.
+        private List<AttitudeCodeDTO> attitudeCodeOptions;
     }
 
 }

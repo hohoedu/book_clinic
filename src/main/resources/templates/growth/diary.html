@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>독서일지</title>
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/growth/diary.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content diary-content">
+
+      <header class="page-header">
+        <h1>독서일지</h1>
+        <button class="guide-btn">
+          <i class="fa-regular fa-circle-question"></i>
+          사용 가이드
+        </button>
+      </header>
+
+      <section class="diary-toolbar">
+        <div class="monitor-date-picker">
+          <span class="monitor-date-display" id="diaryDateDisplay">2026. 07. 14</span>
+          <div class="monitor-date-trigger">
+            <i class="fa-regular fa-calendar"></i>
+            <input type="date" id="diaryDate" value="2026-07-14" />
+          </div>
+        </div>
+
+        <!-- 교시 목록은 별도 마스터 데이터가 없어 우선 고정 목록으로 둔다 (monitor-live와 동일 정책) -->
+        <label class="diary-slot-picker">
+          <span>타임 선택</span>
+          <select id="diarySlot">
+            <option>1교시(14:00 ~ 15:00)</option>
+            <option>2교시(15:00 ~ 16:00)</option>
+          </select>
+        </label>
+
+        <div class="diary-search-box">
+          <input type="text" id="diaryStudentKeyword" placeholder="학생명" />
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </div>
+
+        <button type="button" class="btn primary" id="btnSearchDiary">조회</button>
+
+        <label class="diary-my-student-toggle">
+          <input type="checkbox" id="myStudentOnly" />
+          내 담당 학생만 보기
+        </label>
+
+        <button type="button" class="btn primary diary-save-btn" id="btnSaveAllDiaries">저장</button>
+      </section>
+
+      <section class="diary-list" id="diaryList">
+
+        <!-- 아래 카드는 시안 확인용 샘플 마크업 — diary.js가 /admin/growth/diary API 응답으로
+             동일한 구조를 반복 렌더링하도록 교체할 예정 (2026-07-29 기준 정적 스캐폴딩) -->
+        <article class="diary-row">
+          <div class="diary-row-no">1</div>
+
+          <div class="diary-student">
+            <div class="diary-student-name">김호호 <i class="fa-solid fa-seedling name-flair"></i></div>
+            <div class="diary-student-grade">초1</div>
+            <div class="diary-time-pill time-enter"><span>입실</span><strong>13:50</strong></div>
+            <div class="diary-time-pill time-exit"><span>퇴실</span><strong>14:58</strong></div>
+            <button type="button" class="diary-time-edit-btn" disabled>변경</button>
+          </div>
+
+          <div class="diary-books">
+            <div class="diary-book-card">
+              <img class="diary-book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="diary-book-info">
+                <p class="diary-book-title">책 먹는 여우</p>
+                <p class="diary-book-minutes">22분</p>
+              </div>
+              <div class="diary-book-quiz">
+                <span class="diary-quiz-label">기본문제</span>
+                <strong class="diary-quiz-score">10 / 12</strong>
+                <span class="diary-quiz-badge badge-pass">통과</span>
+              </div>
+              <div class="diary-book-quiz">
+                <span class="diary-quiz-label">심화문제</span>
+                <strong class="diary-quiz-score">6 / 6</strong>
+                <span class="diary-quiz-badge badge-king">심화왕!</span>
+              </div>
+            </div>
+            <div class="diary-book-card">
+              <img class="diary-book-cover" th:src="@{/images/book-sample.png}" alt="" />
+              <div class="diary-book-info">
+                <p class="diary-book-title">해와 달이 된 오누이</p>
+                <p class="diary-book-minutes">19분</p>
+              </div>
+              <div class="diary-book-quiz">
+                <span class="diary-quiz-label">기본문제</span>
+                <strong class="diary-quiz-score">10 / 12</strong>
+                <span class="diary-quiz-badge badge-pass">통과</span>
+              </div>
+              <div class="diary-book-quiz">
+                <span class="diary-quiz-label">심화문제</span>
+                <strong class="diary-quiz-score">-</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="diary-attitude">
+            <div class="diary-section-title">독서 태도</div>
+            <!-- 체크박스 목록은 monitor-live와 동일하게 erp_bookstore_attitude_code(use_yn=1)로 렌더링 예정 -->
+            <label class="diary-checkbox checked"><input type="checkbox" checked />바른 자세로 차분하게 정독했어요.</label>
+            <label class="diary-checkbox"><input type="checkbox" />스스로 책 읽기를 끝까지 이어갔어요.</label>
+            <label class="diary-checkbox"><input type="checkbox" />집중력이 자주 흐트러졌어요.</label>
+            <label class="diary-checkbox"><input type="checkbox" />책장을 빠르게 넘기며 서둘러 읽었어요.</label>
+            <label class="diary-checkbox"><input type="checkbox" />산만한 모습을 보였어요.</label>
+          </div>
+
+          <div class="diary-note">
+            <div class="diary-section-title">기타 전달사항</div>
+            <textarea placeholder="전달사항 내용이 들어갑니다.">전달사항 내용이 들어갑니다.</textarea>
+          </div>
+
+          <div class="diary-send">
+            <button type="button" class="diary-note-send" title="저장"><i class="fa-solid fa-paper-plane"></i></button>
+          </div>
+        </article>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <script th:src="@{/js/growth/diary.js}"></script>
+</body>
+
+</html>

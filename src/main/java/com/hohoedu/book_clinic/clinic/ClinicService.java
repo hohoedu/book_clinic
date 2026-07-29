@@ -88,8 +88,41 @@ public class ClinicService {
     private final MonitorService monitorService;
 
     /**
+     * 홈 화면(student-main) 진입 시 상태 조회 — 2026-07-29. 예전엔 홈 진입=자동추천이라 책을 다
+     * 읽고 홈으로만 나가도 바로 다음 책이 대여 확정돼버렸다(문제도 안 풀고 퇴실하면 그 책만 붕 뜸).
+     * 이제는 "입실"과 "책 추천"을 분리한다: 입실은 홈 진입 자체로 항상 확정하고, 다음 책 추천은
+     * 학생이 "책 추천받기" 버튼을 눌러 POST /clinic/recommend를 호출할 때만 일어난다.
+     * 단, 생애 첫 로그인(추천 이력이 아예 없음)은 보여줄 "직전 책"이 없어 애매하므로 예전처럼
+     * 그 자리에서 즉시 추천한다.
+     */
+    @Transactional
+    public ClinicRespDTO.BookStatusRespDTO getHomeState(String studentId) {
+        monitorService.enterSession(studentId);
+
+        ClinicRespDTO.RecommendBookDTO pending = clinicRepository.findPendingRecommendBookCard(studentId);
+        if (pending != null) {
+            return homeState("READING", pending);
+        }
+
+        ClinicRespDTO.RecommendBookDTO lastDone = clinicRepository.findLastDoneBookCard(studentId);
+        if (lastDone == null) {
+            // 생애 첫 로그인 — 보여줄 직전 책이 없으니 예전처럼 바로 추천해서 내려준다
+            return homeState("READING", recommendBook(studentId));
+        }
+        return homeState("AWAITING_NEXT", lastDone);
+    }
+
+    private ClinicRespDTO.BookStatusRespDTO homeState(String state, ClinicRespDTO.RecommendBookDTO book) {
+        ClinicRespDTO.BookStatusRespDTO resp = new ClinicRespDTO.BookStatusRespDTO();
+        resp.setState(state);
+        resp.setBook(book);
+        return resp;
+    }
+
+    /**
      * 책 확인 — 멱등 처리. 이미 추천받은 책이 있으면 그 책 그대로 반환(재추천/재대여 없음),
      * 없으면 규칙 1~5를 순서대로 적용해 새로 고르고 즉시 대여 + 추천 이력 기록까지 처리한다.
+     * student-main 홈 화면에서는 더 이상 자동으로 호출하지 않고, "책 추천받기" 버튼 클릭 시에만 호출된다.
      */
     @Transactional
     public ClinicRespDTO.RecommendBookDTO recommendBook(String studentId) {
@@ -102,15 +135,10 @@ public class ClinicService {
         }
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
 
-        // 새로 추천한다는 건 이전 추천이 이미 DONE 처리됐다는 뜻(PENDING이면 위에서 그대로 반환됨) —
-        // 이전 책이 아직 대여(LOANED) 상태로 남아있으면 여기서 반납 처리해 재고를 돌려준다
-        BookRespDTO.ItemLoanRespDTO activeLoan = bookRepository.findActiveLoanByStudent(studentId);
-        if (activeLoan != null) {
-            bookRepository.updateLoanReturned(activeLoan.getLoanId());
-            bookRepository.markItemReturned(activeLoan.getItemId());
-            log.info("학생 {}의 이전 대여 도서를 반납 처리했습니다: loanId={}, itemId={}",
-                    studentId, activeLoan.getLoanId(), activeLoan.getItemId());
-        }
+        // 새로 추천한다는 건 이전 추천이 이미 DONE 처리됐다는 뜻(PENDING이면 위에서 그대로 반환됨).
+        // 반납은 이제 완독 확정 순간(submitQuiz)에 바로 처리되므로 보통은 여기서 할 일이 없지만,
+        // 혹시 그 처리가 어떤 이유로 안 됐을 경우를 대비한 안전망으로 남겨둔다.
+        returnActiveLoanSafely(studentId);
 
         String centerCode = clinicRepository.findCenterCode(studentId);
         if (centerCode == null) throw new Exception404("학생의 소속 센터를 찾을 수 없습니다: " + studentId);
@@ -262,6 +290,12 @@ public class ClinicService {
         resp.setGrade(grade);
 
         if (passed) {
+            // 완독 확정 순간 바로 반납 처리한다(2026-07-29) — 예전엔 "다음 책 추천" 시점까지 반납을
+            // 미뤄서, 학생이 결과 화면에서 다음 책을 안 받고 그냥 홈/퇴실해버리면 대여 상태가 그대로
+            // 남아 다른 학생이 그 책을 못 빌렸다. 다음 책을 받든 안 받든 이 책은 이제 필요 없으므로
+            // 여기서 즉시 재고를 돌려준다.
+            returnActiveLoanSafely(studentId);
+
             // 레벨은 EXP가 아니라 "그 학년 도서 완독 권수 ÷ 학년별 필요권수"로 정해진다(단계 = 학생 학년).
             // updateRecommendResult로 이 책이 이미 DONE 처리됐으므로 doneAfter에 이번 완독이 포함된다.
             String schoolyear = resolveSchoolyear(studentId);
@@ -312,6 +346,16 @@ public class ClinicService {
         syncMonitorSafely(studentId);
 
         return resp;
+    }
+
+    /** 완독 확정 시점에 현재 대여 중인 도서를 즉시 반납 처리한다(없으면 조용히 넘어감) */
+    private void returnActiveLoanSafely(String studentId) {
+        BookRespDTO.ItemLoanRespDTO activeLoan = bookRepository.findActiveLoanByStudent(studentId);
+        if (activeLoan == null) return;
+        bookRepository.updateLoanReturned(activeLoan.getLoanId());
+        bookRepository.markItemReturned(activeLoan.getItemId());
+        log.info("학생 {}의 완독 도서를 반납 처리했습니다: loanId={}, itemId={}",
+                studentId, activeLoan.getLoanId(), activeLoan.getItemId());
     }
 
     /**

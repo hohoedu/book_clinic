@@ -1,5 +1,6 @@
 -- DROP (FK 역순)
 IF OBJECT_ID('erp_bookstore_attitude',              'U') IS NOT NULL DROP TABLE erp_bookstore_attitude;
+IF OBJECT_ID('erp_bookstore_attitude_code',         'U') IS NOT NULL DROP TABLE erp_bookstore_attitude_code;
 IF OBJECT_ID('erp_bookstore_diary_detail',          'U') IS NOT NULL DROP TABLE erp_bookstore_diary_detail;
 IF OBJECT_ID('erp_bookstore_diary',                 'U') IS NOT NULL DROP TABLE erp_bookstore_diary;
 IF OBJECT_ID('erp_bookstore_reading_log',           'U') IS NOT NULL DROP TABLE erp_bookstore_reading_log;
@@ -17,7 +18,6 @@ IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
 IF OBJECT_ID('erp_bookstore_item_loan',             'U') IS NOT NULL DROP TABLE erp_bookstore_item_loan;
 IF OBJECT_ID('erp_bookstore_item',                  'U') IS NOT NULL DROP TABLE erp_bookstore_item;
-IF OBJECT_ID('erp_bookstore_item_center',           'U') IS NOT NULL DROP TABLE erp_bookstore_item_center;
 IF OBJECT_ID('erp_bookstore_priority_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_priority_del;
 IF OBJECT_ID('erp_bookstore_priority',              'U') IS NOT NULL DROP TABLE erp_bookstore_priority;
 IF OBJECT_ID('erp_bookstore_priority_draft_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft_del;
@@ -230,35 +230,37 @@ CREATE TABLE erp_bookstore_priority_del (
     sort_order  INT         -- 원본 순위
 );
 
--- 실물도서 마스터 (2026-07-13 재설계) — 개별 사본 1권 = 1행으로 관리 (erp_bookstore_item_center 통합, 수량 집계 컬럼 폐지)
--- bcode는 같은 도서의 여러 사본이 공유하는 도서 식별 바코드이며, 사본 자체의 식별자는 item_id다.
--- 보유수량이 필요하면 COUNT(*)/status 집계로 조회하고, 최근 대여자/대여일시는 스냅샷 컬럼으로 바로 노출한다.
--- 재기동마다 DROP 후 재생성한다 (2026-07-14) — status가 리셋 안 되는 대여이력(recommend_log/item_loan)과
--- 어긋나면서 반납 안 된 LOANED 상태가 영구히 남아 추천이 계속 다음 순위 책으로 밀리는 문제가 있었다.
+-- 실물도서 마스터 (2026-07-29 재설계) — bcode+센터당 1행, qty/loaned_qty 카운터로 보유수량 관리.
+-- 사본 1권 = 1행이던 이전 모델은 보유수량을 늘릴 때마다 행을 insert/delete해야 했다. 지금은 qty(총 보유)와
+-- loaned_qty(그중 대여중)만 두고, "대여 가능 수량 = qty - loaned_qty - lost_qty"로 계산한다.
+-- 대여 확정은 `UPDATE ... SET loaned_qty = loaned_qty + 1 WHERE loaned_qty < qty - lost_qty` 형태의
+-- 원자적 UPDATE로 처리해 동시에 여러 학생이 같은 판본을 신청해도 재고 이상으로 나가지 않는다.
+-- lost_qty는 분실 처리된 누적 수량(현재 앱 로직에서 갱신하는 경로는 없고 컬럼만 존재 — 수동 조정용).
 -- 데이터는 data-items.sql이 매 기동 자동으로 다시 채운다.
 CREATE TABLE erp_bookstore_item (
-    item_id          INT IDENTITY(1,1) PRIMARY KEY,  -- 사본 내부 PK
-    bcode            VARCHAR(50)  NOT NULL,  -- 도서 바코드 (동일 도서의 여러 사본이 공유)
+    item_id          INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK (bcode+센터당 1행)
+    bcode            VARCHAR(50)  NOT NULL,  -- 도서 바코드 (같은 판본이 여러 센터에 있으면 센터별로 행이 나뉘되 bcode는 공유)
     content_id       INT,           -- erp_bookstore_content.content_id (어느 마스터 도서인지)
-    center_code      VARCHAR(20)  NOT NULL DEFAULT 'PUS002',  -- 사본이 속한 센터 (data-books.sql처럼 센터를 지정하지 않는 시딩 스크립트 호환용 기본값)
+    center_code      VARCHAR(20)  NOT NULL DEFAULT 'PUS002',  -- 이 판본이 속한 센터 (data-books.sql처럼 센터를 지정하지 않는 시딩 스크립트 호환용 기본값)
     book_title       VARCHAR(255),  -- 도서명 (등록 시점 스냅샷)
     author           VARCHAR(100),  -- 저자
     publisher        VARCHAR(100),  -- 출판사
     image_url        VARCHAR(500),  -- 표지 이미지 URL
-    status           VARCHAR(20)  NOT NULL DEFAULT 'AVAILABLE',  -- AVAILABLE(대여가능) / LOANED(대여중) / LOST(분실·파손)
-    last_student_id  VARCHAR(100),  -- 마지막으로 대여한 학생 (erp_student.student_id, FK 없이 값으로만 연결)
-    last_loaned_at   DATETIME2,     -- 마지막 대여일시
-    last_returned_at DATETIME2,     -- 마지막 반납일시
-    registered_at    DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 등록일시
+    qty              INT          NOT NULL DEFAULT 0,  -- 총 보유수량 (분실분 포함, 누적 등록량)
+    loaned_qty       INT          NOT NULL DEFAULT 0,  -- qty 중 현재 대여중인 수량
+    lost_qty         INT          NOT NULL DEFAULT 0,  -- qty 중 분실 처리된 수량
+    registered_at    DATETIME2    DEFAULT CURRENT_TIMESTAMP,  -- 최초 등록일시
     FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id),
     FOREIGN KEY (center_code)  REFERENCES erp_center(center_code)
 );
+CREATE UNIQUE INDEX ux_bookstore_item_bcode_center ON erp_bookstore_item(bcode, center_code);
 
--- 실물도서 대여 이력 — 사본(item)의 status/last_* 스냅샷의 원장(대여/반납/분실 시 함께 갱신)
+-- 실물도서 대여 이력 — item_id는 이제 "판본(bcode+센터) 행"을 가리킨다 (사본 개별 식별자가 아님).
+-- 같은 item_id를 참조하는 LOANED 이력이 여러 건 동시에 있을 수 있으며, 그 개수가 item.loaned_qty와 항상 같아야 한다.
 IF OBJECT_ID('erp_bookstore_item_loan', 'U') IS NULL
 CREATE TABLE erp_bookstore_item_loan (
     loan_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    item_id      INT           NOT NULL,  -- 대여한 실물도서 사본 (erp_bookstore_item.item_id)
+    item_id      INT           NOT NULL,  -- 대여한 판본 (erp_bookstore_item.item_id)
     student_id   VARCHAR(100)  NOT NULL,  -- 대여한 학생 (erp_student.student_id)
     loaned_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 대여일시
     returned_at  DATETIME2,     -- 반납일시 (미반납이면 NULL)
@@ -281,16 +283,24 @@ CREATE TABLE erp_bookstore_item_del (
     publisher        VARCHAR(100),  -- 출판사
     image_url        VARCHAR(500),  -- 표지 이미지 URL
     center_code      VARCHAR(20),   -- 원본 센터 코드
-    status           VARCHAR(20),   -- 로그 시점 상태
-    last_student_id  VARCHAR(100),  -- 로그 시점 마지막 대여 학생
-    last_loaned_at   DATETIME2,     -- 로그 시점 마지막 대여일시
-    last_returned_at DATETIME2      -- 로그 시점 마지막 반납일시
+    qty              INT,           -- 로그 시점 총 보유수량
+    loaned_qty       INT,           -- 로그 시점 대여중 수량
+    lost_qty         INT            -- 로그 시점 분실 수량
 );
 
 IF COL_LENGTH('erp_bookstore_item_del', 'del_id') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.del_id', 'log_id', 'COLUMN';
 IF COL_LENGTH('erp_bookstore_item_del', 'deleted_at') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.deleted_at', 'logged_at', 'COLUMN';
 IF COL_LENGTH('erp_bookstore_item_del', 'deleted_by') IS NOT NULL EXEC sp_rename 'erp_bookstore_item_del.deleted_by', 'logged_by', 'COLUMN';
 IF COL_LENGTH('erp_bookstore_item_del', 'log_type') IS NULL ALTER TABLE erp_bookstore_item_del ADD log_type VARCHAR(10) NOT NULL DEFAULT 'DELETE';
+
+-- 2026-07-29 재설계(사본 1행→bcode+센터당 1행 qty 카운터) 마이그레이션 — 기존 DB에 새 컬럼 추가 후 옛 컬럼 제거
+IF COL_LENGTH('erp_bookstore_item_del', 'qty') IS NULL ALTER TABLE erp_bookstore_item_del ADD qty INT;
+IF COL_LENGTH('erp_bookstore_item_del', 'loaned_qty') IS NULL ALTER TABLE erp_bookstore_item_del ADD loaned_qty INT;
+IF COL_LENGTH('erp_bookstore_item_del', 'lost_qty') IS NULL ALTER TABLE erp_bookstore_item_del ADD lost_qty INT;
+IF COL_LENGTH('erp_bookstore_item_del', 'status') IS NOT NULL ALTER TABLE erp_bookstore_item_del DROP COLUMN status;
+IF COL_LENGTH('erp_bookstore_item_del', 'last_student_id') IS NOT NULL ALTER TABLE erp_bookstore_item_del DROP COLUMN last_student_id;
+IF COL_LENGTH('erp_bookstore_item_del', 'last_loaned_at') IS NOT NULL ALTER TABLE erp_bookstore_item_del DROP COLUMN last_loaned_at;
+IF COL_LENGTH('erp_bookstore_item_del', 'last_returned_at') IS NOT NULL ALTER TABLE erp_bookstore_item_del DROP COLUMN last_returned_at;
 
 -- 센터 보유 수량 변경 로그 (2026-07-28 보유도서 설정 화면) — 화면의 +/- 는 저장 버튼 없이 즉시
 -- 사본(erp_bookstore_item) 행을 추가/삭제하므로, "언제 몇 권에서 몇 권이 됐는지"는 사본 테이블만으로는
@@ -302,9 +312,13 @@ CREATE TABLE erp_bookstore_item_stock_log (
     center_code VARCHAR(20)   NOT NULL,  -- 수량이 바뀐 센터
     before_qty  INT           NOT NULL,  -- 변경 전 보유 수량
     after_qty   INT           NOT NULL,  -- 변경 후 보유 수량
+    memo        NVARCHAR(500),           -- 감소 사유 (일괄 등록에서 수량을 줄일 때 필수 입력, 늘릴 때는 NULL)
     changed_by  VARCHAR(100),            -- 처리한 직원 (erp_user.username)
-    changed_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())  -- 변경일시(KST)
+    changed_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 변경일시(KST)
+    FOREIGN KEY (content_id)  REFERENCES erp_bookstore_content(content_id),
+    FOREIGN KEY (center_code) REFERENCES erp_center(center_code)
 );
+IF COL_LENGTH('erp_bookstore_item_stock_log', 'memo') IS NULL ALTER TABLE erp_bookstore_item_stock_log ADD memo NVARCHAR(500);
 
 -- 문제은행 — 도서(content_id)별 독후활동 문제 (관리자가 book-data 화면에서 직접 등록/편집)
 IF OBJECT_ID('erp_bookstore_itempool', 'U') IS NULL
@@ -556,9 +570,23 @@ CREATE TABLE erp_bookstore_diary_detail (
     FOREIGN KEY (recommend_id) REFERENCES erp_bookstore_recommend_log(recommend_id)
 );
 
+-- 독서태도 코드 마스터 (2026-07-29) — 태도 문구가 바뀔 수 있어 monitor-live.js에 하드코딩하지 않고
+-- DB로 뺐다. erp_bookstore_code로 옮기지 않는 이유는 그대로 유지(그 테이블의 code가 VARCHAR(2)라
+-- GOOD_POSTURE 같은 문자열 코드가 들어가지 않고, use_yn/수정이력 같은 컬럼도 없음).
+-- 화면(monitor-live.js)은 /admin/monitor/live 응답의 attitudeCodeOptions(use_yn=1만)로 체크박스를 그려서,
+-- 이 테이블 값을 고치면 재배포 없이 바로 반영된다.
+CREATE TABLE erp_bookstore_attitude_code (
+    id            INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK(표시 순서 기준)
+    attitude_code VARCHAR(20)   NOT NULL UNIQUE,   -- 태도 코드값 (erp_bookstore_attitude.attitude_code가 참조)
+    attitude_name VARCHAR(100)  NOT NULL,           -- 태도명(화면 표시 문구)
+    use_yn        BIT           NOT NULL DEFAULT 1, -- 사용여부
+    created_at    DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at    DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_by    VARCHAR(50)                       -- 수정한 사람
+);
+
 -- 독서태도 체크 — 일지 1건에 복수 선택되므로 1선택 = 1행으로 정규화한다(구 reading_log.attitude_codes 콤마 문자열 대체).
--- attitude_code는 monitor-live.js ATTITUDE_CODES의 값(GOOD_POSTURE, SELF_DIRECTED, LOW_FOCUS, RUSHED, DISTRACTED).
--- erp_bookstore_code로 옮기지 않는 이유: 그 테이블의 code가 VARCHAR(2)라 이 문자열 코드가 들어가지 않는다.
+-- attitude_code는 erp_bookstore_attitude_code.attitude_code를 참조한다.
 CREATE TABLE erp_bookstore_attitude (
     id            INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     diary_key     INT           NOT NULL,  -- erp_bookstore_diary.diary_key (어느 일지의 체크인지)
@@ -566,5 +594,6 @@ CREATE TABLE erp_bookstore_attitude (
     attitude_code VARCHAR(20)   NOT NULL,  -- 독서 태도 코드
     created_at    DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     CONSTRAINT UQ_erp_bookstore_attitude_pair UNIQUE (diary_key, attitude_code),
-    FOREIGN KEY (diary_key) REFERENCES erp_bookstore_diary(diary_key)
+    FOREIGN KEY (diary_key) REFERENCES erp_bookstore_diary(diary_key),
+    FOREIGN KEY (attitude_code) REFERENCES erp_bookstore_attitude_code(attitude_code)
 );

@@ -36,6 +36,9 @@ public interface MonitorRepository {
     /** 특정 날짜·센터의 예약 기준 전체 카드 목록 (예약 없이 입실한 세션은 포함되지 않음) */
     List<MonitorRespDTO.CardDTO> findReservationCards(@Param("date") LocalDate date, @Param("centerCode") String centerCode);
 
+    /** 사용 중(use_yn=1)인 독서태도 코드 목록 — 독서일지 패널 체크박스 렌더링용 */
+    List<MonitorRespDTO.AttitudeCodeDTO> findActiveAttitudeCodes();
+
     /** 카드 캐러셀용 — 그 학생이 오늘 추천받은 책 전체(+ 날짜 상관없이 아직 PENDING인 책) */
     List<MonitorRespDTO.BookPageDTO> findTodayBooks(@Param("studentId") String studentId, @Param("date") LocalDate date);
 

@@ -27,6 +27,50 @@
   const wrongRetryBtn = document.getElementById('wrongRetryBtn');
   const advancedBtn = document.getElementById('advancedBtn');
 
+  const nextBookModal = document.getElementById('nextBookModal');
+  const nextBookYesBtn = document.getElementById('nextBookYesBtn');
+  const nextBookNoBtn = document.getElementById('nextBookNoBtn');
+  const homeBtn = document.querySelector('.btn-home');
+
+  // 이 책이 끝난 상태인지(=책은 이미 반납됨) — 독서왕/독서친구/심화완료면 true, 재도전(불합격)이면
+  // false. true일 때만 "홈으로"를 눌렀을 때 다음 책 질문 팝업을 가로채서 띄운다.
+  let bookFinished = false;
+
+  // "홈으로"를 누른 순간 물어본다(2026-07-29) — 결과 화면에 도착하자마자 묻지 않는다. 책은 이미
+  // ClinicService.submitQuiz에서 반납 처리돼 있으므로 "아니요"를 골라도 반납 자체는 유지된다.
+  if (homeBtn) {
+    homeBtn.addEventListener('click', (e) => {
+      if (!bookFinished) return; // 재도전(불합격) 등은 그냥 홈으로 이동
+      e.preventDefault();
+      if (nextBookModal) nextBookModal.hidden = false;
+    });
+  }
+
+  if (nextBookYesBtn) {
+    nextBookYesBtn.addEventListener('click', async () => {
+      nextBookYesBtn.disabled = true;
+      try {
+        const res = await fetch('/clinic/recommend', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message ?? '추천에 실패했어요.');
+        window.location.href = `/student/main?studentId=${encodeURIComponent(studentId)}`;
+      } catch (err) {
+        console.error(err);
+        alert(err.message || '추천에 실패했어요.');
+        nextBookYesBtn.disabled = false;
+      }
+    });
+  }
+  if (nextBookNoBtn) {
+    nextBookNoBtn.addEventListener('click', () => {
+      window.location.href = `/student/main?studentId=${encodeURIComponent(studentId)}`;
+    });
+  }
+
   // student-question.js가 채점 직후 세션 저장소에 담아둔 결과 — 새로고침/직접 접근 등으로
   // 결과가 없으면 이 화면에서 보여줄 게 없으므로 메인으로 돌려보낸다
   const raw = sessionStorage.getItem('quizResult');
@@ -82,6 +126,7 @@
     retryBtn.hidden = true;
     wrongRetryBtn.hidden = true;
     advancedBtn.hidden = true;
+    bookFinished = true;
   }
 
   function renderKingResult(result) {
@@ -93,6 +138,7 @@
     // 만점이면 다시 풀 문제가 없으므로 "틀린 문제 다시 풀기"는 감춘다
     wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
     advancedBtn.hidden = false;
+    bookFinished = !result.alreadyCompleted;
   }
 
   function renderFriendResult(result) {
@@ -103,6 +149,7 @@
     retryBtn.hidden = true;
     wrongRetryBtn.hidden = false;
     advancedBtn.hidden = false;
+    bookFinished = !result.alreadyCompleted;
   }
 
   function renderRetryResult(result) {
@@ -113,6 +160,7 @@
     retryBtn.hidden = false;
     wrongRetryBtn.hidden = true;
     advancedBtn.hidden = true;
+    bookFinished = false;
   }
 
   // 통과 등급은 "정말 잘했어요!" 리본 이미지(green.png), 재도전은 문구가 맞지 않아 텍스트 리본

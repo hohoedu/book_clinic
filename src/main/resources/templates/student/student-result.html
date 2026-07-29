@@ -169,6 +169,18 @@
         </div>
       </div>
     </main>
+
+    <!-- 기본문제 합격(독서왕/독서친구) 결과에만 student-result.js가 띄운다. 이 시점엔 이미 책이
+         반납 처리돼 있다(ClinicService.submitQuiz) — "아니요"를 골라도 반납은 그대로 유지된다. -->
+    <div class="modal-overlay" id="nextBookModal" hidden>
+      <div class="modal-box">
+        <p class="modal-msg">새로운 책을 추천받으시겠어요?</p>
+        <div class="modal-actions">
+          <button type="button" class="modal-btn modal-btn-no" id="nextBookNoBtn">아니요</button>
+          <button type="button" class="modal-btn modal-btn-yes" id="nextBookYesBtn">예</button>
+        </div>
+      </div>
+    </div>
   </div>
   <script th:src="@{/js/student/student-main.js}"></script>
   <script th:src="@{/js/student/student-result.js}"></script>

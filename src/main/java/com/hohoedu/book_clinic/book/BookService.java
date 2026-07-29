@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.book;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -17,8 +18,8 @@ import lombok.RequiredArgsConstructor;
 
 /**
  * 도서 비즈니스 로직 서비스
- * - 마스터 도서(content), 실물 도서(item, 사본 1행 = 실물 1권. 2026-07-13 재설계로 센터
- * 매핑(item_center) 통합) 처리
+ * - 마스터 도서(content), 실물 도서(item, bcode+센터당 1행 + qty/loaned_qty 카운터. 2026-07-29
+ * 재설계로 사본 1행=1권 모델을 대체) 처리
  * - 삭제/복구는 저장 프로시저(sp_delete_book, sp_restore_book) 호출
  */
 @Service
@@ -83,8 +84,8 @@ public class BookService {
     }
 
     /**
-     * 실물 도서(사본) 등록 — quantity(기본 1)만큼 같은 bcode를 공유하는 사본 행을 해당 센터에 등록한다
-     * (2026-07-13 재설계: item_center 통합으로 센터 지정이 등록과 동시에 이루어진다)
+     * 실물 도서(판본) 등록 — quantity(기본 1)만큼 (bcode+센터) 행의 qty를 채운다
+     * (2026-07-29 재설계: 사본 1행=1권 대신 bcode+센터당 1행 + qty 카운터로 관리)
      */
     @Transactional
     public void registerItem(BookReqDTO.ItemRegisterReqDTO reqDTO) {
@@ -93,9 +94,8 @@ public class BookService {
             reqDTO.setBcode(generateNumericBcode());
         }
         int quantity = reqDTO.getQuantity() == null || reqDTO.getQuantity() < 1 ? 1 : reqDTO.getQuantity();
-        for (int i = 0; i < quantity; i++) {
-            bookRepository.registerItem(reqDTO);
-        }
+        reqDTO.setQuantity(quantity);
+        bookRepository.registerItem(reqDTO);
     }
 
     /** 실물 도서 수정 (제목, 출판사, 키워드) — 변경 전 스냅샷을 item_del에 UPDATE 로그로 남긴다 */
@@ -159,30 +159,26 @@ public class BookService {
         return bookRepository.findItemsByCenter(centerCode);
     }
 
-    /** 기존 바코드를 다른(또는 같은) 센터에 quantity(기본 1)만큼 사본 복제 등록 */
+    /** 기존 바코드를 다른(또는 같은) 센터에 quantity(기본 1)만큼 재고 추가 등록 */
     @Transactional
     public void registerItemCenter(BookReqDTO.ItemCenterRegisterReqDTO reqDTO) {
         int quantity = reqDTO.getQuantity() == null || reqDTO.getQuantity() < 1 ? 1 : reqDTO.getQuantity();
-        for (int i = 0; i < quantity; i++) {
-            bookRepository.cloneItemToCenter(reqDTO.getBcode(), reqDTO.getCenterCode());
-        }
+        bookRepository.cloneItemToCenter(reqDTO.getBcode(), reqDTO.getCenterCode(), quantity);
     }
 
-    /** 센터 보유 사본 수량을 목표치로 조정 — 현재보다 많으면 복제 추가, 적으면 대여 중이 아닌 사본부터 제거 */
+    /** 센터 보유수량을 목표치로 조정 — 현재보다 많으면 채우고, 적으면 대여/분실 중이 아닌 만큼만 줄인다 */
     @Transactional
     public void updateItemCenter(BookReqDTO.ItemCenterUpdateReqDTO reqDTO) {
         int current = bookRepository.countItemsByBcodeCenter(reqDTO.getBcode(), reqDTO.getCenterCode());
         int target = reqDTO.getQuantity();
         if (target > current) {
-            for (int i = current; i < target; i++) {
-                bookRepository.cloneItemToCenter(reqDTO.getBcode(), reqDTO.getCenterCode());
-            }
+            bookRepository.cloneItemToCenter(reqDTO.getBcode(), reqDTO.getCenterCode(), target - current);
         } else if (target < current) {
-            bookRepository.deleteAvailableItems(reqDTO.getBcode(), reqDTO.getCenterCode(), current - target);
+            bookRepository.reduceItemQty(reqDTO.getBcode(), reqDTO.getCenterCode(), current - target);
         }
     }
 
-    /** 센터 도서 매핑(해당 bcode의 모든 사본) 삭제 */
+    /** 센터 도서(판본) 매핑 삭제 */
     @Transactional
     public void deleteItemCenter(String bcode, String centerCode) {
         bookRepository.deleteItemsByBcodeCenter(bcode, centerCode);
@@ -190,7 +186,7 @@ public class BookService {
 
     /**
      * 실물 도서 대여 처리
-     * 대여 가능(status=AVAILABLE)한 사본 1건을 원자적으로 대여 처리하고, 그 item_id로 대여 이력을 남긴다.
+     * 가용 재고(qty-loaned_qty-lost_qty)가 있는 판본의 loaned_qty를 원자적으로 1 늘리고, 그 item_id로 대여 이력을 남긴다.
      */
     @Transactional
     public void loanItem(BookReqDTO.ItemLoanReqDTO reqDTO) {
@@ -206,7 +202,7 @@ public class BookService {
         bookRepository.insertItemLoan(itemId, student.getStudentId());
     }
 
-    /** 실물 도서 반납 처리 — 대여 이력을 반납 처리하고 사본 상태를 AVAILABLE로 되돌린다 */
+    /** 실물 도서 반납 처리 — 대여 이력을 반납 처리하고 그 판본의 loaned_qty를 1 줄인다 */
     @Transactional
     public void returnItem(BookReqDTO.ItemReturnReqDTO reqDTO) {
         BookRespDTO.ItemLoanRespDTO loan = bookRepository.findLoanById(reqDTO.getLoanId());
@@ -232,15 +228,23 @@ public class BookService {
         return bookRepository.searchCenterStocks(centerCode, schoolYear, contentType, genre, hasStock, title);
     }
 
+    /** 센터 보유 수량을 목표치로 변경 — 감소 사유가 필요 없는 호출부(트리, 사본 추가)용 오버로드 */
+    @Transactional
+    public int updateCenterStock(Integer contentId, String centerCode, int target, String changedBy) {
+        return updateCenterStock(contentId, centerCode, target, changedBy, null);
+    }
+
     /**
      * 센터 보유 수량을 목표치로 변경 — 화면에 저장 버튼이 없고 +/- 즉시 반영이라 호출 1회 = 확정 1회다.
-     * 늘릴 땐 사본 행을 추가하고, 줄일 땐 대여 중이 아닌 사본부터 지운다(대여 중인 책은 남긴다).
-     * 변경 결과는 stock_log에 before/after로 남겨 "최근 변경일 / 변경 이력" 표시의 근거가 된다.
+     * 여러 bcode(판본)에 걸쳐 있을 수 있지만, 늘릴 땐 대표 bcode 하나에 채우고 줄일 땐 가용 재고가 있는
+     * bcode부터 순서대로 줄인다(대여/분실 중인 수량은 건드리지 않는다).
+     * 줄이는 경우 memo(감소 사유)가 반드시 있어야 한다 — 일괄 등록 화면에서 실수로 숫자를 낮췄을 때의 안전장치.
+     * 변경 결과는 stock_log에 before/after/memo로 남겨 "최근 변경일 / 변경 이력" 표시의 근거가 된다.
      *
      * @return 실제로 반영된 보유 수량
      */
     @Transactional
-    public int updateCenterStock(Integer contentId, String centerCode, int target, String changedBy) {
+    public int updateCenterStock(Integer contentId, String centerCode, int target, String changedBy, String memo) {
         if (target < 0)
             throw new Exception400("보유 수량은 0권보다 적을 수 없습니다.");
 
@@ -249,31 +253,119 @@ public class BookService {
             return before;
 
         if (target > before) {
-            // 같은 도서의 사본은 센터가 달라도 bcode를 공유한다 — 첫 사본이면 새 bcode를 발급
+            // 같은 도서의 사본은 센터가 달라도 bcode를 공유한다 — 첫 등록이면 새 bcode를 발급
             String bcode = bookRepository.findBcodeByContentId(contentId);
             if (bcode == null || bcode.isBlank())
                 bcode = generateNumericBcode();
-            for (int i = before; i < target; i++) {
-                bookRepository.insertItemFromContent(contentId, centerCode, bcode);
-            }
+            bookRepository.insertItemFromContent(contentId, centerCode, bcode, target - before);
         } else {
+            if (memo == null || memo.isBlank())
+                throw new Exception400("수량을 줄이려면 사유를 입력해야 합니다.");
             int loaned = bookRepository.countLoanedItemsByContentCenter(contentId, centerCode);
             if (target < loaned)
                 throw new Exception400("대여 중인 " + loaned + "권은 반납 전까지 줄일 수 없습니다.");
-            for (int i = before; i > target; i--) {
-                if (bookRepository.deleteAvailableItemByContent(contentId, centerCode) == 0)
-                    throw new Exception400("줄일 수 있는 보유분이 없습니다. 잠시 후 다시 시도해 주세요.");
-            }
+            int reduced = reduceContentQtyAcrossBcodes(contentId, centerCode, before - target);
+            if (reduced < before - target)
+                throw new Exception400("줄일 수 있는 보유분이 없습니다. 잠시 후 다시 시도해 주세요.");
         }
 
         int after = bookRepository.countItemsByContentCenter(contentId, centerCode);
-        bookRepository.insertStockLog(contentId, centerCode, before, after, changedBy);
+        bookRepository.insertStockLog(contentId, centerCode, before, after, target < before ? memo : null, changedBy);
         return after;
+    }
+
+    /**
+     * (content + center)에 걸친 여러 bcode 판본에서 가용 재고가 있는 것부터 순서대로 amount만큼 줄인다.
+     * 한 bcode의 가용 재고만으로 부족하면 다음 bcode로 넘어간다.
+     *
+     * @return 실제로 줄어든 수량 (amount보다 적으면 가용 재고가 부족했다는 뜻)
+     */
+    private int reduceContentQtyAcrossBcodes(Integer contentId, String centerCode, int amount) {
+        int remaining = amount;
+        for (BookRespDTO.StockItemRespDTO row : bookRepository.findStockItems(contentId, centerCode)) {
+            if (remaining <= 0)
+                break;
+            int available = row.getQty() - row.getLoanedQty() - row.getLostQty();
+            if (available <= 0)
+                continue;
+            int take = Math.min(available, remaining);
+            if (bookRepository.reduceItemQty(row.getBcode(), centerCode, take) > 0)
+                remaining -= take;
+        }
+        return amount - remaining;
     }
 
     /** 보유 수량 변경 이력 조회 */
     public List<BookRespDTO.StockLogRespDTO> findStockLogs(Integer contentId, String centerCode) {
         return bookRepository.findStockLogs(contentId, centerCode);
+    }
+
+    /**
+     * 보유수량 일괄 등록 — 도서별로 화면에서 확정한 단계를 순서대로 재생한다. 한 도서 안에서 한 단계가
+     * 실패하면 그 뒤 단계는 시도하지 않고 멈춘다(이미 성공한 앞 단계는 그대로 반영된 채 유지).
+     * 각 단계는 updateCenterStock을 그대로 호출하므로 before/after/memo가 단계별로 각각 stock_log에 남는다.
+     * 같은 클래스 내부 호출이라 updateCenterStock의 @Transactional은 단계별로 새 트랜잭션을 열지 않지만
+     * (스프링 프록시 self-invocation 한계), 각 단계가 하는 일이 MERGE 한 번 + 로그 insert 한 번뿐이라 감수할 만하다.
+     */
+    public List<BookRespDTO.StockBulkResultRespDTO> updateCenterStockBulk(List<BookReqDTO.StockBulkItemReqDTO> items,
+            String centerCode, String changedBy) {
+        List<BookRespDTO.StockBulkResultRespDTO> results = new ArrayList<>();
+        for (BookReqDTO.StockBulkItemReqDTO item : items) {
+            BookRespDTO.StockBulkResultRespDTO result = new BookRespDTO.StockBulkResultRespDTO();
+            result.setContentId(item.getContentId());
+            result.setSuccess(true);
+            try {
+                for (BookReqDTO.StockBulkStepReqDTO step : item.getSteps()) {
+                    result.setQuantity(updateCenterStock(item.getContentId(), centerCode, step.getQuantity(), changedBy, step.getMemo()));
+                }
+            } catch (Exception400 e) {
+                result.setSuccess(false);
+                result.setMessage(e.getMessage());
+            }
+            results.add(result);
+        }
+        return results;
+    }
+
+    /** 마스터 도서 행을 펼쳤을 때 보이는 하위 사본(item) 목록 조회 */
+    public List<BookRespDTO.StockItemRespDTO> findStockItems(Integer contentId, String centerCode) {
+        return bookRepository.findStockItems(contentId, centerCode);
+    }
+
+    /**
+     * 보유수량을 bcode(사본 묶음) 단위로 목표치까지 변경 — 같은 마스터 도서라도 등록된 판본(bcode)이 다르면
+     * 수량을 따로 관리한다. 대여/반납(사본 status)과는 무관하게, 여기서도 대여 중인 사본만은 보존한다.
+     * 변경 이력은 지금까지처럼 마스터 도서(content) 기준 총 보유수량으로 기록한다.
+     *
+     * @return 실제로 반영된 해당 bcode의 보유 수량
+     */
+    @Transactional
+    public int updateStockItemQuantity(Integer contentId, String bcode, String centerCode, int target, String changedBy, String memo) {
+        if (target < 0)
+            throw new Exception400("보유 수량은 0권보다 적을 수 없습니다.");
+
+        int bcodeBefore = bookRepository.countItemsByBcodeCenter(bcode, centerCode);
+        if (target == bcodeBefore)
+            return bcodeBefore;
+
+        int contentBefore = bookRepository.countItemsByContentCenter(contentId, centerCode);
+
+        if (target > bcodeBefore) {
+            bookRepository.cloneItemToCenter(bcode, centerCode, target - bcodeBefore);
+        } else {
+            if (memo == null || memo.isBlank())
+                throw new Exception400("수량을 줄이려면 사유를 입력해야 합니다.");
+            int loaned = bookRepository.countLoanedItemsByBcodeCenter(bcode, centerCode);
+            if (target < loaned)
+                throw new Exception400("대여 중인 " + loaned + "권은 반납 전까지 줄일 수 없습니다.");
+            if (bookRepository.reduceItemQty(bcode, centerCode, bcodeBefore - target) == 0)
+                throw new Exception400("줄일 수 있는 보유분이 없습니다. 잠시 후 다시 시도해 주세요.");
+        }
+
+        int bcodeAfter = bookRepository.countItemsByBcodeCenter(bcode, centerCode);
+        int contentAfter = bookRepository.countItemsByContentCenter(contentId, centerCode);
+        bookRepository.insertStockLog(contentId, centerCode, contentBefore, contentAfter, target < bcodeBefore ? memo : null, changedBy);
+        return bcodeAfter;
     }
 
     /**

@@ -82,7 +82,14 @@
             rl.correct_count   AS basicCorrectCount,
             rl.total_count     AS basicTotalCount,
             rl.status          AS basicStatus,
-            DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS elapsedMinutes,
+            -- 독서 시간은 문제풀이 시작 전까지만 흐른다: 이미 제출해서 얼어붙은 값(frozen.read_minutes)이
+            -- 있으면 그 값을 그대로 쓰고(재도전해도 최초 제출 시점 값으로 고정), 아직 한 번도 제출 안
+            -- 했으면 문제풀이 화면에 들어간 순간(quiz_started_at)까지만 세고 그 이후로는 안 늘어난다.
+            -- 둘 다 없으면(아직 순수 독서 중) 지금까지 계속 흐른다.
+            COALESCE(
+                frozen.read_minutes,
+                DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
+            ) AS elapsedMinutes,
 
             adv.correctCount AS advancedCorrectCount,
             adv.totalCount   AS advancedTotalCount,
@@ -117,15 +124,17 @@
               )
         ) adv
         OUTER APPLY (
+            -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지를 세면 A책 카드에도
+            -- B책에서 딴 뱃지가 같이 보이는 문제가 생긴다(2026-07-29 수정)
             SELECT
                 COUNT(*) AS badgeCount,
                 (SELECT TOP 1 b.badge_name
                  FROM erp_bookstore_student_badge sb2
                  JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
-                 WHERE sb2.student_id = cs.student_id
+                 WHERE sb2.student_id = cs.student_id AND sb2.content_id = rl.content_id
                  ORDER BY sb2.earned_at DESC) AS latestBadgeName
             FROM erp_bookstore_student_badge sb
-            WHERE sb.student_id = cs.student_id
+            WHERE sb.student_id = cs.student_id AND sb.content_id = rl.content_id
         ) badge
         LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
         OUTER APPLY (
@@ -139,6 +148,11 @@
                 FOR XML PATH('')
             ), 1, 1, '') AS attitudeCodes
         ) att
+        OUTER APPLY (
+            SELECT TOP 1 read_minutes
+            FROM erp_bookstore_diary_detail
+            WHERE diary_key = dia.diary_key AND content_id = rl.content_id
+        ) frozen
     </sql>
 
     <select id="findCardBySessionId" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
@@ -177,7 +191,11 @@
             rl.correct_count   AS basicCorrectCount,
             rl.total_count     AS basicTotalCount,
             rl.status          AS basicStatus,
-            DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS elapsedMinutes,
+            -- cardColumns와 같은 규칙(독서 시간은 문제풀이 시작 전까지만 흐름) — 상세 설명은 그쪽 주석 참고
+            COALESCE(
+                frozen.read_minutes,
+                DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
+            ) AS elapsedMinutes,
 
             adv.correctCount AS advancedCorrectCount,
             adv.totalCount   AS advancedTotalCount,
@@ -216,15 +234,16 @@
               )
         ) adv
         OUTER APPLY (
+            -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지가 아니다(2026-07-29 수정)
             SELECT
                 COUNT(*) AS badgeCount,
                 (SELECT TOP 1 b.badge_name
                  FROM erp_bookstore_student_badge sb2
                  JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
-                 WHERE sb2.student_id = r.student_id
+                 WHERE sb2.student_id = r.student_id AND sb2.content_id = rl.content_id
                  ORDER BY sb2.earned_at DESC) AS latestBadgeName
             FROM erp_bookstore_student_badge sb
-            WHERE sb.student_id = r.student_id
+            WHERE sb.student_id = r.student_id AND sb.content_id = rl.content_id
         ) badge
         LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
         OUTER APPLY (
@@ -238,6 +257,11 @@
                 FOR XML PATH('')
             ), 1, 1, '') AS attitudeCodes
         ) att
+        OUTER APPLY (
+            SELECT TOP 1 read_minutes
+            FROM erp_bookstore_diary_detail
+            WHERE diary_key = dia.diary_key AND content_id = rl.content_id
+        ) frozen
     </sql>
 
     <select id="findReservationCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
@@ -245,6 +269,15 @@
         WHERE r.reservation_date = #{date}
           AND st.center_code = #{centerCode}
         ORDER BY r.time_slot ASC, st.student_name ASC
+    </select>
+
+    <select id="findActiveAttitudeCodes" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$AttitudeCodeDTO">
+        SELECT
+            attitude_code AS attitudeCode,
+            attitude_name AS attitudeName
+        FROM erp_bookstore_attitude_code
+        WHERE use_yn = 1
+        ORDER BY id ASC
     </select>
 
     <!--
@@ -264,9 +297,15 @@
             rl.correct_count   AS basicCorrectCount,
             rl.total_count     AS basicTotalCount,
             rl.status          AS basicStatus,
-            DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS elapsedMinutes,
+            -- cardColumns/reservationCardColumns와 같은 규칙(독서 시간은 문제풀이 시작 전까지만 흐름)
+            COALESCE(
+                frozen.read_minutes,
+                DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
+            ) AS elapsedMinutes,
             adv.correctCount AS advancedCorrectCount,
-            adv.totalCount   AS advancedTotalCount
+            adv.totalCount   AS advancedTotalCount,
+            badge.badgeCount      AS badgeCount,
+            badge.latestBadgeName AS latestBadgeName
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
         OUTER APPLY (
@@ -280,6 +319,30 @@
                   WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
               )
         ) adv
+        OUTER APPLY (
+            -- 이 책(rl.content_id)에서 딴 뱃지만 집계 — 카드 캐러셀에서 책마다 따로 보여줘야 한다
+            SELECT
+                COUNT(*) AS badgeCount,
+                (SELECT TOP 1 b.badge_name
+                 FROM erp_bookstore_student_badge sb2
+                 JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
+                 WHERE sb2.student_id = rl.student_id AND sb2.content_id = rl.content_id
+                 ORDER BY sb2.earned_at DESC) AS latestBadgeName
+            FROM erp_bookstore_student_badge sb
+            WHERE sb.student_id = rl.student_id AND sb.content_id = rl.content_id
+        ) badge
+        OUTER APPLY (
+            SELECT TOP 1 session_id, quiz_started_at
+            FROM erp_bookstore_clinic_session
+            WHERE student_id = rl.student_id AND session_date = #{date}
+            ORDER BY session_id DESC
+        ) cs
+        OUTER APPLY (
+            SELECT TOP 1 dd.read_minutes
+            FROM erp_bookstore_diary dia
+            JOIN erp_bookstore_diary_detail dd ON dd.diary_key = dia.diary_key AND dd.content_id = rl.content_id
+            WHERE dia.session_id = cs.session_id
+        ) frozen
         WHERE rl.student_id = #{studentId}
           AND (CAST(rl.recommended_at AS DATE) = #{date} OR rl.status = 'PENDING')
         ORDER BY rl.recommend_id ASC
@@ -362,8 +425,10 @@
 
     <!--
       독서일지 상세 자동 적재 — 채점 제출(ClinicService.submitQuiz)마다 호출된다.
-      도서명/표지는 제출 시점 스냅샷이고, read_minutes는 "추천받은 시각 → 제출 시각"이라
-      책을 읽은 시간에 문제 푼 시간이 포함된다(모니터링 카드의 경과 시간과 같은 기준).
+      도서명/표지는 제출 시점 스냅샷이고, read_minutes는 "추천받은 시각 → 문제풀이 진입 시각
+      (quiz_started_at)"으로 얼어붙는다(문제 푸는 시간은 독서 시간에서 제외). MonitorService.syncStudentToday가
+      이 호출 뒤에 quiz_started_at을 지우므로, 여기서는 아직 그 값이 남아있는 시점에 스냅샷을 뜬다.
+      MATCHED(재도전 재제출) 경우 read_minutes는 갱신 대상에서 빠져있어 최초 제출 시점 값 그대로 유지된다.
       정답 수는 제출한 난이도(qlevel)의 컬럼만 갱신해 기본/심화 결과가 서로 덮어쓰지 않게 한다.
     -->
     <update id="upsertDiaryDetail">
@@ -373,9 +438,11 @@
                 c.content_id,
                 c.original_title,
                 c.image_url,
-                DATEDIFF(MINUTE, rl.recommended_at, CURRENT_TIMESTAMP) AS read_minutes
+                DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP)) AS read_minutes
             FROM erp_bookstore_content c
             LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = #{recommendId}
+            LEFT JOIN erp_bookstore_diary dia2 ON dia2.diary_key = #{diaryKey}
+            LEFT JOIN erp_bookstore_clinic_session cs ON cs.session_id = dia2.session_id
             WHERE c.content_id = #{contentId}
         ) AS source
         ON target.diary_key = #{diaryKey} AND target.content_id = source.content_id

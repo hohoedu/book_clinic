@@ -50,10 +50,14 @@
         {call sp_restore_book(#{delId, jdbcType=INTEGER})}
     </select>
 
-    <!-- 실물 도서(사본) 1행 등록 (2026-07-13 재설계: item_center 통합으로 center_code가 item에 직접 존재) -->
+    <!-- 실물 도서(판본) 등록 — bcode+센터 행이 이미 있으면 qty만 더하고, 없으면 새로 만든다 (2026-07-29 qty 카운터 재설계) -->
     <insert id="registerItem" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$ItemRegisterReqDTO">
-        INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url)
-        VALUES (#{bcode}, #{contentId}, #{centerCode}, #{bookTitle}, #{author}, #{publisher}, #{imageUrl})
+        MERGE erp_bookstore_item AS target
+        USING (SELECT #{bcode, jdbcType=VARCHAR} AS bcode, #{centerCode, jdbcType=VARCHAR} AS center_code) AS source
+        ON target.bcode = source.bcode AND target.center_code = source.center_code
+        WHEN MATCHED THEN UPDATE SET qty = target.qty + #{quantity}
+        WHEN NOT MATCHED THEN INSERT (bcode, content_id, center_code, book_title, author, publisher, image_url, qty)
+            VALUES (source.bcode, #{contentId}, source.center_code, #{bookTitle}, #{author}, #{publisher}, #{imageUrl}, #{quantity});
     </insert>
 
     <!-- bcode를 공유하는 모든 사본에 동일하게 반영 (도서명/저자/출판사/이미지는 사본 공통 속성) -->
@@ -70,16 +74,16 @@
 
     <!-- 센터 보유분(bcode + center)의 삭제 로그를 item_del에 기록 (사본 행 자체는 deleteItemsByBcodeCenter로 별도 삭제) -->
     <insert id="archiveItem">
-        INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, status, last_student_id, last_loaned_at, last_returned_at)
-        SELECT 'DELETE', #{deletedBy}, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, status, last_student_id, last_loaned_at, last_returned_at
+        INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty)
+        SELECT 'DELETE', #{deletedBy}, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty
         FROM erp_bookstore_item
         WHERE bcode = #{bcode} AND center_code = #{centerCode}
     </insert>
 
     <!-- 실물도서 수정 전 스냅샷을 item_del에 UPDATE 로그로 기록 (bcode를 공유하는 모든 사본) -->
     <insert id="archiveItemForUpdate">
-        INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, status, last_student_id, last_loaned_at, last_returned_at)
-        SELECT 'UPDATE', #{updatedBy}, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, status, last_student_id, last_loaned_at, last_returned_at
+        INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty)
+        SELECT 'UPDATE', #{updatedBy}, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty
         FROM erp_bookstore_item
         WHERE bcode = #{bcode}
     </insert>
@@ -100,11 +104,11 @@
         WHERE content_id = #{contentId}
     </insert>
 
-    <!-- item_del에 보관된 사본(bcode+center)을 item으로 복사 복원 (center_code가 있고 아직 없을 때만 — 로그는 지우지 않으므로 중복 복구 방지) -->
+    <!-- item_del에 보관된 판본(bcode+center)을 item으로 복사 복원 (center_code가 있고 아직 없을 때만 — 로그는 지우지 않으므로 중복 복구 방지) -->
     <insert id="restoreItemFromDel">
-        INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url, status, last_student_id, last_loaned_at, last_returned_at)
+        INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url, qty, loaned_qty, lost_qty)
         SELECT d.bcode, d.content_id, d.center_code, d.book_title, d.author, d.publisher, d.image_url,
-               ISNULL(d.status, 'AVAILABLE'), d.last_student_id, d.last_loaned_at, d.last_returned_at
+               ISNULL(d.qty, 0), ISNULL(d.loaned_qty, 0), ISNULL(d.lost_qty, 0)
         FROM erp_bookstore_item_del d
         WHERE d.log_id = #{delId} AND d.center_code IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM erp_bookstore_item i
@@ -153,7 +157,7 @@
         SELECT TOP 1 content_id FROM erp_bookstore_content WHERE original_title = #{title}
     </select>
 
-    <!-- 6: 바코드로 대표 사본 1건 조회 -->
+    <!-- 6: 바코드로 대표 판본 1건 조회 -->
     <select id="findItemByBcode" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
         SELECT TOP 1
                item_id      AS itemId,
@@ -164,12 +168,14 @@
                publisher    AS publisher,
                image_url    AS imageUrl,
                center_code  AS centerCode,
-               status       AS status
+               qty          AS qty,
+               loaned_qty   AS loanedQty,
+               lost_qty     AS lostQty
         FROM erp_bookstore_item
         WHERE bcode = #{bcode}
     </select>
 
-    <!-- 7~9: contentId / 상태(status) / 출판사 복합 검색 -->
+    <!-- 7~9: contentId / 출판사 복합 검색 (state 파라미터는 더 이상 status가 아니라 사용하지 않음 — 호환을 위해 시그니처만 유지) -->
     <select id="searchItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
         SELECT item_id      AS itemId,
                bcode        AS bcode,
@@ -179,32 +185,39 @@
                publisher    AS publisher,
                image_url    AS imageUrl,
                center_code  AS centerCode,
-               status       AS status
+               qty          AS qty,
+               loaned_qty   AS loanedQty,
+               lost_qty     AS lostQty
         FROM erp_bookstore_item
         <where>
             <if test="contentId != null">AND content_id = #{contentId}</if>
-            <if test="state != null and state != ''">AND status = #{state}</if>
             <if test="publisher != null and publisher != ''">AND publisher LIKE '%' + #{publisher} + '%'</if>
         </where>
     </select>
 
-    <!-- (bcode + center) 보유 사본 수 -->
+    <!-- (bcode + center) 보유수량 — 행이 없으면 0 -->
     <select id="countItemsByBcodeCenter" resultType="java.lang.Integer">
-        SELECT COUNT(*) FROM erp_bookstore_item WHERE bcode = #{bcode} AND center_code = #{centerCode}
+        SELECT ISNULL((SELECT qty FROM erp_bookstore_item WHERE bcode = #{bcode} AND center_code = #{centerCode}), 0)
     </select>
 
-    <!-- 같은 bcode의 기존 사본 정보를 그대로 복사해 다른 센터에 사본 1건 추가 등록 -->
+    <!-- 같은 bcode의 기존 판본 정보를 그대로 복사해 (다른 센터일 수도 있는) 대상 행에 수량 deltaQty만큼 추가.
+         대상 행이 없으면 새로 만들고, 있으면 qty만 더한다 -->
     <insert id="cloneItemToCenter">
-        INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url)
-        SELECT TOP 1 bcode, content_id, #{centerCode}, book_title, author, publisher, image_url
-        FROM erp_bookstore_item WHERE bcode = #{bcode}
+        MERGE erp_bookstore_item AS target
+        USING (SELECT TOP 1 bcode, content_id, book_title, author, publisher, image_url
+               FROM erp_bookstore_item WHERE bcode = #{bcode}) AS source
+        ON target.bcode = source.bcode AND target.center_code = #{centerCode, jdbcType=VARCHAR}
+        WHEN MATCHED THEN UPDATE SET qty = target.qty + #{deltaQty}
+        WHEN NOT MATCHED THEN INSERT (bcode, content_id, center_code, book_title, author, publisher, image_url, qty)
+            VALUES (source.bcode, source.content_id, #{centerCode}, source.book_title, source.author, source.publisher, source.image_url, #{deltaQty});
     </insert>
 
-    <!-- 대여 중이 아닌(AVAILABLE) 사본을 최대 limit건 삭제 (수량 축소 시 대여 중인 사본은 보존) -->
-    <delete id="deleteAvailableItems">
-        DELETE TOP (#{limit}) FROM erp_bookstore_item
-        WHERE bcode = #{bcode} AND center_code = #{centerCode} AND status = 'AVAILABLE'
-    </delete>
+    <!-- 보유수량을 amount만큼 축소 — 대여중/분실 제외 가용 수량(qty-loaned_qty-lost_qty)이 부족하면 아무 것도 하지 않는다(영향받은 행 0) -->
+    <update id="reduceItemQty">
+        UPDATE erp_bookstore_item
+        SET qty = qty - #{amount}
+        WHERE bcode = #{bcode} AND center_code = #{centerCode} AND qty - loaned_qty - lost_qty &gt;= #{amount}
+    </update>
 
     <!-- 실물도서 삭제 시: 해당 (bcode + 센터) 사본 전체 제거 -->
     <delete id="deleteItemsByBcodeCenter">
@@ -231,7 +244,9 @@
                d.publisher    AS publisher,
                d.image_url    AS imageUrl,
                d.center_code  AS centerCode,
-               d.status       AS status
+               d.qty          AS qty,
+               d.loaned_qty   AS loanedQty,
+               d.lost_qty     AS lostQty
         FROM (
             SELECT *, ROW_NUMBER() OVER (PARTITION BY bcode, center_code ORDER BY log_id DESC) AS rn
             FROM erp_bookstore_item_del
@@ -243,14 +258,17 @@
         ORDER BY d.logged_at DESC
     </select>
 
-    <!-- 센터별 보유 도서(사본) 목록 — 사본 1행 = 1건이라 quantity는 항상 1, loanedQty/lostQty는 그 사본의 현재 status를 0/1로 표시 -->
+    <!-- 센터별 보유 도서(판본) 목록 — bcode당 1행에 qty/loanedQty/lostQty가 이미 집계돼 있다 -->
     <select id="findItemsByCenter" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemCenterRespDTO">
         SELECT bcode                                          AS bcode,
                center_code                                    AS centerCode,
-               1                                               AS quantity,
-               CASE WHEN status = 'LOANED' THEN 1 ELSE 0 END   AS loanedQty,
-               CASE WHEN status = 'LOST'   THEN 1 ELSE 0 END   AS lostQty,
-               status                                         AS state,
+               qty                                             AS quantity,
+               loaned_qty                                      AS loanedQty,
+               lost_qty                                         AS lostQty,
+               CASE WHEN qty - loaned_qty - lost_qty > 0 THEN 'AVAILABLE'
+                    WHEN loaned_qty > 0 THEN 'LOANED'
+                    WHEN lost_qty > 0 THEN 'LOST'
+                    ELSE 'AVAILABLE' END                        AS state,
                registered_at                                  AS registeredAt,
                content_id                                      AS contentId,
                book_title                                      AS bookTitle,
@@ -286,27 +304,28 @@
         ORDER BY d.logged_at DESC
     </select>
 
-    <!-- (bcode + center)에서 대여 가능한 사본 1건을 원자적으로 대여 처리 후 그 item_id를 반환 (없으면 결과 없음) -->
+    <!-- (bcode + center)에서 가용 재고(qty-loaned_qty-lost_qty)가 있으면 loaned_qty를 원자적으로 1 늘리고 그 item_id를 반환
+         (재고 없으면 WHERE에 안 걸려 결과 없음 — 두 학생이 동시에 신청해도 DB 행 잠금으로 한쪽만 성공) -->
     <select id="loanAvailableItemByBcode" resultType="java.lang.Integer">
         UPDATE TOP (1) erp_bookstore_item
-        SET status = 'LOANED', last_student_id = #{studentId}, last_loaned_at = CURRENT_TIMESTAMP
+        SET loaned_qty = loaned_qty + 1
         OUTPUT INSERTED.item_id
-        WHERE bcode = #{bcode} AND center_code = #{centerCode} AND status = 'AVAILABLE'
+        WHERE bcode = #{bcode} AND center_code = #{centerCode} AND qty - loaned_qty - lost_qty > 0
     </select>
 
-    <!-- (content_id + center)에서 대여 가능한 사본 1건을 원자적으로 대여 처리 후 그 item_id를 반환 (없으면 결과 없음) -->
+    <!-- (content_id + center)에서 가용 재고가 있는 판본 1건의 loaned_qty를 원자적으로 1 늘리고 그 item_id를 반환 -->
     <select id="loanAvailableItemByContent" resultType="java.lang.Integer">
         UPDATE TOP (1) erp_bookstore_item
-        SET status = 'LOANED', last_student_id = #{studentId}, last_loaned_at = CURRENT_TIMESTAMP
+        SET loaned_qty = loaned_qty + 1
         OUTPUT INSERTED.item_id
-        WHERE content_id = #{contentId} AND center_code = #{centerCode} AND status = 'AVAILABLE'
+        WHERE content_id = #{contentId} AND center_code = #{centerCode} AND qty - loaned_qty - lost_qty > 0
     </select>
 
-    <!-- 반납 처리: 사본 상태를 AVAILABLE로 되돌리고 last_returned_at 갱신 -->
+    <!-- 반납 처리: 그 판본의 loaned_qty를 1 줄인다 -->
     <update id="markItemReturned">
         UPDATE erp_bookstore_item
-        SET status = 'AVAILABLE', last_returned_at = CURRENT_TIMESTAMP
-        WHERE item_id = #{itemId}
+        SET loaned_qty = loaned_qty - 1
+        WHERE item_id = #{itemId} AND loaned_qty > 0
     </update>
 
     <!-- 대여 이력 등록 -->
@@ -394,8 +413,8 @@
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN (
             SELECT content_id,
-                   COUNT(*) AS qty,
-                   SUM(CASE WHEN status = 'LOANED' THEN 1 ELSE 0 END) AS loanedQty
+                   SUM(qty) AS qty,
+                   SUM(loaned_qty) AS loanedQty
             FROM erp_bookstore_item
             WHERE center_code = #{centerCode}
             GROUP BY content_id
@@ -418,39 +437,63 @@
         ORDER BY bc.schoolyear, bc.original_title
     </select>
 
-    <!-- (content + center) 보유 사본 수 -->
+    <!-- (content + center) 보유수량 총합 (여러 bcode 판본에 걸쳐 있을 수 있음) -->
     <select id="countItemsByContentCenter" resultType="java.lang.Integer">
-        SELECT COUNT(*) FROM erp_bookstore_item WHERE content_id = #{contentId} AND center_code = #{centerCode}
+        SELECT ISNULL(SUM(qty), 0) FROM erp_bookstore_item WHERE content_id = #{contentId} AND center_code = #{centerCode}
     </select>
 
-    <!-- (content + center) 대여 중 사본 수 -->
+    <!-- 마스터 도서 행을 펼쳤을 때 보이는 하위 판본(bcode) 목록 — bcode당 1행에 수량이 이미 집계돼 있다 -->
+    <select id="findStockItems" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$StockItemRespDTO">
+        SELECT item_id       AS itemId,
+               bcode         AS bcode,
+               book_title    AS bookTitle,
+               author        AS author,
+               publisher     AS publisher,
+               image_url     AS imageUrl,
+               qty           AS qty,
+               loaned_qty    AS loanedQty,
+               lost_qty      AS lostQty,
+               registered_at AS registeredAt
+        FROM erp_bookstore_item
+        WHERE content_id = #{contentId} AND center_code = #{centerCode}
+        ORDER BY registered_at DESC, item_id DESC
+    </select>
+
+    <!-- (bcode + center) 대여중 수량 -->
+    <select id="countLoanedItemsByBcodeCenter" resultType="java.lang.Integer">
+        SELECT ISNULL((SELECT loaned_qty FROM erp_bookstore_item WHERE bcode = #{bcode} AND center_code = #{centerCode}), 0)
+    </select>
+
+    <!-- (content + center) 대여중 수량 총합 -->
     <select id="countLoanedItemsByContentCenter" resultType="java.lang.Integer">
-        SELECT COUNT(*) FROM erp_bookstore_item
-        WHERE content_id = #{contentId} AND center_code = #{centerCode} AND status = 'LOANED'
+        SELECT ISNULL(SUM(loaned_qty), 0) FROM erp_bookstore_item
+        WHERE content_id = #{contentId} AND center_code = #{centerCode}
     </select>
 
-    <!-- 해당 도서의 대표 bcode (같은 도서의 사본은 센터가 달라도 bcode를 공유한다) -->
+    <!-- 해당 도서의 대표 bcode (같은 도서의 판본은 센터가 달라도 bcode를 공유할 수 있다) -->
     <select id="findBcodeByContentId" resultType="java.lang.String">
         SELECT TOP 1 bcode FROM erp_bookstore_item WHERE content_id = #{contentId} ORDER BY item_id
     </select>
 
-    <!-- 사본이 어느 센터에도 없는 도서에 첫 사본을 만들 때 — 마스터 도서 정보를 스냅샷으로 복사 -->
+    <!-- 이 센터에 아직 없는 도서에 첫 재고를 만들 때 — 마스터 도서 정보를 스냅샷으로 복사하며 qty를 deltaQty만큼 추가(없으면 새로 생성) -->
     <insert id="insertItemFromContent">
-        INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url)
-        SELECT #{bcode}, content_id, #{centerCode}, original_title, author, publisher, image_url
-        FROM erp_bookstore_content WHERE content_id = #{contentId}
+        MERGE erp_bookstore_item AS target
+        USING (
+            SELECT #{bcode, jdbcType=VARCHAR} AS bcode, #{centerCode, jdbcType=VARCHAR} AS center_code,
+                   c.content_id AS content_id, c.original_title AS book_title, c.author AS author,
+                   c.publisher AS publisher, c.image_url AS image_url
+            FROM erp_bookstore_content c WHERE c.content_id = #{contentId}
+        ) AS source
+        ON target.bcode = source.bcode AND target.center_code = source.center_code
+        WHEN MATCHED THEN UPDATE SET qty = target.qty + #{deltaQty}
+        WHEN NOT MATCHED THEN INSERT (bcode, content_id, center_code, book_title, author, publisher, image_url, qty)
+            VALUES (source.bcode, source.content_id, source.center_code, source.book_title, source.author, source.publisher, source.image_url, #{deltaQty});
     </insert>
-
-    <!-- 수량 1 감소 — 대여 중인 사본은 건드리지 않는다 (삭제된 행이 0이면 서비스에서 감소 불가로 처리) -->
-    <delete id="deleteAvailableItemByContent">
-        DELETE TOP (1) FROM erp_bookstore_item
-        WHERE content_id = #{contentId} AND center_code = #{centerCode} AND status = 'AVAILABLE'
-    </delete>
 
     <!-- 보유 수량 변경 로그 기록 -->
     <insert id="insertStockLog">
-        INSERT INTO erp_bookstore_item_stock_log (content_id, center_code, before_qty, after_qty, changed_by)
-        VALUES (#{contentId}, #{centerCode}, #{beforeQty}, #{afterQty}, #{changedBy})
+        INSERT INTO erp_bookstore_item_stock_log (content_id, center_code, before_qty, after_qty, memo, changed_by)
+        VALUES (#{contentId}, #{centerCode}, #{beforeQty}, #{afterQty}, #{memo}, #{changedBy})
     </insert>
 
     <!-- 보유 수량 변경 이력 (최신순) -->
@@ -458,6 +501,7 @@
         SELECT log_id      AS logId,
                before_qty  AS beforeQty,
                after_qty   AS afterQty,
+               memo        AS memo,
                changed_by  AS changedBy,
                changed_at  AS changedAt
         FROM erp_bookstore_item_stock_log

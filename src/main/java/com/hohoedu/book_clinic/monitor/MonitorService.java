@@ -69,6 +69,7 @@ public class MonitorService {
         MonitorRespDTO.LiveViewRespDTO resp = new MonitorRespDTO.LiveViewRespDTO();
         resp.setCards(cards);
         resp.setCounts(buildCounts(cards));
+        resp.setAttitudeCodeOptions(monitorRepository.findActiveAttitudeCodes());
         return resp;
     }
 
@@ -205,7 +206,7 @@ public class MonitorService {
         return books;
     }
 
-    /** 우선순위: 미입실 > 퇴실 > 문제 푸는 중 > 결과 확인중 > 재도전 필요 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
+    /** 우선순위: 미입실 > 퇴실 > 문제 푸는 중 > 결과 확인중 > 재도전 필요 > 완료 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
     private String resolveCardStatus(MonitorRespDTO.CardDTO card, Integer readingTimeMinutes, Integer elapsedMinutes) {
         if (card.getSessionId() == null) {
             return "NOT_ENTERED";
@@ -217,7 +218,7 @@ public class MonitorService {
             return "QUIZ_IN_PROGRESS";
         }
         // 채점 제출 후 결과 화면을 보고 있는 상태 — 불합격(RETRY_NEEDED 조건)이어도 결과 화면을 보는 동안은
-        // 이 상태가 우선한다(홈으로 나가면 clearResultViewing으로 해제되어 재도전 필요로 넘어간다)
+        // 이 상태가 우선한다(홈으로 나가면 clearResultViewing으로 해제되어 재도전 필요/완료로 넘어간다)
         if (card.getResultViewedAt() != null) {
             return "RESULT_VIEWING";
         }
@@ -225,6 +226,11 @@ public class MonitorService {
         // (아직 한 번도 안 푼 경우는 correctCount가 null이라 여기 안 걸리고 READING 유지)
         if ("PENDING".equals(card.getBasicStatus()) && card.getBasicCorrectCount() != null) {
             return "RETRY_NEEDED";
+        }
+        // 기본 문제 합격(DONE) — 홈 화면이 "책 추천받기" 버튼을 띄우는 것과 같은 시점이다. 이 책은
+        // 이미 반납 처리됐고 다음 책을 아직 안 받은 상태라, 계속 READING으로 보이면 안 된다(2026-07-29).
+        if ("DONE".equals(card.getBasicStatus())) {
+            return "COMPLETED";
         }
         if (readingTimeMinutes != null && elapsedMinutes != null && elapsedMinutes > readingTimeMinutes) {
             return "TIME_OVER";
@@ -249,7 +255,7 @@ public class MonitorService {
                 case "RESULT_VIEWING" -> counts.setResultViewing(counts.getResultViewing() + 1);
                 case "TIME_OVER" -> counts.setTimeOver(counts.getTimeOver() + 1);
                 case "RETRY_NEEDED" -> counts.setRetryNeeded(counts.getRetryNeeded() + 1);
-                default -> { /* EXITED는 별도 chip 없음 */ }
+                default -> { /* EXITED/COMPLETED는 별도 chip 없음 */ }
             }
             // 미입실 카드는 아직 독서일지 대상이 아니므로 미등록 카운트에서 제외
             if (card.getDiaryKey() == null && !"NOT_ENTERED".equals(card.getCardStatus())) {

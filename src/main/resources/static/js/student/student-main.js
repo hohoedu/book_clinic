@@ -34,8 +34,12 @@
     }
   });
 
-  // student-main.html(#mainPage)에서만 동작 — 로그인하면 무조건 책 한 권을 보여준다
-  // (이미 추천받은 책이 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정 — /clinic/recommend가 멱등 처리)
+  // student-main.html(#mainPage)에서만 동작 — 홈 진입 시 입실 처리 + "지금 보여줄 책"만 확인한다.
+  // 다음 책 추천은 여기서 자동으로 일어나지 않는다(2026-07-29) — 예전엔 홈 화면에 들어오기만 해도
+  // 바로 다음 책이 대여 확정돼서, 문제도 안 풀고 퇴실해버리면 그 책만 아무도 안 읽은 채 붕 떴다.
+  // "새 책 추천받을까요?" 질문은 결과 화면(student-result.js)에서 이미 물어보므로 여기서는 다시
+  // 묻지 않는다 — 읽던 책이 있으면 그 책+"문제 풀기", 방금 끝낸 책만 있으면(결과 화면에서 "아니요"를
+  // 골랐거나 새로고침 등으로 그냥 홈에 온 경우) 그 책+"책 추천받기" 버튼만 조용히 보여준다.
   function initRecommend() {
     const page = document.getElementById('mainPage');
     if (!page) return;
@@ -63,7 +67,8 @@
       cardEl.hidden = name !== 'card';
     }
 
-    function renderBook(book) {
+    // state: "READING"(읽던 중, 버튼="문제 풀기") / "AWAITING_NEXT"(방금 끝냄, 버튼="책 추천받기")
+    function renderBook(book, state) {
       titleEl.textContent = book.originalTitle ?? '-';
       authorEl.textContent = [book.author, book.publisher].filter(Boolean).join(' | ') || '-';
       descEl.textContent = book.summary ?? '-';
@@ -79,15 +84,27 @@
         ? book.keywords.split(',').map((kw) => `#${kw.trim()}`).join(' ')
         : '';
 
-      actionLabel.textContent = '문제 풀기';
-      actionBtn.onclick = () => {
-        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
-      };
+      if (state === 'AWAITING_NEXT') {
+        actionLabel.textContent = '책 추천받기';
+        actionBtn.onclick = fetchNextBook;
+      } else {
+        actionLabel.textContent = '문제 풀기';
+        actionBtn.onclick = () => {
+          window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
+        };
+      }
 
       showState('card');
     }
 
-    async function fetchRecommend() {
+    function showError(err) {
+      console.error(err);
+      emptyMsgEl.textContent = err.message || '추천할 수 있는 도서를 찾지 못했어요.';
+      showState('empty');
+    }
+
+    // "책 추천받기" 버튼 클릭 시에만 호출 — 여기서만 새 책이 실제로 대여 확정된다
+    async function fetchNextBook() {
       showState('loading');
       try {
         const res = await fetch('/clinic/recommend', {
@@ -97,15 +114,30 @@
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error?.message ?? '추천에 실패했어요.');
-        renderBook(data.response);
+        renderBook(data.response, 'READING');
       } catch (err) {
-        console.error(err);
-        emptyMsgEl.textContent = err.message || '추천할 수 있는 도서를 찾지 못했어요.';
-        showState('empty');
+        showError(err);
       }
     }
 
-    fetchRecommend();
+    // 홈 진입 시 1회 — 입실 처리 + "지금 보여줄 책" 상태만 확인한다(다음 책 추천은 안 함)
+    async function loadHomeState() {
+      showState('loading');
+      try {
+        const res = await fetch('/clinic/home-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message ?? '조회에 실패했어요.');
+        renderBook(data.response.book, data.response.state);
+      } catch (err) {
+        showError(err);
+      }
+    }
+
+    loadHomeState();
   }
 
   if ('serviceWorker' in navigator) {

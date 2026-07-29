@@ -81,8 +81,27 @@
       </section>
 
       <section class="monitor-body">
-        <div class="monitor-grid" id="monitorGrid">
-          <!-- 카드는 monitor-live.js가 실시간으로 렌더링한다 -->
+        <!-- 타임별로 순차 노출하던 방식 대신, 그날 예약된 학생 전체를 입실/미입실/퇴실 3개 영역으로
+             나눠서 보여준다(2026-07-29) — 한 목록에 다 몰려있는 것보다 가독성이 좋다 -->
+        <div class="monitor-sections" id="monitorSections">
+          <section class="monitor-section">
+            <h2 class="monitor-section-title">
+              입실한 학생 <span class="monitor-section-count" id="enteredCount">0</span>
+            </h2>
+            <div class="monitor-grid" id="enteredGrid"></div>
+          </section>
+          <section class="monitor-section">
+            <h2 class="monitor-section-title">
+              미입실 학생 <span class="monitor-section-count" id="notEnteredCount">0</span>
+            </h2>
+            <div class="monitor-grid" id="notEnteredGrid"></div>
+          </section>
+          <section class="monitor-section">
+            <h2 class="monitor-section-title">
+              퇴실한 학생 <span class="monitor-section-count" id="exitedCount">0</span>
+            </h2>
+            <div class="monitor-grid" id="exitedGrid"></div>
+          </section>
         </div>
 
         <!-- 독서일지 패널 — 카드의 말풍선 아이콘을 클릭하면 그 학생 기준으로 채워진다.

@@ -24,7 +24,8 @@ public class SecurityConfig {
                         .csrfTokenRepository(new StaticCsrfTokenRepository())
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload",
-                                "/api/notification/**", "/clinic/recommend", "/clinic/quiz/submit"))
+                                "/api/notification/**", "/clinic/recommend", "/clinic/quiz/submit",
+                                "/clinic/home-state"))
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
@@ -41,6 +42,7 @@ public class SecurityConfig {
                                 "/question/search",
                                 "/clinic/recommend",
                                 "/clinic/quiz/submit",
+                                "/clinic/home-state",
                                 "/student/**")
                         .permitAll()
                         .anyRequest().authenticated())

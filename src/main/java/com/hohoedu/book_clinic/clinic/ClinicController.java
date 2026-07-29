@@ -25,8 +25,17 @@ public class ClinicController {
     private final ClinicService clinicService;
 
     /**
-     * 책 확인 — 멱등 처리. 이미 추천받은(미해결) 책이 있으면 그 책 그대로, 없으면 새로 추천해서
-     * 대여까지 확정한다. "다른 책 추천" 같은 재추천 액션은 의도적으로 없음.
+     * 홈 화면(student-main) 진입 시 상태 조회 — 입실 처리 + "지금 보여줄 책"(읽던 중인 책 또는
+     * 방금 끝낸 책)을 반환한다. 다음 책 추천은 여기서 하지 않는다(recommend 참고).
+     */
+    @PostMapping("/home-state")
+    public ResponseEntity<?> homeState(@RequestBody @Valid ClinicReqDTO.RecommendReqDTO reqDTO) {
+        return ResponseEntity.ok(ApiUtils.success(clinicService.getHomeState(reqDTO.getStudentId())));
+    }
+
+    /**
+     * 다음 책 추천 — "책 추천받기" 버튼 클릭 시에만 호출된다. 멱등 처리: 이미 추천받은(미해결) 책이
+     * 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정한다.
      */
     @PostMapping("/recommend")
     public ResponseEntity<?> recommend(@RequestBody @Valid ClinicReqDTO.RecommendReqDTO reqDTO) {

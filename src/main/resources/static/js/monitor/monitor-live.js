@@ -17,13 +17,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 const CSRF_HEADER = "X-XSRF-TOKEN";
 const CSRF_TOKEN = "hohoedu-master-csrf-token";
 
-const ATTITUDE_CODES = [
-  { code: "GOOD_POSTURE", label: "바른 자세로 차분하게 정독했어요." },
-  { code: "SELF_DIRECTED", label: "스스로 책 읽기를 끝까지 이어갔어요." },
-  { code: "LOW_FOCUS", label: "집중력이 자주 흐트러졌어요." },
-  { code: "RUSHED", label: "책장을 빠르게 넘기며 서둘러 읽었어요." },
-  { code: "DISTRACTED", label: "산만한 모습을 보였어요." },
-];
+// 독서태도 체크박스는 erp_bookstore_attitude_code(use_yn=1)를 /admin/monitor/live 응답의
+// attitudeCodeOptions로 받아 렌더링한다 — 문구가 자주 바뀔 수 있어 하드코딩하지 않는다.
 
 const HELP_NEEDED_CODES = [{ code: "ALONE_HARD", label: "혼자 읽기 어려워요!" }];
 
@@ -31,10 +26,10 @@ const HELP_NEEDED_CODES = [{ code: "ALONE_HARD", label: "혼자 읽기 어려워
 // time_slot 값('1'~'4')과 그대로 매칭한다
 const TIME_SLOTS = [
   { key: "ALL", label: "타임 선택" },
-  { key: "1", label: "1교시(14:00~15:00)" },
-  { key: "2", label: "2교시(15:00~16:00)" },
-  { key: "3", label: "3교시(16:00~17:00)" },
-  { key: "4", label: "4교시(17:00~18:00)" },
+  { key: "1", label: "1교시(08:00~09:00)" },
+  { key: "2", label: "2교시(09:00~10:00)" },
+  { key: "3", label: "3교시(10:00~11:00)" },
+  { key: "4", label: "4교시(11:00~12:00)" },
 ];
 
 const FILTERS = [
@@ -54,6 +49,7 @@ const STATUS_BADGE = {
   QUIZ_IN_PROGRESS: { text: "문제 푸는 중", icon: "fa-pen", cls: "status-quiz" },
   RESULT_VIEWING: { text: "결과 확인중", icon: "fa-clipboard-check", cls: "status-result" },
   RETRY_NEEDED: { text: "재도전 필요", icon: "fa-triangle-exclamation", cls: "status-retry" },
+  COMPLETED: { text: "완료", icon: "fa-circle-check", cls: "status-completed" },
   TIME_OVER: { text: "권장시간 초과", icon: "fa-hourglass-end", cls: "status-timeover" },
   EXITED: { text: "퇴실", icon: "fa-right-from-bracket", cls: "status-exited" },
 };
@@ -64,8 +60,11 @@ let activeSlot = "ALL";
 let selectedCard = null;
 let firestoreUnsubscribe = null;
 // 카드 캐러셀에서 학생이 지금 보고 있는 책 페이지 인덱스 — studentId 기준으로 렌더링을 넘나들며
-// 유지된다(안 그러면 Firestore/폴링 갱신이 올 때마다 보고 있던 페이지가 최신 책으로 리셋됨)
+// 유지된다(안 그러면 Firestore/폴링 갱신이 올 때마다 보고 있던 페이지가 리셋됨).
+// 단, 책이 새로 추가되면(pages.length가 늘어나면) 그 새 책이 "지금 읽는 중"인 실시간 상태이므로
+// 직원이 옛날 책 페이지를 보고 있던 중이었어도 새 책으로 강제 이동시킨다(2026-07-29).
 let selectedBookPage = {};
+let lastBookPageCount = {};
 
 /* 공통 요청 헬퍼 */
 async function getJson(url) {
@@ -86,8 +85,7 @@ async function postJson(url, body) {
   return data.response;
 }
 
-function todayStr() {
-  const d = new Date();
+function todayStr(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
@@ -132,6 +130,12 @@ function initSlotPicker() {
   });
 }
 
+/* 일지 헤더(diaryKey)는 채점 제출만 해도 시스템이 자동 생성한다(recordDiaryDetail→ensureDiary) —
+   선생님이 실제로 태도 체크를 했는지는 diaryKey 존재가 아니라 attitudeCodes 값으로 판단해야 한다. */
+function hasAttitude(card) {
+  return !!card.attitudeCodes && card.attitudeCodes.length > 0;
+}
+
 function matchesSlot(card) {
   if (activeSlot === "ALL") return true;
   return card.timeSlot === activeSlot;
@@ -144,6 +148,7 @@ async function loadLiveView() {
     cards = view.cards ?? [];
     const now = Date.now();
     cards.forEach((c) => (c._syncedAt = now)); // 경과시간 로컬 카운트업 기준점
+    initAttitudeCheckboxesOnce(view.attitudeCodeOptions);
     render();
   } catch (e) {
     console.error("실시간 모니터링 초기 조회 실패", e);
@@ -262,7 +267,7 @@ function computeCounts() {
     if (c.cardStatus === "RESULT_VIEWING") counts.resultViewing++;
     if (c.cardStatus === "TIME_OVER") counts.timeOver++;
     if (c.cardStatus === "RETRY_NEEDED") counts.retryNeeded++;
-    if (!c.diaryKey && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;
+    if (!hasAttitude(c) && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;
   });
   return counts;
 }
@@ -285,18 +290,61 @@ function renderFilters(counts) {
 
 function filteredCards() {
   const slotCards = cards.filter(matchesSlot);
-  if (activeFilter === "ALL") return slotCards;
-  if (activeFilter === "LOG_MISSING") return slotCards.filter((c) => !c.diaryKey);
-  return slotCards.filter((c) => c.cardStatus === activeFilter);
+  let result;
+  if (activeFilter === "ALL") result = slotCards;
+  else if (activeFilter === "LOG_MISSING") result = slotCards.filter((c) => !hasAttitude(c));
+  else result = slotCards.filter((c) => c.cardStatus === activeFilter);
+  return sortedCards(result);
 }
 
+/* 카드 정렬 규칙: 입실 중(활성) 카드는 입실 시각순으로 맨 위 → 미입실 카드는 예약 타임순으로
+   그 아래 → 퇴실 카드는 퇴실 시각순으로 맨 아래(흐리게 표시는 status-exited CSS가 이미 처리). */
+function sortedCards(list) {
+  const rank = (c) => {
+    if (c.sessionStatus === "EXITED") return 2;
+    if (c.cardStatus === "NOT_ENTERED") return 1;
+    return 0;
+  };
+  return [...list].sort((a, b) => {
+    const ra = rank(a);
+    const rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    if (ra === 0) return new Date(a.enteredAt) - new Date(b.enteredAt);
+    if (ra === 2) return new Date(a.exitedAt) - new Date(b.exitedAt);
+    if (a.timeSlot !== b.timeSlot) return (a.timeSlot ?? "").localeCompare(b.timeSlot ?? "");
+    return (a.studentName ?? "").localeCompare(b.studentName ?? "", "ko");
+  });
+}
+
+/* 그날 예약된 학생 전체를 입실/미입실/퇴실 3개 영역으로 나눠서 보여준다(2026-07-29) — 타임별로
+   순차 노출하던 방식보다 지금 누가 어느 상태인지 한눈에 파악하기 쉽다. filteredCards()가 이미
+   같은 기준(rank)으로 정렬해 내려주므로 여기서는 그 순서 그대로 그룹만 나눈다. */
 function renderGrid() {
-  const grid = document.getElementById("monitorGrid");
+  const grouped = { entered: [], notEntered: [], exited: [] };
+  filteredCards().forEach((card) => {
+    if (card.sessionStatus === "EXITED") grouped.exited.push(card);
+    else if (card.cardStatus === "NOT_ENTERED") grouped.notEntered.push(card);
+    else grouped.entered.push(card);
+  });
+
+  renderSection("enteredGrid", "enteredCount", grouped.entered, "지금 입실한 학생이 없어요.");
+  renderSection("notEnteredGrid", "notEnteredCount", grouped.notEntered, "미입실 학생이 없어요.");
+  renderSection("exitedGrid", "exitedCount", grouped.exited, "퇴실한 학생이 없어요.");
+}
+
+function renderSection(gridId, countId, list, emptyText) {
+  const grid = document.getElementById(gridId);
+  document.getElementById(countId).textContent = String(list.length);
   grid.innerHTML = "";
 
-  filteredCards().forEach((card) => {
-    grid.appendChild(buildCardEl(card));
-  });
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "monitor-section-empty";
+    empty.textContent = emptyText;
+    grid.appendChild(empty);
+    return;
+  }
+  list.forEach((card) => grid.appendChild(buildCardEl(card)));
 }
 
 /* 카드 캐러셀의 페이지 목록 — books가 있으면 그대로, 없으면(구버전 Firestore 문서·미입실 등)
@@ -315,14 +363,19 @@ function bookPages(card) {
     basicStatus: card.basicStatus,
     advancedCorrectCount: card.advancedCorrectCount,
     advancedTotalCount: card.advancedTotalCount,
+    badgeCount: card.badgeCount,
+    latestBadgeName: card.latestBadgeName,
   }];
 }
 
-/* 학생이 보고 있던 페이지를 기억한다 — 지정 안 돼있으면 마지막(최신) 책을 기본으로 보여준다 */
+/* 학생이 보고 있던 페이지를 기억한다 — 지정 안 돼있거나 책이 새로 늘어났으면(2번째 책을 막
+   추천받은 경우 등) 최신 책으로 이동시킨다. 책 수가 그대로면(단순 데이터 갱신) 보던 페이지를 유지한다. */
 function currentPageIndex(card, pages) {
-  if (selectedBookPage[card.studentId] == null) {
+  const prevCount = lastBookPageCount[card.studentId] ?? 0;
+  if (selectedBookPage[card.studentId] == null || pages.length > prevCount) {
     selectedBookPage[card.studentId] = pages.length - 1;
   }
+  lastBookPageCount[card.studentId] = pages.length;
   return Math.min(selectedBookPage[card.studentId], pages.length - 1);
 }
 
@@ -394,7 +447,7 @@ function renderBookRow(el, card, pages, pageIndex) {
         ${pages.length > 1 ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>` : ""}
       </div>
     </div>
-    ${notEntered ? "" : `<button type="button" class="log-open-btn${card.diaryKey != null ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+    ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
   `;
 
   if (!notEntered) {
@@ -408,12 +461,15 @@ function renderBookRow(el, card, pages, pageIndex) {
   });
 }
 
-/* stat-row(독서시간/기본문제/심화문제는 선택된 책 페이지 기준, 획득뱃지는 학생 단위라 카드 고정값) */
+/* stat-row — 독서시간/기본문제/심화문제/획득뱃지 전부 선택된 책 페이지(content_id) 기준이다.
+   뱃지도 예전엔 학생 전체 합산이라 A책 카드에 B책 뱃지가 같이 보이는 문제가 있었다(2026-07-29 수정) */
 function renderStatRow(el, card, page) {
   const basicText = page.basicTotalCount ? `${page.basicCorrectCount ?? 0}/${page.basicTotalCount}` : "-";
   const advancedText = page.advancedTotalCount ? `${page.advancedCorrectCount ?? 0}/${page.advancedTotalCount}` : "-";
-  // 경과분은 서버 값(page.elapsedMinutes)을 기준점으로 로컬에서 현재 시각까지 올려 표시한다
-  const elapsed = liveElapsed(page.elapsedMinutes, card._syncedAt);
+  // 문제풀이를 시작한 뒤로는 독서 시간이 더 흐르면 안 된다(서버가 이미 그 시점 값으로 얼려서 내려줌) —
+  // READING/TIME_OVER(아직 순수 독서 중)일 때만 로컬로 초를 더 올려서 보여준다.
+  const stillReading = card.cardStatus === "READING" || card.cardStatus === "TIME_OVER";
+  const elapsed = stillReading ? liveElapsed(page.elapsedMinutes, card._syncedAt) : page.elapsedMinutes;
   const readingTimeText = elapsed != null ? `${elapsed}분` : "-";
   const recommendedText = page.readingTimeMinutes != null ? `권장 ${page.readingTimeMinutes}분` : "";
   const isOverTime = page.readingTimeMinutes != null && elapsed != null && elapsed > page.readingTimeMinutes;
@@ -441,8 +497,8 @@ function renderStatRow(el, card, page) {
     </div>
     <div class="stat-cell">
       <div class="stat-label">획득 뱃지</div>
-      <div class="stat-value badge-value">${card.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-"}</div>
-      <div class="stat-sub">${card.latestBadgeName ?? ""}</div>
+      <div class="stat-value badge-value">${page.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-"}</div>
+      <div class="stat-sub">${page.latestBadgeName ?? ""}</div>
     </div>
   `;
 }
@@ -457,11 +513,24 @@ function formatTime(isoString) {
 /* ── 독서일지 패널 ── */
 
 function initReadingLogPanel() {
-  renderCheckboxGroup("attitudeCheckboxGroup", ATTITUDE_CODES, true);
   renderCheckboxGroup("helpNeededCheckboxGroup", HELP_NEEDED_CODES, false);
 
   document.getElementById("btnSaveReadingLog").addEventListener("click", saveReadingLog);
   document.getElementById("btnCloseReadingLog").addEventListener("click", closeReadingLogPanel);
+}
+
+let attitudeCheckboxesBuilt = false;
+
+/* 태도 체크박스는 DB(erp_bookstore_attitude_code)에서 내려온 목록으로 딱 한 번만 그린다 — loadLiveView가
+   30초마다 다시 불려도 여기서 매번 다시 그리면 직원이 체크 중이던 항목이 초기화돼 버린다. */
+function initAttitudeCheckboxesOnce(options) {
+  if (attitudeCheckboxesBuilt || !options) return;
+  renderCheckboxGroup(
+    "attitudeCheckboxGroup",
+    options.map(({ attitudeCode, attitudeName }) => ({ code: attitudeCode, label: attitudeName })),
+    true
+  );
+  attitudeCheckboxesBuilt = true;
 }
 
 function renderCheckboxGroup(containerId, options, multiple) {

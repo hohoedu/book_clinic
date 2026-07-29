@@ -36,7 +36,6 @@
 }
 
 .filter-field.grow {
-  flex: 1;
   min-width: 0;
 }
 
@@ -141,6 +140,86 @@
   text-align: left;
 }
 
+.stock-master-row {
+  cursor: pointer;
+}
+
+.tree-caret {
+  flex: 0 0 12px;
+  color: #9aa5ab;
+  font-size: 13px;
+  transition: transform .15s ease, color .15s ease;
+}
+
+.stock-master-row:hover .tree-caret {
+  color: #008b7a;
+}
+
+.stock-master-row.expanded .tree-caret {
+  color: #008b7a;
+  transform: rotate(90deg);
+}
+
+/* 하위도서(사본) 트리 패널 */
+.stock-items-row td {
+  padding: 0;
+  background: #fafcfc;
+}
+
+.stock-items-panel {
+  padding: 10px 20px 16px 74px;
+}
+
+.stock-items-empty {
+  margin: 0;
+  padding: 10px 0;
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.stock-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+  border: 1px solid #eef1f3;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stock-items-table th,
+.stock-items-table td {
+  padding: 9px 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+  color: #555;
+}
+
+.item-thumb img {
+  width: 30px;
+  height: 40px;
+  object-fit: cover;
+  border: 1px solid #eee;
+  border-radius: 3px;
+}
+
+.stock-items-table thead th {
+  background: #f5f7f8;
+  color: #7b868c;
+  font-weight: 700;
+}
+
+.stock-items-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* 마스터 행의 보유수량은 조작 불가 — 하위 트리(bcode별 스테퍼)에서 바뀐 값을 표시만 한다 */
+.qty-display {
+  font-size: 15px;
+  font-weight: 700;
+  color: #333;
+}
+
 .col-book img {
   width: 46px;
   height: 60px;
@@ -153,6 +232,11 @@
 .col-book strong {
   font-size: 15px;
   font-weight: 700;
+}
+
+/* 사용중인데 보유수량 0권 — 위험재고 경고 */
+.col-book strong.title-danger {
+  color: #d92b2b;
 }
 
 .col-date {
@@ -321,6 +405,129 @@
   overflow: hidden;
 }
 
+.modal-wide {
+  width: 760px;
+}
+
+/* 수량 일괄 등록 팝업 */
+.bulk-hint {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  background: #f3fbfa;
+  border: 1px solid #d7efec;
+  border-radius: 8px;
+  color: #4a5459;
+  font-size: 13px;
+}
+
+.bulk-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.bulk-tab {
+  padding: 7px 14px;
+  border: 1px solid #e0e5e9;
+  border-radius: 20px;
+  background: #fbfcfc;
+  color: #7b868c;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.bulk-tab:hover {
+  border-color: #008b7a;
+  color: #008b7a;
+}
+
+.bulk-tab.active {
+  background: #008b7a;
+  border-color: #008b7a;
+  color: #fff;
+}
+
+.bulk-tab .bulk-tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: #e23c7b;
+  vertical-align: middle;
+}
+
+.bulk-table-wrap {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.bulk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.bulk-table th,
+.bulk-table td {
+  padding: 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.bulk-table thead th {
+  position: sticky;
+  top: 0;
+  background: #fff;
+  color: #7b868c;
+  font-weight: 700;
+  z-index: 1;
+}
+
+.bulk-title {
+  text-align: left;
+  font-weight: 600;
+}
+
+.bulk-qty-input:disabled {
+  background: #f5f7f8;
+  color: #b9c0c4;
+}
+
+/* 증가 대기 중 (사유 불필요) */
+.bulk-row-dirty {
+  background: #fff9e8;
+}
+
+.bulk-row-dirty .bulk-qty-input {
+  border-color: #f5b818;
+}
+
+/* 감소 대기 중 (사유 입력 완료) */
+.bulk-row-decrease {
+  background: #fdecec;
+}
+
+.bulk-row-decrease .bulk-qty-input {
+  border-color: #d92b2b;
+}
+
+.modal-foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 20px;
+  border-top: 1px solid #eee;
+}
+
+.bulk-pending-hint {
+  margin-right: auto;
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
 .modal-head {
   display: flex;
   align-items: center;
@@ -351,17 +558,29 @@
 }
 
 .history-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
   padding: 12px 4px;
   border-bottom: 1px solid #f0f0f0;
   font-size: 14px;
 }
 
+.history-summary-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .history-item .history-date {
   color: #9aa5ab;
+  font-size: 13px;
+}
+
+.history-memo {
+  margin: 6px 0 0;
+  padding: 6px 10px;
+  background: #fdecec;
+  border-radius: 6px;
+  color: #a13a3a;
   font-size: 13px;
 }
 

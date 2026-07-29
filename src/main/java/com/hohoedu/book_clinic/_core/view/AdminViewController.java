@@ -72,4 +72,10 @@ public class AdminViewController {
     public String reservation() {
         return "monitor/reservation";
     }
+
+    /** 독서일지 — 정적 스캐폴딩 단계, 조회/저장 API 연동은 다음 작업에서 이어감 (2026-07-29) */
+    @GetMapping("/admin/growth/diary")
+    public String diary() {
+        return "growth/diary";
+    }
 }

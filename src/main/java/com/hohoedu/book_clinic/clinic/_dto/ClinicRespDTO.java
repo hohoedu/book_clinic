@@ -32,6 +32,19 @@ public class ClinicRespDTO {
         private String genre;
     }
 
+    /**
+     * 홈 화면(student-main) 진입 시 상태 — 2026-07-29 재설계로 "책 다 읽으면 홈 진입만으로 바로
+     * 다음 책 자동 추천"을 없애고, 학생이 직접 "책 추천받기"를 눌러야 다음 책이 나가도록 바꿨다.
+     *   READING       — 아직 안 끝낸(PENDING) 책이 있음. book=그 책, 버튼="문제 풀기"
+     *   AWAITING_NEXT — 직전 책은 끝냈고(DONE) 다음 책 추천 전. book=마지막으로 끝낸 책, 버튼="책 추천받기"
+     * (생애 첫 로그인은 book이 아예 없어 애매하므로 서버가 그 자리에서 즉시 추천해 READING으로 내려준다)
+     */
+    @Data
+    public static class BookStatusRespDTO {
+        private String state;
+        private RecommendBookDTO book;
+    }
+
     /** 학생+도서의 추천 기록 상태 (없으면 null) */
     @Data
     public static class RecommendLogStatusDTO {

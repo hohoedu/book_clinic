@@ -56,6 +56,14 @@ INSERT INTO erp_bookstore_code (gubun, code, codeNm) VALUES
 ('L',	'01',	'기본'),
 ('L',	'02',	'심화');
 
+-- 독서태도 코드 마스터 (2026-07-29) — monitor-live.js 하드코딩 대체, 문구 수정은 이 테이블만 고치면 됨
+INSERT INTO erp_bookstore_attitude_code (attitude_code, attitude_name, use_yn, updated_by) VALUES
+('GOOD_POSTURE',  N'바른 자세로 차분하게 정독했어요.', 1, 'seed'),
+('SELF_DIRECTED', N'스스로 책 읽기를 끝까지 이어갔어요.', 1, 'seed'),
+('LOW_FOCUS',     N'집중력이 자주 흐트러졌어요.', 1, 'seed'),
+('RUSHED',        N'책장을 빠르게 넘기며 서둘러 읽었어요.', 1, 'seed'),
+('DISTRACTED',    N'산만한 모습을 보였어요.', 1, 'seed');
+
 -- 테스트 계정 비밀번호 해시 생성 방법:
 -- 앱 실행 후 GET /test/hash?password=0000&salt=test_salt 호출
 -- 반환된 hash 값으로 아래 password_hash를 교체하세요
@@ -74,8 +82,8 @@ VALUES (1, 1, '2025-12-02 19:54:24.214', '2026-03-12 15:06:29.502', '629548880',
 -- 센터별 재고 더미 (2026-07-13 재설계) — data-items.sql이 적재한 사본(기본 center_code='PUS002')을
 -- DAE001에도 1권씩 복제 (총 2개 센터 재고). erp_bookstore_item은 이제 매 기동 DROP 후 재생성되고
 -- data-items.sql이 그 직후 자동으로 다시 채우므로, 이 시점엔 DAE001 재고가 없는 게 항상 보장된다.
-INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url)
-SELECT bcode, content_id, 'DAE001', book_title, author, publisher, image_url
+INSERT INTO erp_bookstore_item (bcode, content_id, center_code, book_title, author, publisher, image_url, qty)
+SELECT bcode, content_id, 'DAE001', book_title, author, publisher, image_url, qty
 FROM erp_bookstore_item WHERE center_code = 'PUS002';
 
 
@@ -202,36 +210,69 @@ WHERE d.schoolyear IN ('01','02','03','04')
 
 
 -- ────────────────────────────────────────────────────────
--- 테스트 학생: DAE001 / PUS002 각 8명 (학년 초1~초4 반복 배정)
+-- 테스트 학생: DAE001 / PUS002 각 16명, 1~4교시 x 4명씩 예약 (모니터링 화면 부하 테스트용, 260729)
+-- 학년(grade_key)은 활성 priority_draft가 있는 01~05만 사용(06/07은 draft 미시딩 상태라 추천이 나지 않음).
+-- 재고가 "책 1권당 센터당 1부"뿐이라, 같은 센터+같은 교시에 같은 학년을 4명 몰아넣으면
+-- 1순위 도서 재고가 곧장 소진되어 2~4번째 학생부터 우선순위 폴백(다음 순위 도서로 자동 대체)이
+-- 실제로 타는지 확인할 수 있다. 5개 교시는 학년을 통일해 이 충돌 케이스를 재현하고,
+-- 나머지 3개 교시는 학년을 섞어 정상(비충돌) 케이스와 대비해서 볼 수 있게 배치했다.
 -- ────────────────────────────────────────────────────────
 INSERT INTO erp_student (center_code, grade_key, status_key, school, student_id, student_name, app_id, gender, student_privacy_agree, sub_book) VALUES
+-- DAE001 1교시: 초1 x4 (동일 학년 충돌 케이스)
 ('DAE001', '01', 'ACTIVE', N'월성 초등학교', 'DAE001T01', N'테스트생1', '7001', 1, 1, 1),
-('DAE001', '02', 'ACTIVE', N'월성 초등학교', 'DAE001T02', N'테스트생2', '7002', 0, 1, 1),
-('DAE001', '03', 'ACTIVE', N'월성 초등학교', 'DAE001T03', N'테스트생3', '7003', 1, 1, 1),
-('DAE001', '04', 'ACTIVE', N'월성 초등학교', 'DAE001T04', N'테스트생4', '7004', 0, 1, 1),
-('DAE001', '01', 'ACTIVE', N'월성 초등학교', 'DAE001T05', N'테스트생5', '7005', 1, 1, 1),
+('DAE001', '01', 'ACTIVE', N'월성 초등학교', 'DAE001T02', N'테스트생2', '7002', 0, 1, 1),
+('DAE001', '01', 'ACTIVE', N'월성 초등학교', 'DAE001T03', N'테스트생3', '7003', 1, 1, 1),
+('DAE001', '01', 'ACTIVE', N'월성 초등학교', 'DAE001T04', N'테스트생4', '7004', 0, 1, 1),
+-- DAE001 2교시: 초2 x4 (동일 학년 충돌 케이스)
+('DAE001', '02', 'ACTIVE', N'월성 초등학교', 'DAE001T05', N'테스트생5', '7005', 1, 1, 1),
 ('DAE001', '02', 'ACTIVE', N'월성 초등학교', 'DAE001T06', N'테스트생6', '7006', 0, 1, 1),
-('DAE001', '03', 'ACTIVE', N'월성 초등학교', 'DAE001T07', N'테스트생7', '7007', 1, 1, 1),
-('DAE001', '04', 'ACTIVE', N'월성 초등학교', 'DAE001T08', N'테스트생8', '7008', 0, 1, 1),
-('PUS002', '01', 'ACTIVE', N'남천 초등학교', 'PUS002T01', N'테스트생1', '8001', 1, 1, 1),
-('PUS002', '02', 'ACTIVE', N'남천 초등학교', 'PUS002T02', N'테스트생2', '8002', 0, 1, 1),
-('PUS002', '03', 'ACTIVE', N'남천 초등학교', 'PUS002T03', N'테스트생3', '8003', 1, 1, 1),
-('PUS002', '04', 'ACTIVE', N'남천 초등학교', 'PUS002T04', N'테스트생4', '8004', 0, 1, 1),
+('DAE001', '02', 'ACTIVE', N'월성 초등학교', 'DAE001T07', N'테스트생7', '7007', 1, 1, 1),
+('DAE001', '02', 'ACTIVE', N'월성 초등학교', 'DAE001T08', N'테스트생8', '7008', 0, 1, 1),
+-- DAE001 3교시: 초3 x4 (동일 학년 충돌 케이스)
+('DAE001', '03', 'ACTIVE', N'월성 초등학교', 'DAE001T09', N'테스트생9', '7009', 1, 1, 1),
+('DAE001', '03', 'ACTIVE', N'월성 초등학교', 'DAE001T10', N'테스트생10', '7010', 0, 1, 1),
+('DAE001', '03', 'ACTIVE', N'월성 초등학교', 'DAE001T11', N'테스트생11', '7011', 1, 1, 1),
+('DAE001', '03', 'ACTIVE', N'월성 초등학교', 'DAE001T12', N'테스트생12', '7012', 0, 1, 1),
+-- DAE001 4교시: 초4 x4 (동일 학년 충돌 케이스)
+('DAE001', '04', 'ACTIVE', N'월성 초등학교', 'DAE001T13', N'테스트생13', '7013', 1, 1, 1),
+('DAE001', '04', 'ACTIVE', N'월성 초등학교', 'DAE001T14', N'테스트생14', '7014', 0, 1, 1),
+('DAE001', '04', 'ACTIVE', N'월성 초등학교', 'DAE001T15', N'테스트생15', '7015', 1, 1, 1),
+('DAE001', '04', 'ACTIVE', N'월성 초등학교', 'DAE001T16', N'테스트생16', '7016', 0, 1, 1),
+-- PUS002 1교시: 초5 x4 (동일 학년 충돌 케이스)
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T01', N'테스트생1', '8001', 1, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T02', N'테스트생2', '8002', 0, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T03', N'테스트생3', '8003', 1, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T04', N'테스트생4', '8004', 0, 1, 1),
+-- PUS002 2교시: 초1~초4 혼합 (정상/비충돌 대비 케이스)
 ('PUS002', '01', 'ACTIVE', N'남천 초등학교', 'PUS002T05', N'테스트생5', '8005', 1, 1, 1),
 ('PUS002', '02', 'ACTIVE', N'남천 초등학교', 'PUS002T06', N'테스트생6', '8006', 0, 1, 1),
 ('PUS002', '03', 'ACTIVE', N'남천 초등학교', 'PUS002T07', N'테스트생7', '8007', 1, 1, 1),
-('PUS002', '04', 'ACTIVE', N'남천 초등학교', 'PUS002T08', N'테스트생8', '8008', 0, 1, 1);
+('PUS002', '04', 'ACTIVE', N'남천 초등학교', 'PUS002T08', N'테스트생8', '8008', 0, 1, 1),
+-- PUS002 3교시: 초2~초5 혼합 (정상/비충돌 대비 케이스)
+('PUS002', '02', 'ACTIVE', N'남천 초등학교', 'PUS002T09', N'테스트생9', '8009', 1, 1, 1),
+('PUS002', '03', 'ACTIVE', N'남천 초등학교', 'PUS002T10', N'테스트생10', '8010', 0, 1, 1),
+('PUS002', '04', 'ACTIVE', N'남천 초등학교', 'PUS002T11', N'테스트생11', '8011', 1, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T12', N'테스트생12', '8012', 0, 1, 1),
+-- PUS002 4교시: 초1/초3/초4/초5 혼합 (정상/비충돌 대비 케이스, 2교시와 다른 조합)
+('PUS002', '01', 'ACTIVE', N'남천 초등학교', 'PUS002T13', N'테스트생13', '8013', 1, 1, 1),
+('PUS002', '03', 'ACTIVE', N'남천 초등학교', 'PUS002T14', N'테스트생14', '8014', 0, 1, 1),
+('PUS002', '04', 'ACTIVE', N'남천 초등학교', 'PUS002T15', N'테스트생15', '8015', 1, 1, 1),
+('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T16', N'테스트생16', '8016', 0, 1, 1);
 
 -- ────────────────────────────────────────────────────────
--- 클리닉 예약 테스트 데이터: DAE001T01~04(테스트생1~4)를 오늘 1~4교시로 예약 (매 재기동마다 자동 등록)
+-- 클리닉 예약 테스트 데이터: 센터별 16명을 1~4교시에 4명씩 오늘자로 예약 (매 재기동마다 자동 등록)
 -- ────────────────────────────────────────────────────────
-INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time_slot) VALUES
-('DAE001T01', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '1'),
-('DAE001T02', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '2'),
-('DAE001T03', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '3'),
-('DAE001T04', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '4'),
-('PUS002T01', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '1'),
-('PUS002T02', CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE), '3');
+INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time_slot)
+SELECT student_id,
+       CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE),
+       CASE
+           WHEN RIGHT(student_id, 2) BETWEEN '01' AND '04' THEN '1'
+           WHEN RIGHT(student_id, 2) BETWEEN '05' AND '08' THEN '2'
+           WHEN RIGHT(student_id, 2) BETWEEN '09' AND '12' THEN '3'
+           ELSE '4'
+       END
+FROM erp_student
+WHERE student_id LIKE 'DAE001T%' OR student_id LIKE 'PUS002T%';
 
 
 
