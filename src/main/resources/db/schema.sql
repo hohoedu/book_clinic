@@ -400,14 +400,19 @@ CREATE TABLE erp_notification (
 CREATE TABLE erp_bookstore_recommend_log (
     recommend_id    INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     student_id      VARCHAR(100)  NOT NULL,  -- erp_student.student_id
-    content_id      INT           NOT NULL,  -- 추천된 도서 (erp_bookstore_content.content_id)
+    content_id      INT           NOT NULL,  -- 추천된 도서 (erp_bookstore_content.content_id) — 문제(itempool)는 이 기준
+    item_id         INT           NOT NULL,  -- 실제로 대여 확정된 실물 판본 (erp_bookstore_item.item_id).
+                                              -- 추천 자체가 이제 item(판본) 단위다(2026-07-30) — 같은 content라도
+                                              -- item이 다르면 다른 학생에게 각각 추천될 수 있고(재고만큼), 이 학생
+                                              -- 기준 중복배제(dedup)도 content가 아니라 item_id로 판단한다.
     recommended_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 추천일시
     status          VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(문제풀이 전/재도전 대기) / DONE(합격)
     correct_count   INT,      -- 기본 문제풀이(qlevel=01) 최근 제출 정답 수
     total_count     INT,      -- 기본 문제풀이 총 문항 수
     grade           VARCHAR(20),   -- KING(독서왕) / FRIEND(독서친구) — 합격 시에만 값 존재
     completed_at    DATETIME2,     -- 합격(DONE) 처리 시각
-    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id),
+    FOREIGN KEY (item_id)    REFERENCES erp_bookstore_item(item_id)
 );
 
 -- 문제 풀이 이력 — 학생이 문항별로 몇 번 보기를 선택했는지 기록 (2026-07-10)

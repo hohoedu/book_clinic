@@ -107,7 +107,7 @@ public class ClinicService {
         if (pending != null) {
             // 퇴실 시 대여만 반납되고 추천(PENDING)은 그대로 남아있을 수 있다 — 재입실 시 그 책을
             // 다시 대여해 대여 상태를 되살린다(재고가 있을 때만, 2026-07-30)
-            ensureActiveLoan(studentId, pending.getContentId());
+            ensureActiveLoan(studentId, pending.getItemId());
             return homeState("READING", pending);
         }
 
@@ -139,7 +139,7 @@ public class ClinicService {
             // (오늘 이미 열린 세션이 있으면 그대로 재사용하는 멱등 로직)
             monitorService.enterSession(studentId);
             // 퇴실로 대여만 반납되고 추천은 PENDING으로 남아있을 수 있다 — 재고가 있으면 다시 대여한다
-            ensureActiveLoan(studentId, existing.getContentId());
+            ensureActiveLoan(studentId, existing.getItemId());
             return existing;
         }
 
@@ -163,24 +163,27 @@ public class ClinicService {
         String year = String.valueOf(Year.now().getValue());
         log.info("현재 연도: {}", year);
 
-        Integer picked = pickWithFallback(studentId, centerCode, year, schoolyear);
+        ClinicRespDTO.PickedItemDTO picked = pickWithFallback(studentId, centerCode, year, schoolyear);
         if (picked == null) throw new Exception404("추천할 수 있는 도서가 더 이상 없습니다.");
-        log.info("학생 {}에게 추천할 도서 content_id: {}", studentId, picked);
+        log.info("학생 {}에게 추천할 도서 content_id={}, item_id={}", studentId, picked.getContentId(), picked.getItemId());
 
-        Integer itemId = bookRepository.loanAvailableItemByContent(picked, centerCode, studentId);
+        // 후보를 고른 시점과 이 시점 사이 다른 학생이 같은 item을 먼저 채갔을 수 있어 원자적으로 재확인한다
+        Integer itemId = bookRepository.reserveItemById(picked.getItemId());
         if (itemId == null) throw new Exception400("대여 가능한 재고가 없습니다.");
         log.info("학생 {}에게 대여할 도서 item_id: {}", studentId, itemId);
 
         bookRepository.insertItemLoan(itemId, studentId);
-        clinicRepository.insertRecommendLog(studentId, picked);
-        log.info("학생 {}에게 추천된 도서 정보: {}", studentId, clinicRepository.findBookCard(picked));
+        clinicRepository.insertRecommendLog(studentId, picked.getContentId(), itemId);
+        log.info("학생 {}에게 추천된 도서 정보: {}", studentId, clinicRepository.findBookCard(picked.getContentId()));
         // 실시간 모니터링 기준 "입실" 시점 — 미입실 예약 카드가 여기서 입실로 전환된다
         monitorService.enterSession(studentId);
-        return clinicRepository.findBookCard(picked);
+        ClinicRespDTO.RecommendBookDTO card = clinicRepository.findBookCard(picked.getContentId());
+        card.setItemId(itemId);
+        return card;
     }
 
-    /** 규칙 3(dedup) → 규칙 4(dedup 해제) → 규칙 5(윗학년 순차) 순서로 후보를 찾는다 */
-    private Integer pickWithFallback(String studentId, String centerCode, String year, String schoolyear) {
+    /** 규칙 3(dedup) → 규칙 4(dedup 해제) → 규칙 5(윗학년 순차) 순서로 후보를 찾는다 — item(실물 판본) 단위 선택 */
+    private ClinicRespDTO.PickedItemDTO pickWithFallback(String studentId, String centerCode, String year, String schoolyear) {
         log.info("학생 {}에게 추천할 도서를 찾습니다: centerCode={}, year={}, schoolyear={}",
                 studentId, centerCode, year, schoolyear);
         ClinicRespDTO.LastRecommendDTO last = clinicRepository.findLastRecommend(studentId);
@@ -190,13 +193,13 @@ public class ClinicService {
         String lastGenre = last == null ? null : last.getGenre();
         log.info("학생 {}의 직전 추천 도서 genre: {}", studentId, lastGenre);
 
-        Integer picked = clinicRepository.pickNextContentId(
+        ClinicRespDTO.PickedItemDTO picked = clinicRepository.pickNextItem(
                 studentId, centerCode, year, schoolyear, lastType, lastGenre, true);
         if (picked != null) return picked;
         log.info("학생 {}에게 추천할 도서 후보가 없습니다 — dedup 조건 해제 후 다시 시도합니다", studentId);
 
         // 규칙 4: 처음으로 돌아가 dedup 조건 없이 다시 추천
-        picked = clinicRepository.pickNextContentId(
+        picked = clinicRepository.pickNextItem(
                 studentId, centerCode, year, schoolyear, null, null, false);
         if (picked != null) return picked;
         log.info("학생 {}에게 추천할 도서 후보가 여전히 없습니다 — 한 단계 위 학년부터 순차적으로 시도합니다", studentId);
@@ -205,7 +208,7 @@ public class ClinicService {
         int current = parseSchoolyear(schoolyear);
         for (int sy = current + 1; sy <= MAX_SCHOOLYEAR; sy++) {
             String candidate = String.format("%02d", sy);
-            picked = clinicRepository.pickNextContentId(
+            picked = clinicRepository.pickNextItem(
                     studentId, centerCode, year, candidate, null, null, false);
             if (picked != null) return picked;
             log.info("학생 {}에게 추천할 도서 후보가 없습니다 — 학년 {}까지 시도했으나 모두 실패", studentId, candidate);
@@ -365,20 +368,21 @@ public class ClinicService {
     /**
      * PENDING(아직 안 끝난) 추천 도서인데 현재 대여 이력이 없으면 다시 대여한다 — 퇴실 처리
      * (MonitorService.exitSession)가 그 순간 대여를 반납해버리므로, 같은 책을 계속 읽는 중인
-     * 학생이 재입실하면 대여 상태를 되살려줘야 한다(2026-07-30). 재고가 없으면 대여 이력 없이도
-     * 읽던 책은 그대로 보여준다(대여 이력만 비어있는 채로 남음 — 직원이 재고를 채우면 다음 재입실 때 해소됨).
+     * 학생이 재입실하면 대여 상태를 되살려줘야 한다(2026-07-30). 추천이 item(실물 판본) 단위라
+     * 재입실 시에도 원래 추천받았던 그 정확한 item을 다시 대여해야 한다 — 같은 content의 다른
+     * item(다른 학생이 읽는 중일 수 있음)을 대신 잡으면 recommend_log.item_id와 실제 대여가
+     * 어긋난다. 그 item의 재고가 없으면(분실 등) 대여 이력 없이도 읽던 책은 그대로 보여준다.
      */
-    private void ensureActiveLoan(String studentId, Integer contentId) {
+    private void ensureActiveLoan(String studentId, Integer itemId) {
         if (bookRepository.findActiveLoanByStudent(studentId) != null) return;
 
-        String centerCode = clinicRepository.findCenterCode(studentId);
-        Integer itemId = bookRepository.loanAvailableItemByContent(contentId, centerCode, studentId);
-        if (itemId == null) {
-            log.warn("재입실 재대여 실패 — 대여 가능한 재고 없음: studentId={}, contentId={}", studentId, contentId);
+        Integer reservedItemId = bookRepository.reserveItemById(itemId);
+        if (reservedItemId == null) {
+            log.warn("재입실 재대여 실패 — 대여 가능한 재고 없음: studentId={}, itemId={}", studentId, itemId);
             return;
         }
-        bookRepository.insertItemLoan(itemId, studentId);
-        log.info("학생 {}의 읽던 책을 재입실 시점에 재대여했습니다: contentId={}, itemId={}", studentId, contentId, itemId);
+        bookRepository.insertItemLoan(reservedItemId, studentId);
+        log.info("학생 {}의 읽던 책을 재입실 시점에 재대여했습니다: itemId={}", studentId, reservedItemId);
     }
 
     /** 완독 확정 시점에 현재 대여 중인 도서를 즉시 반납 처리한다(없으면 조용히 넘어감) */

@@ -321,6 +321,14 @@
         WHERE content_id = #{contentId} AND center_code = #{centerCode} AND qty - loaned_qty - lost_qty > 0
     </select>
 
+    <!-- 이미 정해진 item_id 하나의 재고를 원자적으로 예약(item 기준 추천 확정용, 2026-07-30) -->
+    <select id="reserveItemById" resultType="java.lang.Integer">
+        UPDATE erp_bookstore_item
+        SET loaned_qty = loaned_qty + 1
+        OUTPUT INSERTED.item_id
+        WHERE item_id = #{itemId} AND qty - loaned_qty - lost_qty > 0
+    </select>
+
     <!-- 반납 처리: 그 판본의 loaned_qty를 1 줄인다 -->
     <update id="markItemReturned">
         UPDATE erp_bookstore_item

@@ -102,6 +102,14 @@ public interface BookRepository {
      */
     Integer loanAvailableItemByContent(@Param("contentId") Integer contentId, @Param("centerCode") String centerCode, @Param("studentId") String studentId);
 
+    /**
+     * 이미 정해진 특정 item_id의 재고가 아직 있으면 loaned_qty를 원자적으로 1 늘린다(2026-07-30, item 기준 추천용).
+     * ClinicService.pickWithFallback이 이미 재고 있는 item을 골라둔 뒤 이 메서드로 그 재고를 확정 예약한다 —
+     * 고른 시점과 예약 시점 사이 다른 학생이 먼저 채갔을 수 있어 실패(0건 반영)할 수 있다.
+     * @return 예약 성공한 item_id (실패하면 null)
+     */
+    Integer reserveItemById(@Param("itemId") Integer itemId);
+
     /** 반납 처리 시 그 판본의 loaned_qty를 1 줄인다 */
     void markItemReturned(@Param("itemId") Integer itemId);
 

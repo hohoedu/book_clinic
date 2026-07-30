@@ -6,9 +6,18 @@ import lombok.Data;
 
 public class ClinicRespDTO {
 
+    /** 우선순위/재고/dedup 필터를 통과한 item(실물 판본) 1건 — pickNextItem 결과 (2026-07-30) */
+    @Data
+    public static class PickedItemDTO {
+        private Integer itemId;
+        private Integer contentId;
+    }
+
     /** 추천 도서 카드 */
     @Data
     public static class RecommendBookDTO {
+        /** 이 추천이 실제로 대여 확정된 item(실물 판본) — 재입실 재대여 등에 쓰인다 */
+        private Integer itemId;
         private Integer contentId;
         private String originalTitle;
         private String author;
