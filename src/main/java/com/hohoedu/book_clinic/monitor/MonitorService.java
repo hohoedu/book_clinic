@@ -8,6 +8,7 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hohoedu.book_clinic.book.BookService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
 
@@ -29,6 +30,7 @@ public class MonitorService {
 
     private final MonitorRepository monitorRepository;
     private final MonitorSyncService monitorSyncService;
+    private final BookService bookService;
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
@@ -43,6 +45,10 @@ public class MonitorService {
             monitorRepository.insertSession(studentId, today);
             sessionId = monitorRepository.findOpenSessionId(studentId, today);
         }
+        // 독서일지가 "메인 데이터"가 되도록, 직원이 뭔가 저장하기 전이라도 입실 시점에 바로 헤더를
+        // 만들어둔다(2026-07-30) — 예전엔 첫 저장/제출 전까지 diary 행이 없어서, 화면이 세션값
+        // COALESCE 폴백으로만 채워지는 불안정한 상태였다. ensureDiary는 이미 있으면 손대지 않는다.
+        monitorRepository.ensureDiary(sessionId);
         syncSafely(sessionId);
     }
 
@@ -58,6 +64,13 @@ public class MonitorService {
             return;
         }
         monitorRepository.updateSessionExit(sessionId);
+        // 완독 전이라도 클리닉을 나가면 그 사이 다른 학생이 재고를 못 쓰는 문제를 막기 위해, 완독
+        // 여부와 무관하게 퇴실 시점에 대여 중인 책을 반납한다(2026-07-29). 재입실하면 ClinicService
+        // (getHomeState/recommendBook의 ensureActiveLoan)가 같은 책을 다시 대여해 이어 읽게 한다.
+        bookService.returnActiveLoanByStudent(studentId);
+        // diary가 메인 데이터가 되려면 퇴실 시각도 diary에 실제로 남아야 한다 — enterSession의
+        // ensureDiary가 만들어둔 헤더에 out_time을 채운다(2026-07-30, 직원이 수동 보정한 값은 보존).
+        monitorRepository.syncDiaryOutTime(sessionId);
         syncSafely(sessionId);
     }
 
@@ -76,11 +89,17 @@ public class MonitorService {
     /**
      * 독서일지 저장(upsert) — 직원이 카드 우측 패널에서 입력.
      * 헤더는 세션 1건당 1행이고, 태도 체크는 체크 해제까지 반영해야 해서 전량 삭제 후 재삽입한다.
+     *
+     * 도움 필요(helpNeeded)는 두 군데에 저장한다(2026-07-30):
+     *   · erp_student.help_needed  — 풀릴 때까지 유지되는 학생 상태값. 다음 수업에도 켜진 채로 보인다.
+     *   · erp_bookstore_diary.help_needed — 그날 일지의 스냅샷. 나중에 상태를 풀어도 과거 일지엔 남는다.
+     * 화면(모니터링 카드)이 읽는 값은 상태값 쪽이다(MonitorMapper의 st.help_needed).
      */
     @Transactional
     public void saveDiary(MonitorReqDTO.DiaryReqDTO req, String staffName) {
-        monitorRepository.upsertDiary(req.getSessionId(), Boolean.TRUE.equals(req.getHelpNeeded()),
-                req.getMemo(), staffName);
+        boolean helpNeeded = Boolean.TRUE.equals(req.getHelpNeeded());
+        monitorRepository.updateStudentHelpNeeded(req.getStudentId(), helpNeeded);
+        monitorRepository.upsertDiary(req.getSessionId(), helpNeeded, req.getMemo(), staffName);
 
         Integer diaryKey = monitorRepository.findDiaryKeyBySessionId(req.getSessionId());
         if (diaryKey != null) {
@@ -165,6 +184,14 @@ public class MonitorService {
         if (sessionId == null) return;
         monitorRepository.clearQuizStarted(sessionId);
         monitorRepository.markResultViewing(sessionId);
+        syncSafely(sessionId);
+    }
+
+    /**
+     * 다른 화면(독서일지 등)이 같은 세션의 일지를 고친 뒤 모니터링 카드를 갱신하려고 호출한다 —
+     * 저장 경로가 달라도 Firestore 미러링은 이 한 곳을 지나게 둔다.
+     */
+    public void syncSession(Integer sessionId) {
         syncSafely(sessionId);
     }
 

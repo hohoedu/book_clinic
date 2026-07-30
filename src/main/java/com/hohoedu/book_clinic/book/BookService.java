@@ -215,6 +215,20 @@ public class BookService {
         bookRepository.markItemReturned(loan.getItemId());
     }
 
+    /**
+     * 학생의 현재 대여 중(LOANED) 도서를 반납 처리한다(없으면 조용히 넘어감) — 퇴실 처리
+     * (MonitorService.exitSession)가 호출한다. 완독 전이라도 학생이 클리닉을 나가면 그 사이 다른
+     * 학생이 재고를 못 쓰는 문제를 막기 위해, 완독 여부와 무관하게 퇴실 시점에 반납한다(2026-07-30).
+     * 재입실하면 ClinicService가 같은 책을 다시 대여해 이어 읽을 수 있게 한다.
+     */
+    @Transactional
+    public void returnActiveLoanByStudent(String studentId) {
+        BookRespDTO.ItemLoanRespDTO loan = bookRepository.findActiveLoanByStudent(studentId);
+        if (loan == null) return;
+        bookRepository.updateLoanReturned(loan.getLoanId());
+        bookRepository.markItemReturned(loan.getItemId());
+    }
+
     /** 특정 실물도서(bcode+센터)의 대여 중 이력 목록 조회 */
     public List<BookRespDTO.ItemLoanRespDTO> findActiveLoans(String bcode, String centerCode) {
         return bookRepository.findActiveLoansByItem(bcode, centerCode);

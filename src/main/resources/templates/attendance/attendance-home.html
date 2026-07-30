@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방 출석체크</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+  <meta name="theme-color" content="#0988d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" th:href="@{/css/attendance/attendance-home.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/qr-scan.css}" />
+</head>
+
+<body>
+  <div class="attendance-viewport">
+    <img class="attendance-logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
+    <h1 class="attendance-title">입실 또는 퇴실을 선택해주세요</h1>
+    <div class="attendance-buttons">
+      <button type="button" class="attendance-btn enter" id="enterBtn">
+        <i class="fa-solid fa-right-to-bracket"></i>
+        <span>입실</span>
+      </button>
+      <button type="button" class="attendance-btn exit" id="exitBtn">
+        <i class="fa-solid fa-right-from-bracket"></i>
+        <span>퇴실</span>
+      </button>
+    </div>
+  </div>
+
+  <script th:src="@{/js/vendor/jsqr/jsQR.js}"></script>
+  <script th:src="@{/js/student/qr-scan.js}"></script>
+  <script th:src="@{/js/attendance/attendance-home.js}"></script>
+</body>
+
+</html>

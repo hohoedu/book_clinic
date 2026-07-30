@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+  <meta name="theme-color" content="#0988d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" th:href="@{/css/launcher.css}" />
+</head>
+
+<body th:attr="data-force-choice=${forceChoice}">
+  <div class="launcher-viewport" id="launcherView" hidden>
+    <img class="launcher-logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
+    <h1 class="launcher-title">이 기기는 어떤 용도로 쓸까요?</h1>
+    <p class="launcher-sub">한 번만 고르면 다음부터는 이 화면 없이 바로 시작해요</p>
+    <div class="launcher-buttons">
+      <button type="button" class="launcher-btn" id="studyBtn">
+        <i class="fa-solid fa-book-open"></i>
+        <span>문제풀이</span>
+      </button>
+      <button type="button" class="launcher-btn" id="attendanceBtn">
+        <i class="fa-solid fa-qrcode"></i>
+        <span>출석체크</span>
+      </button>
+    </div>
+  </div>
+
+  <script th:src="@{/js/launcher.js}"></script>
+</body>
+
+</html>

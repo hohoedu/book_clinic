@@ -167,6 +167,12 @@ function applyFirestoreCard(doc) {
 }
 
 async function connectFirestore() {
+  // 구독을 새로 걸 때마다 Firestore가 "지금까지 저장된 문서"를 최초 1회 무조건 통째로 내려준다
+  // (실제 변경이 아니어도 발생하는 정상 동작). 그 문서의 elapsedMinutes는 마지막 이벤트(입실/퇴실/
+  // 문제풀이 시작 등) 시점에 멈춰있는 스냅샷이라, loadLiveView()가 방금 받아온 신선한 값을 그
+  // 오래된 값으로 덮어써버린다(새로고침 직후 잠깐 0분으로 보였다가 30초 폴링 후 되돌아오는 원인이었음,
+  // 2026-07-30). 구독 직후 오는 최초 스냅샷은 건너뛰고, 그 이후의 진짜 변경분부터 반영한다.
+  let skippedInitialSnapshot = false;
   const fb = window.__monitorFirebase;
   if (!fb) {
     // window.__monitorFirebase는 head의 <script type="module">이 gstatic CDN에서 Firebase SDK를
@@ -220,6 +226,12 @@ async function connectFirestore() {
       q,
       (snapshot) => {
         console.info(`[monitor] Firestore 스냅샷 수신 (${new Date().toLocaleTimeString()}): 변경 ${snapshot.docChanges().length}건`);
+        if (!skippedInitialSnapshot) {
+          // 최초 스냅샷은 구독 시점에 이미 저장돼 있던(오래됐을 수 있는) 문서 전체라 무시한다 —
+          // 방금 loadLiveView()가 받아온 값이 이미 최신이다.
+          skippedInitialSnapshot = true;
+          return;
+        }
         snapshot.docChanges().forEach((change) => {
           if (change.type === "removed") return;
           applyFirestoreCard(change.doc.data());

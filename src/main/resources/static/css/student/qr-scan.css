@@ -1,0 +1,57 @@
+.qr-scan-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .72);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-scan-box {
+  width: 360px;
+  max-width: 90vw;
+  background: #fff;
+  border-radius: 16px;
+  padding: 20px;
+  box-sizing: border-box;
+}
+
+.qr-scan-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 800;
+  font-size: 16px;
+  margin-bottom: 14px;
+}
+
+.qr-scan-close {
+  background: transparent;
+  border: none;
+  font-size: 18px;
+  color: #8c8c8c;
+  cursor: pointer;
+}
+
+.qr-scan-video {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 12px;
+  background: #111;
+}
+
+.qr-scan-hint {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #8c8c8c;
+  text-align: center;
+}
+
+.qr-scan-error {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--red, #ff4b38);
+  text-align: center;
+}

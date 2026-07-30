@@ -1,7 +1,8 @@
 {
-  "name": "호호책방 학생 독서 클리닉",
+  "name": "호호책방",
   "short_name": "호호책방",
-  "start_url": "/student",
+  "id": "/launch",
+  "start_url": "/launch",
   "scope": "/",
   "display": "fullscreen",
   "display_override": ["fullscreen", "standalone"],

@@ -1,11 +1,30 @@
-const CACHE_NAME = 'book-clinic-student-v5';
-const OFFLINE_URL = '/student/login';
+const CACHE_NAME = 'book-clinic-student-v8';
+
+// 앱은 하나(manifest.json, start_url=/launch)지만 그 안에 문제풀이(/student/**)/출석체크
+// (/attendance/**) 두 화면이 있다 — 오프라인 폴백은 지금 들어가려던 화면이 어느 쪽인지에 따라
+// 각자의 홈으로 보내야 한다(하나로 고정하면 다른 쪽은 엉뚱한 화면으로 튕긴다, 2026-07-30).
+function offlineFallbackFor(request) {
+  const pathname = new URL(request.url).pathname;
+  if (pathname.startsWith('/attendance')) return '/attendance';
+  if (pathname.startsWith('/student')) return '/student/login';
+  return '/launch';
+}
 
 const PRECACHE_URLS = [
+  '/launch',
   '/student/login',
+  '/attendance',
+  '/css/launcher.css',
   '/css/student/student-common.css',
   '/css/student/student-main.css',
+  '/css/student/qr-scan.css',
+  '/css/attendance/attendance-home.css',
+  '/css/attendance/book-confirm.css',
+  '/js/launcher.js',
   '/js/student/student-main.js',
+  '/js/student/qr-scan.js',
+  '/js/attendance/attendance-home.js',
+  '/js/vendor/jsqr/jsQR.js',
   '/manifest.json',
   '/images/logo_chaekbang.png',
   '/images/book-sample.png',
@@ -78,7 +97,7 @@ self.addEventListener('fetch', (event) => {
   // 로그인/메인 등 페이지 이동(navigate)은 학생마다·시점마다 내용이 달라지므로
   // 항상 네트워크에서 최신 화면을 받아오고, 오프라인일 때만 캐시된 로그인 화면으로 대체한다
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).catch(() => caches.match(OFFLINE_URL)));
+    event.respondWith(fetch(request).catch(() => caches.match(offlineFallbackFor(request))));
     return;
   }
 
@@ -126,7 +145,7 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
           if (request.mode === 'navigate') {
-            return caches.match(OFFLINE_URL);
+            return caches.match(offlineFallbackFor(request));
           }
         });
     })

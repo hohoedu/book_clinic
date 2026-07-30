@@ -1,0 +1,85 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  font-family: "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f7efd8 url("/images/bg01.png") center / cover no-repeat fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.launcher-viewport {
+  width: 100%;
+  max-width: 900px;
+  padding: 40px;
+  text-align: center;
+}
+
+.launcher-logo {
+  width: 140px;
+  margin-bottom: 32px;
+}
+
+.launcher-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #252525;
+  margin-bottom: 10px;
+}
+
+.launcher-sub {
+  font-size: 14px;
+  color: #8c8c8c;
+  margin-bottom: 40px;
+}
+
+.launcher-buttons {
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+}
+
+.launcher-btn {
+  width: 320px;
+  height: 320px;
+  border-radius: 28px;
+  border: none;
+  background: rgba(255, 255, 255, .95);
+  box-shadow: 0 12px 28px rgba(93, 75, 36, .14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-size: 30px;
+  font-weight: 900;
+  color: #252525;
+  cursor: pointer;
+  transition: transform .15s ease;
+}
+
+.launcher-btn:active {
+  transform: scale(.97);
+}
+
+.launcher-btn i {
+  font-size: 90px;
+  color: #0988d8;
+}

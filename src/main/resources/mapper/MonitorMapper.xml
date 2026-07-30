@@ -99,7 +99,9 @@
 
             dia.diary_key    AS diaryKey,
             att.attitudeCodes AS attitudeCodes,
-            dia.help_needed  AS helpNeeded,
+            -- 도움 필요는 일지 스냅샷(dia.help_needed)이 아니라 학생 상태값을 그대로 본다 —
+            -- 한 번 켜면 다음 수업에도 계속 켜진 채로 보여야 하는 값이다(2026-07-30)
+            st.help_needed   AS helpNeeded,
             dia.memo         AS memo
         FROM erp_bookstore_clinic_session cs
         JOIN erp_student st ON st.student_id = cs.student_id
@@ -205,7 +207,9 @@
 
             dia.diary_key    AS diaryKey,
             att.attitudeCodes AS attitudeCodes,
-            dia.help_needed  AS helpNeeded,
+            -- 도움 필요는 일지 스냅샷(dia.help_needed)이 아니라 학생 상태값을 그대로 본다 —
+            -- 한 번 켜면 다음 수업에도 계속 켜진 채로 보여야 하는 값이다(2026-07-30)
+            st.help_needed   AS helpNeeded,
             dia.memo         AS memo
         FROM erp_bookstore_clinic_reservation r
         JOIN erp_student st ON st.student_id = r.student_id
@@ -352,6 +356,8 @@
       독서일지 헤더 upsert — 세션 1건당 1행.
       record_date/in_time/out_time은 세션에서, record_time(교시)은 같은 학생·같은 날짜의 예약에서 끌어온다.
       세 컬럼 모두 최초 INSERT 시점 스냅샷이며, 이후 UPDATE에서는 건드리지 않는다(직원 보정값 보존).
+      help_needed는 그날 일지의 스냅샷만 갱신한다 — 학생 상태값(erp_student.help_needed)은
+      updateStudentHelpNeeded가 따로 갱신하고, 둘을 MonitorService.saveDiary가 같이 호출한다.
     -->
     <update id="upsertDiary">
         MERGE erp_bookstore_diary AS target
@@ -382,6 +388,17 @@
                     source.entered_at, source.exited_at, #{helpNeeded}, #{memo}, #{createdBy});
     </update>
 
+    <!--
+      도움 필요 상태 갱신 — 하루치 기록이 아니라 풀릴 때까지 유지되는 학생 상태값이라
+      erp_student에 둔다(2026-07-30). 일지의 help_needed는 그날의 스냅샷이라 여기서 건드리지 않는다.
+    -->
+    <update id="updateStudentHelpNeeded">
+        UPDATE erp_student
+        SET help_needed = #{helpNeeded},
+            updated_at  = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE student_id = #{studentId}
+    </update>
+
     <select id="findDiaryKeyBySessionId" resultType="java.lang.Integer">
         SELECT diary_key FROM erp_bookstore_diary WHERE session_id = #{sessionId}
     </select>
@@ -403,24 +420,44 @@
       독서일지 헤더 자동 생성 — 학생이 문제를 제출하면 직원이 일지를 쓰기 전이라도 상세를 붙일
       헤더가 있어야 한다. upsertDiary와 달리 INSERT만 하고 기존 행은 건드리지 않는다
       (직원이 이미 적어둔 help_needed/memo를 덮어쓰지 않기 위함).
+      help_needed는 학생 상태값(erp_student.help_needed)을 그 시점 스냅샷으로 복사한다 — 상태가
+      켜진 학생은 새 일지도 켜진 채로 시작해야 하고, 나중에 상태를 풀어도 이 값은 남는다(2026-07-30).
     -->
     <update id="ensureDiary">
         MERGE erp_bookstore_diary AS target
         USING (
             SELECT
                 cs.session_id, cs.student_id, cs.session_date, cs.entered_at, cs.exited_at,
+                st.help_needed,
                 (SELECT TOP 1 r.time_slot
                  FROM erp_bookstore_clinic_reservation r
                  WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
+            JOIN erp_student st ON st.student_id = cs.student_id
             WHERE cs.session_id = #{sessionId}
         ) AS source
         ON target.session_id = source.session_id
         WHEN NOT MATCHED THEN INSERT
-            (session_id, student_id, record_date, record_time, in_time, out_time)
+            (session_id, student_id, record_date, record_time, in_time, out_time, help_needed)
             VALUES (source.session_id, source.student_id, source.session_date, source.time_slot,
-                    source.entered_at, source.exited_at);
+                    source.entered_at, source.exited_at, source.help_needed);
+    </update>
+
+    <!--
+      퇴실 처리 시점에 diary.out_time을 세션의 exited_at으로 채운다(2026-07-30) — MonitorService.exitSession이
+      updateSessionExit 직후 호출한다. 이미 값이 있으면(직원이 독서일지 화면에서 등하원 시각을 수동
+      보정한 경우 등) 덮어쓰지 않는다. 이 시점엔 enterSession의 ensureDiary 호출로 diary가 항상 있어야
+      정상이지만, 혹시 없더라도(과거 데이터 등) 조용히 0건 반영되고 넘어간다 — 화면은 여전히
+      COALESCE(dia.out_time, cs.exited_at) 폴백으로 세션값을 보여주므로 표시가 깨지진 않는다.
+    -->
+    <update id="syncDiaryOutTime">
+        UPDATE dia
+        SET out_time   = COALESCE(dia.out_time, cs.exited_at),
+            updated_at = DATEADD(HOUR, 9, GETUTCDATE())
+        FROM erp_bookstore_diary dia
+        JOIN erp_bookstore_clinic_session cs ON cs.session_id = dia.session_id
+        WHERE dia.session_id = #{sessionId}
     </update>
 
     <!--

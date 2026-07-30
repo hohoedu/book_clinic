@@ -25,7 +25,7 @@ public class SecurityConfig {
                         .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
                         .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload",
                                 "/api/notification/**", "/clinic/recommend", "/clinic/quiz/submit",
-                                "/clinic/home-state"))
+                                "/clinic/home-state", "/student/exit"))
                 .headers(headers -> headers
                         .frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
@@ -36,6 +36,7 @@ public class SecurityConfig {
                                 "/h2-console/**",
                                 "/css/**", "/js/**", "/images/**", "/uploads/**", "/favicon.ico",
                                 "/manifest.json", "/sw.js",
+                                "/launch",
                                 "/temp-upload.html",
                                 "/question/upload/template",
                                 "/question/upload",
@@ -43,7 +44,8 @@ public class SecurityConfig {
                                 "/clinic/recommend",
                                 "/clinic/quiz/submit",
                                 "/clinic/home-state",
-                                "/student/**")
+                                "/student/**",
+                                "/attendance/**")
                         .permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form

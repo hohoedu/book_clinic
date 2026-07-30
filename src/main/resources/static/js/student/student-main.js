@@ -3,12 +3,30 @@
   const DESIGN_HEIGHT = 800;
   const viewport = document.querySelector('.app-viewport');
 
+  // 모바일 브라우저는 주소창/하단 툴바가 접혔다 펴졌다 하면서 window.innerHeight가 실시간으로
+  // 바뀌는데, 그 순간 window.innerHeight로 스케일을 잡으면 툴바가 다시 나타나 실제 보이는 높이가
+  // 줄어든 뒤에도 갱신이 안 될 수 있다 — 캔버스 맨 아래(문제풀이 화면의 "다음 문제" 버튼 등)가
+  // 화면 밖으로 밀려나는 원인. visualViewport는 툴바 표시/숨김에 따라 실제 보이는 영역 기준으로
+  // resize를 더 안정적으로 쏴주므로, 지원하는 브라우저는 이쪽 값을 우선 사용한다(2026-07-30).
+  const vv = window.visualViewport;
+
   function setAppScale() {
     if (!viewport) return;
 
+    const viewWidth = vv ? vv.width : window.innerWidth;
+    const viewHeight = vv ? vv.height : window.innerHeight;
+
+    // .app-viewport의 실제 박스 크기를 CSS 100vw/100vh(모바일 브라우저에서 주소창 뒤 공간까지
+    // 포함해 스케일 계산 기준(window.innerHeight/visualViewport)보다 더 크게 잡히는 경우가 있음)
+    // 대신 이 값으로 직접 고정한다. .page는 .app-viewport의 top:50%/left:50%로 중앙 정렬되는데,
+    // 두 기준이 어긋나면 .page 자체 크기(스케일)는 정상이어도 중앙 기준점이 실제 화면 중앙보다
+    // 아래로 처져서 캔버스 전체가 밀려 보인다(2026-07-30) — 여기서 기준을 하나로 통일해 없앤다.
+    viewport.style.width = viewWidth + 'px';
+    viewport.style.height = viewHeight + 'px';
+
     // 화면 비율이 1280x800과 달라도 여백 없이 꽉 채우도록 가로/세로 비율을 각각 적용
-    const scaleX = window.innerWidth / DESIGN_WIDTH;
-    const scaleY = window.innerHeight / DESIGN_HEIGHT;
+    const scaleX = viewWidth / DESIGN_WIDTH;
+    const scaleY = viewHeight / DESIGN_HEIGHT;
 
     viewport.style.setProperty('--app-scale-x', scaleX.toFixed(4));
     viewport.style.setProperty('--app-scale-y', scaleY.toFixed(4));
@@ -16,6 +34,14 @@
 
   window.addEventListener('resize', setAppScale);
   window.addEventListener('orientationchange', setAppScale);
+  if (vv) {
+    vv.addEventListener('resize', setAppScale);
+    vv.addEventListener('scroll', setAppScale);
+  }
+  // 폰트/이미지 로딩이 늦게 끝나거나 orientationchange 직후 툴바 애니메이션이 끝나기 전에 계산되는
+  // 경우를 대비해, 로드 완료 후와 약간의 지연을 두고 한 번씩 더 재계산한다.
+  window.addEventListener('load', setAppScale);
+  window.addEventListener('orientationchange', () => setTimeout(setAppScale, 300));
   setAppScale();
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -30,6 +56,33 @@
         sessionStorage.clear();
         // replace()로 이동해 뒤로가기로 메인 화면에 다시 들어올 수 없게 한다
         window.location.replace('/student');
+      });
+    }
+
+    // QR 자가 퇴실 — 학생증 QR을 다시 스캔해 본인 확인 겸 퇴실 처리(2026-07-30).
+    // 지금 로그인된 studentId를 같이 보내 서버가 "스캔된 QR = 본인 것"인지 검증하게 한다 —
+    // 검증 없이 스캔된 appId만 믿으면, 다른 학생 QR을 잘못 스캔했을 때 그 학생은 세션이 없어
+    // 조용히 무시되고 정작 로그인된 학생은 화면만 로그아웃되고 실제 퇴실은 안 찍히는 문제가 있었다
+    // (실사용 중 발견된 버그).
+    const exitButton = document.querySelector('.exit-qr-btn');
+    if (exitButton) {
+      exitButton.addEventListener('click', async () => {
+        try {
+          const studentId = document.getElementById('mainPage').getAttribute('data-student-id');
+          const appId = await window.openQrScanner('QR로 퇴실하기');
+          const res = await fetch('/student/exit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId, appId }),
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.error?.message ?? '퇴실 처리에 실패했어요.');
+          localStorage.clear();
+          sessionStorage.clear();
+          window.location.replace('/student');
+        } catch (err) {
+          if (err.message !== 'cancelled') alert(err.message || 'QR 스캔에 실패했어요.');
+        }
       });
     }
   });

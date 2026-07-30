@@ -143,6 +143,14 @@
         VALUES (#{studentId}, #{contentId})
     </insert>
 
+    <!-- 하루 추천 한도(2권) 판정용 — 그날 이 학생에게 새로 생성된 recommend_log 건수 -->
+    <select id="countTodayRecommends" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId}
+          AND CAST(recommended_at AS DATE) = #{date}
+    </select>
+
     <select id="findRecommendLogStatus" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendLogStatusDTO">
         SELECT TOP 1
                recommend_id AS recommendId,

@@ -1,0 +1,109 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  font-family: "Noto Sans KR", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f7efd8 url("/images/bg01.png") center / cover no-repeat fixed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attendance-viewport {
+  width: 100%;
+  max-width: 900px;
+  padding: 40px;
+  text-align: center;
+}
+
+.attendance-logo {
+  width: 140px;
+  margin-bottom: 32px;
+}
+
+.attendance-title {
+  font-size: 26px;
+  font-weight: 800;
+  color: #252525;
+  margin-bottom: 48px;
+}
+
+.attendance-buttons {
+  display: flex;
+  gap: 28px;
+  justify-content: center;
+}
+
+.attendance-btn {
+  width: 320px;
+  height: 320px;
+  border-radius: 28px;
+  border: none;
+  background: rgba(255, 255, 255, .95);
+  box-shadow: 0 12px 28px rgba(93, 75, 36, .14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  font-size: 30px;
+  font-weight: 900;
+  color: #252525;
+  cursor: pointer;
+  transition: transform .15s ease;
+}
+
+.attendance-btn:active {
+  transform: scale(.97);
+}
+
+.attendance-btn i {
+  font-size: 90px;
+}
+
+.attendance-btn.enter i { color: var(--green, #00a984); }
+.attendance-btn.exit i { color: var(--red, #ff4b38); }
+
+.attendance-toast {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.attendance-toast-box {
+  background: #fff;
+  border-radius: 20px;
+  padding: 48px 60px;
+  text-align: center;
+}
+
+.attendance-toast-box i {
+  font-size: 56px;
+  margin-bottom: 18px;
+  display: block;
+}
+
+.attendance-toast-box.success i { color: var(--green, #00a984); }
+.attendance-toast-box.error i { color: var(--red, #ff4b38); }
+
+.attendance-toast-box p {
+  font-size: 22px;
+  font-weight: 800;
+  color: #252525;
+}

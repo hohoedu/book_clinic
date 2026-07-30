@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.clinic;
 
+import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +53,9 @@ public class ClinicService {
     // 단계(학년)별 최고 레벨(만렙) — 각 학년이 레벨 1~12를 가진다
     private static final int MAX_LEVEL = 12;
 
+    // 하루에 새로 추천받을 수 있는 책 수 상한 — 초과 시 "책 추천받기"를 막는다(2026-07-30)
+    private static final int MAX_DAILY_RECOMMENDATIONS = 2;
+
     /** 학년(단계)별 레벨 규칙 1건 — 단계명/특징 문구/레벨업 1회당 필요 완독 권수 */
     private record LevelRule(String stageName, String feature, int booksPerLevel) {}
 
@@ -101,6 +105,9 @@ public class ClinicService {
 
         ClinicRespDTO.RecommendBookDTO pending = clinicRepository.findPendingRecommendBookCard(studentId);
         if (pending != null) {
+            // 퇴실 시 대여만 반납되고 추천(PENDING)은 그대로 남아있을 수 있다 — 재입실 시 그 책을
+            // 다시 대여해 대여 상태를 되살린다(재고가 있을 때만, 2026-07-30)
+            ensureActiveLoan(studentId, pending.getContentId());
             return homeState("READING", pending);
         }
 
@@ -131,7 +138,14 @@ public class ClinicService {
             // 실시간 모니터링 기준 "입실" 시점 — 이미 추천받은 책이 있는 재로그인도 여기서 입실 처리한다
             // (오늘 이미 열린 세션이 있으면 그대로 재사용하는 멱등 로직)
             monitorService.enterSession(studentId);
+            // 퇴실로 대여만 반납되고 추천은 PENDING으로 남아있을 수 있다 — 재고가 있으면 다시 대여한다
+            ensureActiveLoan(studentId, existing.getContentId());
             return existing;
+        }
+
+        int todayCount = clinicRepository.countTodayRecommends(studentId, LocalDate.now());
+        if (todayCount >= MAX_DAILY_RECOMMENDATIONS) {
+            throw new Exception400("하루에 추천받을 수 있는 책은 " + MAX_DAILY_RECOMMENDATIONS + "권을 초과할 수 없습니다.");
         }
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
 
@@ -346,6 +360,25 @@ public class ClinicService {
         syncMonitorSafely(studentId);
 
         return resp;
+    }
+
+    /**
+     * PENDING(아직 안 끝난) 추천 도서인데 현재 대여 이력이 없으면 다시 대여한다 — 퇴실 처리
+     * (MonitorService.exitSession)가 그 순간 대여를 반납해버리므로, 같은 책을 계속 읽는 중인
+     * 학생이 재입실하면 대여 상태를 되살려줘야 한다(2026-07-30). 재고가 없으면 대여 이력 없이도
+     * 읽던 책은 그대로 보여준다(대여 이력만 비어있는 채로 남음 — 직원이 재고를 채우면 다음 재입실 때 해소됨).
+     */
+    private void ensureActiveLoan(String studentId, Integer contentId) {
+        if (bookRepository.findActiveLoanByStudent(studentId) != null) return;
+
+        String centerCode = clinicRepository.findCenterCode(studentId);
+        Integer itemId = bookRepository.loanAvailableItemByContent(contentId, centerCode, studentId);
+        if (itemId == null) {
+            log.warn("재입실 재대여 실패 — 대여 가능한 재고 없음: studentId={}, contentId={}", studentId, contentId);
+            return;
+        }
+        bookRepository.insertItemLoan(itemId, studentId);
+        log.info("학생 {}의 읽던 책을 재입실 시점에 재대여했습니다: contentId={}, itemId={}", studentId, contentId, itemId);
     }
 
     /** 완독 확정 시점에 현재 대여 중인 도서를 즉시 반납 처리한다(없으면 조용히 넘어감) */

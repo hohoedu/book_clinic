@@ -20,6 +20,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
   <link rel="stylesheet" th:href="@{/css/student/student-main.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/qr-scan.css}" />
 
 </head>
 
@@ -30,6 +31,8 @@
         <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
         <div class="top-actions">
           <div class="student-pill" th:text="|${studentName} 학생|">김호호 학생</div>
+          <button type="button" class="exit-qr-btn"><i class="fa-solid fa-qrcode"
+              aria-hidden="true"></i>퇴실하기</button>
           <button type="button" class="logout-btn"><i class="fa-solid fa-arrow-right-from-bracket"
               aria-hidden="true"></i>로그아웃</button>
         </div>
@@ -171,6 +174,8 @@
       </section>
     </main>
   </div>
+  <script th:src="@{/js/vendor/jsqr/jsQR.js}"></script>
+  <script th:src="@{/js/student/qr-scan.js}"></script>
   <script th:src="@{/js/student/student-main.js}"></script>
 </body>
 

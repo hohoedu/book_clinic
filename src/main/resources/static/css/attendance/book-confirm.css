@@ -1,0 +1,112 @@
+.confirm-viewport {
+  width: 100%;
+  max-width: 640px;
+  padding: 40px;
+}
+
+.confirm-card {
+  background: rgba(255, 255, 255, .95);
+  border-radius: 28px;
+  box-shadow: 0 12px 28px rgba(93, 75, 36, .14);
+  padding: 48px 40px;
+  text-align: center;
+}
+
+.confirm-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--green, #00a984);
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 14px;
+}
+
+.confirm-student {
+  font-size: 24px;
+  font-weight: 900;
+  color: #252525;
+  margin-bottom: 32px;
+}
+
+.confirm-book {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  text-align: left;
+  background: #f7f6e8;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 28px;
+}
+
+.confirm-book-img {
+  width: 90px;
+  height: 122px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, .12);
+}
+
+.confirm-book-info {
+  min-width: 0;
+}
+
+.confirm-book-eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--green, #00a984);
+  margin-bottom: 6px;
+}
+
+.confirm-book-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #252525;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.confirm-book-author {
+  font-size: 14px;
+  color: #8c8c8c;
+}
+
+.confirm-hint {
+  font-size: 13px;
+  color: #8c8c8c;
+  margin-bottom: 28px;
+}
+
+.confirm-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 56px;
+  border-radius: 14px;
+  background: #0988d8;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.error-card i {
+  font-size: 48px;
+  color: var(--red, #ff4b38);
+  margin-bottom: 16px;
+  display: block;
+}
+
+.error-card p {
+  font-size: 16px;
+  font-weight: 700;
+  color: #252525;
+  margin-bottom: 28px;
+}

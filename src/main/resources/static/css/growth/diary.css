@@ -94,7 +94,7 @@
   font-size: 13px;
 }
 
-.diary-search-box input {
+.diary-search-box input[type="text"] {
   width: 220px;
   padding-right: 34px;
 }
@@ -172,39 +172,102 @@
   color: #8a9297;
 }
 
-/* 시안의 입/퇴실 표시는 라벨과 시각이 좌우로 벌어진 넓은 박스 형태 */
-.diary-time-pill {
+/* 등/하원 시각 입력 — 라벨과 입력칸이 한 박스 안에 들어가고 위아래로 쌓인다 */
+.time-boxes {
   display: flex;
+  flex-direction: column;
+  align-items: start;
+}
+
+.time-boxes > div:first-child {
+  margin-bottom: 10px;
+}
+
+.time-boxes > div {
+  border-radius: 5px;
+}
+
+.time-start,
+.time-end {
+  width: 100px;
+  height: 30px;
+  display: flex;
+  justify-content: space-around;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   font-size: 12px;
   font-weight: 700;
-  padding: 6px 12px;
-  border-radius: 6px;
-  width: 50%;
 }
 
-.diary-time-pill.time-enter {
-  background: #e6f6f2;
-  color: #00806e;
+.time-start {
+  background-color: #ecf5f3;
+  border: 1px solid #bde0d8;
+  color: #418478;
 }
 
-.diary-time-pill.time-exit {
-  background: #fdeaea;
-  color: #d63b3b;
+.time-end {
+  background-color: #f7edf1;
+  border: 1px solid #efdae4;
+  color: #c05881;
+}
+
+/* 입력칸은 배경을 투명하게 두어 등/하원 박스 색에 묻히게 하고, 포커스는 테두리 색으로만 알린다.
+   테두리를 항상 1px(투명)로 잡아둬야 포커스 시 크기가 밀리지 않는다.
+   common.css의 input:not([type=radio]):not([type=checkbox])가 (0,2,1)이라
+   요소(input)까지 붙여 동점으로 맞춘다 — 동점이면 나중에 로드되는 이 파일이 이긴다. */
+input.time_input[type="text"] {
+  width: 44px;
+  height: auto;
+  align-self: stretch;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  text-align: center;
+  padding: 0;
+  appearance: none;
+}
+
+input.time_input[type="text"]:focus {
+  outline: none;
+  border-color: currentColor;
+}
+
+/* 포커스하면 바로 입력할 상태이므로 "00:00" 안내는 감춘다 */
+input.time_input[type="text"]:focus::placeholder {
+  color: transparent;
+}
+
+/* 미입실 행은 저장할 일지 헤더가 없어 입력칸이 잠긴다 — 값이 없다는 걸 색으로만 알린다 */
+.time_input[type="text"]:disabled {
+  color: inherit;
+  opacity: 0.5;
+  cursor: default;
 }
 
 .diary-time-edit-btn {
-  margin-top: 4px;
-  height: 32px;
-  width: 50%;
-  border: none;
-  border-radius: 6px;
-  background: #e9edef;
-  color: #97a0a6;
+  margin-top: 8px;
+  width: 100px;
+  height: 28px;
+  border: 1px solid #dfe4e7;
+  border-radius: 5px;
+  background: #f4f6f7;
+  color: #6b7479;
   font-size: 12px;
   font-weight: 700;
+  cursor: pointer;
+}
+
+.diary-time-edit-btn:hover:not(:disabled) {
+  background: #e9edef;
+}
+
+.diary-time-edit-btn:disabled {
+  color: #b3bbc0;
+  cursor: default;
 }
 
 .diary-books {
@@ -212,6 +275,19 @@
   flex-direction: column;
   gap: 12px;
   justify-content: center;
+}
+
+/* 미입실이거나 아직 읽은 책이 없는 행 — 도서 카드 자리에 안내 문구만 둔다 */
+.diary-books-empty,
+.diary-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #9aa5ab;
+}
+
+.diary-empty {
+  padding: 40px 0;
+  text-align: center;
 }
 
 .diary-book-card {
@@ -328,6 +404,13 @@
   border-color: #f5a524;
 }
 
+/* 미입실 행은 태도·전달사항도 저장 대상이 아니라 잠근다(등/퇴실 입력칸과 같은 처리) */
+.diary-checkbox:has(input:disabled),
+.diary-note textarea:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .diary-checkbox input[type="checkbox"] {
   appearance: none;
   -webkit-appearance: none;
@@ -382,10 +465,22 @@
 }
 
 .diary-note-send {
-  color: #2f9e6e;
-  font-size: 26px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
 }
 
-.diary-note-send:hover {
-  color: #008b7a;
+.diary-note-send img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.diary-note-send:not(:disabled):hover {
+  opacity: 0.8;
+}
+
+.diary-note-send:disabled {
+  cursor: default;
+  opacity: 0.6;
 }

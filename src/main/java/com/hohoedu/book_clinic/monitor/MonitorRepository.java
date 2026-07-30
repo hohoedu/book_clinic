@@ -50,6 +50,12 @@ public interface MonitorRepository {
     void upsertDiary(@Param("sessionId") Integer sessionId, @Param("helpNeeded") Boolean helpNeeded,
                      @Param("memo") String memo, @Param("createdBy") String createdBy);
 
+    /**
+     * 도움 필요 상태 갱신 — 하루치 기록이 아니라 풀릴 때까지 유지되는 학생 상태값(erp_student.help_needed).
+     * 일지의 help_needed(그날 스냅샷)와 짝으로 함께 저장한다(MonitorService.saveDiary).
+     */
+    void updateStudentHelpNeeded(@Param("studentId") String studentId, @Param("helpNeeded") Boolean helpNeeded);
+
     Integer findDiaryKeyBySessionId(@Param("sessionId") Integer sessionId);
 
     void deleteDiaryAttitudes(@Param("diaryKey") Integer diaryKey);
@@ -59,6 +65,9 @@ public interface MonitorRepository {
 
     /** 일지 헤더가 없으면 세션 정보로 생성만 한다(기존 행은 손대지 않음) */
     void ensureDiary(@Param("sessionId") Integer sessionId);
+
+    /** 퇴실 시점에 diary.out_time을 세션 exited_at으로 채운다(이미 값이 있으면 보존) */
+    void syncDiaryOutTime(@Param("sessionId") Integer sessionId);
 
     /** 채점 결과를 일지 상세에 적재 — 같은 (일지, 도서)면 제출한 난이도 컬럼만 갱신 */
     void upsertDiaryDetail(@Param("diaryKey") Integer diaryKey, @Param("contentId") Integer contentId,

@@ -15,6 +15,7 @@
   <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/qr-scan.css}" />
   <style>
     .login-viewport {
       width: 100vw;
@@ -76,20 +77,48 @@
       font-size: 13px;
       margin: -6px 0 14px;
     }
+
+    .qr-login-btn {
+      width: 100%;
+      height: 52px;
+      border-radius: 12px;
+      border: 2px solid var(--blue);
+      background: #fff;
+      color: var(--blue);
+      font-size: 16px;
+      font-weight: 800;
+      margin-bottom: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .login-divider {
+      font-size: 12px;
+      color: #aaa;
+      margin: -2px 0 14px;
+    }
   </style>
 </head>
 
 <body>
   <div class="login-viewport">
-    <form class="login-card" th:action="@{/student/login}" method="post">
+    <form class="login-card" id="loginForm" th:action="@{/student/login}" method="post">
       <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
       <h1>학생 로그인</h1>
-      <p>QR 스캔 대신 임시로 앱 아이디를 입력해주세요</p>
+      <p>학생증 QR을 스캔하거나 앱 아이디를 입력해주세요</p>
       <p class="login-error" th:if="${error}" th:text="${error}">에러 메시지</p>
-      <input type="text" name="appId" placeholder="앱 아이디 (appId)" autofocus required />
+      <button type="button" class="qr-login-btn" id="qrLoginBtn">
+        <i class="fa-solid fa-qrcode"></i> QR로 로그인
+      </button>
+      <p class="login-divider">또는</p>
+      <input type="text" name="appId" placeholder="앱 아이디 (appId)" required />
       <button type="submit">입장하기</button>
     </form>
   </div>
+  <script th:src="@{/js/vendor/jsqr/jsQR.js}"></script>
+  <script th:src="@{/js/student/qr-scan.js}"></script>
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -98,6 +127,17 @@
         });
       });
     }
+
+    document.getElementById('qrLoginBtn').addEventListener('click', async () => {
+      try {
+        const appId = await window.openQrScanner('QR로 로그인');
+        const form = document.getElementById('loginForm');
+        form.appId.value = appId;
+        form.submit();
+      } catch (err) {
+        if (err.message !== 'cancelled') alert(err.message || 'QR 스캔에 실패했어요.');
+      }
+    });
   </script>
 </body>
 

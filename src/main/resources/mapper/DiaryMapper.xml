@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.diary.DiaryRepository">
+
+    <!--
+      독서일지 목록 — 예약(erp_bookstore_clinic_reservation)을 루트로 깔고, 그 위에 세션/일지를
+      덮어씌운다(2026-07-30). MonitorMapper.reservationCardColumns와 같은 정책이다:
+        · 예약만 있고 세션이 없으면(미입실) 세션/일지 컬럼이 전부 NULL로 내려온다.
+        · 세션은 그 학생·그 날짜의 최신 1건만 붙인다(재입실로 여러 건 생겨도 최신 1건).
+        · 교시/등하원 시각은 일지 값이 있으면 그쪽이 이긴다 — 일지의 record_time/in_time/out_time은
+          직원이 화면에서 보정할 수 있는 값이라, 예약·세션 원본보다 우선한다.
+      한 학생이 같은 날 두 타임을 예약하면 행이 두 개 나오고, 세션/일지는 날짜 단위라 양쪽 행에
+      같은 값이 붙는다(예약 단위 세션 개념이 없어 현재 구조에서는 구분 불가).
+    -->
+    <select id="findDiaryRows" resultType="com.hohoedu.book_clinic.diary._dto.DiaryRespDTO$RowDTO">
+        SELECT
+            r.reservation_id AS reservationId,
+            r.student_id     AS studentId,
+            st.student_name  AS studentName,
+            st.grade_key     AS gradeKey,
+            cd.codeNm        AS gradeName,
+            COALESCE(dia.record_time, r.time_slot) AS timeSlot,
+
+            cs.session_id    AS sessionId,
+            cs.status        AS sessionStatus,
+            dia.diary_key    AS diaryKey,
+
+            -- 108 = hh:mi:ss → VARCHAR(5)로 자르면 "HH:mm" (화면 입력칸 포맷과 동일)
+            CONVERT(VARCHAR(5), COALESCE(dia.in_time,  cs.entered_at), 108) AS inTime,
+            CONVERT(VARCHAR(5), COALESCE(dia.out_time, cs.exited_at),  108) AS outTime,
+
+            -- 도움 필요는 그날 일지에 기록된 스냅샷을 우선 보여준다(과거 날짜를 조회하면 그때의 값).
+            -- 일지가 아직 없는 행은 현재 학생 상태값으로 채운다 — 예약을 깔고 일지로 덮는 이 화면의 정책과 같다.
+            COALESCE(dia.help_needed, st.help_needed) AS helpNeeded,
+            dia.memo         AS memo,
+            dia.is_send      AS isSend,
+            -- 전송 버튼 아이콘 판별용 — 앱 미가입(토큰 없음/빈 문자열)이면 발송 자체가 불가하다
+            CAST(CASE WHEN NULLIF(st.app_token, '') IS NULL THEN 0 ELSE 1 END AS BIT) AS hasAppToken,
+            att.attitudeCodes AS attitudeCodesRaw
+        FROM erp_bookstore_clinic_reservation r
+        JOIN erp_student st ON st.student_id = r.student_id
+        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        OUTER APPLY (
+            SELECT TOP 1 session_id, status, entered_at, exited_at
+            FROM erp_bookstore_clinic_session
+            WHERE student_id = r.student_id AND session_date = r.reservation_date
+            ORDER BY session_id DESC
+        ) cs
+        LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
+        OUTER APPLY (
+            <!-- 태도 체크는 1선택 = 1행이라 화면이 쓰던 콤마 문자열로 다시 묶는다
+                 (STRING_AGG는 SQL Server 2017+ 전용이라 MonitorMapper와 같이 FOR XML PATH 사용) -->
+            SELECT STUFF((
+                SELECT ',' + a.attitude_code
+                FROM erp_bookstore_attitude a
+                WHERE a.diary_key = dia.diary_key
+                ORDER BY a.id
+                FOR XML PATH('')
+            ), 1, 1, '') AS attitudeCodes
+        ) att
+        WHERE r.reservation_date = #{date}
+          AND st.center_code = #{centerCode}
+        <if test="timeSlot != null and timeSlot != ''">
+          AND COALESCE(dia.record_time, r.time_slot) = #{timeSlot}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND st.student_name LIKE '%' + #{keyword} + '%'
+        </if>
+        ORDER BY COALESCE(dia.record_time, r.time_slot) ASC, st.student_name ASC
+    </select>
+
+    <!--
+      도서 목록 — 목록과 같은 "예약 깔고 일지로 덮기" 정책을 책 단위로 적용한다.
+        1) 일지 상세(diary_detail)에 이미 적재된 책 → 그 스냅샷을 그대로 쓴다(제출 완료분).
+        2) 아직 상세가 없는 책(추천만 받고 제출 전) → 추천 이력에서 끌어와 진행 중 상태로 보여준다.
+      2)는 1)과 겹치지 않도록 NOT EXISTS로 걸러낸다. read_minutes는 MonitorMapper와 같은 규칙으로
+      "추천 시각 → 문제풀이 진입 시각(없으면 지금)"이며, recommended_at이 CURRENT_TIMESTAMP 기준
+      저장값이라 같은 시계(CURRENT_TIMESTAMP)로 빼야 경과 분이 정확하다.
+    -->
+    <select id="findDiaryBooks" resultType="com.hohoedu.book_clinic.diary._dto.DiaryRespDTO$BookDTO">
+        SELECT
+            dia.student_id AS studentId,
+            dd.content_id  AS contentId,
+            COALESCE(dd.book_name, c.original_title) AS bookTitle,
+            COALESCE(dd.book_img, c.image_url)       AS imageUrl,
+            dd.read_minutes         AS readMinutes,
+            dd.basic_correct_cnt    AS basicCorrectCount,
+            dd.basic_total_cnt      AS basicTotalCount,
+            dd.advanced_correct_cnt AS advancedCorrectCount,
+            dd.advanced_total_cnt   AS advancedTotalCount,
+            CAST(1 AS BIT)          AS fromDiary,
+            dd.id                   AS sortKey
+        FROM erp_bookstore_diary dia
+        JOIN erp_bookstore_diary_detail dd ON dd.diary_key = dia.diary_key
+        JOIN erp_student st ON st.student_id = dia.student_id
+        LEFT JOIN erp_bookstore_content c ON c.content_id = dd.content_id
+        WHERE dia.record_date = #{date}
+          AND st.center_code = #{centerCode}
+
+        UNION ALL
+
+        SELECT
+            rl.student_id  AS studentId,
+            rl.content_id  AS contentId,
+            c.original_title AS bookTitle,
+            c.image_url      AS imageUrl,
+            DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP)) AS readMinutes,
+            rl.correct_count AS basicCorrectCount,
+            rl.total_count   AS basicTotalCount,
+            adv.correctCount AS advancedCorrectCount,
+            adv.totalCount   AS advancedTotalCount,
+            CAST(0 AS BIT)   AS fromDiary,
+            rl.recommend_id  AS sortKey
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_student st ON st.student_id = rl.student_id
+        LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        OUTER APPLY (
+            SELECT TOP 1 session_id, quiz_started_at
+            FROM erp_bookstore_clinic_session
+            WHERE student_id = rl.student_id AND session_date = #{date}
+            ORDER BY session_id DESC
+        ) cs
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS totalCount,
+                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
+            FROM erp_bookstore_quiz_answer_log q
+            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
+              AND q.submitted_at = (
+                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
+                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
+              )
+        ) adv
+        WHERE st.center_code = #{centerCode}
+          AND CAST(rl.recommended_at AS DATE) = #{date}
+          AND NOT EXISTS (
+              SELECT 1
+              FROM erp_bookstore_diary dia2
+              JOIN erp_bookstore_diary_detail dd2 ON dd2.diary_key = dia2.diary_key
+              WHERE dia2.student_id = rl.student_id
+                AND dia2.record_date = #{date}
+                AND dd2.content_id = rl.content_id
+          )
+
+        ORDER BY studentId ASC, fromDiary DESC, sortKey ASC
+    </select>
+
+    <!--
+      기타 전달사항 저장 — 독서일지 화면의 일괄 저장용. MonitorMapper.upsertDiary와 달리 help_needed를
+      건드리지 않는다: 도움 필요는 모니터링에서만 켜고 끄는 학생 상태값이라, 이 화면 저장이 그날 스냅샷을
+      바꿔버리면 안 된다. 일지가 없으면 헤더를 만들면서 넣고, 그때만 학생 상태값을 스냅샷으로 복사한다.
+    -->
+    <update id="upsertDiaryNote">
+        MERGE erp_bookstore_diary AS target
+        USING (
+            SELECT
+                cs.session_id,
+                cs.student_id,
+                cs.session_date,
+                cs.entered_at,
+                cs.exited_at,
+                st.help_needed,
+                (SELECT TOP 1 r.time_slot
+                 FROM erp_bookstore_clinic_reservation r
+                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                 ORDER BY r.reservation_id DESC) AS time_slot
+            FROM erp_bookstore_clinic_session cs
+            JOIN erp_student st ON st.student_id = cs.student_id
+            WHERE cs.session_id = #{sessionId}
+        ) AS source
+        ON target.session_id = source.session_id
+        WHEN MATCHED THEN UPDATE SET
+            memo       = #{memo,jdbcType=VARCHAR},
+            created_by = #{createdBy},
+            updated_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT
+            (session_id, student_id, record_date, record_time, in_time, out_time, help_needed, memo, created_by)
+            VALUES (source.session_id, source.student_id, source.session_date, source.time_slot,
+                    source.entered_at, source.exited_at, source.help_needed,
+                    #{memo,jdbcType=VARCHAR}, #{createdBy});
+    </update>
+
+    <!--
+      등/하원 시각 보정 — 일지 헤더의 in_time/out_time만 갱신한다(세션 entered_at/exited_at은 원본이라 보존).
+      일지가 아직 없는 세션(직원이 태도/전달사항을 적기 전, 학생이 문제도 안 낸 상태)에도 시각을 고칠 수
+      있어야 해서 MonitorMapper.ensureDiary와 같은 MERGE로 헤더를 만들면서 넣는다.
+      화면이 주는 값은 "HH:mm"뿐이므로 그날 날짜(session_date)와 붙여 DATETIME2로 만든다 —
+      23은 ISO 'yyyy-mm-dd' 스타일이라 서버 로케일과 무관하게 같은 형태로 나온다.
+      빈 문자열/NULL이 오면 "미기록"으로 보고 NULL을 저장한다.
+    -->
+    <update id="upsertDiaryTime">
+        MERGE erp_bookstore_diary AS target
+        USING (
+            SELECT
+                cs.session_id,
+                cs.student_id,
+                cs.session_date,
+                st.help_needed,
+                (SELECT TOP 1 r.time_slot
+                 FROM erp_bookstore_clinic_reservation r
+                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                 ORDER BY r.reservation_id DESC) AS time_slot,
+                CASE WHEN NULLIF(#{inTime,jdbcType=VARCHAR}, '') IS NULL THEN NULL
+                     ELSE CAST(CONVERT(VARCHAR(10), cs.session_date, 23) + ' ' + #{inTime,jdbcType=VARCHAR} AS DATETIME2)
+                END AS in_time,
+                CASE WHEN NULLIF(#{outTime,jdbcType=VARCHAR}, '') IS NULL THEN NULL
+                     ELSE CAST(CONVERT(VARCHAR(10), cs.session_date, 23) + ' ' + #{outTime,jdbcType=VARCHAR} AS DATETIME2)
+                END AS out_time
+            FROM erp_bookstore_clinic_session cs
+            JOIN erp_student st ON st.student_id = cs.student_id
+            WHERE cs.session_id = #{sessionId}
+        ) AS source
+        ON target.session_id = source.session_id
+        WHEN MATCHED THEN UPDATE SET
+            in_time    = source.in_time,
+            out_time   = source.out_time,
+            updated_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT
+            (session_id, student_id, record_date, record_time, in_time, out_time, help_needed)
+            VALUES (source.session_id, source.student_id, source.session_date, source.time_slot,
+                    source.in_time, source.out_time, source.help_needed);
+    </update>
+
+    <!-- 저장 후 화면에 되돌려줄 값 — 저장이 실제로 반영됐는지 그대로 확인하는 용도 -->
+    <select id="findDiaryTime" resultType="com.hohoedu.book_clinic.diary._dto.DiaryRespDTO$TimeRespDTO">
+        SELECT
+            dia.diary_key AS diaryKey,
+            CONVERT(VARCHAR(5), dia.in_time,  108) AS inTime,
+            CONVERT(VARCHAR(5), dia.out_time, 108) AS outTime
+        FROM erp_bookstore_diary dia
+        WHERE dia.session_id = #{sessionId}
+    </select>
+
+    <select id="findSessionCenterCode" resultType="java.lang.String">
+        SELECT TOP 1 st.center_code
+        FROM erp_bookstore_clinic_session cs
+        JOIN erp_student st ON st.student_id = cs.student_id
+        WHERE cs.session_id = #{sessionId}
+    </select>
+
+</mapper>

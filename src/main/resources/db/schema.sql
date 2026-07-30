@@ -107,6 +107,10 @@ CREATE TABLE erp_student (
     gender                BIT         DEFAULT 0,  -- 성별
     student_privacy_agree BIT         DEFAULT 0,  -- 개인정보 동의 여부
     is_hoho               BIT         DEFAULT 0,  -- 호호에듀 서비스 가입 여부
+    -- 도움 필요 여부 ("혼자 읽기 어려워요") — 하루치 기록이 아니라 풀릴 때까지 유지되는 학생 상태값이다(2026-07-30).
+    -- 직원이 실시간 모니터링에서 켜면 다음 수업에도 계속 켜진 채로 보이고, 해제하면 그때부터 안 보인다.
+    -- erp_bookstore_diary.help_needed는 "그날 일지에 기록된 값"(스냅샷)이라 해제 후에도 과거 일지에 그대로 남는다.
+    help_needed           BIT         NOT NULL DEFAULT 0,
     sub_han               BIT         DEFAULT 0,  -- 한자 서비스 구독 여부
     sub_book              BIT         DEFAULT 0,  -- 도서 서비스 구독 여부
     sub_hoho              BIT         DEFAULT 0   -- 호호 서비스 구독 여부
@@ -536,9 +540,13 @@ CREATE TABLE erp_bookstore_diary (
     record_time  VARCHAR(1),              -- 교시 '1'~'4' (clinic_reservation.time_slot과 동일 도메인)
     in_time      DATETIME2,               -- 입실 시각(KST) — 세션 entered_at 스냅샷, 직원 보정 가능
     out_time     DATETIME2,               -- 퇴실 시각(KST) — 세션 exited_at 스냅샷, 직원 보정 가능
-    help_needed  BIT           NOT NULL DEFAULT 0,  -- 도움 필요 여부 ("혼자 읽기 어려워요") — 선택지가 하나뿐이라 코드가 아닌 플래그로 둔다
+    -- 도움 필요 여부 — "그날 일지에 기록된 값"(스냅샷)이다. 현재 상태는 erp_student.help_needed가
+    -- 들고 있고(풀릴 때까지 유지되는 학생 상태값), 일지 생성 시 그 값을 복사해 넣는다.
+    -- 그래서 직원이 상태를 해제해도 이미 작성된 과거 일지의 값은 그대로 남는다(2026-07-30).
+    help_needed  BIT           NOT NULL DEFAULT 0,
     memo         VARCHAR(500),            -- 전달사항 (구 reading_log.note)
     is_send      BIT           NOT NULL DEFAULT 0,  -- 학부모 발송 여부 — 발송 결과/이력은 erp_notification에 남긴다
+    send_at      DATETIME2,                         -- 발송 처리 시각(KST) — is_send=1로 바뀐 시점 스냅샷
     created_by   VARCHAR(50),             -- 작성한 직원 (구 reading_log.created_by)
     created_at   DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     updated_at   DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),

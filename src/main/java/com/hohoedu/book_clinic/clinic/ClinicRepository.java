@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.clinic;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -46,6 +47,9 @@ public interface ClinicRepository {
 
     /** 추천 이력 기록 (신규 추천 시 status='PENDING'으로 생성됨) */
     void insertRecommendLog(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** 그날 이 학생에게 새로 생성된 recommend_log 건수 — 하루 추천 한도(2권) 판정 기준 */
+    int countTodayRecommends(@Param("studentId") String studentId, @Param("date") LocalDate date);
 
     /** 학생+도서의 추천 기록 ID와 현재 상태 (없으면 null) */
     ClinicRespDTO.RecommendLogStatusDTO findRecommendLogStatus(@Param("studentId") String studentId,

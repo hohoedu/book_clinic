@@ -11,6 +11,9 @@ function initSidebar() {
   const currentPage = normalizePage(location.pathname);
 
   let currentMenuKey = null;
+  // 클릭으로 "고정"된 메뉴 — 고정 중에는 다른 아이콘에 마우스가 스쳐도 서브메뉴가 안 바뀌고,
+  // 사이드바 영역을 완전히 벗어나야 고정이 풀린다(2026-07-30).
+  let pinnedMenuKey = null;
 
   subLinks.forEach((link) => {
     const href = link.getAttribute("href");
@@ -44,8 +47,21 @@ function initSidebar() {
   setActiveMenu(currentMenuKey);
 
   mainItems.forEach((item) => {
-    item.addEventListener("mouseenter", () => openMenu(item.dataset.menu));
+    item.addEventListener("mouseenter", () => {
+      if (pinnedMenuKey) return; // 고정 중엔 다른 아이콘에 스쳐도 서브메뉴를 바꾸지 않는다
+      openMenu(item.dataset.menu);
+    });
+
+    item.addEventListener("click", () => {
+      pinnedMenuKey = item.dataset.menu;
+      layout.classList.add("sidebar-pinned"); // 고정 상태 표시(체크 아이콘 등 CSS 훅)
+      openMenu(pinnedMenuKey);
+    });
   });
 
-  sidebar.addEventListener("mouseleave", closeMenu);
+  sidebar.addEventListener("mouseleave", () => {
+    pinnedMenuKey = null;
+    layout.classList.remove("sidebar-pinned");
+    closeMenu();
+  });
 }

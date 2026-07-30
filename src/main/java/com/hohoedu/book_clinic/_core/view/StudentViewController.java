@@ -1,13 +1,21 @@
 package com.hohoedu.book_clinic._core.view;
 
+import java.util.Map;
+
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
+import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.monitor.MonitorService;
@@ -37,6 +45,31 @@ public class StudentViewController {
     @GetMapping({ "", "/", "/login" })
     public String getLoginPage() {
         return "/student/student-login";
+    }
+
+    /**
+     * 학생 QR 자가 퇴실 — 두 군데에서 호출된다.
+     *   1) student-main의 "퇴실하기" 버튼 — studentId(로그인된 본인)를 같이 보낸다. 스캔된 appId가
+     *      그 studentId 본인 것인지 반드시 확인한다 — 확인 없이 스캔된 appId만 믿으면, 다른 학생 QR을
+     *      잘못 스캔했을 때 그 학생이 세션도 없는 채로 조용히 무시되고, 정작 로그인된 학생은 화면만
+     *      로그아웃될 뿐 실제 퇴실은 안 찍히는 문제가 있었다(2026-07-30, 실사용 중 발견).
+     *   2) 출석체크 PWA의 "퇴실" — 로그인 컨텍스트 자체가 없어 studentId를 안 보낸다. 이 경우엔
+     *      대조할 "본인"이 없으므로 스캔된 QR을 그대로 신뢰한다.
+     */
+    @PostMapping("/exit")
+    @ResponseBody
+    public ResponseEntity<?> exitByQr(@RequestBody Map<String, String> body) {
+        String studentId = body.get("studentId");
+        String appId = body.get("appId");
+        Student student = studentRepository.findByAppId(appId);
+        if (student == null) {
+            throw new Exception404("일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
+        }
+        if (studentId != null && !studentId.isBlank() && !student.getStudentId().equals(studentId)) {
+            throw new Exception400("본인 학생증 QR이 아니에요. 다시 확인해주세요.");
+        }
+        monitorService.exitSession(student.getStudentId());
+        return ResponseEntity.ok(ApiUtils.success(null));
     }
 
     /**

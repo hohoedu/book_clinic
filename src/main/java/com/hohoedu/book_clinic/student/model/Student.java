@@ -35,6 +35,8 @@ public class Student {
     private Boolean subHan;
     private Boolean subBook;
     private Boolean subHoho;
+    /** 도움 필요 여부 ("혼자 읽기 어려워요") — 풀릴 때까지 유지되는 상태값. 모니터링에서만 켜고 끈다 */
+    private Boolean helpNeeded;
 
     @Builder
     public Student(Integer id, LocalDateTime createdAt, LocalDateTime updatedAt,
@@ -43,7 +45,7 @@ public class Student {
             String appId, String appPassword, String appToken, String birth,
             String profileImg, String consultKey, String billingPhone, String serialNum,
             Boolean gender, Boolean studentPrivacyAgree, Boolean isHoho,
-            Boolean subHan, Boolean subBook, Boolean subHoho) {
+            Boolean subHan, Boolean subBook, Boolean subHoho, Boolean helpNeeded) {
         this.id = id;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -69,5 +71,6 @@ public class Student {
         this.subHan = subHan;
         this.subBook = subBook;
         this.subHoho = subHoho;
+        this.helpNeeded = helpNeeded;
     }
 }
