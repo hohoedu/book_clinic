@@ -110,6 +110,14 @@ public interface BookRepository {
      */
     Integer reserveItemById(@Param("itemId") Integer itemId);
 
+    /**
+     * 같은 책(content)의 대여 가능한 사본 하나를 원자적으로 예약한다 — 원래 판본(itemId) 우선,
+     * 없으면 같은 센터의 다른 판본으로 대체. 문제풀이 기록을 되돌릴 때 그 사이 다른 학생이 그
+     * 실물을 가져간 경우를 위한 경로다(BookService.secureCopyForStudent).
+     * @return 예약된 item_id (원래 판본일 수도, 대체 사본일 수도 있다). 한 권도 없으면 null
+     */
+    Integer reserveCopyForContentOf(@Param("itemId") Integer itemId);
+
     /** 반납 처리 시 그 판본의 loaned_qty를 1 줄인다 */
     void markItemReturned(@Param("itemId") Integer itemId);
 

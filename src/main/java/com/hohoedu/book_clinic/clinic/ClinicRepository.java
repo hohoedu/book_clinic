@@ -36,8 +36,11 @@ public interface ClinicRepository {
                                @Param("lastType") String lastType, @Param("lastGenre") String lastGenre,
                                @Param("applyDedup") boolean applyDedup);
 
-    /** 추천 도서 카드 상세 조회 (content 기준 — 문제/표지 등은 여전히 content 단위) */
-    ClinicRespDTO.RecommendBookDTO findBookCard(@Param("contentId") Integer contentId);
+    /**
+     * 추천 도서 카드 상세 조회 — 학생이 실제로 서가에서 찾아올 책은 item(실물 판본)이므로
+     * 제목/저자/출판사/표지는 item 값을 우선 쓰고, 줄거리·장르·수상 등 item에 없는 정보만 content에서 가져온다.
+     */
+    ClinicRespDTO.RecommendBookDTO findBookCard(@Param("contentId") Integer contentId, @Param("itemId") Integer itemId);
 
     /** 이 학생이 아직 풀지 않은(PENDING) 추천 도서 카드 — 있으면 재로그인해도 같은 책을 그대로 보여준다 */
     ClinicRespDTO.RecommendBookDTO findPendingRecommendBookCard(@Param("studentId") String studentId);

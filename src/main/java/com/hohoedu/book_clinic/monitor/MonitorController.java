@@ -17,6 +17,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.handler.exception.Exception500;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 
 import jakarta.validation.Valid;
@@ -34,7 +35,7 @@ public class MonitorController {
     @GetMapping("/live")
     public ResponseEntity<?> live(@RequestParam(value = "date", required = false) String date,
                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
-        LocalDate targetDate = date == null || date.isBlank() ? LocalDate.now() : LocalDate.parse(date);
+        LocalDate targetDate = date == null || date.isBlank() ? KstClock.today() : LocalDate.parse(date);
         String centerCode = userDetails.getLoginUser().getCenterCode();
         return ResponseEntity.ok(ApiUtils.success(monitorService.getLiveView(targetDate, centerCode)));
     }
@@ -52,6 +53,16 @@ public class MonitorController {
                                        Authentication authentication) {
         monitorService.saveDiary(reqDTO, authentication.getName());
         return ResponseEntity.ok(ApiUtils.success(null));
+    }
+
+    /**
+     * 문제풀이 기록 삭제(초기화) — 학생 요청으로 직원이 카드에서 실행한다. 그 책 한 권의 풀이 이력과
+     * 뱃지/카드를 회수하고 추천을 "문제 풀기 전"으로 되돌린다. 삭제 이력은 서버가 남긴다.
+     */
+    @PostMapping("/quiz/reset")
+    public ResponseEntity<?> resetQuiz(@RequestBody @Valid MonitorReqDTO.QuizResetReqDTO reqDTO,
+                                       Authentication authentication) {
+        return ResponseEntity.ok(ApiUtils.success(monitorService.resetQuiz(reqDTO, authentication.getName())));
     }
 
     /**

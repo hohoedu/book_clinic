@@ -28,4 +28,17 @@ public class MonitorReqDTO {
         private String memo;                 // 기타 전달사항
     }
 
+    /**
+     * 문제풀이 기록 삭제(초기화) 요청 — 학생이 "지워주세요"라고 하면 직원이 모니터링 카드에서 누른다.
+     * 지울 회차를 정확히 집기 위해 recommendId로 받고, studentId는 그 추천이 정말 이 학생 것인지
+     * 서버에서 대조하는 용도다(임의의 recommendId를 밀어넣는 것을 막는다).
+     */
+    @Data
+    public static class QuizResetReqDTO {
+        @NotNull(message = "추천 ID는 필수입니다.")
+        private Integer recommendId;
+        @NotBlank(message = "학생 ID는 필수입니다.")
+        private String studentId;
+    }
+
 }

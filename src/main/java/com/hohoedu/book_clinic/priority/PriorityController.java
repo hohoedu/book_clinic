@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic._core.utils.CenterPolicy;
 import com.hohoedu.book_clinic.priority._dto.PriorityReqDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,9 @@ import lombok.RequiredArgsConstructor;
 /**
  * 권장도서 순위 API 컨트롤러
  * - 연도+학년별로 순위 초안(draft)을 여러 건 저장하고, 그중 하나를 적용(활성) 상태로 선택
+ * - 순위는 전 센터가 공유하는 데이터라 조회/엑셀은 모든 센터에 열어두고, 변경(저장·적용·삭제)은
+ *   본사 직원만 가능하다 (2026-07-31). 화면에서 버튼을 숨기더라도 API 직접 호출을 막기 위해
+ *   각 쓰기 엔드포인트에서 CenterPolicy.assertHq로 검사한다.
  */
 @RestController
 @RequestMapping("/priority")
@@ -37,6 +41,7 @@ public class PriorityController {
     @PostMapping("/draft")
     public ResponseEntity<?> saveDraft(@RequestBody @Valid PriorityReqDTO.SaveDraftReqDTO reqDTO,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        CenterPolicy.assertHq(userDetails);
         Integer draftId = priorityService.saveDraft(reqDTO, userDetails.getLoginUser().getUserName());
         return ResponseEntity.ok(ApiUtils.success(draftId));
     }
@@ -59,7 +64,9 @@ public class PriorityController {
 
     /** 초안 적용(선택) */
     @PostMapping("/draft/activate")
-    public ResponseEntity<?> activateDraft(@RequestBody @Valid PriorityReqDTO.ActivateDraftReqDTO reqDTO) {
+    public ResponseEntity<?> activateDraft(@RequestBody @Valid PriorityReqDTO.ActivateDraftReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        CenterPolicy.assertHq(userDetails);
         priorityService.activateDraft(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("적용되었습니다."));
     }
@@ -74,6 +81,7 @@ public class PriorityController {
     @PostMapping("/draft/delete")
     public ResponseEntity<?> deleteDraft(@RequestBody @Valid PriorityReqDTO.DeleteDraftReqDTO reqDTO,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        CenterPolicy.assertHq(userDetails);
         priorityService.deleteDraft(reqDTO.getDraftId(), userDetails.getLoginUser().getUserName());
         return ResponseEntity.ok(ApiUtils.success("삭제되었습니다."));
     }

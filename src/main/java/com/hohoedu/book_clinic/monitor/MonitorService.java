@@ -8,6 +8,8 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
@@ -39,7 +41,7 @@ public class MonitorService {
      */
     @Transactional
     public void enterSession(String studentId) {
-        LocalDate today = LocalDate.now();
+        LocalDate today = KstClock.today();
         Integer sessionId = monitorRepository.findOpenSessionId(studentId, today);
         if (sessionId == null) {
             monitorRepository.insertSession(studentId, today);
@@ -58,7 +60,7 @@ public class MonitorService {
      */
     @Transactional
     public void exitSession(String studentId) {
-        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) {
             log.info("퇴실 처리 요청 무시 — 열린 세션 없음: studentId={}", studentId);
             return;
@@ -118,7 +120,7 @@ public class MonitorService {
      */
     @Transactional
     public void markQuizStarted(String studentId) {
-        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
         monitorRepository.markQuizStarted(sessionId);
         syncSafely(sessionId);
@@ -131,7 +133,7 @@ public class MonitorService {
      */
     @Transactional
     public void markResultViewing(String studentId) {
-        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
         monitorRepository.markResultViewing(sessionId);
         syncSafely(sessionId);
@@ -144,7 +146,7 @@ public class MonitorService {
      */
     @Transactional
     public void clearResultViewing(String studentId) {
-        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
         monitorRepository.clearResultViewing(sessionId);
         syncSafely(sessionId);
@@ -160,7 +162,7 @@ public class MonitorService {
     @Transactional
     public void recordDiaryDetail(String studentId, Integer contentId, Integer recommendId,
                                   String qlevel, int correctCount, int totalCount) {
-        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
 
         monitorRepository.ensureDiary(sessionId);
@@ -180,12 +182,111 @@ public class MonitorService {
      */
     @Transactional
     public void syncStudentToday(String studentId) {
-        Integer sessionId = monitorRepository.findOpenSessionId(studentId, LocalDate.now());
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
         monitorRepository.clearQuizStarted(sessionId);
         monitorRepository.markResultViewing(sessionId);
         syncSafely(sessionId);
     }
+
+    /**
+     * 문제풀이 기록 삭제(초기화) — 학생이 "지워주세요"라고 하면 직원이 모니터링 카드에서 누른다 (2026-07-31).
+     * 삭제한 그 책을 "지금 읽는 책"으로 되돌려서, 학생이 홈에 들어오면 그 책 문제를 처음부터 다시 푼다.
+     *
+     * 대상 책(RESET):
+     *   · quiz_answer_log(기본+심화 전 회차) 삭제
+     *   · 그 책에서 딴 뱃지 / NORMAL 카드 회수
+     *   · 그 도전으로 적재된 독서일지 상세 삭제
+     *   · recommend_log를 PENDING·정답수 null로 되돌림 (행 자체는 남긴다 — 지우면 대여했던
+     *     실물 item_id와의 연결이 끊겨 학생 홈이 읽던 책을 못 찾는다)
+     * 뱃지를 함께 회수하는 이유는 ClinicService의 "첫 시도" 판정이 quiz_answer_log 유무로 이뤄지기
+     * 때문이다 — 로그만 지우고 뱃지를 남기면 다시 풀 때 같은 책 뱃지가 한 번 더 나간다.
+     *
+     * 그 뒤에 추천받은 책(CANCEL): 학생 홈은 가장 최근 PENDING 추천을 "지금 읽는 책"으로 보여주므로,
+     * 뒤 책이 남아있으면 되돌린 책이 계속 가려진다. 그래서 뒤 추천은 기록만이 아니라 recommend_log
+     * 행까지 지워 없던 추천으로 만든다(하루 추천 권수 상한 countTodayRecommends도 함께 줄어든다).
+     * 그 책들로 딴 뱃지·카드도 근거가 사라지므로 같이 회수한다.
+     *
+     * 실물 처리: 뒤 추천을 취소했다면 지금 대여 중인 책(마지막 추천 책)을 반납하고, 되돌린 책의
+     * 실물을 그 자리에서 다시 확보한다. 완독으로 이미 반납됐던 책이면 그 사이 다른 학생이 가져갔을
+     * 수 있어서(A가 끝낸 책을 B가 추천받은 경우), 같은 책의 다른 사본까지 찾아본다
+     * (BookService.secureCopyForStudent). 한 권도 없으면 확보 없이 진행한다 — 문제는 content 기준으로
+     * 출제되어 실물 없이도 풀 수 있다. 대신 그 사실을 응답으로 돌려줘 직원이 바로 알게 한다.
+     *
+     * 지운 값은 erp_bookstore_quiz_reset_log에 스냅샷으로 남긴다(누가·언제·무엇을).
+     */
+    @Transactional
+    public MonitorRespDTO.QuizResetRespDTO resetQuiz(MonitorReqDTO.QuizResetReqDTO req, String staffName) {
+        MonitorRespDTO.QuizResetTargetDTO target =
+                monitorRepository.findQuizResetTarget(req.getRecommendId(), req.getStudentId());
+        if (target == null) {
+            throw new Exception404("삭제할 문제풀이 기록을 찾을 수 없습니다: recommendId=" + req.getRecommendId());
+        }
+
+        // 1) 뒤에 추천받은 책부터 없앤다 — 자식(풀이 이력/일지 상세)을 먼저 지워야 FK가 걸리지 않는다
+        List<MonitorRespDTO.QuizResetTargetDTO> later =
+                monitorRepository.findLaterRecommends(target.getStudentId(), target.getRecommendId());
+        for (MonitorRespDTO.QuizResetTargetDTO cancelled : later) {
+            int answers = monitorRepository.deleteQuizAnswerLogs(cancelled.getRecommendId());
+            int badges = monitorRepository.deleteStudentBadges(cancelled.getStudentId(), cancelled.getContentId());
+            int cards = monitorRepository.deleteNormalCard(cancelled.getStudentId(), cancelled.getContentId());
+            monitorRepository.deleteDiaryDetailByRecommend(cancelled.getRecommendId());
+            monitorRepository.deleteRecommendLog(cancelled.getRecommendId());
+            monitorRepository.insertQuizResetLog(cancelled, "CANCEL", staffName, answers, badges, cards);
+        }
+
+        // 2) 대상 책을 "문제 풀기 전"으로 되돌린다
+        int answerRows = monitorRepository.deleteQuizAnswerLogs(target.getRecommendId());
+        int badgeRows = monitorRepository.deleteStudentBadges(target.getStudentId(), target.getContentId());
+        int cardRows = monitorRepository.deleteNormalCard(target.getStudentId(), target.getContentId());
+        monitorRepository.deleteDiaryDetailByRecommend(target.getRecommendId());
+        monitorRepository.resetRecommendResult(target.getRecommendId());
+
+        // NORMAL 회수가 모두 끝난 뒤 한 번만 — 그래야 RARE 회수 조건(현재 보유 수)이 최종값으로 계산된다
+        cardRows += monitorRepository.deleteOrphanRareCards(target.getStudentId());
+        monitorRepository.insertQuizResetLog(target, "RESET", staffName, answerRows, badgeRows, cardRows);
+
+        log.info("문제풀이 기록 삭제 — staff={}, studentId={}, recommendId={}, contentId={}, 이전상태={} {}/{}, "
+                        + "지운 행: answer={}, badge={}, card={}, 함께 취소한 뒤 추천={}건",
+                staffName, target.getStudentId(), target.getRecommendId(), target.getContentId(),
+                target.getStatus(), target.getCorrectCount(), target.getTotalCount(),
+                answerRows, badgeRows, cardRows, later.size());
+
+        // 3) 뒤 추천을 취소했다면 지금 대여 중인 책(마지막 추천 책)은 반납 대상이다
+        if (!later.isEmpty()) {
+            bookService.returnActiveLoanByStudent(target.getStudentId());
+        }
+
+        // 4) 되돌린 책의 실물을 다시 확보한다 — 원래 판본이 없으면 같은 책의 다른 사본으로 대체하고,
+        //    그마저 없으면(다른 학생이 마지막 한 권을 가져감) 확보 없이 진행한다
+        MonitorRespDTO.QuizResetRespDTO resp = new MonitorRespDTO.QuizResetRespDTO();
+        resp.setCancelledCount(later.size());
+        Integer securedItemId = bookService.secureCopyForStudent(target.getStudentId(), target.getItemId());
+        resp.setBookSecured(securedItemId != null);
+        if (securedItemId != null && !securedItemId.equals(target.getItemId())) {
+            // 다른 사본을 잡았으면 추천이 가리키는 판본도 실제 대여한 것으로 맞춰야, 다음에 이 학생이
+            // 재입실할 때 ensureActiveLoan이 엉뚱한 판본을 다시 잡지 않는다
+            monitorRepository.updateRecommendItem(target.getRecommendId(), securedItemId);
+            resp.setCopySwitched(true);
+            log.info("되돌린 책의 실물을 다른 사본으로 대체했습니다 — studentId={}, {} → {}",
+                    target.getStudentId(), target.getItemId(), securedItemId);
+        } else if (securedItemId == null) {
+            log.warn("되돌린 책의 실물을 확보하지 못했습니다(다른 학생 대여 중) — studentId={}, itemId={}. "
+                    + "문제풀이는 화면으로 가능하며 실물은 직원이 수동 조치해야 합니다",
+                    target.getStudentId(), target.getItemId());
+        }
+
+        // 5) 기록이 사라졌으니 카드도 "독서 중"으로 돌아가야 한다 — 결과 확인중/문제 푸는 중 표시를 함께 푼다
+        Integer sessionId = monitorRepository.findOpenSessionId(target.getStudentId(), KstClock.today());
+        if (sessionId != null) {
+            monitorRepository.clearQuizStarted(sessionId);
+            monitorRepository.clearResultViewing(sessionId);
+        }
+        syncSafely(sessionId);
+
+        return resp;
+    }
+
 
     /**
      * 다른 화면(독서일지 등)이 같은 세션의 일지를 고친 뒤 모니터링 카드를 갱신하려고 호출한다 —

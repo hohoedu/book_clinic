@@ -229,6 +229,27 @@ public class BookService {
         bookRepository.markItemReturned(loan.getItemId());
     }
 
+    /**
+     * 학생에게 그 책의 실물 한 권을 확보해준다 — 문제풀이 기록을 되돌릴 때(MonitorService.resetQuiz)
+     * 호출한다. 되돌린 책이 완독으로 이미 반납된 상태면 그 사이 다른 학생이 가져갔을 수 있어서,
+     * 원래 판본을 1순위로 잡되 없으면 같은 센터의 다른 사본으로 대체한다.
+     *
+     * 학생이 이미 무언가를 대여 중이면(되돌린 책을 아직 들고 있는 경우) 그 대여를 그대로 인정한다 —
+     * 여기서 또 잡으면 한 학생이 두 권을 물고 있게 된다.
+     *
+     * @return 확보된 item_id (원래 판본 또는 대체 사본). 대여 가능한 사본이 한 권도 없으면 null
+     */
+    @Transactional
+    public Integer secureCopyForStudent(String studentId, Integer itemId) {
+        BookRespDTO.ItemLoanRespDTO active = bookRepository.findActiveLoanByStudent(studentId);
+        if (active != null) return active.getItemId();
+
+        Integer securedItemId = bookRepository.reserveCopyForContentOf(itemId);
+        if (securedItemId == null) return null;
+        bookRepository.insertItemLoan(securedItemId, studentId);
+        return securedItemId;
+    }
+
     /** 특정 실물도서(bcode+센터)의 대여 중 이력 목록 조회 */
     public List<BookRespDTO.ItemLoanRespDTO> findActiveLoans(String bcode, String centerCode) {
         return bookRepository.findActiveLoansByItem(bcode, centerCode);

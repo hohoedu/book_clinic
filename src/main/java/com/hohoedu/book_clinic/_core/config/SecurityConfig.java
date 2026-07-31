@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 @Configuration
@@ -21,8 +22,12 @@ public class SecurityConfig {
         http
                 .authenticationProvider(customAuthenticationProvider)
                 .csrf(csrf -> csrf
-                        .csrfTokenRepository(new StaticCsrfTokenRepository())
-                        .csrfTokenRequestHandler(new CsrfTokenRequestAttributeHandler())
+                        // 세션/브라우저마다 다른 랜덤 토큰을 XSRF-TOKEN 쿠키로 내려준다(모든 사용자가
+                        // 같은 고정 문자열을 공유하던 StaticCsrfTokenRepository를 대체, 2026-07-31).
+                        // 쿠키 이름/헤더 이름(X-XSRF-TOKEN)은 Spring 기본값이라 기존 JS의
+                        // CSRF_HEADER 상수와 그대로 맞는다.
+                        .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
+                        .csrfTokenRequestHandler(eagerCsrfRequestHandler())
                         .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload",
                                 "/api/notification/**", "/clinic/recommend", "/clinic/quiz/submit",
                                 "/clinic/home-state", "/student/exit"))
@@ -57,5 +62,18 @@ public class SecurityConfig {
                         .permitAll());
 
         return http.build();
+    }
+
+    /**
+     * Security 6는 CSRF 토큰을 지연(deferred) 로딩해서, 요청 중 아무도 토큰을 읽지 않으면
+     * XSRF-TOKEN 쿠키를 아예 내려주지 않는다. 특히 로그인 성공 시점에 기존 쿠키를 지운 뒤
+     * 새 토큰은 "읽힐 때" 저장되므로, 화면이 토큰을 렌더링하지 않는 이 프로젝트에서는
+     * 로그인 후 쿠키가 사라져 JS의 X-XSRF-TOKEN 헤더가 빈 값이 되고 POST가 전부 403이 된다.
+     * 요청 attribute 이름을 null로 두면 매 요청마다 토큰을 즉시 로딩 → 쿠키가 항상 발급된다.
+     */
+    private CsrfTokenRequestAttributeHandler eagerCsrfRequestHandler() {
+        CsrfTokenRequestAttributeHandler handler = new CsrfTokenRequestAttributeHandler();
+        handler.setCsrfRequestAttributeName(null);
+        return handler;
     }
 }

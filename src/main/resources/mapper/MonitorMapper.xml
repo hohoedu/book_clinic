@@ -291,6 +291,7 @@
     -->
     <select id="findTodayBooks" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$BookPageDTO">
         SELECT
+            rl.recommend_id    AS recommendId,
             rl.content_id      AS contentId,
             c.original_title   AS bookTitle,
             c.author           AS author,
@@ -468,6 +469,110 @@
       MATCHED(재도전 재제출) 경우 read_minutes는 갱신 대상에서 빠져있어 최초 제출 시점 값 그대로 유지된다.
       정답 수는 제출한 난이도(qlevel)의 컬럼만 갱신해 기본/심화 결과가 서로 덮어쓰지 않게 한다.
     -->
+    <!--
+      ── 문제풀이 기록 삭제(초기화) — MonitorService.resetQuiz (2026-07-31) ──────────────
+      학생 요청으로 그 책의 풀이 기록을 없던 일로 되돌린다. recommend_log 행은 지우지 않고
+      "문제 풀기 전(PENDING)" 상태로 되돌리기만 한다 — 지워버리면 대여 중인 실물(item_id)과의
+      연결이 끊겨서 학생 홈이 읽던 책을 못 찾는다.
+    -->
+    <select id="findQuizResetTarget" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$QuizResetTargetDTO">
+        SELECT
+            recommend_id  AS recommendId,
+            student_id    AS studentId,
+            content_id    AS contentId,
+            item_id       AS itemId,
+            correct_count AS correctCount,
+            total_count   AS totalCount,
+            grade         AS grade,
+            status        AS status
+        FROM erp_bookstore_recommend_log
+        WHERE recommend_id = #{recommendId} AND student_id = #{studentId}
+    </select>
+
+    <select id="findLaterRecommends" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$QuizResetTargetDTO">
+        SELECT
+            recommend_id  AS recommendId,
+            student_id    AS studentId,
+            content_id    AS contentId,
+            item_id       AS itemId,
+            correct_count AS correctCount,
+            total_count   AS totalCount,
+            grade         AS grade,
+            status        AS status
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId} AND recommend_id > #{recommendId}
+        ORDER BY recommend_id ASC
+    </select>
+
+    <delete id="deleteRecommendLog">
+        DELETE FROM erp_bookstore_recommend_log
+        WHERE recommend_id = #{recommendId}
+    </delete>
+
+    <delete id="deleteQuizAnswerLogs">
+        DELETE FROM erp_bookstore_quiz_answer_log
+        WHERE recommend_id = #{recommendId}
+    </delete>
+
+    <delete id="deleteStudentBadges">
+        DELETE FROM erp_bookstore_student_badge
+        WHERE student_id = #{studentId} AND content_id = #{contentId}
+    </delete>
+
+    <delete id="deleteNormalCard">
+        DELETE FROM erp_bookstore_student_card
+        WHERE student_id = #{studentId} AND content_id = #{contentId} AND card_type = 'NORMAL'
+    </delete>
+
+    <!--
+      RARE 카드는 "NORMAL 10장째"라는 사건으로 발급된다(trigger_count = 그 시점 누적 NORMAL 수).
+      NORMAL을 회수해 보유 수가 그 아래로 내려가면 근거가 사라지므로 함께 회수한다 — 남겨두면
+      다시 10장을 채웠을 때 existsRareCard(trigger_count)에 걸려 레어카드를 영영 못 받는다.
+      deleteNormalCard 다음에 호출해야 현재 보유 수가 회수 후 값으로 계산된다.
+    -->
+    <delete id="deleteOrphanRareCards">
+        DELETE FROM erp_bookstore_student_card
+        WHERE student_id = #{studentId}
+          AND card_type = 'RARE'
+          AND trigger_count > (
+              SELECT COUNT(*) FROM erp_bookstore_student_card
+              WHERE student_id = #{studentId} AND card_type = 'NORMAL'
+          )
+    </delete>
+
+    <delete id="deleteDiaryDetailByRecommend">
+        DELETE FROM erp_bookstore_diary_detail
+        WHERE recommend_id = #{recommendId}
+    </delete>
+
+    <!-- 되돌린 책의 실물이 없어 같은 책의 다른 사본으로 대체됐을 때, 추천이 가리키는 판본을 맞춰준다 -->
+    <update id="updateRecommendItem">
+        UPDATE erp_bookstore_recommend_log
+        SET item_id = #{itemId}
+        WHERE recommend_id = #{recommendId}
+    </update>
+
+    <update id="resetRecommendResult">
+        UPDATE erp_bookstore_recommend_log
+        SET status        = 'PENDING',
+            correct_count = NULL,
+            total_count   = NULL,
+            grade         = NULL,
+            completed_at  = NULL
+        WHERE recommend_id = #{recommendId}
+    </update>
+
+    <insert id="insertQuizResetLog">
+        INSERT INTO erp_bookstore_quiz_reset_log
+            (logged_by, log_type, recommend_id, student_id, content_id,
+             correct_count, total_count, grade, status,
+             answer_rows, badge_rows, card_rows)
+        VALUES
+            (#{loggedBy}, #{logType}, #{target.recommendId}, #{target.studentId}, #{target.contentId},
+             #{target.correctCount}, #{target.totalCount}, #{target.grade}, #{target.status},
+             #{answerRows}, #{badgeRows}, #{cardRows})
+    </insert>
+
     <update id="upsertDiaryDetail">
         MERGE erp_bookstore_diary_detail AS target
         USING (

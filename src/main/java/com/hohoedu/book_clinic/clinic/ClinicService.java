@@ -1,6 +1,5 @@
 package com.hohoedu.book_clinic.clinic;
 
-import java.time.LocalDate;
 import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
@@ -12,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookRepository;
 import com.hohoedu.book_clinic.book._dto.BookRespDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicReqDTO;
@@ -32,7 +32,9 @@ import lombok.extern.slf4j.Slf4j;
  * 문제로 이어지므로).
  *
  * 새로 추천할 때의 규칙:
- *   1) 권장 우선순위(erp_bookstore_priority) 순으로 추천
+ *   1) 권장 우선순위(erp_bookstore_priority) 순으로 추천 — "어떤 순서로 읽히느냐"는 이 코드가 아니라
+ *      순위표가 정한다. 순위표는 학년별로 나뉘고, 그 안에서 난이도 하→중→상, 같은 난이도 안에서는
+ *      분류가 연달아 나오지 않게 섞은 순서다(정렬 규칙은 db/data.sql의 priority 시드 주석 참고).
  *   2) 현재 센터에 대여 가능한 실물 재고가 있는 책만 추천
  *   3) 직전 추천 도서와 분류·장르가 모두 같으면 제외 (dedup)
  *   4) 3의 조건에 걸려 후보가 없으면, 처음으로 돌아가 dedup 없이 우선순위 순으로 다시 추천
@@ -45,7 +47,7 @@ import lombok.extern.slf4j.Slf4j;
 public class ClinicService {
 
     // erp_student.grade_key가 비어있는 학생(아직 학년 미등록)을 위한 안전망 기본값
-    private static final String FALLBACK_SCHOOLYEAR = "05";
+    private static final String FALLBACK_SCHOOLYEAR = "01";
 
     // erp_bookstore_code(gubun='S')에 등록된 학년 코드 범위 — 규칙 5(윗학년 순차 추천)의 상한
     private static final int MAX_SCHOOLYEAR = 7;
@@ -143,15 +145,19 @@ public class ClinicService {
             return existing;
         }
 
-        int todayCount = clinicRepository.countTodayRecommends(studentId, LocalDate.now());
+        int todayCount = clinicRepository.countTodayRecommends(studentId, KstClock.today());
         if (todayCount >= MAX_DAILY_RECOMMENDATIONS) {
             throw new Exception400("하루에 추천받을 수 있는 책은 " + MAX_DAILY_RECOMMENDATIONS + "권을 초과할 수 없습니다.");
         }
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
 
         // 새로 추천한다는 건 이전 추천이 이미 DONE 처리됐다는 뜻(PENDING이면 위에서 그대로 반환됨).
-        // 반납은 이제 완독 확정 순간(submitQuiz)에 바로 처리되므로 보통은 여기서 할 일이 없지만,
-        // 혹시 그 처리가 어떤 이유로 안 됐을 경우를 대비한 안전망으로 남겨둔다.
+        // 완독 시점에는 반납하지 않으므로(재도전 대비, submitQuiz 주석 참고) 다 읽은 그 책을 여기서
+        // 반납한다 — 학생이 다음 책을 받았다는 건 이제 이전 책을 놓아줘도 된다는 뜻이다.
+        // 반납이 일어나는 시점은 이 세 곳뿐이다:
+        //   1) 학생 QR 퇴실 (StudentViewController.exitByQr → MonitorService.exitSession)
+        //   2) 직원 퇴실 처리 (MonitorController.exit → MonitorService.exitSession)
+        //   3) 새 책 추천 (여기)
         returnActiveLoanSafely(studentId);
 
         String centerCode = clinicRepository.findCenterCode(studentId);
@@ -174,11 +180,10 @@ public class ClinicService {
 
         bookRepository.insertItemLoan(itemId, studentId);
         clinicRepository.insertRecommendLog(studentId, picked.getContentId(), itemId);
-        log.info("학생 {}에게 추천된 도서 정보: {}", studentId, clinicRepository.findBookCard(picked.getContentId()));
         // 실시간 모니터링 기준 "입실" 시점 — 미입실 예약 카드가 여기서 입실로 전환된다
         monitorService.enterSession(studentId);
-        ClinicRespDTO.RecommendBookDTO card = clinicRepository.findBookCard(picked.getContentId());
-        card.setItemId(itemId);
+        ClinicRespDTO.RecommendBookDTO card = clinicRepository.findBookCard(picked.getContentId(), itemId);
+        log.info("학생 {}에게 추천된 도서 정보: {}", studentId, card);
         return card;
     }
 
@@ -246,12 +251,16 @@ public class ClinicService {
         List<ClinicReqDTO.AnswerLogDTO> answerLogs = new ArrayList<>();
         for (QuestionRespDTO.QuestionDTO q : questions) {
             Integer selected = submittedByQnum.get(q.getQnum());
-            if (selected == null) continue; // 미제출 문항은 오답 처리(이력 없음)
-            boolean correct = String.valueOf(selected).equals(q.getAns());
+            // 미제출(또는 존재하지 않는 qnum만 담아 보낸 위조 제출) 문항은 오답으로 기록한다.
+            // 문항마다 항상 로그를 남겨야 countPriorAttempts가 "이번 제출이 있었다"를 놓치지 않는다
+            // — 예전엔 매칭된 문항이 하나도 없으면 로그가 아예 안 쌓여 firstAttempt가 계속 true로
+            // 남는 바람에, 문제 번호를 실제 문항과 다르게 보내는 "빈 제출"을 반복해 뱃지를 중복
+            // 획득할 수 있었다.
+            boolean correct = selected != null && String.valueOf(selected).equals(q.getAns());
             if (correct) correctCount++;
             ClinicReqDTO.AnswerLogDTO logRow = new ClinicReqDTO.AnswerLogDTO();
             logRow.setQnum(q.getQnum());
-            logRow.setSelected(selected);
+            logRow.setSelected(selected != null ? selected : 0); // 0 = 미제출(보기 1~4 범위 밖 sentinel)
             logRow.setCorrect(correct);
             logRow.setQtype(q.getQtype());
             answerLogs.add(logRow);
@@ -307,11 +316,13 @@ public class ClinicService {
         resp.setGrade(grade);
 
         if (passed) {
-            // 완독 확정 순간 바로 반납 처리한다(2026-07-29) — 예전엔 "다음 책 추천" 시점까지 반납을
-            // 미뤄서, 학생이 결과 화면에서 다음 책을 안 받고 그냥 홈/퇴실해버리면 대여 상태가 그대로
-            // 남아 다른 학생이 그 책을 못 빌렸다. 다음 책을 받든 안 받든 이 책은 이제 필요 없으므로
-            // 여기서 즉시 재고를 돌려준다.
-            returnActiveLoanSafely(studentId);
+            // 완독해도 여기서 반납하지 않는다(2026-07-31) — 현장에서는 다 읽은 책을 반납대에 놓기만
+            // 하고 반납 처리는 미룬다. 학생이 "다시 풀고 싶다"고 오는 경우가 있어서, 그때 반납대에서
+            // 그 책을 도로 집어올 수 있어야 하기 때문이다. 여기서 재고를 풀어버리면 그 사이 다른
+            // 학생이 추천받아 가져가서, 실물은 반납대에 있는데 시스템상으론 남의 책이 된다.
+            // (2026-07-29엔 여기서 즉시 반납했었다. "다음 책을 안 받고 나가면 재고가 묶인다"는 이유였는데,
+            //  그 뒤 퇴실 처리(MonitorService.exitSession)와 다음 책 추천(recommendBook) 양쪽에 반납이
+            //  들어가면서 이 호출은 중복이 됐고, 위의 부작용만 남았다.)
 
             // 레벨은 EXP가 아니라 "그 학년 도서 완독 권수 ÷ 학년별 필요권수"로 정해진다(단계 = 학생 학년).
             // updateRecommendResult로 이 책이 이미 DONE 처리됐으므로 doneAfter에 이번 완독이 포함된다.
@@ -385,13 +396,13 @@ public class ClinicService {
         log.info("학생 {}의 읽던 책을 재입실 시점에 재대여했습니다: itemId={}", studentId, reservedItemId);
     }
 
-    /** 완독 확정 시점에 현재 대여 중인 도서를 즉시 반납 처리한다(없으면 조용히 넘어감) */
+    /** 현재 대여 중인 도서를 반납 처리한다(없으면 조용히 넘어감) — 다음 책 추천 시점에 호출된다 */
     private void returnActiveLoanSafely(String studentId) {
         BookRespDTO.ItemLoanRespDTO activeLoan = bookRepository.findActiveLoanByStudent(studentId);
         if (activeLoan == null) return;
         bookRepository.updateLoanReturned(activeLoan.getLoanId());
         bookRepository.markItemReturned(activeLoan.getItemId());
-        log.info("학생 {}의 완독 도서를 반납 처리했습니다: loanId={}, itemId={}",
+        log.info("학생 {}의 이전 대여 도서를 반납 처리했습니다: loanId={}, itemId={}",
                 studentId, activeLoan.getLoanId(), activeLoan.getItemId());
     }
 

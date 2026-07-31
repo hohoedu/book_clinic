@@ -15,7 +15,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 const CSRF_HEADER = "X-XSRF-TOKEN";
-const CSRF_TOKEN = "hohoedu-master-csrf-token";
+// 서버가 세션마다 다른 값을 XSRF-TOKEN 쿠키로 내려준다(CookieCsrfTokenRepository, 2026-07-31) —
+// 예전처럼 고정 문자열을 하드코딩하지 않고 매 요청마다 쿠키에서 읽는다.
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
 
 // 독서태도 체크박스는 erp_bookstore_attitude_code(use_yn=1)를 /admin/monitor/live 응답의
 // attitudeCodeOptions로 받아 렌더링한다 — 문구가 자주 바뀔 수 있어 하드코딩하지 않는다.
@@ -77,7 +82,7 @@ async function getJson(url) {
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", [CSRF_HEADER]: CSRF_TOKEN },
+    headers: { "Content-Type": "application/json", [CSRF_HEADER]: getCsrfToken() },
     body: JSON.stringify(body),
   });
   const data = await response.json();
@@ -156,11 +161,15 @@ async function loadLiveView() {
 }
 
 /* Firestore 문서 변경 → 카드 배열에 반영 (없으면 추가, 있으면 갱신).
-   studentId로 매칭한다 — 미입실 카드는 sessionId가 없어서(null) sessionId로 매칭하면 미입실
-   →입실 전환 시 기존 카드를 못 찾고 중복으로 추가돼 버린다. */
+   studentId + timeSlot으로 매칭한다 — 미입실 카드는 sessionId가 없어서(null) sessionId로
+   매칭하면 미입실→입실 전환 시 기존 카드를 못 찾고 중복으로 추가돼 버린다(그래서 studentId를
+   기준으로 삼는다). timeSlot을 함께 봐야 하는 이유는 한 학생이 같은 날 두 타임을 예약하면
+   카드가 2건 생기는데(findReservationCards가 예약 단위로 행을 뽑음), studentId만 보면
+   findIndex가 항상 첫 번째 카드만 찾아 두 번째 타임슬롯 카드가 영영 갱신되지 않기 때문이다.
+   timeSlot은 예약 자체의 값이라 입실 전후로 바뀌지 않으므로 미입실→입실 매칭에는 영향 없다. */
 function applyFirestoreCard(doc) {
   doc._syncedAt = Date.now(); // 경과시간 로컬 카운트업 기준점 (이 카드가 서버 값으로 갱신된 시각)
-  const idx = cards.findIndex((c) => c.studentId === doc.studentId);
+  const idx = cards.findIndex((c) => c.studentId === doc.studentId && c.timeSlot === doc.timeSlot);
   if (idx === -1) cards.push(doc);
   else cards[idx] = doc;
   render();
@@ -364,6 +373,8 @@ function renderSection(gridId, countId, list, emptyText) {
 function bookPages(card) {
   if (card.books && card.books.length > 0) return card.books;
   return [{
+    recommendId: card.recommendId,
+    contentId: card.contentId,
     bookTitle: card.bookTitle,
     author: card.author,
     publisher: card.publisher,
@@ -459,11 +470,19 @@ function renderBookRow(el, card, pages, pageIndex) {
         ${pages.length > 1 ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>` : ""}
       </div>
     </div>
-    ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+    <div class="book-actions">
+      ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+      ${hasQuizRecord(page) ? `<button type="button" class="quiz-reset-btn" title="문제풀이 기록 삭제"><i class="fa-regular fa-trash-can"></i></button>` : ""}
+    </div>
   `;
 
   if (!notEntered) {
     bookRow.querySelector(".log-open-btn").addEventListener("click", () => toggleReadingLogPanel(card));
+  }
+  const resetBtn = bookRow.querySelector(".quiz-reset-btn");
+  if (resetBtn) {
+    // 뒤 페이지 = 이 책 다음에 추천받은 책들. 삭제하면 함께 취소되므로 확인 문구에 개수를 적는다
+    resetBtn.addEventListener("click", () => resetQuiz(card, page, pages.length - 1 - pageIndex));
   }
   bookRow.querySelectorAll(".dot").forEach((dot) => {
     dot.addEventListener("click", () => {
@@ -471,6 +490,55 @@ function renderBookRow(el, card, pages, pageIndex) {
       render();
     });
   });
+}
+
+/* 지울 문제풀이 기록이 실제로 있는 책 페이지인지 — 아직 한 번도 안 푼 책엔 삭제 버튼을 안 띄운다.
+   recommendId는 구버전 Firestore 문서(캐러셀 이전 형식)엔 없을 수 있어 함께 확인한다. */
+function hasQuizRecord(page) {
+  if (page.recommendId == null) return false;
+  return page.basicCorrectCount != null || page.advancedCorrectCount != null;
+}
+
+/* 문제풀이 기록 삭제 — 학생이 "지워주세요"라고 할 때 직원이 실행한다. 되돌릴 수 없고, 그 책에서
+   딴 뱃지/카드는 물론 뒤에 추천받은 책까지 취소되므로 무엇이 사라지는지 확인 문구에 그대로 적는다. */
+async function resetQuiz(card, page, laterCount) {
+  const bookTitle = page.bookTitle ?? "이 책";
+  const ok = confirm(
+    `[${card.studentName ?? ""}] ${bookTitle}\n\n` +
+    "이 책의 문제풀이 기록을 삭제합니다.\n" +
+    "· 기본/심화 풀이 기록과 점수\n" +
+    "· 이 책에서 받은 뱃지와 카드\n" +
+    "· 독서일지에 적힌 이 책의 점수\n" +
+    (laterCount > 0 ? `· 이 책 다음에 추천받은 책 ${laterCount}권 (추천 자체가 취소됩니다)\n` : "") +
+    "\n삭제 후 학생은 이 책을 다시 읽으며 문제를 처음부터 다시 풉니다.\n되돌릴 수 없습니다. 삭제할까요?"
+  );
+  if (!ok) return;
+
+  try {
+    const result = await postJson("/admin/monitor/quiz/reset", {
+      studentId: card.studentId,
+      recommendId: page.recommendId,
+    });
+    await loadLiveView();
+    alert(resetResultMessage(bookTitle, result));
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+/* 삭제 후 직원이 곧바로 해야 할 행동을 알려준다 — 핵심은 "실물 책을 지금 줄 수 있느냐"다.
+   되돌린 책을 그 사이 다른 학생이 가져간 경우(A가 끝낸 책을 B가 추천받음)가 실제로 생긴다. */
+function resetResultMessage(bookTitle, result) {
+  const head = `${bookTitle} 문제풀이 기록을 삭제했습니다.\n`;
+  if (!result || !result.bookSecured) {
+    return head +
+      "\n[실물 책 없음] 이 책의 남은 재고가 없습니다(다른 학생이 대여 중).\n" +
+      "문제는 화면으로 풀 수 있으니 진행에는 문제없지만, 책이 필요하면 직접 챙겨주세요.";
+  }
+  if (result.copySwitched) {
+    return head + "\n같은 책의 다른 사본으로 대여했습니다. 학생에게 그 책을 전달해 주세요.";
+  }
+  return head + "\n이 책을 다시 대여 처리했습니다. 학생에게 책을 전달해 주세요.";
 }
 
 /* stat-row — 독서시간/기본문제/심화문제/획득뱃지 전부 선택된 책 페이지(content_id) 기준이다.

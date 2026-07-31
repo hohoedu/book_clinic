@@ -27,9 +27,13 @@ document.addEventListener("DOMContentLoaded", () => {
   loadDiaryList();
 });
 
-// 정적 CSRF 토큰 — SecurityConfig의 StaticCsrfTokenRepository와 짝을 맞춘다(다른 관리자 화면과 동일)
+// 서버가 세션마다 다른 값을 XSRF-TOKEN 쿠키로 내려준다(CookieCsrfTokenRepository, 2026-07-31) —
+// 예전처럼 고정 문자열을 하드코딩하지 않고 매 요청마다 쿠키에서 읽는다.
 const CSRF_HEADER = "X-XSRF-TOKEN";
-const CSRF_TOKEN = "hohoedu-master-csrf-token";
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
 
 async function getJson(url) {
   const response = await fetch(url);
@@ -41,7 +45,7 @@ async function getJson(url) {
 async function postJson(url, body) {
   const response = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", [CSRF_HEADER]: CSRF_TOKEN },
+    headers: { "Content-Type": "application/json", [CSRF_HEADER]: getCsrfToken() },
     body: JSON.stringify(body),
   });
   const data = await response.json();

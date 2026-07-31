@@ -62,14 +62,20 @@
         ORDER BY p.sort_order ASC, i.item_id ASC
     </select>
 
+    <!--
+      학생이 들고 찾아오는 건 센터에 꽂혀 있는 "실물 책"이라, 제목/저자/출판사/표지는 그 센터가 등록한
+      item 값을 우선 쓴다(item에 값이 없거나 item이 지워졌으면 마스터 content로 폴백, 2026-07-31).
+      줄거리·장르·수상·교육과정·키워드는 item에 없는 정보라 항상 content 기준이다.
+    -->
     <select id="findBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
         SELECT bc.content_id     AS contentId,
-               bc.original_title AS originalTitle,
-               bc.author         AS author,
-               bc.publisher      AS publisher,
+               it.item_id        AS itemId,
+               COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
+               COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
+               COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
+               COALESCE(NULLIF(it.image_url, ''),  bc.image_url)      AS imageUrl,
                bc.summary        AS summary,
                bc.keywords       AS keywords,
-               bc.image_url      AS imageUrl,
                bc.content_type   AS contentType,
                ct.codeNm         AS contentTypeName,
                bc.genre          AS genre,
@@ -78,6 +84,7 @@
                dr.name           AS recommendOrgName,
                da.name           AS awardName
         FROM erp_bookstore_content bc
+        LEFT JOIN erp_bookstore_item it ON it.item_id = #{itemId}
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
@@ -91,12 +98,12 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
-               bc.original_title AS originalTitle,
-               bc.author         AS author,
-               bc.publisher      AS publisher,
+               COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
+               COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
+               COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
+               COALESCE(NULLIF(it.image_url, ''),  bc.image_url)      AS imageUrl,
                bc.summary        AS summary,
                bc.keywords       AS keywords,
-               bc.image_url      AS imageUrl,
                bc.content_type   AS contentType,
                ct.codeNm         AS contentTypeName,
                bc.genre          AS genre,
@@ -106,6 +113,7 @@
                da.name           AS awardName
         FROM erp_bookstore_recommend_log rl
         JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
+        LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
@@ -120,12 +128,12 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
-               bc.original_title AS originalTitle,
-               bc.author         AS author,
-               bc.publisher      AS publisher,
+               COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
+               COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
+               COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
+               COALESCE(NULLIF(it.image_url, ''),  bc.image_url)      AS imageUrl,
                bc.summary        AS summary,
                bc.keywords       AS keywords,
-               bc.image_url      AS imageUrl,
                bc.content_type   AS contentType,
                ct.codeNm         AS contentTypeName,
                bc.genre          AS genre,
@@ -135,6 +143,7 @@
                da.name           AS awardName
         FROM erp_bookstore_recommend_log rl
         JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
+        LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
@@ -183,7 +192,7 @@
             total_count   = #{totalCount},
             grade         = #{grade},
             status        = #{status}
-            <if test="status == 'DONE'">, completed_at = CURRENT_TIMESTAMP</if>
+            <if test="status == 'DONE'">, completed_at = DATEADD(HOUR, 9, GETUTCDATE())</if>
         WHERE recommend_id = #{recommendId}
     </update>
 

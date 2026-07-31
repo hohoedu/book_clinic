@@ -71,6 +71,10 @@ public class MonitorRespDTO {
      */
     @Data
     public static class BookPageDTO {
+        // 이 페이지가 어느 추천(도전)인지 — 문제풀이 기록 삭제(resetQuiz)의 대상 식별자다.
+        // 같은 책을 나중에 다시 추천받으면 content_id는 같아도 recommend_id가 달라서, 지울 회차를
+        // 정확히 집으려면 content_id가 아니라 이 값을 써야 한다.
+        private Integer recommendId;
         private Integer contentId;
         private String bookTitle;
         private String author;
@@ -94,6 +98,31 @@ public class MonitorRespDTO {
         // 보이는 문제가 있었다). 2026-07-29
         private Integer badgeCount;
         private String latestBadgeName;
+    }
+
+    /** 문제풀이 기록 삭제 대상 1건 — 초기화 직전 recommend_log 스냅샷(삭제 이력에 그대로 남긴다) */
+    @Data
+    public static class QuizResetTargetDTO {
+        private Integer recommendId;
+        private String studentId;
+        private Integer contentId;
+        private Integer itemId;     // 그때 대여했던 실물 판본 — 되돌릴 때 같은 책을 다시 확보하는 기준
+        private Integer correctCount;
+        private Integer totalCount;
+        private String grade;
+        private String status;
+    }
+
+    /**
+     * 문제풀이 기록 삭제 결과 — 직원이 곧바로 알아야 하는 건 "실물 책을 지금 줄 수 있느냐"다.
+     * 되돌린 책을 그 사이 다른 학생이 가져갔을 수 있어서(A가 끝낸 책을 B가 추천받은 경우),
+     * 시스템이 실물을 확보했는지 여부를 화면에 그대로 알려준다.
+     */
+    @Data
+    public static class QuizResetRespDTO {
+        private int cancelledCount;      // 함께 취소된 뒤 추천 권수
+        private boolean bookSecured;     // 실물 확보 성공 — 학생에게 책을 건네주면 된다
+        private boolean copySwitched;    // 원래 판본이 없어 같은 책의 다른 사본으로 대체됨
     }
 
     /** 독서태도 코드 옵션(use_yn=1만) — 화면 체크박스 렌더링용. erp_bookstore_attitude_code 조회 결과 */

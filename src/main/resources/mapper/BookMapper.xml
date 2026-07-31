@@ -329,6 +329,26 @@
         WHERE item_id = #{itemId} AND qty - loaned_qty - lost_qty > 0
     </select>
 
+    <!--
+      같은 책(content)의 대여 가능한 사본 하나를 원자적으로 잡는다 — 원래 그 판본(itemId)을 1순위로,
+      없으면 같은 센터의 다른 판본으로 대체한다. 문제풀이 기록을 되돌릴 때(MonitorService.resetQuiz)
+      그 사이 다른 학생이 그 실물을 가져간 경우를 위한 경로다. 잡히면 item_id, 한 권도 없으면 null.
+    -->
+    <select id="reserveCopyForContentOf" resultType="java.lang.Integer">
+        UPDATE erp_bookstore_item
+        SET loaned_qty = loaned_qty + 1
+        OUTPUT INSERTED.item_id
+        WHERE item_id = (
+            SELECT TOP 1 i.item_id
+            FROM erp_bookstore_item i
+            JOIN erp_bookstore_item o ON o.item_id = #{itemId}
+            WHERE i.content_id = o.content_id
+              AND i.center_code = o.center_code
+              AND i.qty - i.loaned_qty - i.lost_qty > 0
+            ORDER BY CASE WHEN i.item_id = #{itemId} THEN 0 ELSE 1 END, i.item_id ASC
+        )
+    </select>
+
     <!-- 반납 처리: 그 판본의 loaned_qty를 1 줄인다 -->
     <update id="markItemReturned">
         UPDATE erp_bookstore_item

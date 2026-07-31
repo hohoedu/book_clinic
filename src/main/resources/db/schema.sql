@@ -9,6 +9,7 @@ IF OBJECT_ID('erp_bookstore_clinic_reservation',    'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_bookstore_student_card',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_card;
 IF OBJECT_ID('erp_bookstore_student_badge',         'U') IS NOT NULL DROP TABLE erp_bookstore_student_badge;
 IF OBJECT_ID('erp_bookstore_badge',                 'U') IS NOT NULL DROP TABLE erp_bookstore_badge;
+IF OBJECT_ID('erp_bookstore_quiz_reset_log',        'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_reset_log;
 IF OBJECT_ID('erp_bookstore_quiz_answer_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_quiz_answer_log;
 IF OBJECT_ID('erp_bookstore_student_info',          'U') IS NOT NULL DROP TABLE erp_bookstore_student_info;
 IF OBJECT_ID('erp_bookstore_exp_rule',               'U') IS NOT NULL DROP TABLE erp_bookstore_exp_rule;      -- 폐지(EXP 제거)
@@ -405,7 +406,7 @@ CREATE TABLE erp_bookstore_recommend_log (
                                               -- 추천 자체가 이제 item(판본) 단위다(2026-07-30) — 같은 content라도
                                               -- item이 다르면 다른 학생에게 각각 추천될 수 있고(재고만큼), 이 학생
                                               -- 기준 중복배제(dedup)도 content가 아니라 item_id로 판단한다.
-    recommended_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 추천일시
+    recommended_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 추천일시(KST)
     status          VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(문제풀이 전/재도전 대기) / DONE(합격)
     correct_count   INT,      -- 기본 문제풀이(qlevel=01) 최근 제출 정답 수
     total_count     INT,      -- 기본 문제풀이 총 문항 수
@@ -428,9 +429,34 @@ CREATE TABLE erp_bookstore_quiz_answer_log (
     qtype         VARCHAR(2),   -- 문제 유형 코드 스냅샷 (erp_bookstore_code gubun='T') — 제출 시점 itempool.qtype, 이후 문제가 수정/삭제돼도 이력 보존
     selected      INT           NOT NULL,  -- 학생이 선택한 보기 번호 (1~4)
     is_correct    BIT           NOT NULL,  -- 서버 채점 결과 (제출 시점 itempool.ans 기준)
-    submitted_at  DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 제출일시 (같은 값 = 같은 회차)
+    submitted_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 제출일시(KST) (같은 값 = 같은 회차)
     FOREIGN KEY (recommend_id) REFERENCES erp_bookstore_recommend_log(recommend_id),
     FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id)
+);
+
+-- 문제풀이 기록 삭제 이력 (2026-07-31) — 학생 요청으로 직원이 모니터링 화면에서 그 책의 풀이 기록을
+-- 초기화하면(MonitorService.resetQuiz) 지워지는 값들의 스냅샷을 여기 남긴다. 원본 행(quiz_answer_log,
+-- student_badge, student_card)은 실제로 삭제되므로, "왜 뱃지가 사라졌나" 같은 문의를 이 표로 답한다.
+-- 다른 _del 로그와 같은 규칙으로 FK 없이 값으로만 연결한다(원본 행이 이미 없어서 FK를 걸 수 없다).
+CREATE TABLE erp_bookstore_quiz_reset_log (
+    log_id        INT IDENTITY(1,1) PRIMARY KEY,
+    logged_at     DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 삭제 처리 시각(KST)
+    logged_by     VARCHAR(50),                                           -- 처리한 직원 (로그인 계정명)
+    -- RESET  = 삭제 대상 책. recommend_log 행은 PENDING으로 남아 다시 풀 수 있다
+    -- CANCEL = 그 뒤에 추천받은 책. 되돌아가려면 비켜줘야 해서 recommend_log 행까지 지운다
+    log_type      VARCHAR(10)   NOT NULL DEFAULT 'RESET',
+    recommend_id  INT           NOT NULL,  -- 초기화한 추천(도전) — 행 자체는 PENDING으로 남는다
+    student_id    VARCHAR(100)  NOT NULL,
+    content_id    INT           NOT NULL,
+    -- 초기화 직전 recommend_log 스냅샷
+    correct_count INT,
+    total_count   INT,
+    grade         VARCHAR(20),  -- KING / FRIEND
+    status        VARCHAR(20),  -- PENDING / DONE
+    -- 실제로 지운 행 수
+    answer_rows   INT,          -- quiz_answer_log
+    badge_rows    INT,          -- student_badge (그 책에서 딴 뱃지)
+    card_rows     INT           -- student_card (NORMAL + 회수로 무효가 된 RARE)
 );
 
 -- 레벨 체계 재편 (EXP 폐지) — "단계 = 학생 학년(01~06)"이고, 각 단계 안에서 레벨 1~12가 있다.
@@ -467,7 +493,7 @@ CREATE TABLE erp_bookstore_student_badge (
     student_id  VARCHAR(100)  NOT NULL,
     content_id  INT           NOT NULL,   -- 어느 책에서 얻은 뱃지인지
     badge_id    INT           NOT NULL,
-    earned_at   DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    earned_at   DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 획득일시(KST)
     PRIMARY KEY (student_id, content_id, badge_id),
     FOREIGN KEY (badge_id)   REFERENCES erp_bookstore_badge(badge_id),
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
@@ -484,7 +510,7 @@ CREATE TABLE erp_bookstore_student_card (
     content_id     INT           NULL,      -- NORMAL만 값 있음(그 책). RARE는 NULL
     card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / RARE
     trigger_count  INT           NULL,      -- RARE만 값 있음(발급을 유발한 누적 NORMAL 카드 수: 10, 20 ...)
-    earned_at      DATETIME2     DEFAULT CURRENT_TIMESTAMP,
+    earned_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 지급일시(KST)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 CREATE UNIQUE INDEX UX_erp_bookstore_student_card_normal
@@ -610,3 +636,122 @@ CREATE TABLE erp_bookstore_attitude (
     FOREIGN KEY (diary_key) REFERENCES erp_bookstore_diary(diary_key),
     FOREIGN KEY (attitude_code) REFERENCES erp_bookstore_attitude_code(attitude_code)
 );
+
+
+-- ════════════════════════════════════════════════════════
+-- 결제 / 환불 (2026-07-31, KG이니시스)
+--
+-- [흐름] Flutter가 이니시스 모바일 SDK로 인증(카드 선택/본인확인)까지만 하고, 그 결과를
+-- Spring으로 넘긴다. 승인 API 호출은 반드시 서버가 한다 — 앱이 보낸 "결제 성공"만 믿으면
+-- 위변조된 금액으로 결제 완료 처리가 되기 때문이다.
+--   1) 서버: order_no 발급 + 금액은 서버 설정에서 읽어 status=READY로 선(先)기록
+--   2) 앱  : 이니시스 인증 → authToken/authUrl을 서버로 전달
+--   3) 서버: 승인 요청 → 응답 금액이 1)의 amount와 같은지 검증 → 다르면 즉시 망취소 후 FAILED
+--   4) 서버: status=PAID로 갱신, 요청/응답 원문 로그 적재 후 앱에 결과 반환
+--
+-- [범위] 카드 일시불만 받는다(2026-07-31 확정). 가상계좌·계좌이체·휴대폰결제·할부를 쓰지
+-- 않으므로 vbank_*, card_quota, 환불계좌 컬럼을 두지 않는다. 상품 종류가 고정이라 상품
+-- 마스터 테이블도 만들지 않고 금액은 서버 설정(application.yml)에서 읽는다.
+--
+-- [컬럼을 늘리지 않는 이유] 이니시스 응답 필드를 전부 컬럼으로 펼치지 않는다. 화면에 쓰지
+-- 않는 값은 erp_bookstore_payment_log의 원문(res_body)에 이미 다 들어 있어서, 컬럼으로
+-- 또 꺼내면 같은 데이터를 두 군데 관리하게 된다. 여기 있는 컬럼은 조회/환불/정산에 실제로
+-- 쓰는 것만 남긴 것이다.
+--
+-- [DROP 제외] 실제 돈이 오간 기록이라 매 기동 리셋하면 안 된다. 파일 상단 DROP 목록에 넣지 말고
+-- IF OBJECT_ID(...) IS NULL로만 생성한다(erp_center와 같은 취급). 인덱스도 같은 이유로
+-- sys.indexes 존재 확인을 감싸서 재실행이 안전하게 한다.
+--
+-- [FK] student_id / center_code는 다른 테이블과 같은 관례로 값으로만 연결한다.
+-- payment_cancel → payment만 FK를 거는데, 이 관계의 정합성이 곧 금액 정합성이라서다.
+--
+-- [미확정] 결제 성공 → erp_student.sub_book/sub_hoho 연결은 아직 정하지 않았다. 만료일을
+-- 남기려면 구독기간 테이블이 별도로 필요한데, 결제 스키마 범위 밖이라 두지 않았다.
+-- ════════════════════════════════════════════════════════
+
+-- 결제 — 한 주문에 상품 1건이고 장바구니/분할결제가 없어서 주문 테이블을 따로 두지 않는다.
+-- 행은 결제 "시작" 시점에 status=READY로 먼저 생긴다(승인 실패/이탈 건도 남아야 정산 대조가 된다).
+IF OBJECT_ID('erp_bookstore_payment', 'U') IS NULL
+CREATE TABLE erp_bookstore_payment (
+    payment_id    INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    order_no      VARCHAR(40)   NOT NULL UNIQUE,  -- 가맹점 주문번호(이니시스 oid). 서버 생성, 이니시스 제한이 40자
+    tid           VARCHAR(40)   UNIQUE,           -- 이니시스 거래번호. 환불 API에 넘기는 키.
+                                                  -- 승인 전에는 NULL이라 NOT NULL 불가. UNIQUE라서 앱이 재시도로
+                                                  -- 같은 승인 요청을 두 번 보내도 중복 결제 행이 생기지 않는다
+    center_code   VARCHAR(50),                    -- 결제한 학생의 소속 센터 (정산/조회 필터용 중복 저장)
+    student_id    VARCHAR(100)  NOT NULL,         -- erp_student.student_id (FK 없이 값으로만 연결)
+    product_code  VARCHAR(30),                    -- 상품 코드 (마스터 테이블 없이 서버 설정값)
+    product_name  VARCHAR(100),                   -- 결제 시점 상품명 스냅샷 (설정이 바뀌어도 과거 내역은 그대로여야 함)
+    amount        INT           NOT NULL,         -- 결제 금액. 승인 응답 금액과 이 값을 대조해 위변조를 검증한다.
+                                                  -- 검증을 통과해야만 PAID가 되므로 "승인금액" 컬럼을 따로 두지 않는다
+    refund_amount INT           NOT NULL DEFAULT 0,  -- 누적 환불 금액. payment_cancel의 status='DONE' 합계와 항상 같아야 한다.
+                                                     -- 매번 합계를 내지 않으려고 캐시로 둔 것이라 취소 트랜잭션에서 같이 갱신한다
+    status        VARCHAR(20)   NOT NULL DEFAULT 'READY',
+        -- READY(결제창 띄움) / PAID(승인완료) / FAILED(승인실패·망취소)
+        -- / PARTIAL_CANCELED(부분취소) / CANCELED(전액취소)
+    pay_method    VARCHAR(10),                    -- 이니시스 payMethod. 현재는 Card만 받지만 값은 응답대로 저장한다
+    card_name     VARCHAR(30),                    -- 카드사명 (결제내역 화면 표시용)
+    card_no       VARCHAR(20),                    -- 마스킹된 카드번호. 원본 번호는 절대 저장하지 않는다
+    appl_no       VARCHAR(30),                    -- 카드 승인번호 (카드사 문의 시 필요)
+    result_code   VARCHAR(10),                    -- 이니시스 resultCode ('0000'=성공). 실패 건을 걸러내는 용도.
+                                                  -- 실패 사유 원문은 payment_log.res_body를 본다
+    requested_at  DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 결제 시작일시(KST)
+    paid_at       DATETIME2                       -- 승인 완료일시(KST)
+);
+
+-- 결제내역 조회는 "이 학생의 결제 목록을 최신순"이 대부분이라 정렬까지 인덱스에 태운다.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_student' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    CREATE INDEX IX_payment_student ON erp_bookstore_payment (student_id, requested_at DESC);
+
+-- 센터별 기간 정산용
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_center_paid' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    CREATE INDEX IX_payment_center_paid ON erp_bookstore_payment (center_code, paid_at);
+
+-- 승인까지 못 간 READY 방치분을 배치로 정리하기 위한 인덱스
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_status' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    CREATE INDEX IX_payment_status ON erp_bookstore_payment (status, requested_at);
+
+-- 환불(취소) 내역 — 부분취소와 재시도가 있어 결제 1건에 N행이다.
+-- 취소 금액이 원결제의 일부인지(부분취소인지)는 cancel_amount와 payment.amount 비교로 나오므로
+-- is_partial 같은 플래그를 따로 두지 않는다. 취소 후 잔액도 amount - refund_amount로 나온다.
+IF OBJECT_ID('erp_bookstore_payment_cancel', 'U') IS NULL
+CREATE TABLE erp_bookstore_payment_cancel (
+    cancel_id     INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    payment_id    INT           NOT NULL,         -- erp_bookstore_payment.payment_id (tid는 여기서 조인해 얻는다)
+    cancel_amount INT           NOT NULL,         -- 이번에 취소한 금액
+    reason        VARCHAR(100),                   -- 취소 사유 (이니시스 cancelmsg로 전달, 필수 파라미터라 비워둘 수 없음)
+    requested_by  VARCHAR(50),                    -- 처리자 erp_user.user_code. 앱에서 학생/보호자가 요청했으면 'APP'
+    status        VARCHAR(10)   NOT NULL DEFAULT 'REQ',  -- REQ(요청) / DONE(취소완료) / FAIL(취소실패)
+    result_code   VARCHAR(10),                    -- 이니시스 resultCode
+    result_msg    VARCHAR(200),                   -- 취소 실패 사유. 직원이 환불 버튼을 눌렀다가 실패한 건이라
+                                                  -- 화면에 바로 보여줘야 해서 payment와 달리 컬럼으로 둔다
+    requested_at  DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 취소 요청일시(KST)
+    canceled_at   DATETIME2,                      -- 취소 완료일시(KST). status=DONE일 때만 채워짐
+    FOREIGN KEY (payment_id) REFERENCES erp_bookstore_payment(payment_id)
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_cancel_payment' AND object_id = OBJECT_ID('erp_bookstore_payment_cancel'))
+    CREATE INDEX IX_payment_cancel_payment ON erp_bookstore_payment_cancel (payment_id);
+
+-- PG 통신 원문 로그 — 승인/취소 요청·응답 본문을 그대로 남긴다.
+-- 결제 분쟁은 "우리가 뭘 보냈고 이니시스가 뭘 답했나"를 증명하는 싸움이라 파싱된 컬럼만으로는 부족하다.
+-- 위 두 테이블에서 컬럼을 덜어낼 수 있는 것도 원문이 여기 남기 때문이다.
+-- 카드번호·인증정보가 섞여 들어오므로 저장 전에 마스킹한 뒤 넣는다.
+IF OBJECT_ID('erp_bookstore_payment_log', 'U') IS NULL
+CREATE TABLE erp_bookstore_payment_log (
+    log_id      BIGINT         IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK (결제 1건당 여러 행이라 BIGINT)
+    payment_id  INT,                            -- erp_bookstore_payment.payment_id (승인 전 로그는 NULL일 수 있어 FK 없음)
+    order_no    VARCHAR(40),                    -- payment_id가 아직 없는 시점의 로그도 추적되도록 함께 남긴다
+    tid         VARCHAR(40),
+    log_type    VARCHAR(20)    NOT NULL,        -- APPROVE(승인) / NET_CANCEL(망취소) / CANCEL(환불) / INQUIRY(거래조회)
+                                                -- 금액 불일치로 망취소를 때렸는데 그마저 실패하면 카드사에는 승인이 남는다.
+                                                -- log_type='NET_CANCEL' + 실패 건은 따로 모니터링해서 수동 취소해야 한다
+    http_status SMALLINT,                       -- HTTP 응답 코드. 타임아웃 등 응답 자체가 없으면 NULL
+    result_code VARCHAR(10),                    -- 이니시스 resultCode (실패 로그만 빠르게 걸러내려고 별도 컬럼)
+    req_body    NVARCHAR(MAX),                  -- 요청 본문(마스킹 후)
+    res_body    NVARCHAR(MAX),                  -- 응답 본문(마스킹 후)
+    created_at  DATETIME2      DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_log_order' AND object_id = OBJECT_ID('erp_bookstore_payment_log'))
+    CREATE INDEX IX_payment_log_order ON erp_bookstore_payment_log (order_no, created_at);

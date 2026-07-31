@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.diary._dto.DiaryReqDTO;
 
 import jakarta.validation.Valid;
@@ -36,7 +37,7 @@ public class DiaryController {
                                   @RequestParam(value = "timeSlot", required = false) String timeSlot,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
-        LocalDate targetDate = date == null || date.isBlank() ? LocalDate.now() : LocalDate.parse(date);
+        LocalDate targetDate = date == null || date.isBlank() ? KstClock.today() : LocalDate.parse(date);
         String centerCode = userDetails.getLoginUser().getCenterCode();
         return ResponseEntity.ok(ApiUtils.success(
                 diaryService.getDiaryView(targetDate, centerCode, timeSlot, keyword)));

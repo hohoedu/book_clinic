@@ -94,6 +94,9 @@ public class MonitorSyncService {
         List<Map<String, Object>> result = new ArrayList<>(books.size());
         for (MonitorRespDTO.BookPageDTO book : books) {
             Map<String, Object> m = new HashMap<>();
+            // 여기 빠뜨린 필드는 최초 진입(/admin/monitor/live)에만 보이고 실시간 갱신에선 사라진다 —
+            // 프론트가 읽는 BookPageDTO 필드를 하나도 빠짐없이 넣어야 한다(2026-07-31)
+            m.put("recommendId", book.getRecommendId());
             m.put("contentId", book.getContentId());
             m.put("bookTitle", book.getBookTitle());
             m.put("author", book.getAuthor());
@@ -108,6 +111,10 @@ public class MonitorSyncService {
             m.put("advancedTotalCount", book.getAdvancedTotalCount());
             m.put("readingTimeMinutes", book.getReadingTimeMinutes());
             m.put("elapsedMinutes", book.getElapsedMinutes());
+            // 책별 뱃지(stat-row 획득 뱃지 칸) — 같은 이유로 빠져 있어서 실시간 갱신 때만 뱃지가
+            // 사라졌다가 새로고침하면 다시 보였다
+            m.put("badgeCount", book.getBadgeCount());
+            m.put("latestBadgeName", book.getLatestBadgeName());
             result.add(m);
         }
         return result;

@@ -22,6 +22,8 @@ import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
 /**
@@ -31,15 +33,40 @@ import lombok.RequiredArgsConstructor;
  * 흐름은 로그인 모드로 분기하지 않는다: 로그인 → 책 추천(없으면 새로 추천, 있으면 그 책 그대로) →
  * 로그아웃 → (오프라인 독서) → 재로그인 → 문제풀기 → 결과 확인. 메인 화면은 항상 같은 화면이고,
  * "문제 풀기" 버튼 하나만 있다 — 언제 누를지는 학생 자유.
+ *
+ * 인증(2026-07-31): QR 로그인이 실제 신원 확인을 하는 곳은 /student/login 뿐이었고, 그 뒤 화면들은
+ * URL의 studentId 파라미터가 DB에 존재하기만 하면 그대로 통과시켰다 — studentId는 QR의 appId처럼
+ * 비밀값이 아니라 평범한 학번류라, 다른 학생의 studentId만 알면 로그인 없이 그 학생 화면에 들어갈 수
+ * 있었다. 로그인 성공 시 HttpSession에 studentId를 심어두고, 이후 화면은 그 세션값만 신뢰한다 —
+ * URL의 studentId 파라미터는 화면 전환용일 뿐 신원 증명으로 쓰지 않는다(세션 값과 다르면 재로그인).
  */
 @Controller
 @RequiredArgsConstructor
 @RequestMapping("/student")
 public class StudentViewController {
 
+    private static final String SESSION_STUDENT_ID = "studentId";
+
     private final StudentRepository studentRepository;
     private final ClinicService clinicService;
     private final MonitorService monitorService;
+
+    /**
+     * 세션에 로그인된 studentId가 없으면(로그인 안 함/세션 만료) null. 세션은 있는데 URL의
+     * studentId가 다른 학생을 가리키면(다른 학생 화면을 직접 열어보려는 시도) 역시 null —
+     * 세션값이 항상 우선이고, URL 파라미터는 그것과 일치할 때만(또는 비어있을 때만) 유효하다.
+     */
+    private String requireSessionStudentId(HttpServletRequest request, String requestedStudentId) {
+        HttpSession session = request.getSession(false);
+        Object sessionStudentId = session == null ? null : session.getAttribute(SESSION_STUDENT_ID);
+        if (sessionStudentId == null) {
+            return null;
+        }
+        if (requestedStudentId != null && !requestedStudentId.isBlank() && !sessionStudentId.equals(requestedStudentId)) {
+            return null;
+        }
+        return (String) sessionStudentId;
+    }
 
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
     @GetMapping({ "", "/", "/login" })
@@ -85,12 +112,21 @@ public class StudentViewController {
 
     /** appId로 로그인 → 성공 시 메인 화면으로 이동 */
     @PostMapping("/login")
-    public String login(@RequestParam("appId") String appId, RedirectAttributes redirectAttributes) {
+    public String login(@RequestParam("appId") String appId, RedirectAttributes redirectAttributes,
+            HttpServletRequest request) {
         Student student = studentRepository.findByAppId(appId);
         if (student == null) {
             redirectAttributes.addFlashAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. 다시 확인해주세요.");
             return "redirect:/student/login";
         }
+        // QR(appId)로 신원을 확인한 이 시점에만 세션을 발급한다 — 이후 화면들은 URL의 studentId가
+        // 아니라 이 세션값을 신뢰한다. 기존 세션에 다른 학생이 남아있을 수 있으니(같은 브라우저를
+        // 여러 학생이 돌려쓰는 키오스크 환경) invalidate 후 새로 발급한다.
+        HttpSession oldSession = request.getSession(false);
+        if (oldSession != null) {
+            oldSession.invalidate();
+        }
+        request.getSession(true).setAttribute(SESSION_STUDENT_ID, student.getStudentId());
         // 실시간 모니터링 기준 "입실"은 로그인이 아니라 책 추천 시점(ClinicService.recommendBook)에
         // 처리한다 — 예약 카드가 미입실 상태로 미리 떠 있다가 책을 추천받는 순간 입실로 전환된다.
         return "redirect:/student/main?studentId=" + student.getStudentId();
@@ -105,8 +141,9 @@ public class StudentViewController {
      */
     @GetMapping("/main")
     public String getStudentMainPage(@RequestParam(value = "studentId", required = false) String studentId,
-            Model model) {
-        if (studentId == null || studentId.isBlank()) {
+            Model model, HttpServletRequest request) {
+        studentId = requireSessionStudentId(request, studentId);
+        if (studentId == null) {
             return "redirect:/student/login";
         }
 
@@ -146,8 +183,9 @@ public class StudentViewController {
     public String getQuestionPage(@RequestParam(value = "studentId", required = false) String studentId,
             @RequestParam(value = "contentId", required = false) Integer contentId,
             @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
-            Model model) {
-        if (studentId == null || studentId.isBlank()) {
+            Model model, HttpServletRequest request) {
+        studentId = requireSessionStudentId(request, studentId);
+        if (studentId == null) {
             return "redirect:/student/login";
         }
 
@@ -175,8 +213,9 @@ public class StudentViewController {
     public String getResultPage(@RequestParam(value = "studentId", required = false) String studentId,
             @RequestParam(value = "contentId", required = false) Integer contentId,
             @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
-            Model model) {
-        if (studentId == null || studentId.isBlank()) {
+            Model model, HttpServletRequest request) {
+        studentId = requireSessionStudentId(request, studentId);
+        if (studentId == null) {
             return "redirect:/student/login";
         }
 

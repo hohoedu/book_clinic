@@ -69,6 +69,51 @@ public interface MonitorRepository {
     /** 퇴실 시점에 diary.out_time을 세션 exited_at으로 채운다(이미 값이 있으면 보존) */
     void syncDiaryOutTime(@Param("sessionId") Integer sessionId);
 
+    // ── 문제풀이 기록 삭제(초기화) — MonitorService.resetQuiz (2026-07-31) ──────────────
+
+    /** 삭제 대상 추천 1건 + 초기화 직전 스냅샷 — 없거나 다른 학생 것이면 null */
+    MonitorRespDTO.QuizResetTargetDTO findQuizResetTarget(@Param("recommendId") Integer recommendId,
+                                                          @Param("studentId") String studentId);
+
+    /**
+     * 삭제 대상보다 뒤에 추천받은 책들 — 학생이 그 책 문제로 되돌아가려면 이 책들이 비켜줘야 한다.
+     * 오래된 순으로 반환한다.
+     */
+    List<MonitorRespDTO.QuizResetTargetDTO> findLaterRecommends(@Param("studentId") String studentId,
+                                                                @Param("recommendId") Integer recommendId);
+
+    /** 추천 이력 행 자체를 삭제 — 뒤 추천(CANCEL) 전용. 참조하는 자식 행을 모두 지운 뒤 호출해야 한다 */
+    void deleteRecommendLog(@Param("recommendId") Integer recommendId);
+
+    /** 그 추천의 문제풀이 이력(기본+심화 전 회차) 삭제 — 반환값은 지운 행 수 */
+    int deleteQuizAnswerLogs(@Param("recommendId") Integer recommendId);
+
+    /** 그 책에서 딴 뱃지 회수 — 안 지우면 재도전이 "첫 시도"로 안 잡혀 등급이 고정된 채로 남는다 */
+    int deleteStudentBadges(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** 그 책의 NORMAL 카드 회수 */
+    int deleteNormalCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** NORMAL 카드가 줄어 근거가 사라진 RARE 카드(trigger_count > 현재 보유 수) 회수 */
+    int deleteOrphanRareCards(@Param("studentId") String studentId);
+
+    /** 그 추천으로 적재된 일지 상세 삭제 — 점수/독서시간 스냅샷이 통째로 사라진다 */
+    int deleteDiaryDetailByRecommend(@Param("recommendId") Integer recommendId);
+
+    /** 되돌린 책을 같은 책의 다른 사본으로 확보했을 때, 추천이 가리키는 실물 판본을 맞춰준다 */
+    void updateRecommendItem(@Param("recommendId") Integer recommendId, @Param("itemId") Integer itemId);
+
+    /** 추천 이력을 문제 풀기 전 상태(PENDING·정답수 null)로 되돌린다 — 행 자체는 남긴다 */
+    void resetRecommendResult(@Param("recommendId") Integer recommendId);
+
+    /** 삭제 이력 적재 (erp_bookstore_quiz_reset_log) — logType은 RESET(대상 책) / CANCEL(뒤 추천) */
+    void insertQuizResetLog(@Param("target") MonitorRespDTO.QuizResetTargetDTO target,
+                            @Param("logType") String logType,
+                            @Param("loggedBy") String loggedBy,
+                            @Param("answerRows") int answerRows,
+                            @Param("badgeRows") int badgeRows,
+                            @Param("cardRows") int cardRows);
+
     /** 채점 결과를 일지 상세에 적재 — 같은 (일지, 도서)면 제출한 난이도 컬럼만 갱신 */
     void upsertDiaryDetail(@Param("diaryKey") Integer diaryKey, @Param("contentId") Integer contentId,
                            @Param("recommendId") Integer recommendId, @Param("qlevel") String qlevel,

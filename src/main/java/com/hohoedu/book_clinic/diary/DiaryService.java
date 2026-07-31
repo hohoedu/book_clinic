@@ -3,12 +3,16 @@ package com.hohoedu.book_clinic.diary;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic.diary._dto.DiaryReqDTO;
@@ -59,6 +63,11 @@ public class DiaryService {
      */
     @Transactional
     public int saveDiaries(DiaryReqDTO.BulkSaveReqDTO req, String centerCode, String staffName) {
+        // Firestore write는 SQL 트랜잭션 롤백으로 되돌릴 수 없는 외부 부수효과다. 항목 루프 중간에
+        // 예외가 나면(다른 센터 세션 등) 이 메서드 전체가 롤백되므로, 루프 안에서 항목마다 바로
+        // 동기화하면 이미 write된 Firestore 문서가 실제로는 커밋되지 않은 값을 들고 남는다.
+        // 세션ID만 모아뒀다가 트랜잭션이 실제로 커밋된 뒤(afterCommit)에만 동기화한다.
+        Set<Integer> sessionIds = new LinkedHashSet<>();
         for (DiaryReqDTO.SaveItemDTO item : req.getItems()) {
             String sessionCenter = diaryRepository.findSessionCenterCode(item.getSessionId());
             if (sessionCenter == null) {
@@ -78,7 +87,16 @@ public class DiaryService {
                     monitorRepository.insertDiaryAttitudes(diaryKey, item.getStudentId(), codes);
                 }
             }
-            monitorService.syncSession(item.getSessionId());
+            sessionIds.add(item.getSessionId());
+        }
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    sessionIds.forEach(monitorService::syncSession);
+                }
+            });
         }
         return req.getItems().size();
     }

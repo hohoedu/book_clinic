@@ -31,7 +31,12 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 const CSRF_HEADER = "X-XSRF-TOKEN";
-const CSRF_TOKEN = "hohoedu-master-csrf-token";
+// 서버가 세션마다 다른 값을 XSRF-TOKEN 쿠키로 내려준다(CookieCsrfTokenRepository, 2026-07-31) —
+// 예전처럼 고정 문자열을 하드코딩하지 않고 매 요청마다 쿠키에서 읽는다.
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
 const DEFAULT_BOOK_IMAGE = "/images/book-sample.png";
 
 // 본사 센터 코드 — 이 센터만 마스터 도서(content) 편집 가능, 그 외는 하위 도서(item) 등록
@@ -147,7 +152,7 @@ async function postJson(url, body) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      [CSRF_HEADER]: CSRF_TOKEN,
+      [CSRF_HEADER]: getCsrfToken(),
     },
     body: JSON.stringify(body),
   });
@@ -232,7 +237,7 @@ function initGuideLogout() {
 
   button.addEventListener("click", async () => {
     try {
-      await fetch("/logout", { method: "POST", headers: { [CSRF_HEADER]: CSRF_TOKEN } });
+      await fetch("/logout", { method: "POST", headers: { [CSRF_HEADER]: getCsrfToken() } });
     } catch (error) {
       console.error(error);
     }
@@ -409,7 +414,7 @@ function buildItemCard(item, master) {
     try {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/book/image", { method: "POST", headers: { [CSRF_HEADER]: CSRF_TOKEN }, body: form });
+      const res = await fetch("/book/image", { method: "POST", headers: { [CSRF_HEADER]: getCsrfToken() }, body: form });
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
       setCardImage(card, data.response.url);
@@ -1065,7 +1070,7 @@ function initImageButtons() {
 
       const response = await fetch("/book/image", {
         method: "POST",
-        headers: { [CSRF_HEADER]: CSRF_TOKEN },
+        headers: { [CSRF_HEADER]: getCsrfToken() },
         body: form,
       });
 

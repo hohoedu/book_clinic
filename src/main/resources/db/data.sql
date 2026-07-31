@@ -182,30 +182,91 @@ INSERT INTO erp_bookstore_badge (badge_id, badge_name, badge_desc, category, thr
 (4, N'심화 완료',    N'한 단계 깊은 사고 활동에 도전',          'ADV_PASS',      1, NULL),
 (5, N'심화왕',       N'어휘력과 문해력의 실력 증가',            'ADV_PERFECT',   1, NULL);
 
--- 권장도서 순위 초안: 올해 + 초5, 활성 상태
-INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by) VALUES
-(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '05', 'Y', 'seed');
+-- ────────────────────────────────────────────────────────
+-- 난이도 자동 부여 (2026-07-31) — 도서 시드(data-books.sql)가 difficulty를 넣지 않아 전 권이 비어
+-- 있었다. 비어 있으면 아래 순위 정렬의 규칙 2(하→중→상)가 통째로 무의미해지므로 값을 채워준다.
+--
+-- 기준: 학년 안에서 "장르 난이도" 순으로 줄 세운 뒤 NTILE(3)으로 균등 3등분한다. 장르는 난이도가
+-- 아니지만 이 데이터에서 유일하게 난이도와 상관이 있는 값이라 대용으로 쓴다 — 창작·전래 계열이
+-- 앞(하), 인물·과학 계열이 가운데(중), 고전·비문학·소설 계열이 뒤(상)로 간다.
+--
+-- 근거가 강한 값이 아니라 "일단 순서가 돌아가게" 하는 출발점이다. 실제 난이도는 도서 관리 화면에서
+-- 고쳐야 하고, 아래 WHERE 절이 그 값을 지켜준다 — 이미 값이 있는 책은 건드리지 않으므로 매 기동
+-- 다시 돌아도 사람이 입력한 값을 덮어쓰지 않는다(content 테이블은 매 기동 리셋 대상이 아니다).
+-- ────────────────────────────────────────────────────────
+WITH weighted AS (
+    SELECT content_id,
+           NTILE(3) OVER (
+               PARTITION BY schoolyear
+               ORDER BY
+                   CASE
+                       -- 쉬움: 창작 / 전래 / 외국창작 / 신체동화 / 동시지 / 만화
+                       WHEN genre IN ('01','03','05','07','10','27') THEN 1
+                       -- 보통: 명작 / 환경 / 과학동화 / 인물 / 상식 / 과학 / 생활 비문학
+                       WHEN genre IN ('02','06','08','09','13','18','19','22','23','24') THEN 2
+                       -- 어려움: 고전 / 역사 / 소설 / 교양 / 그 밖의 비문학 전반
+                       ELSE 3
+                   END,
+                   content_id
+           ) AS tier
+    FROM erp_bookstore_content
+    WHERE state = 'Y'
+      AND (difficulty IS NULL OR LTRIM(RTRIM(difficulty)) = '')
+)
+UPDATE c
+SET difficulty = CASE w.tier WHEN 1 THEN N'하' WHEN 2 THEN N'중' ELSE N'상' END
+FROM erp_bookstore_content c
+JOIN weighted w ON w.content_id = c.content_id;
 
--- 순위 내용: 초5 노출 도서 전체를 content_id 순으로 순위 부여
-INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
-SELECT (SELECT MAX(draft_id) FROM erp_bookstore_priority_draft),
-       content_id,
-       ROW_NUMBER() OVER (ORDER BY content_id)
-FROM erp_bookstore_content
-WHERE schoolyear = '05' AND state = 'Y';
-
--- 권장도서 순위 초안: 초1~초4 (DAE001/PUS002 테스트 학생용)
+-- 권장도서 순위 초안: 올해 + 초1~초5, 활성 상태 (초6/중등은 아직 시딩하지 않는다)
 INSERT INTO erp_bookstore_priority_draft (year, schoolyear, is_active, created_by) VALUES
 (CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '01', 'Y', 'seed'),
 (CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '02', 'Y', 'seed'),
 (CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '03', 'Y', 'seed'),
-(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '04', 'Y', 'seed');
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '04', 'Y', 'seed'),
+(CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4)), '05', 'Y', 'seed');
 
+-- 순위 내용 — 정렬 규칙 확정 (2026-07-31). ClinicService.pickNextItem이 이 sort_order를 그대로
+-- 훑으며 추천하므로, "어떤 순서로 추천할지"는 추천 코드가 아니라 이 정렬이 결정한다.
+--   1) 학년: 초안(draft)이 학년별로 나뉘어 있어 c.schoolyear = d.schoolyear 조인으로 이미 걸러진다
+--   2) 난이도: 하 → 중 → 상. content.difficulty는 코드가 아니라 자유 입력 텍스트라(도서 관리 화면에서
+--      직접 타이핑) 공백을 털어내고 비교하고, 값이 비어 있으면 중간(중)으로 취급한다
+--   3) 분류: 같은 난이도 구간 안에서 분류(content_type)가 연달아 나오지 않게 라운드로빈으로 섞는다.
+--      분류별로 번호를 매긴 뒤(type_seq) 그 번호 순으로 뽑으면 "각 분류의 1번째들 → 2번째들 → ..."이
+--      되어 분류가 자연히 번갈아 나온다. 어떤 분류의 책이 유독 많으면 뒤쪽엔 그 분류만 남는데,
+--      남은 게 그것뿐이라 이건 피할 수 없다.
+WITH graded AS (
+    SELECT c.content_id,
+           c.schoolyear,
+           c.content_type,
+           CASE LTRIM(RTRIM(c.difficulty))
+               WHEN N'하' THEN 1
+               WHEN N'상' THEN 3
+               ELSE 2                      -- '중' 그리고 미입력(NULL/공백)
+           END AS diff_rank
+    FROM erp_bookstore_content c
+    WHERE c.state = 'Y'
+), spread AS (
+    SELECT g.content_id,
+           g.schoolyear,
+           g.content_type,
+           g.diff_rank,
+           ROW_NUMBER() OVER (
+               PARTITION BY g.schoolyear, g.diff_rank, g.content_type
+               ORDER BY g.content_id
+           ) AS type_seq
+    FROM graded g
+)
 INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
-SELECT d.draft_id, c.content_id, ROW_NUMBER() OVER (PARTITION BY d.draft_id ORDER BY c.content_id)
+SELECT d.draft_id,
+       s.content_id,
+       ROW_NUMBER() OVER (
+           PARTITION BY d.draft_id
+           ORDER BY s.diff_rank, s.type_seq, s.content_type, s.content_id
+       )
 FROM erp_bookstore_priority_draft d
-JOIN erp_bookstore_content c ON c.schoolyear = d.schoolyear AND c.state = 'Y'
-WHERE d.schoolyear IN ('01','02','03','04')
+JOIN spread s ON s.schoolyear = d.schoolyear
+WHERE d.schoolyear IN ('01','02','03','04','05')
   AND d.year = CAST(YEAR(DATEADD(HOUR, 9, GETUTCDATE())) AS VARCHAR(4));
 
 

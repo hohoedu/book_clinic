@@ -1,4 +1,5 @@
 document.addEventListener("DOMContentLoaded", async () => {
+  await loadCurrentUser(); // 목록을 그리기 전에 본사 여부를 먼저 확정해야 드래그/버튼 노출이 맞는다
   renderGradeTabs();
   initSearch();
   initActionButtons();
@@ -8,7 +9,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 const CSRF_HEADER = "X-XSRF-TOKEN";
-const CSRF_TOKEN = "hohoedu-master-csrf-token";
+// 서버가 세션마다 다른 값을 XSRF-TOKEN 쿠키로 내려준다(CookieCsrfTokenRepository, 2026-07-31) —
+// 예전처럼 고정 문자열을 하드코딩하지 않고 매 요청마다 쿠키에서 읽는다.
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : "";
+}
+
+// 권장도서 순위는 전 센터가 공유하는 데이터라 변경은 본사만 가능하다 — 지점은 조회/엑셀만 (2026-07-31).
+// 화면 차단은 편의일 뿐이고 실제 차단은 서버(PriorityController의 CenterPolicy.assertHq)에서 한다.
+const HQ_CENTER_CODE = "PUS001";
+let isHq = false; // 사용자 조회 실패 시엔 안전하게 읽기 전용으로 둔다
 
 const SCHOOLYEAR_CODES = [
   { code: "01", name: "초1" },
@@ -52,7 +63,7 @@ async function postJson(url, body) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      [CSRF_HEADER]: CSRF_TOKEN,
+      [CSRF_HEADER]: getCsrfToken(),
     },
     body: JSON.stringify(body),
   });
@@ -61,6 +72,26 @@ async function postJson(url, body) {
   if (!data.success) throw new Error(data.error?.message ?? "요청 처리에 실패했습니다.");
 
   return data;
+}
+
+/* 로그인 사용자 조회 → 본사 여부 판별 후 권한 UI 적용 */
+async function loadCurrentUser() {
+  try {
+    const response = await fetch("/api/user/me");
+    const data = await response.json();
+    if (data.success) isHq = data.response.centerCode === HQ_CENTER_CODE;
+  } catch (error) {
+    console.error(error);
+  }
+  applyRoleUi();
+}
+
+/* 지점 계정이면 순위를 바꾸는 UI(저장 버튼)를 아예 감춘다 — 드래그/초안 버튼은 각 렌더 지점에서 막는다 */
+function applyRoleUi() {
+  if (isHq) return;
+
+  const saveBtn = document.getElementById("btnSaveRanking");
+  if (saveBtn) saveBtn.hidden = true;
 }
 
 /* 학년 탭 렌더링 */
@@ -203,8 +234,11 @@ function buildRankingRow(book, rank, disableDrag) {
 
   const diffClass = DIFFICULTY_BADGE_CLASS[book.difficulty] ?? "diff-mid";
 
+  // 지점은 순위를 못 바꾸므로 드래그 손잡이 자체를 그리지 않는다
+  const showHandle = rank != null && isHq;
+
   li.innerHTML = `
-    <span class="drag-handle">${rank == null ? "" : '<i class="fa-solid fa-grip-vertical"></i>'}</span>
+    <span class="drag-handle">${showHandle ? '<i class="fa-solid fa-grip-vertical"></i>' : ""}</span>
     <span class="rank-number">${rank ?? ""}</span>
     <img class="rank-thumb" src="${book.imageUrl || "/images/book-sample.png"}" alt="">
     <span class="rank-title">${book.originalTitle ?? ""}</span>
@@ -216,7 +250,7 @@ function buildRankingRow(book, rank, disableDrag) {
     </div>
   `;
 
-  if (!disableDrag) bindDragEvents(li);
+  if (!disableDrag && isHq) bindDragEvents(li);
 
   return li;
 }
@@ -484,6 +518,10 @@ function initActionButtons() {
 
 /* 현재 화면 순서를 새 초안으로 저장 (해당 연도+학년 첫 저장이면 자동으로 적용 상태가 됨) */
 async function saveRankingDraft() {
+  if (!isHq) {
+    alert("권장도서 순위는 본사에서만 변경할 수 있습니다.");
+    return;
+  }
   if (!gradeBooks.length) {
     alert("저장할 도서가 없습니다.");
     return;
@@ -609,12 +647,13 @@ function renderDrafts(drafts) {
 
     info.append(date, meta);
 
+    // 적용중이 아닌 초안이라도 지점 계정에는 "적용" 버튼 대신 아무것도 두지 않는다(미리보기는 그대로 가능)
     let actionEl;
     if (draft.isActive === "Y") {
       actionEl = document.createElement("span");
       actionEl.className = "draft-active-badge";
       actionEl.textContent = "적용중";
-    } else {
+    } else if (isHq) {
       actionEl = document.createElement("button");
       actionEl.type = "button";
       actionEl.className = "btn primary small";
@@ -622,14 +661,18 @@ function renderDrafts(drafts) {
       actionEl.addEventListener("click", () => activateDraft(draft.draftId));
     }
 
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.className = "draft-delete";
-    deleteBtn.setAttribute("aria-label", "초안 삭제");
-    deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
-    deleteBtn.addEventListener("click", () => deleteDraft(draft.draftId, draft.isActive));
+    row.append(toggleBtn, info);
+    if (actionEl) row.append(actionEl);
 
-    row.append(toggleBtn, info, actionEl, deleteBtn);
+    if (isHq) {
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "draft-delete";
+      deleteBtn.setAttribute("aria-label", "초안 삭제");
+      deleteBtn.innerHTML = '<i class="fa-solid fa-trash"></i>';
+      deleteBtn.addEventListener("click", () => deleteDraft(draft.draftId, draft.isActive));
+      row.append(deleteBtn);
+    }
 
     const preview = document.createElement("div");
     preview.className = "draft-preview";
@@ -683,6 +726,7 @@ async function loadDraftPreview(draftId, container) {
 }
 
 async function activateDraft(draftId) {
+  if (!isHq) return;
   const ok = await customConfirm("이 순위를 적용하시겠습니까? 현재 적용 중인 순위는 해제됩니다.");
   if (!ok) return;
 
@@ -699,6 +743,7 @@ async function activateDraft(draftId) {
 
 /* 초안 삭제 — _del로 이관만 하고 복구는 지원하지 않으므로 삭제 전 한 번 더 확인 */
 async function deleteDraft(draftId, isActive) {
+  if (!isHq) return;
   const message = isActive === "Y"
     ? "이 순위는 현재 적용 중입니다.\n삭제하면 적용된 순위가 없어집니다.\n그래도 삭제하시겠습니까?\n(삭제 후 복구할 수 없습니다)"
     : "이 순위 초안을 삭제하시겠습니까?\n삭제 후에는 복구할 수 없습니다.";
