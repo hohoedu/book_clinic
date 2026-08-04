@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>결제</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
+               margin: 0; padding: 24px; background: #f7f8fa; }
+        .box { max-width: 480px; margin: 0 auto; background: #fff;
+               border-radius: 12px; padding: 24px; }
+        h2 { margin: 0 0 20px; font-size: 18px; }
+        .row { display: flex; justify-content: space-between; padding: 10px 0;
+               border-bottom: 1px solid #f0f0f0; font-size: 15px; }
+        .row span:first-child { color: #888; }
+        .total { font-size: 18px; font-weight: 600; padding-top: 16px; border-bottom: 0; }
+        button { width: 100%; margin-top: 24px; padding: 16px; font-size: 16px; font-weight: 600;
+                 border: 0; border-radius: 8px; background: #1f6feb; color: #fff; }
+        .warn { margin-top: 16px; padding: 12px; background: #fff8e1; border-radius: 8px;
+                font-size: 13px; color: #8a6d3b; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>결제 확인</h2>
+    <div class="row"><span>상품</span><span th:text="${goodName}"></span></div>
+    <div class="row"><span>주문번호</span><span th:text="${oid}"></span></div>
+    <div class="row total"><span>결제 금액</span><span th:text="${#numbers.formatInteger(price, 0, 'COMMA')} + '원'"></span></div>
+
+    <button type="button" onclick="document.getElementById('mobileweb').submit()">결제하기</button>
+
+    <div class="warn" th:if="${testMode}">
+        테스트 상점이라 실제로 돈이 빠져나가지 않습니다.
+    </div>
+</div>
+
+<!--
+  이니시스 모바일 결제창으로 보내는 폼.
+
+  [PC 웹표준(INIStdPay.js)을 쓰지 않는 이유] 그쪽은 window.open으로 결제창을 띄우는데
+  webview_flutter는 팝업을 지원하지 않아 앱에서 버튼을 눌러도 아무 일도 일어나지 않는다.
+  모바일 결제창은 같은 창에서 폼을 전송하므로 WebView에서 그대로 동작한다.
+
+  [파라미터 이름] 모바일은 전부 P_ 접두어를 쓰고 PC와 이름 체계가 다르다.
+  이니시스가 이 name을 그대로 읽으므로 바꾸면 안 된다.
+
+  [금액 위변조] 모바일 결제창에는 PC의 signature/mKey 같은 서명 파라미터가 없다.
+  그래서 금액 검증은 전적으로 서버 승인 단계에서 한다 — 인증 결과의 P_AMT와 승인 응답의
+  P_AMT를 둘 다 우리가 기록한 금액과 대조하고, 하나라도 어긋나면 결제로 인정하지 않는다.
+-->
+<form id="mobileweb" method="post" th:action="${mobilePayUrl}" accept-charset="UTF-8">
+    <input type="hidden" name="P_INI_PAYMENT" value="CARD">          <!-- 카드만 -->
+    <input type="hidden" name="P_MID" th:value="${mid}">
+    <input type="hidden" name="P_OID" th:value="${oid}">
+    <input type="hidden" name="P_AMT" th:value="${price}">
+    <input type="hidden" name="P_GOODS" th:value="${goodName}">
+    <input type="hidden" name="P_UNAME" th:value="${studentId}">
+    <input type="hidden" name="P_MOBILE" value="01000000000">
+    <input type="hidden" name="P_EMAIL" value="test@hohoedu.com">
+    <!-- 인증이 끝나면 이 주소로 결과를 POST한다 (PC의 returnUrl에 해당) -->
+    <input type="hidden" name="P_NEXT_URL" th:value="${returnUrl}">
+    <!--
+      P_NOTI: 가맹점이 보낸 값을 이니시스가 그대로 돌려주는 자유 필드.
+      모바일 결제창은 인증 응답에 P_OID를 실어주지 않는다(P_OID는 승인 응답에만 있다).
+      그래서 인증 직후 시점에는 이 값으로만 우리 주문을 식별할 수 있다 — 반드시 채워야 한다.
+    -->
+    <input type="hidden" name="P_NOTI" th:value="${oid}">
+    <input type="hidden" name="P_CHARSET" value="utf8">
+    <!-- 할부를 받지 않으므로 일시불로 고정한다 -->
+    <input type="hidden" name="P_QUOTABASE" value="0">
+</form>
+
+</body>
+</html>

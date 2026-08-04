@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  이용권/차감 쿼리. 결제 방식(PG/서당) 분기가 한 줄도 없는 것이 의도다.
+  시각은 전부 DATEADD(HOUR, 9, GETUTCDATE())로 KST를 만든다.
+-->
+<mapper namespace="com.hohoedu.book_clinic.pass.PassRepository">
+
+    <insert id="insertPass">
+        INSERT INTO erp_bookstore_pass
+            (student_id, center_code, product_id, service_code, source, ref_no, billing_ym,
+             total_count, remain_count, granted_at)
+        VALUES
+            (#{studentId}, #{centerCode}, #{productId}, #{serviceCode}, #{source}, #{refNo}, #{billingYm},
+             #{totalCount}, #{totalCount}, DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <sql id="passColumns">
+        pass_id, student_id, center_code, product_id, service_code, source, ref_no,
+        billing_ym, total_count, remain_count, granted_at, revoked_at
+    </sql>
+
+    <!-- 먼저 받은 이용권부터 소진시킨다 (전월 잔여 + 이번 달분이 겹칠 수 있음) -->
+    <select id="findUsablePass" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
+        SELECT TOP 1 <include refid="passColumns"/>
+        FROM erp_bookstore_pass
+        WHERE student_id   = #{studentId}
+          AND service_code = #{serviceCode}
+          AND revoked_at IS NULL
+          AND remain_count > 0
+        ORDER BY granted_at ASC
+    </select>
+
+    <!-- remain_count > 0 조건이 동시 요청에서 잔여가 마이너스로 내려가는 것을 막는다 -->
+    <update id="decrementRemain">
+        UPDATE erp_bookstore_pass
+        SET remain_count = remain_count - 1
+        WHERE pass_id = #{passId}
+          AND remain_count > 0
+          AND revoked_at IS NULL
+    </update>
+
+    <insert id="insertUse">
+        INSERT INTO erp_bookstore_pass_use
+            (pass_id, student_id, session_id, used_date, created_at)
+        VALUES
+            (#{passId}, #{studentId}, #{sessionId}, #{usedDate}, DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <select id="existsTodayUse" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM erp_bookstore_pass_use
+            WHERE student_id = #{studentId} AND used_date = #{usedDate}
+        ) THEN 1 ELSE 0 END
+    </select>
+
+    <select id="sumRemain" resultType="int">
+        SELECT ISNULL(SUM(remain_count), 0)
+        FROM erp_bookstore_pass
+        WHERE student_id   = #{studentId}
+          AND service_code = #{serviceCode}
+          AND revoked_at IS NULL
+    </select>
+
+    <select id="findByRef" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
+        SELECT <include refid="passColumns"/>
+        FROM erp_bookstore_pass
+        WHERE source = #{source}
+          AND ref_no = #{refNo}
+    </select>
+
+    <select id="countUse" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_pass_use
+        WHERE pass_id = #{passId}
+    </select>
+
+    <!--
+      잔여만 0으로 만들면 "다 써서 0"인지 "환불돼서 0"인지 구분이 안 되므로 회수 시각을 함께 남긴다.
+      이미 회수된 건은 WHERE에서 걸러 중복 회수를 막는다.
+    -->
+    <update id="revoke">
+        UPDATE erp_bookstore_pass
+        SET remain_count = 0,
+            revoked_at   = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE pass_id = #{passId}
+          AND revoked_at IS NULL
+    </update>
+
+</mapper>

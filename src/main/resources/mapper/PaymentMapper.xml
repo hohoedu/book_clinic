@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  결제/환불 쿼리.
+
+  시각은 전부 DATEADD(HOUR, 9, GETUTCDATE())로 KST를 만든다. GETDATE()는 서버 타임존을
+  따라가서 UTC 컨테이너에 배포되면 9시간 어긋나므로 이 프로젝트에서는 쓰지 않는다.
+-->
+<mapper namespace="com.hohoedu.book_clinic.payment.PaymentRepository">
+
+    <select id="findActiveProduct" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$ProductDTO">
+        SELECT product_id, product_code, product_name, service_code, total_count, price
+        FROM erp_bookstore_product
+        WHERE product_code = #{productCode}
+          AND is_active = 1
+    </select>
+
+    <select id="findActiveProducts" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$ProductDTO">
+        SELECT product_id, product_code, product_name, service_code, total_count, price
+        FROM erp_bookstore_product
+        WHERE is_active = 1
+        <if test="serviceCode != null and serviceCode != ''">
+          AND service_code = #{serviceCode}
+        </if>
+        ORDER BY price ASC
+    </select>
+
+    <select id="findProductById" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$ProductDTO">
+        SELECT product_id, product_code, product_name, service_code, total_count, price
+        FROM erp_bookstore_product
+        WHERE product_id = #{productId}
+    </select>
+
+    <insert id="insertReady">
+        INSERT INTO erp_bookstore_payment
+            (order_no, student_id, center_code, product_id, product_name, amount, status, requested_at)
+        VALUES
+            (#{orderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{amount}, 'READY',
+             DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <sql id="paymentColumns">
+        payment_id, order_no, tid, student_id, center_code, product_id, product_name,
+        amount, refund_amount, status, paid_at
+    </sql>
+
+    <select id="findByOrderNo" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+        SELECT <include refid="paymentColumns"/>
+        FROM erp_bookstore_payment
+        WHERE order_no = #{orderNo}
+    </select>
+
+    <select id="findById" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+        SELECT <include refid="paymentColumns"/>
+        FROM erp_bookstore_payment
+        WHERE payment_id = #{paymentId}
+    </select>
+
+    <!--
+      status='READY' 조건이 중복 승인 방어의 마지막 선이다. 앱이 같은 승인을 두 번 보내면
+      두 번째는 0행이 되고, 호출부가 그걸 재시도로 판단한다. tid의 필터드 UNIQUE 인덱스가
+      한 겹 더 막아준다.
+    -->
+    <update id="markPaid">
+        UPDATE erp_bookstore_payment
+        SET tid         = #{tid},
+            pay_method  = #{payMethod},   <!-- 지금은 Card만 받지만 응답값을 그대로 저장한다 -->
+            card_name   = #{cardName},
+            card_no     = #{cardNo},
+            appl_no     = #{applNo},
+            result_code = #{resultCode},
+            status      = 'PAID',
+            paid_at     = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE order_no = #{orderNo}
+          AND status   = 'READY'
+    </update>
+
+    <update id="markFailed">
+        UPDATE erp_bookstore_payment
+        SET result_code = #{resultCode},
+            status      = 'FAILED'
+        WHERE order_no = #{orderNo}
+          AND status   = 'READY'
+    </update>
+
+    <!-- 승인 시도 없이 이탈 — X버튼/뒤로가기/방치. "실패"가 아니라 "안 샀다"이므로 FAILED와 분리한다 -->
+    <update id="markClosed">
+        UPDATE erp_bookstore_payment
+        SET status = 'CLOSED'
+        WHERE order_no = #{orderNo}
+          AND status   = 'READY'
+    </update>
+
+    <!-- 방치 READY 일괄 정리 — requested_at 기준이라 승인 시도조차 없었던 순수 이탈 건만 걸린다 -->
+    <update id="markStaleReadyAsClosed">
+        UPDATE erp_bookstore_payment
+        SET status = 'CLOSED'
+        WHERE status = 'READY'
+          AND requested_at &lt; #{olderThan}
+    </update>
+
+    <!--
+      누적 환불액을 더하면서 전액이 되면 CANCELED로 내린다. 부분환불은 status를 건드리지
+      않는다(PAID + refund_amount > 0으로 판별). 잔액보다 큰 금액은 WHERE에서 걸러 음수 잔액을 막는다.
+    -->
+    <update id="applyRefund">
+        UPDATE erp_bookstore_payment
+        SET refund_amount = refund_amount + #{cancelAmount},
+            status        = CASE WHEN refund_amount + #{cancelAmount} >= amount THEN 'CANCELED' ELSE status END
+        WHERE payment_id = #{paymentId}
+          AND status IN ('PAID')
+          AND refund_amount + #{cancelAmount} &lt;= amount
+    </update>
+
+    <insert id="insertCancelRequest"
+            parameterType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$CancelRowDTO"
+            useGeneratedKeys="true" keyProperty="cancelId" keyColumn="cancel_id">
+        INSERT INTO erp_bookstore_payment_cancel
+            (payment_id, cancel_amount, reason, requested_by, rule_code, used_days, used_count, status, requested_at)
+        VALUES
+            (#{paymentId}, #{cancelAmount}, #{reason}, #{requestedBy}, #{ruleCode}, #{usedDays}, #{usedCount}, 'REQ',
+             DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <update id="updateCancelResult">
+        UPDATE erp_bookstore_payment_cancel
+        SET status      = #{status},
+            cancel_tid  = #{cancelTid},
+            result_code = #{resultCode},
+            result_msg  = #{resultMsg},
+            canceled_at = CASE WHEN #{status} = 'DONE' THEN DATEADD(HOUR, 9, GETUTCDATE()) ELSE canceled_at END
+        WHERE cancel_id = #{cancelId}
+    </update>
+
+    <insert id="insertLog">
+        INSERT INTO erp_bookstore_payment_log
+            (order_no, tid, log_type, http_status, result_code, req_body, res_body, created_at)
+        VALUES
+            (#{orderNo}, #{tid}, #{logType}, #{httpStatus}, #{resultCode}, #{reqBody}, #{resBody},
+             DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <select id="findActiveRefundRules" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$RefundRuleDTO">
+        SELECT rule_code, rule_name, max_days, max_count, refund_rate
+        FROM erp_bookstore_refund_rule
+        WHERE is_active = 1
+        ORDER BY priority ASC
+    </select>
+
+    <select id="findHistory" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$HistoryDTO">
+        SELECT payment_id, order_no, product_name, amount, refund_amount,
+               status, card_name, card_no, requested_at, paid_at
+        FROM erp_bookstore_payment
+        WHERE student_id = #{studentId}
+          AND status NOT IN ('READY', 'CLOSED')   <!-- 결제창만 띄우고 만 건은 사용자에게 보여줄 내역이 아니다 -->
+        ORDER BY requested_at DESC
+    </select>
+
+</mapper>

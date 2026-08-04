@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>결제 결과</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
+               margin: 0; padding: 48px 24px; background: #f7f8fa; text-align: center; }
+        .icon { font-size: 56px; }
+        h2 { margin: 16px 0 8px; font-size: 20px; }
+        .ok { color: #1a7f37; }
+        .fail { color: #cf222e; }
+        .cancel { color: #6e7781; }
+        p { color: #666; font-size: 15px; line-height: 1.6; margin: 4px 0; }
+    </style>
+</head>
+<body>
+
+<!--
+  이 화면은 사람이 브라우저로 결제했을 때만 보인다.
+  앱(WebView)은 /payment/done 주소가 뜨는 순간 WebView를 닫으므로 내용을 볼 일이 없다 —
+  그래서 결과는 화면 글자가 아니라 URL 쿼리 파라미터(status/paymentId/remain)로 전달한다.
+-->
+<div th:switch="${status}">
+    <div th:case="'ok'">
+        <div class="icon">✅</div>
+        <h2 class="ok">결제가 완료되었습니다</h2>
+        <p th:text="'이용 가능 횟수 ' + ${remain} + '회'"></p>
+        <p th:if="${paymentId != null}" th:text="'결제번호 ' + ${paymentId}"></p>
+    </div>
+    <div th:case="'cancel'">
+        <div class="icon">🚫</div>
+        <h2 class="cancel">결제를 취소했습니다</h2>
+    </div>
+    <div th:case="*">
+        <div class="icon">⚠️</div>
+        <h2 class="fail">결제에 실패했습니다</h2>
+        <p th:text="${msg}"></p>
+    </div>
+</div>
+
+</body>
+</html>

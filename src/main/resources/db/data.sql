@@ -339,3 +339,15 @@ WHERE student_id LIKE 'DAE001T%' OR student_id LIKE 'PUS002T%';
 
 
 
+
+
+-- ── 테스트 학생 앱 비밀번호 (2026-08-04, 학부모 앱 로그인 테스트용) ──────────────
+-- 학생 PWA는 QR(appId)만으로 로그인해서 비밀번호가 필요 없었지만, 학부모 앱은 결제를
+-- 다루므로 비밀번호까지 확인한다(AppAuthController). 시드 학생들은 app_password가
+-- 비어 있어 그대로면 로그인이 안 되므로 여기서 채운다.
+--
+-- 값은 sha256('1234')이다. erp_student에는 salt 컬럼이 없어 salt 없이 해시한다(HashUtils 참고).
+-- 개발 시드 전용이며 운영에는 data.sql 자체가 실행되지 않는다.
+UPDATE erp_student
+SET app_password = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'
+WHERE app_password IS NULL OR app_password = '';
