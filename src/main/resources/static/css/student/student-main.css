@@ -103,6 +103,16 @@
   color: var(--blue);
 }
 
+.state-card__sub {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.state-card--warn i {
+  color: var(--orange);
+}
+
 .card {
   background: var(--panel-soft);
   border: 1px solid rgba(0,0,0,.05);

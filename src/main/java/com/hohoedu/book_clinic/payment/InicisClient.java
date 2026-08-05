@@ -3,6 +3,9 @@ package com.hohoedu.book_clinic.payment;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -38,6 +41,8 @@ import lombok.extern.slf4j.Slf4j;
 @Component
 @RequiredArgsConstructor
 public class InicisClient {
+
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     private final InicisProperties props;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -122,28 +127,50 @@ public class InicisClient {
     public Result refund(String tid, String reason, Integer partialAmount, int remainAfterRefund) {
         String clientIp = props.getClientIp();
         boolean partial = partialAmount != null;
-        String type = partial ? "PartialRefund" : "Refund";
-        String payMethod = "Card";
-        String timestamp = String.valueOf(System.currentTimeMillis());
+        // 실제 요청서비스 값은 소문자 시작(fixed value) — "Refund"/"PartialRefund"가 아니다
+        // (2026-08-05, 상점관리자 API 문서 확인).
+        String type = partial ? "partialRefund" : "refund";
+        // 환불(webApi) 계열은 승인/결제창과 달리 timestamp를 유닉스 타임(초/밀리초)이 아니라
+        // yyyyMMddHHmmss(14자리) 형태로 요구한다. 밀리초(13자리)·초단위(10자리) 모두
+        // 이니시스가 ERR101(Length 오류)로 거절했다.
+        String timestamp = LocalDateTime.now(KST).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
 
-        // 환불 API는 승인과 달리 SHA512이고, 해시 재료의 순서가 정해져 있다(순서가 틀리면 무조건 실패)
-        String hashData = sha512(props.getApiKey() + type + payMethod + timestamp + clientIp + props.getMid() + tid);
-
-        MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("type", type);
-        form.add("paymethod", payMethod);
-        form.add("timestamp", timestamp);
-        form.add("clientIp", clientIp);
-        form.add("mid", props.getMid());
-        form.add("tid", tid);
-        form.add("msg", reason);
-        form.add("hashData", hashData);
+        // v2 취소 API는 요청을 최상위 필드(mid/type/timestamp/clientIp/hashData)와 그 안에 중첩된
+        // data(tid/msg/price/confirmPrice)로 나눈다. 전액취소는 data에 tid/msg만 있으면 된다
+        // (price/confirmPrice는 필수가 아니라 아예 안 넣음). currency/tax/taxFree는 필수 항목이
+        // 아니라고 확인해서 넣지 않는다.
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("tid", tid);
+        data.put("msg", reason);
         if (partial) {
-            form.add("price", String.valueOf(partialAmount));            // 이번에 취소할 금액
-            form.add("confirmPrice", String.valueOf(remainAfterRefund));  // 취소 후 남을 금액 (대조용)
+            data.put("price", partialAmount);            // 이번에 취소할 금액
+            data.put("confirmPrice", remainAfterRefund);  // 취소 후 남을 금액 (대조용)
         }
 
-        return post(props.getRefundUrl(), form);
+        String dataJson;
+        try {
+            dataJson = objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            throw new IllegalStateException("[이니시스] 취소 요청 data 직렬화 실패", e);
+        }
+
+        // hashData = SHA512(INIAPIKey + mid + type + timestamp + data의 JSON 문자열) — 위 dataJson과
+        // 정확히 같은 문자열이어야 한다. body에도 이 Map을 그대로 중첩시켜서 실제 전송 시 다시
+        // 직렬화되는 결과가 여기서 만든 dataJson과 어긋나지 않게 한다(둘 다 Jackson 기본 컴팩트 출력).
+        String hashData = sha512(props.getApiKey() + props.getMid() + type + timestamp + dataJson);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mid", props.getMid());
+        body.put("type", type);
+        body.put("timestamp", timestamp);
+        body.put("clientIp", clientIp);
+        body.put("hashData", hashData);
+        body.put("data", data);
+
+        // 전액취소와 부분취소는 파라미터(type)만 다른 게 아니라 엔드포인트 자체가 다르다
+        // (v2/pg/refund vs v2/pg/partialRefund) — type만 바꿔서 같은 URL로 보내면 거절된다.
+        String url = partial ? props.getPartialRefundUrl() : props.getRefundUrl();
+        return postJson(url, body);
     }
 
     // ─────────────── 결제창 호출용 서명 (승인 요청과는 별개의 규칙) ───────────────
@@ -199,6 +226,32 @@ public class InicisClient {
 
         String raw = response.getBody();
         return new Result(response.getStatusCode().value(), parse(raw), raw);
+    }
+
+    /** v2 취소 API 전용 — JSON 바디로 보낸다(위 post()의 form-urlencoded와 다름) */
+    private Result postJson(String url, Map<String, Object> body) {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(Duration.ofMillis(props.getTimeoutMs()));
+        factory.setReadTimeout(Duration.ofMillis(props.getTimeoutMs()));
+
+        RestClient client = RestClient.builder().requestFactory(factory).build();
+
+        String raw;
+        try {
+            raw = objectMapper.writeValueAsString(body);
+        } catch (Exception e) {
+            throw new IllegalStateException("[이니시스] 취소 요청 바디 직렬화 실패", e);
+        }
+
+        var response = client.post()
+                .uri(url)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(raw)
+                .retrieve()
+                .toEntity(String.class);
+
+        String respRaw = response.getBody();
+        return new Result(response.getStatusCode().value(), parse(respRaw), respRaw);
     }
 
     /**

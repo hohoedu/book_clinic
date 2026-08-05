@@ -40,8 +40,11 @@ public class InicisProperties {
     /** 환불 API 요청 암호화 IV */
     private String apiIv;
 
-    /** 환불 API 엔드포인트 (테스트/운영 호스트가 다르다) */
+    /** 전액취소 API 엔드포인트 */
     private String refundUrl;
+
+    /** 부분취소 API 엔드포인트 — 전액취소와 파라미터만 다른 게 아니라 URL 자체가 다르다 */
+    private String partialRefundUrl;
 
     /** 결제창이 인증 결과를 던지는 주소 */
     private String returnUrl;

@@ -99,10 +99,66 @@
       color: #aaa;
       margin: -2px 0 14px;
     }
+
+    .pass-exhausted-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, .72);
+      z-index: 9999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .pass-exhausted-box {
+      width: 360px;
+      max-width: 90vw;
+      background: #fff;
+      border-radius: var(--radius-xl);
+      padding: 32px 28px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    .pass-exhausted-box i {
+      font-size: 40px;
+      color: var(--orange);
+      margin-bottom: 14px;
+    }
+
+    .pass-exhausted-box h2 {
+      font-size: 18px;
+      margin: 0 0 8px;
+    }
+
+    .pass-exhausted-box p {
+      font-size: 14px;
+      color: #888;
+      margin: 0 0 24px;
+    }
+
+    .pass-exhausted-box button {
+      width: 100%;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--blue);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 800;
+    }
   </style>
 </head>
 
 <body>
+  <div class="pass-exhausted-overlay" th:if="${passExhausted}" id="passExhaustedModal">
+    <div class="pass-exhausted-box">
+      <i class="fa-solid fa-ticket" aria-hidden="true"></i>
+      <h2>이용권이 모두 소진되었어요</h2>
+      <p>선생님께 말씀드리고 이용권을 다시 등록해주세요.</p>
+      <button type="button" id="passExhaustedOk">확인</button>
+    </div>
+  </div>
+
   <div class="login-viewport">
     <form class="login-card" id="loginForm" th:action="@{/student/login}" method="post">
       <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
@@ -126,6 +182,11 @@
           console.error('Service worker 등록 실패:', err);
         });
       });
+    }
+
+    const passExhaustedModal = document.getElementById('passExhaustedModal');
+    if (passExhaustedModal) {
+      document.getElementById('passExhaustedOk').addEventListener('click', () => passExhaustedModal.remove());
     }
 
     document.getElementById('qrLoginBtn').addEventListener('click', async () => {

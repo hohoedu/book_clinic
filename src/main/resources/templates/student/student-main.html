@@ -46,6 +46,13 @@
             <p>오늘의 추천 도서를 고르고 있어요...</p>
           </article> 
 
+          <!-- 이용권 소진 — 결제/재계약이 필요한 상태(일반 에러와 톤을 구분) -->
+          <article class="card book-card state-card state-card--warn" id="passExhausted" hidden>
+            <i class="fa-solid fa-ticket" aria-hidden="true"></i>
+            <p>이용권이 모두 소진되었어요.</p>
+            <p class="state-card__sub">선생님께 말씀드리고 이용권을 다시 등록해주세요.</p>
+          </article>
+
           <!-- 추천 도서 없음/에러 -->
           <article class="card book-card state-card" id="recommendEmpty" hidden>
             <i class="fa-solid fa-circle-info" aria-hidden="true"></i>

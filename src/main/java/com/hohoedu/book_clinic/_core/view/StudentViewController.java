@@ -19,6 +19,7 @@ import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.monitor.MonitorService;
+import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -50,6 +51,7 @@ public class StudentViewController {
     private final StudentRepository studentRepository;
     private final ClinicService clinicService;
     private final MonitorService monitorService;
+    private final PassService passService;
 
     /**
      * 세션에 로그인된 studentId가 없으면(로그인 안 함/세션 만료) null. 세션은 있는데 URL의
@@ -117,6 +119,14 @@ public class StudentViewController {
         Student student = studentRepository.findByAppId(appId);
         if (student == null) {
             redirectAttributes.addFlashAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. 다시 확인해주세요.");
+            return "redirect:/student/login";
+        }
+        // 이용권이 없으면 메인 화면까지 들여보내지 않고 로그인 단계에서 바로 막는다(2026-08-05).
+        // 세션을 만들기 전에 확인하므로 여기서 막힌 학생은 홈 화면 URL을 직접 열어도 재로그인부터
+        // 다시 해야 한다. MonitorService.enterSession()에도 같은 조건의 차단이 남아있는데, 그건
+        // 로그인 이후 세션 중간에 이용권이 회수되는 것 같은 드문 경우를 막는 이중 방어용이다.
+        if (passService.remain(student.getStudentId(), "BOOK") <= 0) {
+            redirectAttributes.addFlashAttribute("passExhausted", true);
             return "redirect:/student/login";
         }
         // QR(appId)로 신원을 확인한 이 시점에만 세션을 발급한다 — 이후 화면들은 URL의 studentId가

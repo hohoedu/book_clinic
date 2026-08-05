@@ -8,11 +8,13 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
+import com.hohoedu.book_clinic.pass.PassService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -33,11 +35,19 @@ public class MonitorService {
     private final MonitorRepository monitorRepository;
     private final MonitorSyncService monitorSyncService;
     private final BookService bookService;
+    private final PassService passService;
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
      * 오늘 이미 열린(ENTERED) 세션이 있으면 재사용하고, 없으면(당일 첫 로그인 또는 이전
      * 세션이 이미 퇴실 처리됨) 새로 만든다.
+     *
+     * 이용권 차감(2026-08-05)도 여기서 함께 한다 — getHomeState/recommendBook 세 호출부가
+     * 전부 이 메서드를 거치는 유일한 "입실" 지점이라, 차감 규칙을 여기 한 곳에 두면 호출부마다
+     * 중복해서 검사할 필요가 없다. consume()은 그날 이미 썼으면 다시 까지 않고 그대로 잔여값을
+     * 돌려주므로(0이어도) 반복 호출에 안전하다 — 새로 깎을 게 없는데 오늘 아직 한 번도 못 쓴
+     * 경우에만 -1이 오므로, 그 경우에만 입실을 막는다. 예외가 나면 @Transactional이 방금 만든
+     * 세션 insert까지 함께 롤백해서 "이용권도 없는데 세션만 남는" 상태가 생기지 않는다.
      */
     @Transactional
     public void enterSession(String studentId) {
@@ -46,6 +56,9 @@ public class MonitorService {
         if (sessionId == null) {
             monitorRepository.insertSession(studentId, today);
             sessionId = monitorRepository.findOpenSessionId(studentId, today);
+        }
+        if (passService.consume(studentId, "BOOK", sessionId) == -1) {
+            throw new Exception400("이용권이 모두 소진되었습니다. 재결제 후 이용해주세요.");
         }
         // 독서일지가 "메인 데이터"가 되도록, 직원이 뭔가 저장하기 전이라도 입실 시점에 바로 헤더를
         // 만들어둔다(2026-07-30) — 예전엔 첫 저장/제출 전까지 diary 행이 없어서, 화면이 세션값

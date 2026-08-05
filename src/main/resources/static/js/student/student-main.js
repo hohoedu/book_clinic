@@ -102,6 +102,7 @@
     const loadingEl = document.getElementById('recommendLoading');
     const emptyEl = document.getElementById('recommendEmpty');
     const emptyMsgEl = document.getElementById('recommendEmptyMsg');
+    const passExhaustedEl = document.getElementById('passExhausted');
     const cardEl = document.getElementById('recommendCard');
     const titleEl = document.getElementById('bookTitle');
     const authorEl = document.getElementById('bookAuthor');
@@ -117,6 +118,7 @@
     function showState(name) {
       loadingEl.hidden = name !== 'loading';
       emptyEl.hidden = name !== 'empty';
+      passExhaustedEl.hidden = name !== 'passExhausted';
       cardEl.hidden = name !== 'card';
     }
 
@@ -150,8 +152,15 @@
       showState('card');
     }
 
+    // 이용권 소진(MonitorService.enterSession)은 시스템 오류가 아니라 결제/재계약이 필요한
+    // 정상적인 업무 상황이라, 같은 "실패" 톤이 아니라 전용 카드(passExhausted)로 구분해서 보여준다.
+    // 서버가 별도 에러 코드를 내려주지 않아 메시지 문구로 구분한다 — enterSession의 문구와 짝이 맞아야 한다.
     function showError(err) {
       console.error(err);
+      if (err.message && err.message.includes('이용권이 모두 소진')) {
+        showState('passExhausted');
+        return;
+      }
       emptyMsgEl.textContent = err.message || '추천할 수 있는 도서를 찾지 못했어요.';
       showState('empty');
     }

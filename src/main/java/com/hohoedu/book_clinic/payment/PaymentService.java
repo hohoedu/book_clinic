@@ -360,13 +360,21 @@ public class PaymentService {
     /**
      * 환불 규정 적용 — priority 순으로 훑어 조건에 처음 맞는 규정 하나만 쓴다.
      * 어디에도 안 걸리면 환불 불가다(규정에 없는 환불을 코드가 임의로 만들어내지 않는다).
+     *
+     * 사용 횟수만으로 판정한다(2026-08-05, 날짜 조건 폐지) — 0회 전액, 1회 75%, 2회 50%,
+     * 3회 이상은 규정에 맞는 행이 없어 자연히 환불 불가로 떨어진다. usedDays는 더 이상 판정에
+     * 쓰지 않지만 payment_cancel 감사 스냅샷에 여전히 남기므로 계산은 유지한다.
+     *
+     * 환불은 결제 1건당 1번만 허용한다(2026-08-05) — refund_amount가 조금이라도 있으면 그걸로
+     * 끝이다. 부분환불(예: 75%) 후 남은 잔액을 다시 계산해서 또 내주면, 두 번 요청하는 것만으로
+     * 사실상 100% 환불이 되어 "1회 사용 시 75%까지만" 같은 규정이 무의미해진다.
      */
     private PaymentRespDTO.RefundQuoteDTO calculateRefund(PaymentRespDTO.PaymentDTO payment) {
         if (!"PAID".equals(payment.getStatus())) {
             return refundDenied("환불할 수 있는 결제가 아닙니다.");
         }
-        if (payment.getRefundAmount() >= payment.getAmount()) {
-            return refundDenied("이미 전액 환불된 결제입니다.");
+        if (payment.getRefundAmount() > 0) {
+            return refundDenied("이미 환불 처리된 결제입니다.");
         }
         if (payment.getPaidAt() == null || payment.getTid() == null) {
             return refundDenied("승인 정보가 없어 환불할 수 없습니다.");
@@ -379,7 +387,7 @@ public class PaymentService {
 
         List<PaymentRespDTO.RefundRuleDTO> rules = paymentRepository.findActiveRefundRules();
         for (PaymentRespDTO.RefundRuleDTO rule : rules) {
-            if (usedDays > rule.getMaxDays() || usedCount > rule.getMaxCount()) {
+            if (usedCount > rule.getMaxCount()) {
                 continue;
             }
             // 원 단위 절사 — 정수 나눗셈이 그대로 절사다. 카드사에 원 미만 금액은 넘길 수 없다.
