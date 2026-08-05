@@ -1,5 +1,7 @@
 package com.hohoedu.book_clinic.payment;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -57,10 +59,39 @@ public class PaymentTxService {
         paymentRepository.markFailed(orderNo, resultCode);
     }
 
+    /**
+     * 형제 묶음결제 승인 확정 — confirmPaid를 학생 수만큼 반복한다.
+     * 한 트랜잭션 안에서 돌아야 "형제 중 일부만 결제 확정" 상태가 생기지 않는다.
+     */
+    @Transactional
+    public void confirmPaidGroup(List<PaymentRespDTO.PaymentDTO> payments, PaymentRespDTO.ProductDTO product,
+                                 String tid, String payMethod, String cardName, String cardNo,
+                                 String applNo, String resultCode) {
+        for (PaymentRespDTO.PaymentDTO payment : payments) {
+            confirmPaid(payment, product, tid, payMethod, cardName, cardNo, applNo, resultCode);
+        }
+    }
+
+    /** 형제 묶음결제 실패 확정 — confirmFailed를 그룹 전체에 대해 한 트랜잭션으로 반복한다 */
+    @Transactional
+    public void confirmFailedGroup(List<String> orderNos, String resultCode) {
+        for (String orderNo : orderNos) {
+            confirmFailed(orderNo, resultCode);
+        }
+    }
+
     /** 승인 시도 없이 이탈 확정 — X버튼/뒤로가기/방치. "안 샀다"와 "실패했다"를 구분하기 위해 나눈다 */
     @Transactional
     public void confirmClosed(String orderNo) {
         paymentRepository.markClosed(orderNo);
+    }
+
+    /** 형제 묶음결제 이탈 확정 — confirmClosed를 그룹 전체에 대해 한 트랜잭션으로 반복한다 */
+    @Transactional
+    public void confirmClosedGroup(List<String> orderNos) {
+        for (String orderNo : orderNos) {
+            confirmClosed(orderNo);
+        }
     }
 
     /**

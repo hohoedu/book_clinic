@@ -31,12 +31,19 @@ public interface PaymentRepository {
      */
     PaymentRespDTO.ProductDTO findProductById(@Param("productId") int productId);
 
-    /** 결제 시작 — status=READY 행을 먼저 만든다. 생성된 payment_id를 DTO에 되돌려 받는다 */
-    void insertReady(@Param("orderNo") String orderNo, @Param("studentId") String studentId,
+    /**
+     * 결제 시작 — status=READY 행을 먼저 만든다. 생성된 payment_id를 DTO에 되돌려 받는다.
+     * groupOrderNo는 형제 묶음결제일 때만 값이 있다(단일결제는 null로 넘긴다).
+     */
+    void insertReady(@Param("orderNo") String orderNo, @Param("groupOrderNo") String groupOrderNo,
+                     @Param("studentId") String studentId,
                      @Param("centerCode") String centerCode, @Param("productId") int productId,
                      @Param("productName") String productName, @Param("amount") int amount);
 
     PaymentRespDTO.PaymentDTO findByOrderNo(@Param("orderNo") String orderNo);
+
+    /** 같은 그룹으로 묶인 형제 묶음결제 행 전체 — 그룹 승인 확정 때 학생별로 순회하기 위함 */
+    List<PaymentRespDTO.PaymentDTO> findByGroupOrderNo(@Param("groupOrderNo") String groupOrderNo);
 
     PaymentRespDTO.PaymentDTO findById(@Param("paymentId") int paymentId);
 

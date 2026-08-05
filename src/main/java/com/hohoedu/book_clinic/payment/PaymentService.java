@@ -68,11 +68,50 @@ public class PaymentService {
         String centerCode = clinicRepository.findCenterCode(reqDTO.getStudentId());
         String orderNo = newOrderNo();
 
-        paymentRepository.insertReady(orderNo, reqDTO.getStudentId(), centerCode,
+        paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
                 product.getProductId(), product.getProductName(), product.getPrice());
 
         return new PaymentRespDTO.PrepareDTO(orderNo, props.getMid(), product.getPrice(),
                 product.getProductName(), props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
+    }
+
+    /** 판매중인 상품 조회 — 형제 선택 화면에서 학생별 개별 금액을 보여줄 때 쓴다 */
+    public PaymentRespDTO.ProductDTO productByCode(String productCode) {
+        return paymentRepository.findActiveProduct(productCode);
+    }
+
+    /**
+     * 형제 묶음결제 시작 — 선택된 학생마다 개별 READY 행을 만들고 공통 group_order_no로 묶는다.
+     *
+     * 모든 학생이 같은 상품을 산다는 전제다(형제마다 다른 상품을 고르는 것은 이번 범위 밖).
+     * PG에는 이 그룹 주문번호 하나로 합계 금액을 결제 1건만 승인 요청한다 — 학생별 결제 내역/이용권은
+     * 승인 확정 시점(approveGroupMobileByReturn)에 학생 수만큼 나뉘어 저장된다.
+     */
+    public PaymentRespDTO.PrepareGroupDTO prepareGroup(List<String> studentIds, String productCode) {
+        if (studentIds == null || studentIds.isEmpty()) {
+            throw new Exception400("결제할 학생을 선택해주세요.");
+        }
+        PaymentRespDTO.ProductDTO product = paymentRepository.findActiveProduct(productCode);
+        if (product == null) {
+            throw new Exception404("판매 중인 상품이 아닙니다.");
+        }
+
+        String groupOrderNo = newOrderNo();
+        int totalAmount = 0;
+        for (String studentId : studentIds) {
+            String centerCode = clinicRepository.findCenterCode(studentId);
+            String orderNo = newOrderNo();
+            paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
+                    product.getProductId(), product.getProductName(), product.getPrice());
+            totalAmount += product.getPrice();
+        }
+
+        String goodName = studentIds.size() > 1
+                ? product.getProductName() + " 외 " + (studentIds.size() - 1) + "명"
+                : product.getProductName();
+
+        return new PaymentRespDTO.PrepareGroupDTO(groupOrderNo, props.getMid(), totalAmount, goodName,
+                props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
     }
 
     // ───────────────────────────── 승인 ─────────────────────────────
@@ -206,6 +245,12 @@ public class PaymentService {
 
         PaymentRespDTO.PaymentDTO payment = paymentRepository.findByOrderNo(orderNo);
         if (payment == null) {
+            // 단일결제 order_no로 못 찾았으면 형제 묶음결제의 그룹 주문번호일 수 있다 — 결제창에서
+            // 그룹 결제일 때는 P_OID/P_NOTI에 group_order_no를 실어 보내기 때문이다.
+            List<PaymentRespDTO.PaymentDTO> group = paymentRepository.findByGroupOrderNo(orderNo);
+            if (!group.isEmpty()) {
+                return approveGroupMobileByReturn(orderNo, group, reqUrl, tid, authAmount);
+            }
             throw new Exception404("결제 정보를 찾을 수 없습니다.");
         }
         if ("PAID".equals(payment.getStatus())) {
@@ -267,6 +312,86 @@ public class PaymentService {
 
         int remain = passService.remain(payment.getStudentId(), product.getServiceCode());
         return approveResult(paymentRepository.findByOrderNo(orderNo), remain);
+    }
+
+    /**
+     * 형제 묶음결제 승인 — approveMobileByReturn과 같은 단계를 그대로 따라가되 대상이
+     * 학생 여러 명(리스트)이라는 것만 다르다. PG 승인은 합계 금액으로 한 번만 호출하고,
+     * 승인 확정은 PaymentTxService.confirmPaidGroup이 학생 수만큼 한 트랜잭션 안에서 반복한다
+     * (일부 학생만 확정되는 상황을 막기 위해 전원 확정이 하나의 트랜잭션이어야 한다).
+     *
+     * 모든 학생이 같은 상품을 샀다는 전제라 product/serviceCode는 그룹의 첫 행 기준으로 하나만 조회한다.
+     */
+    private PaymentRespDTO.ApproveDTO approveGroupMobileByReturn(String groupOrderNo,
+            List<PaymentRespDTO.PaymentDTO> group, String reqUrl, String tid, String authAmount) {
+        boolean allPaid = group.stream().allMatch(p -> "PAID".equals(p.getStatus()));
+        if (allPaid) {
+            PaymentRespDTO.PaymentDTO first = group.get(0);
+            return approveResult(first, passService.remain(first.getStudentId(), serviceCodeOf(first)));
+        }
+        boolean allReady = group.stream().allMatch(p -> "READY".equals(p.getStatus()));
+        if (!allReady) {
+            throw new Exception400("이미 종료된 결제입니다.");
+        }
+
+        int recordedAmount = group.stream().mapToInt(PaymentRespDTO.PaymentDTO::getAmount).sum();
+        if (parseAmount(authAmount) != recordedAmount) {
+            log.error("[결제] 인증 금액 불일치(그룹) — groupOrderNo={}, 기록={}, 인증={}",
+                    groupOrderNo, recordedAmount, authAmount);
+            paymentTxService.confirmFailedGroup(orderNosOf(group), null);
+            throw new Exception400("결제 금액이 일치하지 않습니다.");
+        }
+
+        InicisClient.Result result;
+        try {
+            result = inicisClient.approveMobile(reqUrl, tid);
+        } catch (Exception e) {
+            log.error("[결제] 모바일 승인 호출 실패(그룹) — groupOrderNo={}", groupOrderNo, e);
+            paymentRepository.insertLog(groupOrderNo, tid, "APPROVE", null, null, null, e.toString());
+            paymentTxService.confirmFailedGroup(orderNosOf(group), null);
+            throw new Exception500("결제 승인에 실패했습니다. 잠시 후 다시 시도해주세요.");
+        }
+
+        paymentRepository.insertLog(groupOrderNo, result.get("P_TID"), "APPROVE",
+                result.httpStatus(), result.get("P_STATUS"), null, mask(result.rawBody()));
+
+        if (!result.isMobileSuccess()) {
+            paymentTxService.confirmFailedGroup(orderNosOf(group), result.get("P_STATUS"));
+            throw new Exception400(nvl(result.get("P_RMESG1"), "결제가 승인되지 않았습니다."));
+        }
+
+        int approvedAmount = parseAmount(result.get("P_AMT"));
+        if (approvedAmount != recordedAmount) {
+            log.error("[결제] 승인 금액 불일치(그룹) — 수동 취소 필요. groupOrderNo={}, tid={}, 기록={}, 승인={}",
+                    groupOrderNo, result.get("P_TID"), recordedAmount, approvedAmount);
+            paymentRepository.insertLog(groupOrderNo, result.get("P_TID"), "NET_CANCEL", null, null,
+                    "승인 금액 불일치 — 수동 취소 필요", null);
+            paymentTxService.confirmFailedGroup(orderNosOf(group), result.get("P_STATUS"));
+            throw new Exception400("결제 금액이 일치하지 않습니다. 고객센터로 문의해주세요.");
+        }
+
+        PaymentRespDTO.ProductDTO product = paymentRepository.findProductById(group.get(0).getProductId());
+        if (product == null) {
+            log.error("[결제] 상품 정보 없음(그룹) — 수동 취소 필요. groupOrderNo={}, tid={}", groupOrderNo, result.get("P_TID"));
+            throw new Exception500("상품 정보를 찾을 수 없습니다. 고객센터로 문의해주세요.");
+        }
+
+        try {
+            paymentTxService.confirmPaidGroup(group, product, result.get("P_TID"), "Card",
+                    result.get("P_FN_NM"), maskCardNo(result.get("P_CARD_NUM")),
+                    result.get("P_AUTH_NO"), result.get("P_STATUS"));
+        } catch (Exception e) {
+            log.error("[결제] 승인 확정 실패(그룹) — 수동 취소 필요. groupOrderNo={}, tid={}", groupOrderNo, result.get("P_TID"), e);
+            throw new Exception500("결제 처리에 실패했습니다. 고객센터로 문의해주세요.");
+        }
+
+        PaymentRespDTO.PaymentDTO first = paymentRepository.findByOrderNo(group.get(0).getOrderNo());
+        int remain = passService.remain(first.getStudentId(), product.getServiceCode());
+        return approveResult(first, remain);
+    }
+
+    private List<String> orderNosOf(List<PaymentRespDTO.PaymentDTO> payments) {
+        return payments.stream().map(PaymentRespDTO.PaymentDTO::getOrderNo).toList();
     }
 
     /**
@@ -413,19 +538,43 @@ public class PaymentService {
 
     // ───────────────────────────── 조회 ─────────────────────────────
 
-    /** 본인 소유의 READY 주문 조회 — 결제창 재진입용. 남의 주문이거나 이미 끝난 주문이면 거부한다 */
-    public PaymentRespDTO.PaymentDTO findOwnReadyPayment(String studentId, String orderNo) {
-        PaymentRespDTO.PaymentDTO payment = paymentRepository.findByOrderNo(orderNo);
-        if (payment == null) {
+    /**
+     * 결제창을 다시 열 때 필요한 정보 조회 — orderNo가 단일결제 주문번호든 형제 묶음결제의
+     * group_order_no든 구분 없이 받아 처리한다. 앱(Flutter)은 prepare/prepareGroup 응답에서
+     * 받은 값을 그대로 orderNo로 넘기므로, 어느 쪽인지는 서버가 대신 판별해준다.
+     */
+    public PaymentRespDTO.PrepareGroupDTO findOwnReadyForCheckout(String studentId, String orderNo) {
+        PaymentRespDTO.PaymentDTO single = paymentRepository.findByOrderNo(orderNo);
+        if (single != null) {
+            if (!single.getStudentId().equals(studentId)) {
+                throw new Exception400("다른 학생의 결제입니다.");
+            }
+            if (!"READY".equals(single.getStatus())) {
+                throw new Exception400("이미 종료된 결제입니다.");
+            }
+            return new PaymentRespDTO.PrepareGroupDTO(single.getOrderNo(), props.getMid(), single.getAmount(),
+                    single.getProductName(), props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
+        }
+
+        List<PaymentRespDTO.PaymentDTO> group = paymentRepository.findByGroupOrderNo(orderNo);
+        if (group.isEmpty()) {
             throw new Exception404("결제 정보를 찾을 수 없습니다.");
         }
-        if (!payment.getStudentId().equals(studentId)) {
+        boolean owns = group.stream().anyMatch(p -> p.getStudentId().equals(studentId));
+        if (!owns) {
             throw new Exception400("다른 학생의 결제입니다.");
         }
-        if (!"READY".equals(payment.getStatus())) {
+        boolean allReady = group.stream().allMatch(p -> "READY".equals(p.getStatus()));
+        if (!allReady) {
             throw new Exception400("이미 종료된 결제입니다.");
         }
-        return payment;
+
+        int totalAmount = group.stream().mapToInt(PaymentRespDTO.PaymentDTO::getAmount).sum();
+        String goodName = group.size() > 1
+                ? group.get(0).getProductName() + " 외 " + (group.size() - 1) + "명"
+                : group.get(0).getProductName();
+        return new PaymentRespDTO.PrepareGroupDTO(orderNo, props.getMid(), totalAmount, goodName,
+                props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
     }
 
     /** product_id로 상품 조회 — 결제창 화면이 상품명을 다시 그릴 때 쓴다 */
@@ -453,10 +602,22 @@ public class PaymentService {
      */
     public void abandon(String studentId, String orderNo) {
         PaymentRespDTO.PaymentDTO payment = paymentRepository.findByOrderNo(orderNo);
-        if (payment == null || !payment.getStudentId().equals(studentId)) {
-            return;   // 이미 없거나 남의 주문이면 조용히 무시한다 — 앱 종료 타이밍 경합으로 흔히 생긴다
+        if (payment != null) {
+            if (!payment.getStudentId().equals(studentId)) {
+                return;   // 남의 주문이면 조용히 무시한다 — 앱 종료 타이밍 경합으로 흔히 생긴다
+            }
+            abandon(orderNo);
+            return;
         }
-        abandon(orderNo);
+
+        // 단일결제 order_no로 못 찾았으면 형제 묶음결제의 group_order_no일 수 있다.
+        List<PaymentRespDTO.PaymentDTO> group = paymentRepository.findByGroupOrderNo(orderNo);
+        boolean owns = group.stream().anyMatch(p -> p.getStudentId().equals(studentId));
+        if (!owns) {
+            return;   // 이미 없거나 남의 주문이면 조용히 무시한다
+        }
+        paymentTxService.confirmClosedGroup(orderNosOf(group));
+        log.info("[결제] 결제창 이탈 정리(그룹) — groupOrderNo={}", orderNo);
     }
 
     /** 판매중인 상품 목록 (serviceCode가 null이면 전체) */

@@ -351,3 +351,15 @@ WHERE student_id LIKE 'DAE001T%' OR student_id LIKE 'PUS002T%';
 UPDATE erp_student
 SET app_password = '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'
 WHERE app_password IS NULL OR app_password = '';
+
+
+-- ── 테스트 형제 등록 (2026-08-05, 형제 묶음결제 개발용) ──────────────────────
+-- app_id 7001/7002(테스트생1/테스트생2)를 형제로 묶는다. 형제 매핑은 로그인/결제/세션에서
+-- 실제로 쓰는 erp_student.student_id 기준이라 app_id(7001/7002)가 아니라
+-- student_id(DAE001T01/DAE001T02)로 저장한다. sibling_key는 대표 학생의 student_id를 그대로 쓴다.
+-- erp_student_sibling도 결제 테이블과 같은 이유로 IF OBJECT_ID(...) IS NULL로만 생성돼
+-- 매 기동 리셋되지 않는다 — 재기동 시 UNIQUE 제약 위반이 나지 않도록 존재 여부를 먼저 확인한다.
+IF NOT EXISTS (SELECT 1 FROM erp_student_sibling WHERE sibling_key = 'DAE001T01' AND student_id = 'DAE001T01')
+    INSERT INTO erp_student_sibling (sibling_key, student_id) VALUES ('DAE001T01', 'DAE001T01');
+IF NOT EXISTS (SELECT 1 FROM erp_student_sibling WHERE sibling_key = 'DAE001T01' AND student_id = 'DAE001T02')
+    INSERT INTO erp_student_sibling (sibling_key, student_id) VALUES ('DAE001T01', 'DAE001T02');

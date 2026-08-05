@@ -94,4 +94,22 @@
         ORDER BY student_name ASC
     </select>
 
+    <select id="findSiblingGroup" resultType="com.hohoedu.book_clinic.student.model.Student">
+        SELECT id                     AS id,
+               center_code            AS centerCode,
+               grade_key              AS gradeKey,
+               school                 AS school,
+               student_id             AS studentId,
+               student_name           AS studentName,
+               app_id                 AS appId
+        FROM erp_student
+        WHERE student_id = #{studentId}
+           OR student_id IN (
+               SELECT sib2.student_id FROM erp_student_sibling sib2
+               WHERE sib2.sibling_key IN (
+                   SELECT sib1.sibling_key FROM erp_student_sibling sib1 WHERE sib1.student_id = #{studentId}
+               )
+           )
+    </select>
+
 </mapper>

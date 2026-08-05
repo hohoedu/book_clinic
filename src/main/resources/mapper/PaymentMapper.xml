@@ -34,14 +34,14 @@
 
     <insert id="insertReady">
         INSERT INTO erp_bookstore_payment
-            (order_no, student_id, center_code, product_id, product_name, amount, status, requested_at)
+            (order_no, group_order_no, student_id, center_code, product_id, product_name, amount, status, requested_at)
         VALUES
-            (#{orderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{amount}, 'READY',
+            (#{orderNo}, #{groupOrderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{amount}, 'READY',
              DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="paymentColumns">
-        payment_id, order_no, tid, student_id, center_code, product_id, product_name,
+        payment_id, order_no, group_order_no, tid, student_id, center_code, product_id, product_name,
         amount, refund_amount, status, paid_at
     </sql>
 
@@ -49,6 +49,12 @@
         SELECT <include refid="paymentColumns"/>
         FROM erp_bookstore_payment
         WHERE order_no = #{orderNo}
+    </select>
+
+    <select id="findByGroupOrderNo" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+        SELECT <include refid="paymentColumns"/>
+        FROM erp_bookstore_payment
+        WHERE group_order_no = #{groupOrderNo}
     </select>
 
     <select id="findById" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">

@@ -180,6 +180,9 @@ IF OBJECT_ID('erp_bookstore_payment', 'U') IS NULL
 CREATE TABLE erp_bookstore_payment (
     payment_id    INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     order_no      VARCHAR(40)   NOT NULL UNIQUE,  -- 가맹점 주문번호(이니시스 oid). 서버 생성, 이니시스 제한이 40자
+    group_order_no VARCHAR(40),                   -- 형제 묶음결제 시 공통 그룹 주문번호. 단일결제는 항상 NULL.
+                                                  -- PG에는 그룹 주문번호 1개로 결제 1건만 승인 요청하고, 이 컬럼으로
+                                                  -- 같은 그룹에 속한 학생별 payment 행들을 되짚는다.
     tid           VARCHAR(40),                    -- 이니시스 거래번호. 환불 API에 넘기는 키.
                                                   -- 승인 전에는 NULL이라 NOT NULL 불가.
                                                   -- 중복 승인 차단은 아래 필터드 UNIQUE 인덱스가 담당한다
@@ -226,6 +229,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_center_paid' A
 -- 승인까지 못 간 READY 방치분을 배치로 정리하기 위한 인덱스
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_status' AND object_id = OBJECT_ID('erp_bookstore_payment'))
     CREATE INDEX IX_payment_status ON erp_bookstore_payment (status, requested_at);
+
+-- 형제 묶음결제 승인 시 group_order_no로 그룹 내 학생별 payment 행을 되짚기 위한 인덱스
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_group_order' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    CREATE INDEX IX_payment_group_order ON erp_bookstore_payment (group_order_no) WHERE group_order_no IS NOT NULL;
+
+-- 마이그레이션: erp_bookstore_payment가 group_order_no 도입 이전에 이미 만들어져 있는 운영 DB용.
+-- 위 CREATE TABLE은 테이블이 아예 없을 때만 실행되므로, 기존 테이블에는 컬럼을 별도로 추가해야 한다.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'group_order_no')
+    ALTER TABLE erp_bookstore_payment ADD group_order_no VARCHAR(40);
 
 -- 환불(취소) 내역 — 부분환불과 재시도가 있어 결제 1건에 N행이다. PG 결제분 전용이다.
 -- 이번 취소가 부분인지 전액인지는 cancel_amount와 payment.amount - payment.refund_amount 비교로 나오므로

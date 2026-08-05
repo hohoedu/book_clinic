@@ -1,5 +1,9 @@
 package com.hohoedu.book_clinic.payment;
 
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -8,9 +12,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.payment._dto.PaymentReqDTO;
+import com.hohoedu.book_clinic.student.StudentRepository;
+import com.hohoedu.book_clinic.student.model.Student;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -37,6 +44,7 @@ public class PaymentController {
     private static final String SESSION_STUDENT_ID = "studentId";
 
     private final PaymentService paymentService;
+    private final StudentRepository studentRepository;
 
     private void requireOwnStudent(HttpServletRequest request, String requestedStudentId) {
         HttpSession session = request.getSession(false);
@@ -61,6 +69,44 @@ public class PaymentController {
                                      HttpServletRequest request) {
         requireOwnStudent(request, reqDTO.getStudentId());
         return ResponseEntity.ok(ApiUtils.success(paymentService.prepare(reqDTO)));
+    }
+
+    /**
+     * 형제 목록 조회 — 앱이 결제 시작 전에 이걸 불러 형제가 있으면 선택 UI를 보여주고,
+     * 없으면(본인 1건만 돌아오면) 기존처럼 바로 prepare()를 부르면 된다.
+     */
+    @GetMapping("/siblings")
+    public ResponseEntity<?> siblings(@RequestParam("studentId") String studentId, HttpServletRequest request) {
+        requireOwnStudent(request, studentId);
+        List<Student> siblings = studentRepository.findSiblingGroup(studentId);
+        return ResponseEntity.ok(ApiUtils.success(siblings));
+    }
+
+    /**
+     * 형제 묶음결제 시작 — prepare()의 그룹 버전. 선택된 학생들의 상품 금액을 합산해
+     * 그룹 주문번호를 발급한다. 앱은 이 orderNo로 그대로 결제창(WebView)을 열면 된다
+     * (결제창/승인/이탈 경로는 단일결제와 동일한 orderNo 파라미터를 그대로 쓴다).
+     */
+    @PostMapping("/prepare/group")
+    public ResponseEntity<?> prepareGroup(@Valid @RequestBody PaymentReqDTO.PrepareGroupDTO reqDTO,
+                                          HttpServletRequest request) {
+        requireOwnStudent(request, reqDTO.getStudentId());
+
+        List<String> siblingStudentIds = reqDTO.getSiblingStudentIds();
+        if (siblingStudentIds == null || siblingStudentIds.isEmpty()) {
+            throw new Exception400("결제할 학생을 선택해주세요.");
+        }
+        // 남에게 이용권을 지급하는 경로가 되지 않도록, 선택된 학생이 실제로 요청자의
+        // 형제 그룹에 속하는지 서버가 다시 확인한다 — 요청은 조작될 수 있다.
+        Set<String> validStudentIds = studentRepository.findSiblingGroup(reqDTO.getStudentId()).stream()
+                .map(Student::getStudentId)
+                .collect(Collectors.toSet());
+        if (!validStudentIds.containsAll(siblingStudentIds)) {
+            throw new Exception400("형제 관계가 아닌 학생이 포함되어 있습니다.");
+        }
+
+        return ResponseEntity.ok(ApiUtils.success(
+                paymentService.prepareGroup(siblingStudentIds, reqDTO.getProductCode())));
     }
 
     /** 승인 — 결제창 인증 결과를 넘기면 서버가 이니시스에 승인을 요청하고 이용권을 발급한다 */

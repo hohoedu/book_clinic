@@ -2,7 +2,10 @@ package com.hohoedu.book_clinic.payment;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -14,8 +17,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
+import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic.payment._dto.PaymentReqDTO;
 import com.hohoedu.book_clinic.payment._dto.PaymentRespDTO;
+import com.hohoedu.book_clinic.student.StudentRepository;
+import com.hohoedu.book_clinic.student.model.Student;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -55,8 +61,8 @@ public class PaymentCheckoutViewController {
     static final String MOBILE_PAY_URL = "https://mobile.inicis.com/smart/payment/";
 
     private final PaymentService paymentService;
-    private final InicisClient inicisClient;
     private final InicisProperties props;
+    private final StudentRepository studentRepository;
 
     /**
      * 결제창 — 로그인한 학생(=학부모가 로그인한 자녀 계정) 기준으로 주문을 만들고 결제창을 연다.
@@ -79,28 +85,106 @@ public class PaymentCheckoutViewController {
         if (productCode == null || productCode.isBlank()) {
             throw new Exception400("상품 또는 주문번호가 필요합니다.");
         }
+        // 형제가 있으면 결제창을 바로 열지 않고 형제 선택 화면부터 보여준다. 앱은 이 주소를
+        // 그대로 부르기만 하면 되므로, 형제 유무 판단은 여기서 서버가 대신 해준다.
+        if (studentRepository.findSiblingGroup((String) studentId).size() > 1) {
+            return "redirect:/payment/checkout/select?productCode=" + productCode;
+        }
         return renderCheckout((String) studentId, productCode, model);
     }
 
     /**
-     * 이미 발급된 READY 주문으로 결제창을 연다.
+     * 형제 선택 화면 — 로그인 학생에게 형제가 있으면 본인+형제 목록을 보여주고 몇 명 결제할지
+     * 고르게 한다. 형제가 없으면 기존 단일결제 흐름(/checkout)으로 그대로 넘긴다(회귀 없음).
+     */
+    @GetMapping("/checkout/select")
+    public String select(@RequestParam(name = "productCode", required = true) String productCode,
+                         HttpServletRequest request, Model model) {
+        HttpSession session = request.getSession(false);
+        Object studentId = session == null ? null : session.getAttribute(SESSION_STUDENT_ID);
+        if (studentId == null) {
+            throw new Exception401("로그인이 필요합니다.");
+        }
+
+        List<Student> siblings = studentRepository.findSiblingGroup((String) studentId);
+        if (siblings.size() <= 1) {
+            return "redirect:/payment/checkout?productCode=" + productCode;
+        }
+
+        PaymentRespDTO.ProductDTO product = paymentService.productByCode(productCode);
+        if (product == null) {
+            throw new Exception404("판매 중인 상품이 아닙니다.");
+        }
+
+        model.addAttribute("siblings", siblings);
+        model.addAttribute("productCode", productCode);
+        model.addAttribute("productName", product.getProductName());
+        model.addAttribute("price", product.getPrice());
+        model.addAttribute("selfStudentId", studentId);
+        return "payment/payment-sibling-select";
+    }
+
+    /**
+     * 형제 묶음결제 시작 — 선택된 학생들의 상품 금액을 합산해 그룹 주문을 만들고
+     * 기존 결제창(payment-checkout.html)을 재사용해 렌더링한다.
+     */
+    @PostMapping("/checkout/group")
+    public String group(@RequestParam("productCode") String productCode,
+                        @RequestParam("studentIds") List<String> studentIds,
+                        HttpServletRequest request, Model model) {
+        HttpSession session = request.getSession(false);
+        Object studentId = session == null ? null : session.getAttribute(SESSION_STUDENT_ID);
+        if (studentId == null) {
+            throw new Exception401("로그인이 필요합니다.");
+        }
+
+        // 남에게 이용권을 지급하는 경로가 되지 않도록, 선택된 학생이 실제로 로그인 학생의
+        // 형제 그룹에 속하는지 다시 확인한다 — 화면에서 이미 걸러 보내지만 요청은 조작될 수 있다.
+        List<Student> siblingGroup = studentRepository.findSiblingGroup((String) studentId);
+        Set<String> validStudentIds = siblingGroup.stream()
+                .map(Student::getStudentId)
+                .collect(Collectors.toSet());
+        if (!validStudentIds.containsAll(studentIds)) {
+            throw new Exception400("형제 관계가 아닌 학생이 포함되어 있습니다.");
+        }
+
+        PaymentRespDTO.PrepareGroupDTO prepared = paymentService.prepareGroup(studentIds, productCode);
+
+        String timestamp = String.valueOf(System.currentTimeMillis());
+        model.addAttribute("mobilePayUrl", MOBILE_PAY_URL);
+        model.addAttribute("mid", prepared.getMid());
+        model.addAttribute("oid", prepared.getGroupOrderNo());
+        model.addAttribute("price", prepared.getAmount());
+        model.addAttribute("goodName", prepared.getProductName());
+        model.addAttribute("timestamp", timestamp);
+        model.addAttribute("returnUrl", prepared.getReturnUrl());
+        model.addAttribute("closeUrl", prepared.getCloseUrl() + "?orderNo=" + prepared.getGroupOrderNo());
+        model.addAttribute("studentId", studentId);
+        model.addAttribute("testMode", prepared.isTestMode());
+        return "payment/payment-checkout";
+    }
+
+    /**
+     * 이미 발급된 READY 주문으로 결제창을 연다. 단일결제 orderNo든 형제 묶음결제의
+     * group_order_no든 구분 없이 받는다 — 앱은 prepare()/prepare/group() 중 무엇을
+     * 불렀는지와 무관하게 받은 값을 그대로 이 orderNo 파라미터로 넘기면 된다.
+     *
      * 앱이 X 버튼을 눌렀을 때 "어느 주문을 버릴지" 알아야 /payment/abandon을 부를 수 있어서,
      * 결제창을 열기 전에 앱이 먼저 orderNo를 알 수 있는 경로가 필요해 추가했다.
      */
     private String renderExistingCheckout(String studentId, String orderNo, Model model) {
-        PaymentRespDTO.PaymentDTO payment = paymentService.findOwnReadyPayment(studentId, orderNo);
-        PaymentRespDTO.ProductDTO product = paymentService.productByPaymentId(payment.getProductId());
+        PaymentRespDTO.PrepareGroupDTO prepared = paymentService.findOwnReadyForCheckout(studentId, orderNo);
 
         String timestamp = String.valueOf(System.currentTimeMillis());
         model.addAttribute("mobilePayUrl", MOBILE_PAY_URL);
-        model.addAttribute("mid", props.getMid());
-        model.addAttribute("oid", payment.getOrderNo());
-        model.addAttribute("price", payment.getAmount());
-        model.addAttribute("goodName", payment.getProductName());
+        model.addAttribute("mid", prepared.getMid());
+        model.addAttribute("oid", prepared.getGroupOrderNo());
+        model.addAttribute("price", prepared.getAmount());
+        model.addAttribute("goodName", prepared.getProductName());
         model.addAttribute("timestamp", timestamp);
-        model.addAttribute("returnUrl", props.getReturnUrl());
+        model.addAttribute("returnUrl", prepared.getReturnUrl());
         model.addAttribute("studentId", studentId);
-        model.addAttribute("testMode", props.isTestMode());
+        model.addAttribute("testMode", prepared.isTestMode());
         return "payment/payment-checkout";
     }
 

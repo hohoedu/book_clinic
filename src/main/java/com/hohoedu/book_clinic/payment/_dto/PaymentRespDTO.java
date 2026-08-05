@@ -26,6 +26,21 @@ public class PaymentRespDTO {
         private final boolean testMode;
     }
 
+    /**
+     * 형제 묶음결제 시작 응답 — prepare()의 그룹 버전.
+     * amount/productName은 선택된 학생 전원의 합계·요약이다(개별 학생 상품은 항상 동일하다는 전제).
+     */
+    @Data
+    public static class PrepareGroupDTO {
+        private final String groupOrderNo;
+        private final String mid;
+        private final int amount;
+        private final String productName;
+        private final String returnUrl;
+        private final String closeUrl;
+        private final boolean testMode;
+    }
+
     /** 승인 완료 응답 */
     @Data
     public static class ApproveDTO {
@@ -88,6 +103,8 @@ public class PaymentRespDTO {
     public static class PaymentDTO {
         private int paymentId;
         private String orderNo;
+        /** 형제 묶음결제일 때만 값이 있다. 단일결제는 항상 null */
+        private String groupOrderNo;
         private String tid;
         private String studentId;
         private String centerCode;

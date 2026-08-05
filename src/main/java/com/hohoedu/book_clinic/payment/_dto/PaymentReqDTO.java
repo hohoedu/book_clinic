@@ -1,5 +1,7 @@
 package com.hohoedu.book_clinic.payment._dto;
 
+import java.util.List;
+
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
 
@@ -40,6 +42,22 @@ public class PaymentReqDTO {
 
         /** 승인 후 실패 시 되돌릴 망취소 주소. 이것도 도메인 검증 대상이다 */
         private String netCancelUrl;
+    }
+
+    /**
+     * 형제 묶음결제 시작 — prepare()의 그룹 버전. studentId는 로그인 학생(요청자) 본인이고,
+     * siblingStudentIds는 실제로 결제 대상으로 선택된 학생 목록(본인 포함 여부는 앱이 정한다).
+     * 서버는 siblingStudentIds가 studentId의 형제 그룹에 실제로 속하는지 다시 검증한다.
+     */
+    @Data
+    public static class PrepareGroupDTO {
+        @NotEmpty(message = "학생 정보가 없습니다.")
+        private String studentId;
+
+        private List<String> siblingStudentIds;
+
+        @NotEmpty(message = "상품을 선택해주세요.")
+        private String productCode;
     }
 
     /** 결제 포기 — 앱이 결제창을 닫을 때 보낸다 */
