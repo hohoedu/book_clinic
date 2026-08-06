@@ -748,6 +748,11 @@ CREATE TABLE erp_bookstore_pass (
     billing_ym   CHAR(6),                      -- 이 이용권이 청구된 년월(YYYYMM). 서당 일괄청구는 전월 20일에
                                                -- 다음 달치를 걷으므로 "언제 청구된 몫인지"가 결제일과 다르다.
                                                -- all_pass 청구 내역과 대조하는 키라서 PG 건에도 같은 규칙으로 채운다
+    valid_from   DATE          NOT NULL,       -- 이 이용권이 적용되는 달의 1일(billing_ym에서 파생).
+                                               -- SQL에서 CHAR(6) 문자열을 매번 파싱하지 않고 날짜로 바로
+                                               -- 비교하려고 별도 컬럼으로 둔다(2026-08-06, 월 단위 유효기간 도입)
+    valid_until  DATE          NOT NULL,       -- 그 달의 마지막 날. 오늘이 이 범위 밖이면 remain_count가
+                                               -- 남아 있어도 못 쓴다 — 이월 없이 월말 소멸한다는 정책
     total_count  SMALLINT      NOT NULL,       -- 지급된 총 횟수 (product.total_count 스냅샷)
     remain_count SMALLINT      NOT NULL,       -- 잔여 횟수. 출석마다 1씩 깐다.
                                                -- pass_use 건수와 total_count - remain_count가 항상 같아야 한다.
@@ -759,10 +764,34 @@ CREATE TABLE erp_bookstore_pass (
     FOREIGN KEY (product_id) REFERENCES erp_bookstore_product(product_id)
 );
 
+-- 마이그레이션: valid_from/valid_until 도입 이전에 이미 만들어져 있는 개발 DB용.
+-- 기존 행은 billing_ym(없으면 granted_at의 월)에서 그 달의 1일/말일을 역산해 채운다.
+-- BEGIN/END로 묶지 않고 독립된 문장으로 나눈다 — 이 프로젝트의 SQL 스크립트 실행기는
+-- 세미콜론 단위로 문장을 쪼개서 실행하는데, BEGIN/END 블록 안에 세미콜론이 여러 개 있으면
+-- 블록 중간에서 잘려 "Incorrect syntax" 오류가 난다(2026-08-06 확인).
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_from')
+    ALTER TABLE erp_bookstore_pass ADD valid_from DATE NULL, valid_until DATE NULL;
+
+UPDATE erp_bookstore_pass
+SET valid_from  = DATEFROMPARTS(LEFT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 4),
+                                 RIGHT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 2), 1),
+    valid_until = EOMONTH(DATEFROMPARTS(LEFT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 4),
+                                         RIGHT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 2), 1))
+WHERE valid_from IS NULL;
+
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_from' AND is_nullable = 1)
+    ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_from DATE NOT NULL;
+
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_until' AND is_nullable = 1)
+    ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_until DATE NOT NULL;
+
 -- 출석할 때마다 타는 경로 — 살아있는 이용권만 보면 되므로 필터드 인덱스로 좁힌다.
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_student' AND object_id = OBJECT_ID('erp_bookstore_pass'))
-    CREATE INDEX IX_pass_student ON erp_bookstore_pass (student_id, service_code, granted_at)
-        WHERE revoked_at IS NULL;
+-- 여러 달치가 겹칠 수 있게 되면서(월 단위 유효기간 도입) 소진 순서 기준이 granted_at(먼저 산 것)에서
+-- valid_until(먼저 만료되는 것)로 바뀌었다 — 인덱스도 실제 조회/정렬 조건에 맞춰 갈아탄다.
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_student' AND object_id = OBJECT_ID('erp_bookstore_pass'))
+    DROP INDEX IX_pass_student ON erp_bookstore_pass;
+CREATE INDEX IX_pass_student ON erp_bookstore_pass (student_id, service_code, valid_until)
+    WHERE revoked_at IS NULL;
 
 -- 결제/청구 건에서 이용권을 되짚는 경로 (환불 시 회수할 이용권 찾기, 정산 대조)
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_ref' AND object_id = OBJECT_ID('erp_bookstore_pass'))
@@ -815,6 +844,10 @@ CREATE TABLE erp_bookstore_payment (
     center_code   VARCHAR(50),                    -- 결제한 학생의 소속 센터 (정산/조회 필터용 중복 저장)
     product_id    INT           NOT NULL,         -- erp_bookstore_product.product_id
     product_name  VARCHAR(50),                    -- 결제 시점 상품명 스냅샷
+    billing_ym    CHAR(6),                        -- 이 결제가 몇 월치 이용권인지(YYYYMM). prepare()/prepareGroup()
+                                                  -- 시점에 PassService.nextBillingYm()으로 정해서 넣고, 승인 확정
+                                                  -- 때 이 값을 그대로 이용권에 옮긴다(그 사이 재계산하면 화면에
+                                                  -- 보여준 달과 실제 발급된 달이 어긋날 수 있다. 2026-08-06)
     amount        INT           NOT NULL,         -- 결제 금액(원) = 결제 시점 가격 스냅샷.
                                                   -- 승인 응답 금액과 이 값을 대조해 위변조를 검증한다.
                                                   -- 검증을 통과해야만 PAID가 되므로 "승인금액" 컬럼을 따로 두지 않는다
@@ -845,10 +878,17 @@ CREATE TABLE erp_bookstore_payment (
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'group_order_no')
     ALTER TABLE erp_bookstore_payment ADD group_order_no VARCHAR(40);
 
--- 승인된 거래번호는 유일해야 한다. 앱이 재시도로 같은 승인 요청을 두 번 보내도 결제 행이 둘로 늘지 않는다.
--- 승인 전 READY 행은 tid가 NULL이므로 인덱스 대상에서 빼야 여러 건이 공존할 수 있다.
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_payment_tid' AND object_id = OBJECT_ID('erp_bookstore_payment'))
-    CREATE UNIQUE INDEX UX_payment_tid ON erp_bookstore_payment (tid) WHERE tid IS NOT NULL;
+-- 마이그레이션: billing_ym(월 단위 유효기간) 도입 이전에 이미 만들어져 있는 개발 DB용.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'billing_ym')
+    ALTER TABLE erp_bookstore_payment ADD billing_ym CHAR(6);
+
+-- (2026-08-06 폐지) tid 유니크 인덱스는 형제 묶음결제와 양립할 수 없어 제거했다 — PG 승인은
+-- 그룹당 1건만 나는데, 그 tid를 학생 수만큼의 payment 행에 그대로 복사해 남기므로 같은 tid를
+-- 가진 행이 여러 개 있는 게 정상이다. 이중 승인 방어는 markPaid의 WHERE status='READY'
+-- 조건이 이미 담당한다(재시도하면 0행 갱신되어 자연히 막힌다) — tid 유니크는 원래도 보조 방어선일
+-- 뿐이었다. 이미 만들어진 개발/운영 DB에는 인덱스가 남아 있을 수 있어 제거 마이그레이션을 둔다.
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_payment_tid' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    DROP INDEX UX_payment_tid ON erp_bookstore_payment;
 
 -- 결제내역 조회는 "이 학생의 결제 목록을 최신순"이 대부분이라 정렬까지 인덱스에 태운다.
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_student' AND object_id = OBJECT_ID('erp_bookstore_payment'))

@@ -29,7 +29,7 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
         }
 
         String hashedPassword = HashUtils.hashPassword(rawPassword, user.getSalt());
-        if (!hashedPassword.equals(user.getPasswordHash())) {
+        if (!hashedPassword.equalsIgnoreCase(user.getPasswordHash())) {
             throw new BadCredentialsException("비밀번호가 일치하지 않습니다.");
         }
 

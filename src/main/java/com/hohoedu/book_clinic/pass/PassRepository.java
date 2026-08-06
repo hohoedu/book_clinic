@@ -22,7 +22,14 @@ public interface PassRepository {
     void insertPass(@Param("studentId") String studentId, @Param("centerCode") String centerCode,
                     @Param("productId") int productId, @Param("serviceCode") String serviceCode,
                     @Param("source") String source, @Param("refNo") String refNo,
-                    @Param("billingYm") String billingYm, @Param("totalCount") int totalCount);
+                    @Param("billingYm") String billingYm, @Param("validFrom") LocalDate validFrom,
+                    @Param("validUntil") LocalDate validUntil, @Param("totalCount") int totalCount);
+
+    /**
+     * 이 학생의 이 서비스 이용권 중 가장 늦은 valid_until — 다음 결제의 대상월을 정할 때 쓴다.
+     * 이미 지난 달이어도 상관없다(공백기 판단은 호출부가 한다), 살아있는(revoked_at NULL) 것만 본다.
+     */
+    LocalDate findLatestValidUntil(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode);
 
     /**
      * 지금 쓸 수 있는 이용권 1건 — 오래 전에 받은 것부터 소진시킨다.

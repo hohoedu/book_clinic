@@ -70,10 +70,15 @@ public class PaymentRespDTO {
         private final int refundAmount;
     }
 
-    /** 결제 내역 한 줄 */
+    /** 결제 내역 한 줄 — 형제 묶음결제 도입 이후 조회 자체가 형제 그룹 전체를 합쳐서 나오므로,
+     * 화면에서 "누구 결제인지" 구분할 수 있도록 studentId/studentName을 함께 내려준다. */
     @Data
     public static class HistoryDTO {
         private int paymentId;
+        private String studentId;
+        private String studentName;
+        /** 형제 묶음결제일 때만 값이 있다 — 있으면 화면이 "환불" 시 형제 선택 체크박스를 띄운다 */
+        private String groupOrderNo;
         private String orderNo;
         private String productName;
         private int amount;
@@ -105,6 +110,8 @@ public class PaymentRespDTO {
         private String orderNo;
         /** 형제 묶음결제일 때만 값이 있다. 단일결제는 항상 null */
         private String groupOrderNo;
+        /** 몇 월치 이용권인지(YYYYMM). prepare() 시점에 정해지고 승인 확정 때 그대로 이용권에 옮겨진다 */
+        private String billingYm;
         private String tid;
         private String studentId;
         private String centerCode;

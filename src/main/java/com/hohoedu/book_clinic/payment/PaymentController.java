@@ -151,10 +151,23 @@ public class PaymentController {
                 paymentService.refund(reqDTO.getStudentId(), reqDTO.getPaymentId(), reqDTO.getReason(), "APP")));
     }
 
-    /** 결제 내역 */
+    /** 결제 내역 — 로그인 학생 본인 것만 (형제 것은 여기 안 나온다) */
     @GetMapping("/history")
     public ResponseEntity<?> history(@RequestParam("studentId") String studentId, HttpServletRequest request) {
         requireOwnStudent(request, studentId);
         return ResponseEntity.ok(ApiUtils.success(paymentService.history(studentId)));
+    }
+
+    /**
+     * 형제 묶음결제 그룹원 조회 — 결제 내역에서 그룹 결제 건의 "환불"을 누르면, 결제할 때와
+     * 똑같은 체크박스 화면으로 "이 그룹 중 누구를 환불할지" 고를 수 있어야 한다. 그 체크박스
+     * 목록을 채우기 위해 그룹 전체(본인 포함)를 학생명과 함께 돌려준다.
+     */
+    @GetMapping("/refund/group-members")
+    public ResponseEntity<?> refundGroupMembers(@RequestParam("studentId") String studentId,
+                                                @RequestParam("groupOrderNo") String groupOrderNo,
+                                                HttpServletRequest request) {
+        requireOwnStudent(request, studentId);
+        return ResponseEntity.ok(ApiUtils.success(paymentService.groupMembers(studentId, groupOrderNo)));
     }
 }

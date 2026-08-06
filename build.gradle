@@ -52,6 +52,12 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+// Tomcat webapps에 올릴 때 파일명이 곧 컨텍스트 경로가 된다. all_pass가 이미 같은
+// Tomcat의 ROOT를 쓰고 있어서 book_clinic은 ROOT로 두면 안 되고 별도 이름(서브경로)을 쓴다.
+bootWar {
+	archiveFileName = 'ROOT.war'
+}
+
 tasks.withType(JavaCompile).configureEach {
 	options.compilerArgs << '-parameters'
 }

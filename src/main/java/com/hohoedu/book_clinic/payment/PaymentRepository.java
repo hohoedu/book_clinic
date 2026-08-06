@@ -38,12 +38,22 @@ public interface PaymentRepository {
     void insertReady(@Param("orderNo") String orderNo, @Param("groupOrderNo") String groupOrderNo,
                      @Param("studentId") String studentId,
                      @Param("centerCode") String centerCode, @Param("productId") int productId,
-                     @Param("productName") String productName, @Param("amount") int amount);
+                     @Param("productName") String productName, @Param("billingYm") String billingYm,
+                     @Param("amount") int amount);
 
     PaymentRespDTO.PaymentDTO findByOrderNo(@Param("orderNo") String orderNo);
 
     /** 같은 그룹으로 묶인 형제 묶음결제 행 전체 — 그룹 승인 확정 때 학생별로 순회하기 위함 */
     List<PaymentRespDTO.PaymentDTO> findByGroupOrderNo(@Param("groupOrderNo") String groupOrderNo);
+
+    /**
+     * 이 tid가 "이번 확정 대상이 아닌" 다른 행에 이미 쓰였는지 센다.
+     * 단일결제(groupOrderNo=null)는 같은 tid를 가진 다른 행이 하나라도 있으면 안 되고,
+     * 형제 묶음결제는 같은 group_order_no 안에서만 tid 공유가 허용된다 — 그 밖으로 새면 이상 징후다.
+     * (tid 자체의 DB UNIQUE 제약은 형제 묶음결제와 양립할 수 없어 제거했고, 이 조회가 그 대체 방어선이다)
+     */
+    int countByTidElsewhere(@Param("tid") String tid, @Param("orderNo") String orderNo,
+                            @Param("groupOrderNo") String groupOrderNo);
 
     PaymentRespDTO.PaymentDTO findById(@Param("paymentId") int paymentId);
 
@@ -98,6 +108,12 @@ public interface PaymentRepository {
     /** 현행 환불 규정 목록 (priority 오름차순). 적용은 조건에 처음 맞는 한 건만 */
     List<PaymentRespDTO.RefundRuleDTO> findActiveRefundRules();
 
-    /** 학생 결제 내역 (최신순) */
-    List<PaymentRespDTO.HistoryDTO> findHistory(@Param("studentId") String studentId);
+    /**
+     * 결제 내역 (최신순) — 형제 그룹 전체(본인 포함)를 한 번에 조회한다.
+     * 형제가 없는 학생은 studentIds가 본인 1건뿐이라 기존과 동일하게 본인 내역만 나온다.
+     */
+    List<PaymentRespDTO.HistoryDTO> findHistory(@Param("studentIds") List<String> studentIds);
+
+    /** 형제 묶음결제 그룹 하나에 속한 결제 행 전체 — 환불 화면의 형제 선택 체크박스용 */
+    List<PaymentRespDTO.HistoryDTO> findHistoryByGroupOrderNo(@Param("groupOrderNo") String groupOrderNo);
 }

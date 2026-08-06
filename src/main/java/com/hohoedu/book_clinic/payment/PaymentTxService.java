@@ -42,6 +42,15 @@ public class PaymentTxService {
                                String tid, String payMethod, String cardName, String cardNo,
                                String applNo, String resultCode) {
 
+        // tid 자체엔 더 이상 DB UNIQUE 제약이 없다(형제 묶음결제는 같은 tid를 여러 행에 정당하게
+        // 나눠 쓴다). 그 밖의 경우 — 같은 tid가 다른 주문/다른 그룹에 이미 쓰였다면 — 은 여전히
+        // 이상 징후이므로 여기서 직접 확인해 막는다. 조용히 기록하는 대신 예외로 세워 사람이 보게 한다.
+        int elsewhere = paymentRepository.countByTidElsewhere(tid, payment.getOrderNo(), payment.getGroupOrderNo());
+        if (elsewhere > 0) {
+            throw new IllegalStateException(
+                    "tid가 다른 주문에 이미 사용되었습니다 — orderNo=" + payment.getOrderNo() + ", tid=" + tid);
+        }
+
         int updated = paymentRepository.markPaid(payment.getOrderNo(), tid, payMethod,
                 cardName, cardNo, applNo, resultCode);
         if (updated == 0) {
@@ -49,7 +58,8 @@ public class PaymentTxService {
         }
 
         passService.grant(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
-                product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(), product.getTotalCount());
+                product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
+                payment.getBillingYm(), product.getTotalCount());
         return true;
     }
 

@@ -34,14 +34,15 @@
 
     <insert id="insertReady">
         INSERT INTO erp_bookstore_payment
-            (order_no, group_order_no, student_id, center_code, product_id, product_name, amount, status, requested_at)
+            (order_no, group_order_no, student_id, center_code, product_id, product_name, billing_ym,
+             amount, status, requested_at)
         VALUES
-            (#{orderNo}, #{groupOrderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{amount}, 'READY',
-             DATEADD(HOUR, 9, GETUTCDATE()))
+            (#{orderNo}, #{groupOrderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{billingYm},
+             #{amount}, 'READY', DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="paymentColumns">
-        payment_id, order_no, group_order_no, tid, student_id, center_code, product_id, product_name,
+        payment_id, order_no, group_order_no, billing_ym, tid, student_id, center_code, product_id, product_name,
         amount, refund_amount, status, paid_at
     </sql>
 
@@ -55,6 +56,16 @@
         SELECT <include refid="paymentColumns"/>
         FROM erp_bookstore_payment
         WHERE group_order_no = #{groupOrderNo}
+    </select>
+
+    <select id="countByTidElsewhere" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_payment
+        WHERE tid = #{tid}
+          AND order_no &lt;&gt; #{orderNo}
+          <if test="groupOrderNo != null">
+              AND (group_order_no IS NULL OR group_order_no &lt;&gt; #{groupOrderNo})
+          </if>
     </select>
 
     <select id="findById" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
@@ -154,13 +165,29 @@
         ORDER BY priority ASC
     </select>
 
+    <sql id="historyColumns">
+        p.payment_id, p.student_id, s.student_name, p.group_order_no, p.order_no, p.product_name,
+        p.amount, p.refund_amount, p.status, p.card_name, p.card_no, p.requested_at, p.paid_at
+    </sql>
+
     <select id="findHistory" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$HistoryDTO">
-        SELECT payment_id, order_no, product_name, amount, refund_amount,
-               status, card_name, card_no, requested_at, paid_at
-        FROM erp_bookstore_payment
-        WHERE student_id = #{studentId}
-          AND status NOT IN ('READY', 'CLOSED')   <!-- 결제창만 띄우고 만 건은 사용자에게 보여줄 내역이 아니다 -->
-        ORDER BY requested_at DESC
+        SELECT <include refid="historyColumns"/>
+        FROM erp_bookstore_payment p
+        LEFT JOIN erp_student s ON s.student_id = p.student_id
+        WHERE p.student_id IN
+        <foreach item="studentId" collection="studentIds" open="(" separator="," close=")">
+            #{studentId}
+        </foreach>
+          AND p.status NOT IN ('READY', 'CLOSED')   <!-- 결제창만 띄우고 만 건은 사용자에게 보여줄 내역이 아니다 -->
+        ORDER BY p.requested_at DESC
+    </select>
+
+    <select id="findHistoryByGroupOrderNo" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$HistoryDTO">
+        SELECT <include refid="historyColumns"/>
+        FROM erp_bookstore_payment p
+        LEFT JOIN erp_student s ON s.student_id = p.student_id
+        WHERE p.group_order_no = #{groupOrderNo}
+        ORDER BY p.requested_at
     </select>
 
 </mapper>

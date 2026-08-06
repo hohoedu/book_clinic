@@ -10,18 +10,22 @@
     <insert id="insertPass">
         INSERT INTO erp_bookstore_pass
             (student_id, center_code, product_id, service_code, source, ref_no, billing_ym,
-             total_count, remain_count, granted_at)
+             valid_from, valid_until, total_count, remain_count, granted_at)
         VALUES
             (#{studentId}, #{centerCode}, #{productId}, #{serviceCode}, #{source}, #{refNo}, #{billingYm},
-             #{totalCount}, #{totalCount}, DATEADD(HOUR, 9, GETUTCDATE()))
+             #{validFrom}, #{validUntil}, #{totalCount}, #{totalCount}, DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="passColumns">
         pass_id, student_id, center_code, product_id, service_code, source, ref_no,
-        billing_ym, total_count, remain_count, granted_at, revoked_at
+        billing_ym, valid_from, valid_until, total_count, remain_count, granted_at, revoked_at
     </sql>
 
-    <!-- 먼저 받은 이용권부터 소진시킨다 (전월 잔여 + 이번 달분이 겹칠 수 있음) -->
+    <!--
+      먼저 만료되는 이용권부터 소진시킨다 (전월 잔여 + 이번 달분, 심지어 미리 산 다음 달분까지
+      겹칠 수 있음). 유효기간 밖(아직 시작 전이거나 이미 끝난 달)이면 remain_count가 남아 있어도
+      제외한다 — 이월 없이 월말 소멸이라는 정책이 여기서 실질적으로 집행된다.
+    -->
     <select id="findUsablePass" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
         SELECT TOP 1 <include refid="passColumns"/>
         FROM erp_bookstore_pass
@@ -29,7 +33,17 @@
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
           AND remain_count > 0
-        ORDER BY granted_at ASC
+          AND valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+          AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+        ORDER BY valid_until ASC, granted_at ASC
+    </select>
+
+    <select id="findLatestValidUntil" resultType="java.time.LocalDate">
+        SELECT MAX(valid_until)
+        FROM erp_bookstore_pass
+        WHERE student_id   = #{studentId}
+          AND service_code = #{serviceCode}
+          AND revoked_at IS NULL
     </select>
 
     <!-- remain_count > 0 조건이 동시 요청에서 잔여가 마이너스로 내려가는 것을 막는다 -->
@@ -55,12 +69,15 @@
         ) THEN 1 ELSE 0 END
     </select>
 
+    <!-- 아직 시작 안 했거나 이미 끝난 달의 잔여는 "지금 쓸 수 있는 횟수"에 넣지 않는다 -->
     <select id="sumRemain" resultType="int">
         SELECT ISNULL(SUM(remain_count), 0)
         FROM erp_bookstore_pass
         WHERE student_id   = #{studentId}
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
+          AND valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+          AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
     </select>
 
     <select id="findByRef" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">

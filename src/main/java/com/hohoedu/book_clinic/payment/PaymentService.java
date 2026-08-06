@@ -4,7 +4,9 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.springframework.stereotype.Service;
@@ -18,6 +20,7 @@ import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 import com.hohoedu.book_clinic.payment._dto.PaymentReqDTO;
 import com.hohoedu.book_clinic.payment._dto.PaymentRespDTO;
+import com.hohoedu.book_clinic.student.StudentRepository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -50,6 +53,7 @@ public class PaymentService {
     private final InicisClient inicisClient;
     private final InicisProperties props;
     private final ClinicRepository clinicRepository;
+    private final StudentRepository studentRepository;
 
     // ───────────────────────────── 결제 시작 ─────────────────────────────
 
@@ -67,12 +71,14 @@ public class PaymentService {
 
         String centerCode = clinicRepository.findCenterCode(reqDTO.getStudentId());
         String orderNo = newOrderNo();
+        String billingYm = passService.nextBillingYm(reqDTO.getStudentId(), product.getServiceCode());
 
         paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
-                product.getProductId(), product.getProductName(), product.getPrice());
+                product.getProductId(), product.getProductName(), billingYm, product.getPrice());
 
         return new PaymentRespDTO.PrepareDTO(orderNo, props.getMid(), product.getPrice(),
-                product.getProductName(), props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
+                product.getProductName() + " (" + monthLabel(billingYm) + ")",
+                props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
     }
 
     /** 판매중인 상품 조회 — 형제 선택 화면에서 학생별 개별 금액을 보여줄 때 쓴다 */
@@ -98,17 +104,25 @@ public class PaymentService {
 
         String groupOrderNo = newOrderNo();
         int totalAmount = 0;
+        // 형제라도 이미 커버된 달이 서로 다를 수 있다(한 명이 먼저 다음 달 걸 사둔 경우 등) —
+        // 그룹 전체에 한 달을 통일해서 정하지 않고 학생마다 각자의 nextBillingYm을 따로 구한다.
+        Set<String> billingYms = new LinkedHashSet<>();
         for (String studentId : studentIds) {
             String centerCode = clinicRepository.findCenterCode(studentId);
             String orderNo = newOrderNo();
+            String billingYm = passService.nextBillingYm(studentId, product.getServiceCode());
+            billingYms.add(billingYm);
             paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
-                    product.getProductId(), product.getProductName(), product.getPrice());
+                    product.getProductId(), product.getProductName(), billingYm, product.getPrice());
             totalAmount += product.getPrice();
         }
 
+        // 그룹 전원의 대상월이 같으면 화면에 그 달을 보여주고, 갈리면(드문 경우) 잘못된 달을
+        // 하나로 뭉뚱그려 보여주는 것보다는 월 표시 자체를 생략하는 편이 안전하다.
+        String monthSuffix = billingYms.size() == 1 ? " (" + monthLabel(billingYms.iterator().next()) + ")" : "";
         String goodName = studentIds.size() > 1
-                ? product.getProductName() + " 외 " + (studentIds.size() - 1) + "명"
-                : product.getProductName();
+                ? product.getProductName() + monthSuffix + " 외 " + (studentIds.size() - 1) + "명"
+                : product.getProductName() + monthSuffix;
 
         return new PaymentRespDTO.PrepareGroupDTO(groupOrderNo, props.getMid(), totalAmount, goodName,
                 props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
@@ -451,7 +465,20 @@ public class PaymentService {
         int cancelId = paymentTxService.openCancel(paymentId, quote.getRefundAmount(), cancelReason,
                 requestedBy, quote.getRuleCode(), quote.getUsedDays(), quote.getUsedCount());
 
-        int remainAfter = payment.getAmount() - payment.getRefundAmount() - quote.getRefundAmount();
+        // tid 1건에 걸린 실제 PG 승인 금액은 이 결제 행 하나가 아니라(형제 묶음결제라면) 그룹
+        // 전체의 합계다. 여기서 "이 행만" 기준으로 remainAfter를 0으로 잘못 계산하면, 전액취소로
+        // 오인해 형제 전원의 결제가 걸린 tid 전체를 취소해버린다 — 다른 형제 몫까지 카드사에서
+        // 사라지는데 우리 DB에는 그 행이 여전히 PAID로 남는 정합성 사고로 이어진다.
+        // 그룹이 아니면(groupOrderNo=null) 아래 계산은 이 행 하나로 좁혀져 기존 단건 계산과 같다.
+        int groupTotalAmount = payment.getAmount();
+        int groupTotalRefunded = payment.getRefundAmount();
+        if (payment.getGroupOrderNo() != null) {
+            List<PaymentRespDTO.PaymentDTO> group = paymentRepository.findByGroupOrderNo(payment.getGroupOrderNo());
+            groupTotalAmount = group.stream().mapToInt(PaymentRespDTO.PaymentDTO::getAmount).sum();
+            groupTotalRefunded = group.stream().mapToInt(PaymentRespDTO.PaymentDTO::getRefundAmount).sum();
+        }
+
+        int remainAfter = groupTotalAmount - groupTotalRefunded - quote.getRefundAmount();
         boolean partial = remainAfter > 0;
 
         InicisClient.Result result;
@@ -625,18 +652,42 @@ public class PaymentService {
         return paymentRepository.findActiveProducts(serviceCode);
     }
 
+    /** 결제 내역 — 로그인 학생 본인 것만 (형제 것은 여기 안 나온다) */
     public List<PaymentRespDTO.HistoryDTO> history(String studentId) {
-        return paymentRepository.findHistory(studentId);
+        return paymentRepository.findHistory(List.of(studentId));
+    }
+
+    /**
+     * 형제 묶음결제 건의 그룹원 조회 — 결제 내역에서 그룹 결제 하나를 "환불"하려 할 때,
+     * 결제 화면의 형제 선택 체크박스와 똑같은 방식으로 "이 그룹 중 누구를 환불할지" 고르게
+     * 하기 위해 그룹 전체(본인 포함)를 학생명과 함께 돌려준다.
+     * 요청자가 그 그룹에 속해 있지 않으면(남의 그룹 주문번호를 넣어 엿보는 경로) 거부한다.
+     */
+    public List<PaymentRespDTO.HistoryDTO> groupMembers(String studentId, String groupOrderNo) {
+        List<PaymentRespDTO.HistoryDTO> members = paymentRepository.findHistoryByGroupOrderNo(groupOrderNo);
+        boolean requesterInGroup = members.stream().anyMatch(m -> m.getStudentId().equals(studentId));
+        if (!requesterInGroup) {
+            throw new Exception400("형제 관계가 아닌 결제입니다.");
+        }
+        return members;
     }
 
     // ───────────────────────────── 보조 ─────────────────────────────
 
+    /**
+     * 환불/견적 대상 결제 조회 — 형제 묶음결제 도입 이후로는 "본인 결제"가 아니라
+     * "형제 그룹 소속 학생의 결제"면 된다. 결제도 형제 아무나 대신 진행할 수 있게 했으므로,
+     * 환불도 같은 사람이 형제 대신 처리할 수 있어야 대칭이 맞는다. 형제가 없으면
+     * findSiblingGroup이 본인 1건만 돌려주므로 기존과 동일하게 본인 것만 허용된다.
+     */
     private PaymentRespDTO.PaymentDTO requireOwnPayment(String studentId, int paymentId) {
         PaymentRespDTO.PaymentDTO payment = paymentRepository.findById(paymentId);
         if (payment == null) {
             throw new Exception404("결제 정보를 찾을 수 없습니다.");
         }
-        if (!payment.getStudentId().equals(studentId)) {
+        boolean inSiblingGroup = studentRepository.findSiblingGroup(studentId).stream()
+                .anyMatch(s -> s.getStudentId().equals(payment.getStudentId()));
+        if (!inSiblingGroup) {
             throw new Exception400("다른 학생의 결제입니다.");
         }
         return payment;
@@ -706,6 +757,11 @@ public class PaymentService {
 
     private String nvl(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value;
+    }
+
+    /** "202609" → "9월" — 결제창에 몇 월치 이용권인지 보여줄 때 쓴다 */
+    private String monthLabel(String billingYm) {
+        return Integer.parseInt(billingYm.substring(4)) + "월";
     }
 
     /** 결제 행에는 product_id만 있어서 서비스 구분이 필요할 때 상품을 되짚는다 */
