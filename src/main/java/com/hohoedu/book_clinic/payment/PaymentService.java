@@ -4,8 +4,10 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -70,11 +72,36 @@ public class PaymentService {
         }
 
         String centerCode = clinicRepository.findCenterCode(reqDTO.getStudentId());
-        String orderNo = newOrderNo();
         String billingYm = passService.nextBillingYm(reqDTO.getStudentId(), product.getServiceCode());
 
-        paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
-                product.getProductId(), product.getProductName(), billingYm, product.getPrice());
+        // 중복 결제 방지(2026-08-07) — 다른 기기에서 같은 학생·서비스·청구월로 이미 결제창을
+        // 열어뒀거나(READY) 결제를 끝냈으면(PAID), 새로 만들지 않고 그 주문을 그대로 재사용한다.
+        // A기기로 결제창을 열어두고 방치한 사이 B기기로 새로 결제하면 둘 다 정상 승인돼서 같은 달
+        // 결제가 이중으로 잡히는 사고를 막기 위함이다 — nextBillingYm()은 이미 발급된(승인 완료)
+        // 이용권만 보고 계산해서, 진행 중인 다른 결제 시도는 그 계산에 안 잡힌다.
+        PaymentRespDTO.PaymentDTO existing = paymentRepository.findActiveByStudentServiceBilling(
+                reqDTO.getStudentId(), product.getServiceCode(), billingYm);
+        if (existing != null) {
+            if ("PAID".equals(existing.getStatus())) {
+                throw new Exception400("이미 이번 달 결제가 완료됐어요.");
+            }
+            return new PaymentRespDTO.PrepareDTO(existing.getOrderNo(), props.getMid(), existing.getAmount(),
+                    existing.getProductName() + " (" + monthLabel(billingYm) + ")",
+                    props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
+        }
+
+        String orderNo = newOrderNo();
+        try {
+            paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
+                    product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
+                    product.getPrice());
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 위 체크와 이 INSERT 사이의 아주 좁은 순간에 다른 기기가 먼저 같은 조합으로 INSERT
+            // 했을 때만 여기로 온다 — UX_payment_active_billing 유니크 인덱스가 막아준 것이다.
+            log.warn("[결제] 중복 결제 시도 차단(DB 유니크 인덱스) — studentId={}, serviceCode={}, billingYm={}",
+                    reqDTO.getStudentId(), product.getServiceCode(), billingYm, e);
+            throw new Exception400("이미 이번 달 결제가 진행 중이거나 완료됐어요. 새로고침 후 다시 시도해주세요.");
+        }
 
         return new PaymentRespDTO.PrepareDTO(orderNo, props.getMid(), product.getPrice(),
                 product.getProductName() + " (" + monthLabel(billingYm) + ")",
@@ -102,19 +129,46 @@ public class PaymentService {
             throw new Exception404("판매 중인 상품이 아닙니다.");
         }
 
+        // 중복 결제 방지(2026-08-07) — 그룹 행을 만들기 전에 전원부터 검사한다. 검사와 INSERT를
+        // 섞으면 일부 학생만 만들어진 채로 막혀서 그룹 주문이 절반만 생기는 상태가 될 수 있다.
+        // 각자의 청구월도 여기서 같이 미리 구해 아래 INSERT 단계에서 재사용한다.
+        Map<String, String> billingYmByStudent = new LinkedHashMap<>();
+        for (String studentId : studentIds) {
+            String billingYm = passService.nextBillingYm(studentId, product.getServiceCode());
+            billingYmByStudent.put(studentId, billingYm);
+
+            PaymentRespDTO.PaymentDTO existing = paymentRepository.findActiveByStudentServiceBilling(
+                    studentId, product.getServiceCode(), billingYm);
+            if (existing != null) {
+                throw new Exception400(("PAID".equals(existing.getStatus())
+                        ? "이미 이번 달 결제가 완료된 학생이 있어요: "
+                        : "이미 결제가 진행 중인 학생이 있어요: ") + studentId);
+            }
+        }
+
         String groupOrderNo = newOrderNo();
         int totalAmount = 0;
         // 형제라도 이미 커버된 달이 서로 다를 수 있다(한 명이 먼저 다음 달 걸 사둔 경우 등) —
         // 그룹 전체에 한 달을 통일해서 정하지 않고 학생마다 각자의 nextBillingYm을 따로 구한다.
         Set<String> billingYms = new LinkedHashSet<>();
-        for (String studentId : studentIds) {
-            String centerCode = clinicRepository.findCenterCode(studentId);
-            String orderNo = newOrderNo();
-            String billingYm = passService.nextBillingYm(studentId, product.getServiceCode());
-            billingYms.add(billingYm);
-            paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
-                    product.getProductId(), product.getProductName(), billingYm, product.getPrice());
-            totalAmount += product.getPrice();
+        try {
+            for (String studentId : studentIds) {
+                String centerCode = clinicRepository.findCenterCode(studentId);
+                String orderNo = newOrderNo();
+                String billingYm = billingYmByStudent.get(studentId);
+                billingYms.add(billingYm);
+                paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
+                        product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
+                        product.getPrice());
+                totalAmount += product.getPrice();
+            }
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            // 위 사전 검사와 INSERT 사이의 아주 좁은 순간에 다른 기기가 먼저 같은 조합으로
+            // INSERT했을 때만 여기로 온다 — UX_payment_active_billing 유니크 인덱스가 막아준 것.
+            // 이미 만든 그룹원 행이 일부 있을 수 있지만 group_order_no가 새로 발급된 값이라
+            // 다른 정상 그룹과 섞이지 않고, 전부 READY로 방치되면 PaymentCleanupJob이 정리한다.
+            log.warn("[결제] 중복 결제 시도 차단(DB 유니크 인덱스, 그룹) — productCode={}", productCode, e);
+            throw new Exception400("이미 이번 달 결제가 진행 중이거나 완료된 학생이 있어요. 새로고침 후 다시 시도해주세요.");
         }
 
         // 그룹 전원의 대상월이 같으면 화면에 그 달을 보여주고, 갈리면(드문 경우) 잘못된 달을
@@ -210,7 +264,21 @@ public class PaymentService {
         }
 
         if (!updated) {
-            log.info("[결제] 승인 중복 요청 — orderNo={}", reqDTO.getOrderNo());
+            // markPaid가 0행이면 이 order_no는 이미 누군가 PAID로 확정해놨다는 뜻인데, 그게
+            // "내가 방금 보낸 것과 같은 tid의 재시도"인지 "전혀 다른 tid로 거의 동시에 이중 승인된
+            // 것"인지 구분해야 한다(2026-08-07). 후자면 방금 우리가 이니시스에서 받아온 승인
+            // (result.get("tid"))은 우리 DB 어디에도 안 남는 채로 카드사에만 남는 orphan 승인이라,
+            // 그대로 두면 고객 카드에서 조용히 중복으로 돈이 빠진다 — 즉시 망취소한다.
+            PaymentRespDTO.PaymentDTO current = paymentRepository.findByOrderNo(reqDTO.getOrderNo());
+            String justApprovedTid = result.get("tid");
+            if (current != null && current.getTid() != null && !current.getTid().equals(justApprovedTid)) {
+                log.error("[결제] 동시 승인 경합 — 같은 주문에 서로 다른 tid로 이중 승인됨. 방금 승인분 망취소. "
+                                + "orderNo={}, 기존tid={}, 방금tid={}",
+                        reqDTO.getOrderNo(), current.getTid(), justApprovedTid);
+                netCancel(reqDTO, "동시 승인 경합 — 중복 승인분 취소");
+            } else {
+                log.info("[결제] 승인 중복 요청(재시도) — orderNo={}", reqDTO.getOrderNo());
+            }
         }
 
         int remain = passService.remain(payment.getStudentId(), product.getServiceCode());
@@ -306,22 +374,42 @@ public class PaymentService {
             paymentRepository.insertLog(orderNo, result.get("P_TID"), "NET_CANCEL", null, null,
                     "승인 금액 불일치 — 수동 취소 필요", null);
             paymentTxService.confirmFailed(orderNo, result.get("P_STATUS"));
+            paymentRepository.markNeedsReview(orderNo, "승인 금액 불일치(모바일) — 상점관리자에서 직접 취소 필요");
             throw new Exception400("결제 금액이 일치하지 않습니다. 고객센터로 문의해주세요.");
         }
 
         PaymentRespDTO.ProductDTO product = paymentRepository.findProductById(payment.getProductId());
         if (product == null) {
             log.error("[결제] 상품 정보 없음 — 수동 취소 필요. orderNo={}, tid={}", orderNo, result.get("P_TID"));
+            paymentRepository.markNeedsReview(orderNo, "승인은 났으나 상품 정보 없음 — 상점관리자에서 직접 취소 필요");
             throw new Exception500("상품 정보를 찾을 수 없습니다. 고객센터로 문의해주세요.");
         }
 
+        boolean updated;
         try {
-            paymentTxService.confirmPaid(payment, product, result.get("P_TID"), "Card",
+            updated = paymentTxService.confirmPaid(payment, product, result.get("P_TID"), "Card",
                     result.get("P_FN_NM"), maskCardNo(result.get("P_CARD_NUM")),
                     result.get("P_AUTH_NO"), result.get("P_STATUS"));
         } catch (Exception e) {
             log.error("[결제] 승인 확정 실패 — 수동 취소 필요. orderNo={}, tid={}", orderNo, result.get("P_TID"), e);
+            paymentRepository.markNeedsReview(orderNo, "승인은 났으나 확정 실패 — 상점관리자에서 직접 취소 필요");
             throw new Exception500("결제 처리에 실패했습니다. 고객센터로 문의해주세요.");
+        }
+
+        if (!updated) {
+            // 모바일은 망취소 수단이 없어(클래스 상단 주석 참고) PC처럼 자동으로 되돌릴 수 없다 —
+            // 다른 tid로 이중 승인된 것으로 보이면 사람이 상점관리자에서 직접 확인해야 한다(2026-08-07).
+            PaymentRespDTO.PaymentDTO current = paymentRepository.findByOrderNo(orderNo);
+            String justApprovedTid = result.get("P_TID");
+            if (current != null && current.getTid() != null && !current.getTid().equals(justApprovedTid)) {
+                log.error("[결제] 동시 승인 경합(모바일) — 같은 주문에 서로 다른 tid로 이중 승인됨. 수동 취소 필요. "
+                                + "orderNo={}, 기존tid={}, 방금tid={}",
+                        orderNo, current.getTid(), justApprovedTid);
+                paymentRepository.markNeedsReview(orderNo,
+                        "동시 승인 경합(모바일) — 방금 승인된 tid가 orphan일 수 있음, 상점관리자에서 확인 필요");
+            } else {
+                log.info("[결제] 승인 중복 요청(재시도, 모바일) — orderNo={}", orderNo);
+            }
         }
 
         int remain = passService.remain(payment.getStudentId(), product.getServiceCode());
@@ -381,22 +469,37 @@ public class PaymentService {
             paymentRepository.insertLog(groupOrderNo, result.get("P_TID"), "NET_CANCEL", null, null,
                     "승인 금액 불일치 — 수동 취소 필요", null);
             paymentTxService.confirmFailedGroup(orderNosOf(group), result.get("P_STATUS"));
+            markNeedsReviewGroup(group, "승인 금액 불일치(그룹) — 상점관리자에서 직접 취소 필요");
             throw new Exception400("결제 금액이 일치하지 않습니다. 고객센터로 문의해주세요.");
         }
 
         PaymentRespDTO.ProductDTO product = paymentRepository.findProductById(group.get(0).getProductId());
         if (product == null) {
             log.error("[결제] 상품 정보 없음(그룹) — 수동 취소 필요. groupOrderNo={}, tid={}", groupOrderNo, result.get("P_TID"));
+            markNeedsReviewGroup(group, "승인은 났으나 상품 정보 없음(그룹) — 상점관리자에서 직접 취소 필요");
             throw new Exception500("상품 정보를 찾을 수 없습니다. 고객센터로 문의해주세요.");
         }
 
+        boolean allUpdated;
         try {
-            paymentTxService.confirmPaidGroup(group, product, result.get("P_TID"), "Card",
+            allUpdated = paymentTxService.confirmPaidGroup(group, product, result.get("P_TID"), "Card",
                     result.get("P_FN_NM"), maskCardNo(result.get("P_CARD_NUM")),
                     result.get("P_AUTH_NO"), result.get("P_STATUS"));
         } catch (Exception e) {
             log.error("[결제] 승인 확정 실패(그룹) — 수동 취소 필요. groupOrderNo={}, tid={}", groupOrderNo, result.get("P_TID"), e);
+            markNeedsReviewGroup(group, "승인은 났으나 확정 실패(그룹) — 상점관리자에서 직접 취소 필요");
             throw new Exception500("결제 처리에 실패했습니다. 고객센터로 문의해주세요.");
+        }
+
+        if (!allUpdated) {
+            // 그룹원 중 한 명이라도 이미 PAID라 갱신할 게 없었다는 뜻 — 동시 승인 경합으로 방금
+            // 이니시스에서 또 승인을 받아버렸을 수 있다. 모바일은 망취소 수단이 없고, 그룹은
+            // 멤버별 tid 비교까지 하기엔 복잡해서(단일결제처럼 정밀하게 구분하지 않고) 일단 전원을
+            // 확인 대상으로 남긴다(2026-08-07).
+            log.error("[결제] 동시 승인 경합 가능성(그룹) — 일부 이미 처리됨, 수동 확인 필요. groupOrderNo={}, tid={}",
+                    groupOrderNo, result.get("P_TID"));
+            markNeedsReviewGroup(group,
+                    "동시 승인 경합 가능성(그룹) — 방금 승인된 tid가 orphan일 수 있음, 상점관리자에서 확인 필요");
         }
 
         PaymentRespDTO.PaymentDTO first = paymentRepository.findByOrderNo(group.get(0).getOrderNo());
@@ -408,6 +511,13 @@ public class PaymentService {
         return payments.stream().map(PaymentRespDTO.PaymentDTO::getOrderNo).toList();
     }
 
+    /** 그룹 전원 각자의 order_no에 확인 필요 표시를 남긴다 — 목록 화면은 order_no 단위로 보여준다 */
+    private void markNeedsReviewGroup(List<PaymentRespDTO.PaymentDTO> group, String reason) {
+        for (String orderNo : orderNosOf(group)) {
+            paymentRepository.markNeedsReview(orderNo, reason);
+        }
+    }
+
     /**
      * 망취소 — 실패해도 예외를 위로 올리지 않는다. 이 시점의 호출부는 이미 실패 경로를 타고
      * 있어서, 여기서 또 예외가 나면 원래 실패 원인이 가려진다. 대신 로그에 남겨 사람이
@@ -416,6 +526,7 @@ public class PaymentService {
     private void netCancel(PaymentReqDTO.ApproveDTO reqDTO, String why) {
         if (reqDTO.getNetCancelUrl() == null || reqDTO.getNetCancelUrl().isBlank()) {
             log.error("[결제] 망취소 주소 없음 — 수동 취소 필요. orderNo={}, 사유={}", reqDTO.getOrderNo(), why);
+            paymentRepository.markNeedsReview(reqDTO.getOrderNo(), "망취소 주소 없음 — " + why);
             return;
         }
         try {
@@ -426,10 +537,12 @@ public class PaymentService {
             if (!result.isApproveSuccess()) {
                 log.error("[결제] 망취소 실패 — 수동 취소 필요. orderNo={}, resultCode={}",
                         reqDTO.getOrderNo(), result.get("resultCode"));
+                paymentRepository.markNeedsReview(reqDTO.getOrderNo(), "망취소 실패(" + why + ") — 상점관리자에서 직접 취소 필요");
             }
         } catch (Exception e) {
             log.error("[결제] 망취소 호출 실패 — 수동 취소 필요. orderNo={}", reqDTO.getOrderNo(), e);
             paymentRepository.insertLog(reqDTO.getOrderNo(), null, "NET_CANCEL", null, null, why, e.toString());
+            paymentRepository.markNeedsReview(reqDTO.getOrderNo(), "망취소 호출 실패(" + why + ") — 상점관리자에서 직접 취소 필요");
         }
     }
 
@@ -454,6 +567,24 @@ public class PaymentService {
                                                 String requestedBy) {
         PaymentRespDTO.PaymentDTO payment = requireOwnPayment(studentId, paymentId);
 
+        // 동시 환불 요청 경합 방지 — "환불 안 됨"을 확인만 하고 실제 PG 호출까지 가는 사이에 락이
+        // 없으면, 거의 동시에 두 번 요청됐을 때 둘 다 통과해 PG 취소가 이중으로 나갈 수 있다
+        // (2026-08-07). markPaid의 WHERE status='READY'와 같은 원리로 원자적 UPDATE 한 번으로
+        // 선점하고, 뒤 요청은 여기서 막는다.
+        if (paymentRepository.claimRefund(paymentId) == 0) {
+            throw new Exception400("이미 환불이 진행 중이거나 완료된 결제입니다. 잠시 후 다시 확인해주세요.");
+        }
+        try {
+            return doRefund(payment, paymentId, reason, requestedBy);
+        } finally {
+            // 성공/실패 무관하게 선점을 풀어준다 — 성공은 refund_amount>0이 영구 차단하고
+            // (calculateRefund), 실패는 재시도가 가능해야 하므로 여기서 다시 열어준다.
+            paymentRepository.releaseRefundClaim(paymentId);
+        }
+    }
+
+    private PaymentRespDTO.RefundQuoteDTO doRefund(PaymentRespDTO.PaymentDTO payment, int paymentId, String reason,
+                                                    String requestedBy) {
         PaymentRespDTO.RefundQuoteDTO quote = calculateRefund(payment);
         if (!quote.isRefundable()) {
             throw new Exception400(quote.getReason());

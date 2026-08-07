@@ -2,8 +2,10 @@ package com.hohoedu.book_clinic.monitor;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -89,10 +91,24 @@ public class MonitorService {
         syncSafely(sessionId);
     }
 
-    /** 실시간 모니터링 화면 최초 진입용 — 예약 기준 카드 목록(로그인 직원의 센터로 스코핑). 이후 갱신은 Firestore 구독으로 받는다 */
+    /**
+     * 실시간 모니터링 화면 최초 진입용 — 예약 기준 카드 목록(로그인 직원의 센터로 스코핑).
+     * 이후 갱신은 Firestore 구독으로 받되, 끊겼을 때 대비해 monitor-live.js가 이 메서드를 30초
+     * 마다 다시 호출한다(백업 폴링). 카드마다 책 목록을 따로 조회하면(N+1) 학생 수만큼 쿼리가
+     * 늘어나 그 폴링 부담이 그대로 비례해서 커지므로, 학생 목록을 한 번에 묶어 배치로 조회한다
+     * (2026-08-07).
+     */
     public MonitorRespDTO.LiveViewRespDTO getLiveView(LocalDate date, String centerCode) {
         List<MonitorRespDTO.CardDTO> cards = monitorRepository.findReservationCards(date, centerCode);
-        cards.forEach(this::fillDerivedFields);
+
+        List<String> studentIds = cards.stream().map(MonitorRespDTO.CardDTO::getStudentId).distinct().toList();
+        Map<String, List<MonitorRespDTO.BookPageDTO>> booksByStudent = studentIds.isEmpty()
+                ? Map.of()
+                : monitorRepository.findTodayBooksByStudentIds(studentIds, date).stream()
+                        .peek(book -> book.setReadingTimeMinutes(parseMinutes(book.getReadingTimeText())))
+                        .collect(Collectors.groupingBy(MonitorRespDTO.BookPageDTO::getStudentId));
+
+        cards.forEach(card -> fillDerivedFields(card, booksByStudent.getOrDefault(card.getStudentId(), List.of())));
 
         MonitorRespDTO.LiveViewRespDTO resp = new MonitorRespDTO.LiveViewRespDTO();
         resp.setCards(cards);
@@ -332,11 +348,17 @@ public class MonitorService {
      * 여기서는 그 값을 그대로 쓴다 — Java 쪽에서 다시 "지금"을 구해 비교하면 DB 서버 시계와
      * 어긋날 수 있어서 일부러 하지 않는다.
      */
+    /** 세션 1건 갱신 후(syncCard) 단건 조회로 책 목록을 채운다 */
     private void fillDerivedFields(MonitorRespDTO.CardDTO card) {
+        fillDerivedFields(card, fillBookPages(card));
+    }
+
+    /** getLiveView가 배치로 미리 조회해둔 책 목록을 그대로 꽂아준다(N+1 회피, 2026-08-07) */
+    private void fillDerivedFields(MonitorRespDTO.CardDTO card, List<MonitorRespDTO.BookPageDTO> books) {
         Integer readingTimeMinutes = parseMinutes(card.getReadingTimeText());
         card.setReadingTimeMinutes(readingTimeMinutes);
         card.setCardStatus(resolveCardStatus(card, readingTimeMinutes, card.getElapsedMinutes()));
-        card.setBooks(fillBookPages(card));
+        card.setBooks(books);
     }
 
     /** 카드 캐러셀용 — 그 학생이 오늘 추천받은 책 목록을 조회하고, 책마다 권장 분을 파싱해 채운다 */

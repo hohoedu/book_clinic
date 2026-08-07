@@ -39,8 +39,20 @@ public interface MonitorRepository {
     /** 사용 중(use_yn=1)인 독서태도 코드 목록 — 독서일지 패널 체크박스 렌더링용 */
     List<MonitorRespDTO.AttitudeCodeDTO> findActiveAttitudeCodes();
 
-    /** 카드 캐러셀용 — 그 학생이 오늘 추천받은 책 전체(+ 날짜 상관없이 아직 PENDING인 책) */
+    /**
+     * 카드 캐러셀용 — 그 학생이 오늘 추천받은 책 전체(+ 날짜 상관없이 아직 PENDING인 책).
+     * 세션 1건만 갱신됐을 때(입실/퇴실/문제풀이 시작 등, syncCard) 쓴다 — 여러 카드를 한 번에
+     * 그릴 때는 findTodayBooksByStudentIds를 대신 써야 N+1이 안 생긴다(2026-08-07).
+     */
     List<MonitorRespDTO.BookPageDTO> findTodayBooks(@Param("studentId") String studentId, @Param("date") LocalDate date);
+
+    /**
+     * findTodayBooks의 배치 버전 — 실시간 모니터링 화면(getLiveView)이 30초마다 전체 카드를
+     * 다시 그릴 때, 카드 수만큼 쿼리를 따로 날리지 않고 학생 목록을 한 번에 묶어 조회한다
+     * (2026-08-07, N+1 제거). 결과에 studentId가 채워져 있어 호출부가 학생별로 그룹핑한다.
+     */
+    List<MonitorRespDTO.BookPageDTO> findTodayBooksByStudentIds(@Param("studentIds") List<String> studentIds,
+                                                                 @Param("date") LocalDate date);
 
     /** 세션 1건의 카드 상세 — Firestore 동기화/저장 직후 최신값 재조회용 */
     MonitorRespDTO.CardDTO findCardBySessionId(@Param("sessionId") Integer sessionId);

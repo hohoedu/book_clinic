@@ -34,8 +34,17 @@
         WHERE student_id = #{studentId}
     </select>
 
+    <!--
+      app_id/serial_num 둘 다 UNIQUE 제약이 없어(schema.sql 참고), 서로 다른 두 학생의
+      app_id와 serial_num이 같은 값을 갖는 경우(또는 같은 컬럼 안에 중복값이 있는 경우)
+      OR 조건에 두 행이 동시에 걸려 selectOne()이 TooManyResultsException을 던졌다
+      (2026-08-07 출석체크 QR 스캔 중 실제 발생). TOP 1 + app_id 우선 정렬로 항상 1건만
+      반환하도록 고정한다 — app_id로 먼저 찾고, 못 찾을 때만 serial_num으로 대체한다는
+      호출부의 원래 의도를 그대로 유지하면서 다건 반환을 막는다.
+    -->
     <select id="findByAppId" resultType="com.hohoedu.book_clinic.student.model.Student">
-        SELECT id                     AS id,
+        SELECT TOP 1
+               id                     AS id,
                created_at             AS createdAt,
                updated_at             AS updatedAt,
                center_code            AS centerCode,
@@ -61,7 +70,8 @@
                sub_book               AS subBook,
                sub_hoho               AS subHoho
         FROM erp_student
-        WHERE app_id = #{appId}
+        WHERE app_id = #{appId} or serial_num = #{appId}
+        ORDER BY CASE WHEN app_id = #{appId} THEN 0 ELSE 1 END
     </select>
 
     <select id="findTokensByCenter" resultType="String">

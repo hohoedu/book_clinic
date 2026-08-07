@@ -353,6 +353,73 @@
         ORDER BY rl.recommend_id ASC
     </select>
 
+    <!-- findTodayBooks의 배치 버전 — WHERE만 IN(...)으로 바뀌고 나머지 로직은 완전히 동일하다 -->
+    <select id="findTodayBooksByStudentIds" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$BookPageDTO">
+        SELECT
+            rl.student_id      AS studentId,
+            rl.recommend_id    AS recommendId,
+            rl.content_id      AS contentId,
+            c.original_title   AS bookTitle,
+            c.author           AS author,
+            c.publisher        AS publisher,
+            c.image_url        AS imageUrl,
+            c.reading_time     AS readingTimeText,
+            rl.recommended_at  AS recommendedAt,
+            rl.correct_count   AS basicCorrectCount,
+            rl.total_count     AS basicTotalCount,
+            rl.status          AS basicStatus,
+            COALESCE(
+                frozen.read_minutes,
+                DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
+            ) AS elapsedMinutes,
+            adv.correctCount AS advancedCorrectCount,
+            adv.totalCount   AS advancedTotalCount,
+            badge.badgeCount      AS badgeCount,
+            badge.latestBadgeName AS latestBadgeName
+        FROM erp_bookstore_recommend_log rl
+        LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS totalCount,
+                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
+            FROM erp_bookstore_quiz_answer_log q
+            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
+              AND q.submitted_at = (
+                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
+                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
+              )
+        ) adv
+        OUTER APPLY (
+            SELECT
+                COUNT(*) AS badgeCount,
+                (SELECT TOP 1 b.badge_name
+                 FROM erp_bookstore_student_badge sb2
+                 JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
+                 WHERE sb2.student_id = rl.student_id AND sb2.content_id = rl.content_id
+                 ORDER BY sb2.earned_at DESC) AS latestBadgeName
+            FROM erp_bookstore_student_badge sb
+            WHERE sb.student_id = rl.student_id AND sb.content_id = rl.content_id
+        ) badge
+        OUTER APPLY (
+            SELECT TOP 1 session_id, quiz_started_at
+            FROM erp_bookstore_clinic_session
+            WHERE student_id = rl.student_id AND session_date = #{date}
+            ORDER BY session_id DESC
+        ) cs
+        OUTER APPLY (
+            SELECT TOP 1 dd.read_minutes
+            FROM erp_bookstore_diary dia
+            JOIN erp_bookstore_diary_detail dd ON dd.diary_key = dia.diary_key AND dd.content_id = rl.content_id
+            WHERE dia.session_id = cs.session_id
+        ) frozen
+        WHERE rl.student_id IN
+        <foreach item="studentId" collection="studentIds" open="(" separator="," close=")">
+            #{studentId}
+        </foreach>
+          AND (CAST(rl.recommended_at AS DATE) = #{date} OR rl.status = 'PENDING')
+        ORDER BY rl.student_id, rl.recommend_id ASC
+    </select>
+
     <!--
       독서일지 헤더 upsert — 세션 1건당 1행.
       record_date/in_time/out_time은 세션에서, record_time(교시)은 같은 학생·같은 날짜의 예약에서 끌어온다.

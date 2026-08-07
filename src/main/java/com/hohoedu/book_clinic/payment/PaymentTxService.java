@@ -72,14 +72,21 @@ public class PaymentTxService {
     /**
      * 형제 묶음결제 승인 확정 — confirmPaid를 학생 수만큼 반복한다.
      * 한 트랜잭션 안에서 돌아야 "형제 중 일부만 결제 확정" 상태가 생기지 않는다.
+     *
+     * @return 그룹원 전원이 새로 확정됐으면 true. 한 명이라도 이미 PAID라서 갱신할 게 없었으면
+     *         false — 동시 승인 경합(같은 그룹에 서로 다른 tid로 이중 승인)일 수 있다는 신호라
+     *         호출부(PaymentService)가 이 값을 보고 추가 확인을 한다(2026-08-07).
      */
     @Transactional
-    public void confirmPaidGroup(List<PaymentRespDTO.PaymentDTO> payments, PaymentRespDTO.ProductDTO product,
-                                 String tid, String payMethod, String cardName, String cardNo,
-                                 String applNo, String resultCode) {
+    public boolean confirmPaidGroup(List<PaymentRespDTO.PaymentDTO> payments, PaymentRespDTO.ProductDTO product,
+                                    String tid, String payMethod, String cardName, String cardNo,
+                                    String applNo, String resultCode) {
+        boolean allUpdated = true;
         for (PaymentRespDTO.PaymentDTO payment : payments) {
-            confirmPaid(payment, product, tid, payMethod, cardName, cardNo, applNo, resultCode);
+            boolean updated = confirmPaid(payment, product, tid, payMethod, cardName, cardNo, applNo, resultCode);
+            allUpdated = allUpdated && updated;
         }
+        return allUpdated;
     }
 
     /** 형제 묶음결제 실패 확정 — confirmFailed를 그룹 전체에 대해 한 트랜잭션으로 반복한다 */

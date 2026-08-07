@@ -225,6 +225,9 @@ CREATE TABLE erp_bookstore_payment (
     center_code   VARCHAR(50),                    -- 결제한 학생의 소속 센터 (정산/조회 필터용 중복 저장)
     product_id    INT           NOT NULL,         -- erp_bookstore_product.product_id
     product_name  VARCHAR(50),                    -- 결제 시점 상품명 스냅샷
+    -- 상품의 service_code 스냅샷(2026-08-07) — 아래 UX_payment_active_billing 필터드 유니크
+    -- 인덱스에 쓴다. 필터드 유니크 인덱스는 조인을 못 걸어서 값으로 복사해 둬야 한다.
+    service_code  VARCHAR(10),
     billing_ym    CHAR(6),                        -- 이 결제가 몇 월치 이용권인지(YYYYMM). prepare()/prepareGroup()
                                                   -- 시점에 PassService.nextBillingYm()으로 정해서 넣고, 승인 확정
                                                   -- 때 이 값을 그대로 이용권에 옮긴다(그 사이 재계산하면 화면에
@@ -247,8 +250,26 @@ CREATE TABLE erp_bookstore_payment (
                                                   -- 실패 사유 원문은 payment_log.res_body를 본다
     requested_at  DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 결제 시작일시(KST)
     paid_at       DATETIME2,                      -- 승인 완료일시(KST). 환불 규정의 "며칠 이내"가 이 값 기준이다
+    -- 운영자 수동 확인 필요 플래그(2026-08-07) — schema.sql과 동일. 이미 배포된 운영 DB는
+    -- 이 CREATE TABLE이 안 타므로 patch-erp_bookstore_payment-needs_review.sql로 별도 추가한다.
+    needs_review  BIT           NOT NULL DEFAULT 0,
+    review_reason VARCHAR(200),
+    reviewed_at   DATETIME2,
+    -- 동시 환불 요청 경합 방지 선점 컬럼(2026-08-07) — schema.sql과 동일. 이미 배포된 운영 DB는
+    -- patch-erp_bookstore_payment-refund_lock.sql로 별도 추가한다.
+    refund_requested_at DATETIME2,
+    -- CLOSED 사후 재확인 완료 표시(2026-08-07) — schema.sql과 동일. 이미 배포된 운영 DB는
+    -- patch-erp_bookstore_payment-closed_recheck.sql로 별도 추가한다.
+    closed_recheck_at DATETIME2,
     FOREIGN KEY (product_id) REFERENCES erp_bookstore_product(product_id)
 );
+
+-- 같은 학생·서비스·청구월에 진행 중(READY)이거나 완료(PAID)된 결제가 동시에 2개 이상 있지
+-- 못하게 막는다(2026-08-07) — schema.sql과 동일. 이미 배포된 운영 DB는
+-- patch-erp_bookstore_payment-active_billing_unique.sql로 별도 추가한다.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_payment_active_billing' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    CREATE UNIQUE INDEX UX_payment_active_billing ON erp_bookstore_payment (student_id, service_code, billing_ym)
+        WHERE status IN ('READY', 'PAID');
 
 -- (2026-08-06 폐지) tid 유니크 인덱스는 형제 묶음결제와 양립할 수 없어 제거했다 — PG 승인은
 -- 그룹당 1건만 나는데, 그 tid를 학생 수만큼의 payment 행에 그대로 복사해 남기므로 같은 tid를

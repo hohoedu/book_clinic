@@ -19,8 +19,14 @@ public interface ClinicRepository {
     /** 학생 소속 센터 코드 */
     String findCenterCode(@Param("studentId") String studentId);
 
-    /** 학생 학년 코드 (erp_student.grade_key, S코드 01~07) — 없으면 null */
+    /** 학생 학년 코드 (erp_student.grade_key, 올패스 코드 — book_clinic S코드가 아니다) — 없으면 null */
     String findGradeKey(@Param("studentId") String studentId);
+
+    /** 클리닉 추천 기준 학년 (erp_student.clinic_grade_key, S코드 01~07, book_clinic 자체 관리) — 없으면 null */
+    String findClinicGradeKey(@Param("studentId") String studentId);
+
+    /** 클리닉 추천 기준 학년 최초 채움/조정 */
+    void updateClinicGradeKey(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
 
     /** 직전 추천 도서의 분류/장르 (추천 이력이 없으면 null) */
     ClinicRespDTO.LastRecommendDTO findLastRecommend(@Param("studentId") String studentId);

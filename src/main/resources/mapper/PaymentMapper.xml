@@ -34,17 +34,28 @@
 
     <insert id="insertReady">
         INSERT INTO erp_bookstore_payment
-            (order_no, group_order_no, student_id, center_code, product_id, product_name, billing_ym,
+            (order_no, group_order_no, student_id, center_code, product_id, product_name, service_code, billing_ym,
              amount, status, requested_at)
         VALUES
-            (#{orderNo}, #{groupOrderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{billingYm},
+            (#{orderNo}, #{groupOrderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{serviceCode}, #{billingYm},
              #{amount}, 'READY', DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="paymentColumns">
         payment_id, order_no, group_order_no, billing_ym, tid, student_id, center_code, product_id, product_name,
-        amount, refund_amount, status, paid_at
+        service_code, amount, refund_amount, status, paid_at
     </sql>
+
+    <!-- 같은 학생·서비스·청구월에 이미 진행 중이거나 완료된 결제가 있는지 — 중복 결제 방지용(2026-08-07) -->
+    <select id="findActiveByStudentServiceBilling" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+        SELECT TOP 1 <include refid="paymentColumns"/>
+        FROM erp_bookstore_payment
+        WHERE student_id = #{studentId}
+          AND service_code = #{serviceCode}
+          AND billing_ym = #{billingYm}
+          AND status IN ('READY', 'PAID')
+        ORDER BY CASE status WHEN 'PAID' THEN 0 ELSE 1 END, requested_at DESC
+    </select>
 
     <select id="findByOrderNo" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
         SELECT <include refid="paymentColumns"/>
@@ -79,6 +90,13 @@
       두 번째는 0행이 되고, 호출부가 그걸 재시도로 판단한다. tid의 필터드 UNIQUE 인덱스가
       한 겹 더 막아준다.
     -->
+    <!--
+      status IN ('READY','CLOSED')인 이유(2026-08-07) — 원래는 READY만 허용했는데, 그러면 방치
+      타임아웃으로 CLOSED된 직후 고객이 이니시스 결제창에서 실제로 승인을 완료해버린 경우(레이스
+      컨디션)를 영원히 PAID로 못 돌릴 방법이 없었다. CLOSED는 "안 샀다"는 확정이 아니라 "우리
+      추측으로 포기했다"는 뜻일 뿐이라, 실제 승인 사실이 사후에 확인되면(PaymentCleanupJob의
+      CLOSED 재확인) PAID로 복구할 수 있어야 한다.
+    -->
     <update id="markPaid">
         UPDATE erp_bookstore_payment
         SET tid         = #{tid},
@@ -90,7 +108,7 @@
             status      = 'PAID',
             paid_at     = DATEADD(HOUR, 9, GETUTCDATE())
         WHERE order_no = #{orderNo}
-          AND status   = 'READY'
+          AND status   IN ('READY', 'CLOSED')
     </update>
 
     <update id="markFailed">
@@ -109,13 +127,13 @@
           AND status   = 'READY'
     </update>
 
-    <!-- 방치 READY 일괄 정리 — requested_at 기준이라 승인 시도조차 없었던 순수 이탈 건만 걸린다 -->
-    <update id="markStaleReadyAsClosed">
-        UPDATE erp_bookstore_payment
-        SET status = 'CLOSED'
+    <!-- 방치 READY 목록 — 건별로 거래조회부터 해본 뒤 정리할지 복구할지 PaymentCleanupJob이 정한다 -->
+    <select id="findStaleReady" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+        SELECT <include refid="paymentColumns"/>
+        FROM erp_bookstore_payment
         WHERE status = 'READY'
           AND requested_at &lt; #{olderThan}
-    </update>
+    </select>
 
     <!--
       누적 환불액을 더하면서 전액이 되면 CANCELED로 내린다. 부분환불은 status를 건드리지
@@ -189,5 +207,59 @@
         WHERE p.group_order_no = #{groupOrderNo}
         ORDER BY p.requested_at
     </select>
+
+    <update id="markNeedsReview">
+        UPDATE erp_bookstore_payment
+        SET needs_review  = 1,
+            review_reason = #{reason}
+        WHERE order_no = #{orderNo}
+    </update>
+
+    <select id="findNeedsReview" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$ReviewDTO">
+        SELECT payment_id AS paymentId, order_no AS orderNo, group_order_no AS groupOrderNo,
+               student_id AS studentId, center_code AS centerCode, product_name AS productName,
+               amount, status, review_reason AS reviewReason, requested_at AS requestedAt
+        FROM erp_bookstore_payment
+        WHERE needs_review = 1
+          AND reviewed_at IS NULL
+        ORDER BY requested_at DESC
+    </select>
+
+    <update id="resolveReview">
+        UPDATE erp_bookstore_payment
+        SET reviewed_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE payment_id = #{paymentId}
+          AND needs_review = 1
+          AND reviewed_at IS NULL
+    </update>
+
+    <!-- 원자적 선점 — 이미 선점됐거나(처리 중) 이미 환불된 건이면 0행이라 경합이 안전하게 막힌다 -->
+    <update id="claimRefund">
+        UPDATE erp_bookstore_payment
+        SET refund_requested_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE payment_id = #{paymentId}
+          AND refund_requested_at IS NULL
+          AND refund_amount = 0
+    </update>
+
+    <update id="releaseRefundClaim">
+        UPDATE erp_bookstore_payment
+        SET refund_requested_at = NULL
+        WHERE payment_id = #{paymentId}
+    </update>
+
+    <select id="findClosedForRecheck" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+        SELECT <include refid="paymentColumns"/>
+        FROM erp_bookstore_payment
+        WHERE status = 'CLOSED'
+          AND closed_recheck_at IS NULL
+          AND requested_at >= #{windowStart}
+    </select>
+
+    <update id="markClosedRechecked">
+        UPDATE erp_bookstore_payment
+        SET closed_recheck_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE order_no = #{orderNo}
+    </update>
 
 </mapper>

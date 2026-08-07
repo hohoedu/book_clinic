@@ -13,12 +13,13 @@ function getCsrfToken() {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-// 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — monitor-live.js의 TIME_SLOTS와 값('1'~'4')을 맞춘다
+// 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — monitor-live.js/diary.js의 TIME_SLOTS와
+// 값('1'~'4')·시간(KST) 모두 맞춘다(교시당 50분 수업 + 10분 휴식, 2026-08-07 확정).
 const TIME_SLOTS = [
-  { key: "1", label: "1교시(14:00~15:00)" },
-  { key: "2", label: "2교시(15:00~16:00)" },
-  { key: "3", label: "3교시(16:00~17:00)" },
-  { key: "4", label: "4교시(17:00~18:00)" },
+  { key: "1", label: "1교시(10:00~10:50)" },
+  { key: "2", label: "2교시(11:00~11:50)" },
+  { key: "3", label: "3교시(12:00~12:50)" },
+  { key: "4", label: "4교시(13:00~13:50)" },
 ];
 
 let selectedStudent = null;

@@ -40,7 +40,6 @@ public class SecurityConfig {
                         .frameOptions(frame -> frame.sameOrigin()))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/",
                                 "/login", "/join",
                                 "/error",
                                 "/h2-console/**",

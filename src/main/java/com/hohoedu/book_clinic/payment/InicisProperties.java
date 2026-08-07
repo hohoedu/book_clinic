@@ -46,6 +46,12 @@ public class InicisProperties {
     /** 부분취소 API 엔드포인트 — 전액취소와 파라미터만 다른 게 아니라 URL 자체가 다르다 */
     private String partialRefundUrl;
 
+    /**
+     * 거래조회(v2/pg/inquiry) API 엔드포인트 — PaymentCleanupJob이 READY 방치 건을 닫기 전에
+     * "실제로 승인이 났는데 콜백만 유실된 건 아닌지" 확인할 때 쓴다(2026-08-07).
+     */
+    private String inquiryUrl;
+
     /** 결제창이 인증 결과를 던지는 주소 */
     private String returnUrl;
 

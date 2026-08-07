@@ -16,6 +16,19 @@
         WHERE student_id = #{studentId}
     </select>
 
+    <!-- 클리닉 추천 기준 학년(book_clinic 자체 관리) — 올패스 grade_key와 별개, 없으면 null -->
+    <select id="findClinicGradeKey" resultType="java.lang.String">
+        SELECT TOP 1 clinic_grade_key
+        FROM erp_student
+        WHERE student_id = #{studentId}
+    </select>
+
+    <update id="updateClinicGradeKey">
+        UPDATE erp_student
+        SET clinic_grade_key = #{schoolyear}
+        WHERE student_id = #{studentId}
+    </update>
+
     <select id="findLastRecommend" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LastRecommendDTO">
         SELECT TOP 1
                bc.content_type AS contentType,

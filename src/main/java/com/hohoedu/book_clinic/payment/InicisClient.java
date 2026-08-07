@@ -69,6 +69,20 @@ public class InicisClient {
         public boolean isMobileSuccess() {
             return "00".equals(get("P_STATUS"));
         }
+
+        /** 거래조회(v2) 계열의 성공 코드 — "조회 자체가 됐다"는 뜻이지 "승인됐다"는 뜻이 아니다 */
+        public boolean isInquirySuccess() {
+            return "SUCCESS".equals(get("resultCode"));
+        }
+
+        /**
+         * 조회된 거래가 실제로 승인 상태인지 — APPROVAL(정상승인)과 PART_CANCEL(부분취소, 원거래
+         * 자체는 승인된 것)을 모두 승인으로 본다. CANCEL(전액취소)이나 그 외는 승인 아님으로 본다.
+         */
+        public boolean isApproved() {
+            String status = get("transactionStatus");
+            return "APPROVAL".equals(status) || "PART_CANCEL".equals(status);
+        }
     }
 
     /**
@@ -171,6 +185,43 @@ public class InicisClient {
         // (v2/pg/refund vs v2/pg/partialRefund) — type만 바꿔서 같은 URL로 보내면 거절된다.
         String url = partial ? props.getPartialRefundUrl() : props.getRefundUrl();
         return postJson(url, body);
+    }
+
+    /**
+     * 거래조회 — READY로 방치된 주문을 닫기 전에 "카드사 승인은 났는데 콜백만 유실된 건 아닌지"
+     * 확인할 때 쓴다(2026-08-07, PaymentCleanupJob). 승인 콜백을 아예 못 받은 상태라 tid를
+     * 모르므로 oid(우리 주문번호)로 조회한다 — 매뉴얼상 tid/oid 중 하나만 있으면 된다.
+     *
+     * refund()와 같은 v2(JSON) 계열이라 요청 구조도 같다: 최상위(mid/type/timestamp/clientIp/
+     * hashData) + 중첩 data(oid). hashData = SHA512(INIAPIKey + mid + type + timestamp + data의
+     * JSON 문자열) — dataJson과 정확히 같은 문자열이어야 한다(매뉴얼: manual.inicis.com/pay/etc-inquiry.html).
+     */
+    public Result inquiry(String oid) {
+        String clientIp = props.getClientIp();
+        String type = "inquiry";
+        String timestamp = LocalDateTime.now(KST).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("oid", oid);
+
+        String dataJson;
+        try {
+            dataJson = objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            throw new IllegalStateException("[이니시스] 거래조회 요청 data 직렬화 실패", e);
+        }
+
+        String hashData = sha512(props.getApiKey() + props.getMid() + type + timestamp + dataJson);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mid", props.getMid());
+        body.put("type", type);
+        body.put("timestamp", timestamp);
+        body.put("clientIp", clientIp);
+        body.put("hashData", hashData);
+        body.put("data", data);
+
+        return postJson(props.getInquiryUrl(), body);
     }
 
     // ─────────────── 결제창 호출용 서명 (승인 요청과는 별개의 규칙) ───────────────

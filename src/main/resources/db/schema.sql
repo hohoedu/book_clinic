@@ -105,6 +105,13 @@ CREATE TABLE erp_student (
     consult_key           VARCHAR(50),    -- 상담 구분 코드
     billing_phone         VARCHAR(20),    -- 결제/청구용 전화번호
     serial_num            VARCHAR(100),   -- 일련번호
+    -- 클리닉(책방)에서 실제로 추천 기준으로 삼는 학년(S코드 01~07) — 올패스 grade_key와 별개다.
+    -- grade_key는 올패스와 공유하는 값이라 book_clinic이 함부로 못 건드리는데, "초1인데 독서를
+    -- 잘해서 초2 수준 책을 추천받고 싶다" 같은 경우 실제 학년을 안 바꾸고 이 값만 조정하면 된다.
+    -- 처음엔 비어있다가 ClinicService.resolveSchoolyear()가 grade_key(올패스 코드)를 book_clinic
+    -- 코드로 변환해 최초 1회 채워넣는다(lazy init) — 그 뒤로는 grade_key가 바뀌어도 자동으로
+    -- 안 따라간다(2026-08-07).
+    clinic_grade_key      VARCHAR(2),
     gender                BIT         DEFAULT 0,  -- 성별
     student_privacy_agree BIT         DEFAULT 0,  -- 개인정보 동의 여부
     is_hoho               BIT         DEFAULT 0,  -- 호호에듀 서비스 가입 여부
@@ -844,6 +851,10 @@ CREATE TABLE erp_bookstore_payment (
     center_code   VARCHAR(50),                    -- 결제한 학생의 소속 센터 (정산/조회 필터용 중복 저장)
     product_id    INT           NOT NULL,         -- erp_bookstore_product.product_id
     product_name  VARCHAR(50),                    -- 결제 시점 상품명 스냅샷
+    -- 상품의 service_code 스냅샷(2026-08-07) — 아래 "같은 학생·서비스·청구월 중복 결제 방지"
+    -- 유니크 인덱스에 쓴다. 필터드 유니크 인덱스는 조인을 못 걸어서 값으로 복사해 둬야 한다
+    -- (pass 테이블의 service_code 스냅샷과 같은 이유).
+    service_code  VARCHAR(10),
     billing_ym    CHAR(6),                        -- 이 결제가 몇 월치 이용권인지(YYYYMM). prepare()/prepareGroup()
                                                   -- 시점에 PassService.nextBillingYm()으로 정해서 넣고, 승인 확정
                                                   -- 때 이 값을 그대로 이용권에 옮긴다(그 사이 재계산하면 화면에
@@ -869,6 +880,24 @@ CREATE TABLE erp_bookstore_payment (
                                                   -- 실패 사유 원문은 payment_log.res_body를 본다
     requested_at  DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 결제 시작일시(KST)
     paid_at       DATETIME2,                      -- 승인 완료일시(KST). 환불 규정의 "며칠 이내"가 이 값 기준이다
+    -- 운영자 수동 확인 필요 플래그(2026-08-07) — 금액 불일치·망취소 실패·승인 확정 실패처럼 코드가
+    -- 스스로 못 끝내고 사람이 이니시스 상점관리자에서 직접 봐야 하는 상태를 표시한다. 예전엔 로그에만
+    -- 남아서 아무도 안 보면 그대로 묻혔다. 관리자 화면(/admin/payment/review-view)이 이 플래그가 선
+    -- 건만 모아 보여주고, 처리 완료 시 reviewed_at을 채워 목록에서 빠지게 한다.
+    needs_review  BIT           NOT NULL DEFAULT 0,
+    review_reason VARCHAR(200),                   -- 왜 확인이 필요한지(예: "승인 금액 불일치 — 수동 취소 필요")
+    reviewed_at   DATETIME2,                      -- 운영자가 처리 완료로 표시한 시각. NULL이면 미해결
+    -- 동시 환불 요청 경합 방지용 선점 표시(2026-08-07). "환불 안 됨"을 확인만 하고 PG 호출까지
+    -- 가는 사이 락이 없으면 거의 동시에 두 번 요청됐을 때 PG 취소가 이중으로 나갈 수 있다.
+    -- PaymentService.refund()가 원자적 UPDATE(claimRefund)로 이 값을 채워 선점하고, 처리가
+    -- 끝나면(성공/실패 무관) 다시 NULL로 되돌린다 — 성공은 refund_amount>0이 영구 차단하므로
+    -- 이 값 자체는 재시도를 막을 필요가 없다.
+    refund_requested_at DATETIME2,
+    -- CLOSED 사후 재확인 완료 표시(2026-08-07). 고객이 이니시스 결제창에서 딴짓하다 10분을 넘겨
+    -- 우리 배치가 CLOSED로 닫았는데, 그 직후 실제로 승인을 완료해버리는 레이스가 있을 수 있다.
+    -- PaymentCleanupJob이 최근 CLOSED된 주문을 한 번 더 거래조회해서 실제로는 승인이었으면
+    -- PAID로 복구하고, 이 값을 채워 같은 주문을 계속 재확인하지 않게 한다.
+    closed_recheck_at DATETIME2,
     FOREIGN KEY (product_id) REFERENCES erp_bookstore_product(product_id)
 );
 
@@ -881,6 +910,35 @@ IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookst
 -- 마이그레이션: billing_ym(월 단위 유효기간) 도입 이전에 이미 만들어져 있는 개발 DB용.
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'billing_ym')
     ALTER TABLE erp_bookstore_payment ADD billing_ym CHAR(6);
+
+-- 마이그레이션: needs_review(운영자 수동 확인 플래그) 도입 이전에 이미 만들어져 있는 개발 DB용.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'needs_review')
+    ALTER TABLE erp_bookstore_payment ADD needs_review BIT NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'review_reason')
+    ALTER TABLE erp_bookstore_payment ADD review_reason VARCHAR(200);
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'reviewed_at')
+    ALTER TABLE erp_bookstore_payment ADD reviewed_at DATETIME2;
+
+-- 마이그레이션: refund_requested_at(동시 환불 경합 방지 선점 컬럼) 도입 이전에 이미 만들어져 있는 개발 DB용.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'refund_requested_at')
+    ALTER TABLE erp_bookstore_payment ADD refund_requested_at DATETIME2;
+
+-- 마이그레이션: closed_recheck_at(CLOSED 사후 재확인 완료 표시) 도입 이전에 이미 만들어져 있는 개발 DB용.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'closed_recheck_at')
+    ALTER TABLE erp_bookstore_payment ADD closed_recheck_at DATETIME2;
+
+-- 마이그레이션: service_code(상품 서비스코드 스냅샷) 도입 이전에 이미 만들어져 있는 개발 DB용.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_payment') AND name = 'service_code')
+    ALTER TABLE erp_bookstore_payment ADD service_code VARCHAR(10);
+
+-- 같은 학생·서비스·청구월에 진행 중(READY)이거나 완료(PAID)된 결제가 동시에 2개 이상 있지
+-- 못하게 막는다(2026-08-07). A기기로 결제창을 열어두고 방치한 사이 B기기로 새로 결제해서
+-- 같은 달 결제가 이중으로 승인되는 사고를 막는 최종 방어선 — 애플리케이션 체크(PaymentService.
+-- prepare/prepareGroup)만으로는 두 기기가 동시에 요청하는 순간의 레이스를 완전히 못 막는다.
+-- CLOSED/FAILED/CANCELED는 걸리지 않으므로 재시도(새 결제)는 항상 가능하다.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_payment_active_billing' AND object_id = OBJECT_ID('erp_bookstore_payment'))
+    CREATE UNIQUE INDEX UX_payment_active_billing ON erp_bookstore_payment (student_id, service_code, billing_ym)
+        WHERE status IN ('READY', 'PAID');
 
 -- (2026-08-06 폐지) tid 유니크 인덱스는 형제 묶음결제와 양립할 수 없어 제거했다 — PG 승인은
 -- 그룹당 1건만 나는데, 그 tid를 학생 수만큼의 payment 행에 그대로 복사해 남기므로 같은 tid를

@@ -30,7 +30,7 @@ public class AdminViewController {
     @Value("${FIREBASE_WEB_APP_ID}")
     private String firebaseWebAppId;
 
-    @GetMapping("/admin/book-data")
+    @GetMapping({"/", "/admin/book-data"})
     public String bookData(Model model) {
         // 분류(대분류)·장르 코드 - 화면 chip/셀렉트/필터 렌더링용
         model.addAttribute("contentTypeCodes", codeService.findBookstoreCodes("C"));
@@ -77,5 +77,14 @@ public class AdminViewController {
     @GetMapping("/admin/growth/diary")
     public String diary() {
         return "growth/diary";
+    }
+
+    /**
+     * 결제 이상 건 — 금액 불일치·망취소 실패·승인 확정 실패처럼 코드가 스스로 못 끝내고
+     * 사람이 이니시스 상점관리자에서 직접 확인해야 하는 결제 목록 (2026-08-07)
+     */
+    @GetMapping("/admin/payment/review-view")
+    public String paymentReview() {
+        return "payment/payment-review";
     }
 }

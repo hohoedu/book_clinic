@@ -38,10 +38,19 @@ public interface PaymentRepository {
     void insertReady(@Param("orderNo") String orderNo, @Param("groupOrderNo") String groupOrderNo,
                      @Param("studentId") String studentId,
                      @Param("centerCode") String centerCode, @Param("productId") int productId,
-                     @Param("productName") String productName, @Param("billingYm") String billingYm,
-                     @Param("amount") int amount);
+                     @Param("productName") String productName, @Param("serviceCode") String serviceCode,
+                     @Param("billingYm") String billingYm, @Param("amount") int amount);
 
     PaymentRespDTO.PaymentDTO findByOrderNo(@Param("orderNo") String orderNo);
+
+    /**
+     * 이 학생·서비스·청구월에 진행 중(READY)이거나 완료(PAID)된 결제가 이미 있는지 — 다른
+     * 기기로 동시에 새 결제를 시작하려 할 때 중복 방지용으로 prepare()/prepareGroup()이 먼저
+     * 확인한다(2026-08-07). 없으면 null. DB의 UX_payment_active_billing 필터드 유니크 인덱스가
+     * 이 체크를 통과한 뒤에도 남는 아주 좁은 동시 요청 레이스의 최종 방어선이다.
+     */
+    PaymentRespDTO.PaymentDTO findActiveByStudentServiceBilling(@Param("studentId") String studentId,
+            @Param("serviceCode") String serviceCode, @Param("billingYm") String billingYm);
 
     /** 같은 그룹으로 묶인 형제 묶음결제 행 전체 — 그룹 승인 확정 때 학생별로 순회하기 위함 */
     List<PaymentRespDTO.PaymentDTO> findByGroupOrderNo(@Param("groupOrderNo") String groupOrderNo);
@@ -78,12 +87,13 @@ public interface PaymentRepository {
     int markClosed(@Param("orderNo") String orderNo);
 
     /**
-     * 오래 방치된 READY 주문 일괄 정리. 앱의 abandon 호출이 닿지 못한 경우(강제 종료,
-     * 네트워크 끊김)의 최종 방어선이라 클라이언트 신호와 무관하게 시간만으로 판단한다.
-     * 승인 시도 자체가 없었던 건만 걸리므로 CLOSED로 내린다.
-     * @return 정리된 건수
+     * 오래 방치된 READY 주문 목록. 앱의 abandon 호출이 닿지 못한 경우(강제 종료, 네트워크 끊김)의
+     * 최종 방어선이라 클라이언트 신호와 무관하게 시간만으로 판단한다. 예전엔 여기서 바로
+     * CLOSED로 일괄 정리했지만, "승인 시도 자체가 없었다"는 게 사실은 추정일 뿐이었다 — 카드사
+     * 승인은 났는데 콜백만 유실된 경우도 똑같이 방치돼 보이기 때문이다. 그래서 지금은 목록만
+     * 받아 PaymentCleanupJob이 건별로 이니시스에 거래조회부터 해보고 정리한다(2026-08-07).
      */
-    int markStaleReadyAsClosed(@Param("olderThan") java.time.LocalDateTime olderThan);
+    List<PaymentRespDTO.PaymentDTO> findStaleReady(@Param("olderThan") java.time.LocalDateTime olderThan);
 
     /** 환불 반영 — 누적 환불액을 더하고, 전액이 되면 CANCELED로 내린다 */
     int applyRefund(@Param("paymentId") int paymentId, @Param("cancelAmount") int cancelAmount);
@@ -116,4 +126,37 @@ public interface PaymentRepository {
 
     /** 형제 묶음결제 그룹 하나에 속한 결제 행 전체 — 환불 화면의 형제 선택 체크박스용 */
     List<PaymentRespDTO.HistoryDTO> findHistoryByGroupOrderNo(@Param("groupOrderNo") String groupOrderNo);
+
+    /**
+     * 운영자 수동 확인 필요로 표시 — 금액 불일치·망취소 실패·승인 확정 실패 등 코드가 스스로
+     * 못 끝내는 지점마다 호출한다(2026-08-07). 이미 표시된 건에 또 걸리면 사유만 최신으로 덮는다.
+     */
+    void markNeedsReview(@Param("orderNo") String orderNo, @Param("reason") String reason);
+
+    /** 확인 필요 목록 (미해결만, 최신순) — /admin/payment/review-view가 보여준다 */
+    List<PaymentRespDTO.ReviewDTO> findNeedsReview();
+
+    /** 운영자가 처리 완료로 표시 — reviewed_at을 채워 목록에서 빠지게 한다 */
+    int resolveReview(@Param("paymentId") int paymentId);
+
+    /**
+     * 환불 선점 — 원자적 UPDATE로 refund_requested_at을 채운다. 이미 선점됐거나(다른 요청이
+     * 처리 중) 이미 환불된(refund_amount>0) 건이면 0행 갱신되어 경합을 막는다.
+     * markPaid의 WHERE status='READY'와 같은 원리(2026-08-07).
+     * @return 선점 성공하면 1, 실패(이미 처리 중/완료)면 0
+     */
+    int claimRefund(@Param("paymentId") int paymentId);
+
+    /** 환불 선점 해제 — 성공/실패 무관하게 refund() 종료 시 항상 호출한다(재시도 가능하게) */
+    void releaseRefundClaim(@Param("paymentId") int paymentId);
+
+    /**
+     * 최근 CLOSED로 닫힌 주문 중 아직 사후 재확인 안 한 것 — "닫았는데 사실은 승인됐던" 레이스를
+     * 잡는 용도(2026-08-07). windowStart보다 오래된 CLOSED 건은 대상에서 제외한다 — 오래전에
+     * 닫힌 주문까지 매번 다시 조회하는 건 낭비고, 이 레이스는 애초에 닫힌 직후에만 일어난다.
+     */
+    List<PaymentRespDTO.PaymentDTO> findClosedForRecheck(@Param("windowStart") java.time.LocalDateTime windowStart);
+
+    /** CLOSED 사후 재확인 완료 표시 — 다시 검사 대상에서 빠진다 */
+    void markClosedRechecked(@Param("orderNo") String orderNo);
 }

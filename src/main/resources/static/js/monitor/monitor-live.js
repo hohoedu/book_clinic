@@ -2,17 +2,39 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDatePicker();
   initSlotPicker();
   await loadLiveView();
+  // Firestore 연결 여부가 확인되기 전까지는 안전하게 30초(빠른 주기)로 시작한다 — connectFirestore()가
+  // 실제로 스냅샷을 받으면 onFirestoreHealthy()가 5분 주기로 늦춰준다(2026-08-07, N+1 제거 이후 이
+  // 폴링 자체가 평소(Firestore 정상)에도 상시로 돌아가는 부담이라 줄였다). 완전히 끄지 않고 5분
+  // 안전망을 남긴 이유는, Firestore가 에러 콜백 없이 조용히 끊기는 경우까지 대비하기 위함이다 —
+  // 폴링을 아예 껐다가 그런 경우가 나면 화면이 영원히 멈춘 채로 아무도 모르게 방치된다.
+  schedulePoll(POLL_FAST_MS);
   connectFirestore();
   initReadingLogPanel();
-  // Firestore 미설정/연결 끊김 대비 백업 polling — 경과시간/상태는 항상 서버(DB 시계) 계산값을
-  // 그대로 신뢰한다(클라이언트에서 timestamp로 재계산하면 브라우저-DB 타임존 차이만큼 오차가 생김).
-  // 실시간 반영은 Firestore push가 담당한다(입실/제출/퇴실 등 이벤트는 즉시 푸시됨). 폴링은 푸시가
-  // 끊겼을 때를 위한 백업이라 30초로 충분하다. 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에
-  // 기대지 않고 startElapsedTicker가 브라우저에서 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를
-  // 기준점으로 삼아 그 위로 초를 더하는 방식이라 DB/브라우저 시계 차이 문제가 없다.
-  setInterval(loadLiveView, 30000);
+  // 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에 기대지 않고 startElapsedTicker가 브라우저에서
+  // 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를 기준점으로 삼아 그 위로 초를 더하는 방식이라
+  // DB/브라우저 시계 차이 문제가 없다.
   startElapsedTicker();
 });
+
+const POLL_FAST_MS = 30000;    // Firestore 연결이 불확실하거나 끊겼을 때
+const POLL_SLOW_MS = 300000;   // Firestore가 정상 동작 중인 것으로 확인됐을 때의 안전망 주기(5분)
+
+let pollTimer = null;
+
+function schedulePoll(intervalMs) {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(loadLiveView, intervalMs);
+}
+
+/** 스냅샷을 실제로 받았다는 것 자체가 연결이 살아있다는 증거 — 받을 때마다 안전망 타이머를 다시 늦춘다 */
+function onFirestoreHealthy() {
+  schedulePoll(POLL_SLOW_MS);
+}
+
+function onFirestoreUnhealthy(reason) {
+  console.warn(`[monitor] Firestore 비정상(${reason}) — 폴링 주기를 30초로 되돌립니다`);
+  schedulePoll(POLL_FAST_MS);
+}
 
 const CSRF_HEADER = "X-XSRF-TOKEN";
 // 서버가 세션마다 다른 값을 XSRF-TOKEN 쿠키로 내려준다(CookieCsrfTokenRepository, 2026-07-31) —
@@ -28,13 +50,14 @@ function getCsrfToken() {
 const HELP_NEEDED_CODES = [{ code: "ALONE_HARD", label: "혼자 읽기 어려워요!" }];
 
 // 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — 예약(erp_bookstore_clinic_reservation)의
-// time_slot 값('1'~'4')과 그대로 매칭한다
+// time_slot 값('1'~'4')과 그대로 매칭한다. 시간(KST)은 reservation.js/diary.js와 반드시 맞춘다
+// (교시당 50분 수업 + 10분 휴식, 2026-08-07 확정).
 const TIME_SLOTS = [
-  { key: "ALL", label: "타임 선택" },
-  { key: "1", label: "1교시(08:00~09:00)" },
-  { key: "2", label: "2교시(09:00~10:00)" },
-  { key: "3", label: "3교시(10:00~11:00)" },
-  { key: "4", label: "4교시(11:00~12:00)" },
+  { key: "ALL", label: "전체" },
+  { key: "1", label: "1교시(10:00~10:50)" },
+  { key: "2", label: "2교시(11:00~11:50)" },
+  { key: "3", label: "3교시(12:00~12:50)" },
+  { key: "4", label: "4교시(13:00~13:50)" },
 ];
 
 const FILTERS = [
@@ -189,6 +212,7 @@ async function connectFirestore() {
     // 시작되지 못하고 30초 폴백 폴링에만 의존하게 된다. 조용히 넘어가지 말고 원인을 남긴다.
     console.warn("[monitor] Firestore 구독 미시작 — Firebase SDK(window.__monitorFirebase) 로드 안 됨. "
       + "head의 gstatic CDN import 실패(오프라인/차단망) 가능성 → 30초 폴백 폴링에만 의존합니다");
+    onFirestoreUnhealthy("SDK 미로드");
     return;
   }
   if (firestoreUnsubscribe) {
@@ -212,6 +236,7 @@ async function connectFirestore() {
       // 넘어가면 원인 없이 30초 폴링만 남으므로 명시적으로 남긴다.
       console.warn("[monitor] Firestore 구독 미시작 — body의 firebase apiKey가 비어있음. "
         + "실행 프로파일에 application-secrets.yml 미적용/FIREBASE_WEB_API_KEY 미설정 가능성 → 30초 폴백 폴링에만 의존합니다");
+      onFirestoreUnhealthy("설정 없음");
       return;
     }
 
@@ -234,6 +259,9 @@ async function connectFirestore() {
     firestoreUnsubscribe = fb.onSnapshot(
       q,
       (snapshot) => {
+        // 스냅샷을 실제로 받았다는 것 자체가 연결이 살아있다는 증거 — 최초 스냅샷이든 아니든
+        // 매번 안전망 폴링 주기를 5분으로 늦춘다(2026-08-07).
+        onFirestoreHealthy();
         console.info(`[monitor] Firestore 스냅샷 수신 (${new Date().toLocaleTimeString()}): 변경 ${snapshot.docChanges().length}건`);
         if (!skippedInitialSnapshot) {
           // 최초 스냅샷은 구독 시점에 이미 저장돼 있던(오래됐을 수 있는) 문서 전체라 무시한다 —
@@ -246,11 +274,15 @@ async function connectFirestore() {
           applyFirestoreCard(change.doc.data());
         });
       },
-      (err) => console.warn("[monitor] Firestore 구독 중 에러 — 이후 갱신은 30초 폴백 폴링에만 의존합니다", err)
+      (err) => {
+        console.warn("[monitor] Firestore 구독 중 에러 — 이후 갱신은 30초 폴백 폴링에만 의존합니다", err);
+        onFirestoreUnhealthy("구독 에러");
+      }
     );
     console.info("[monitor] Firestore 실시간 구독 연결 성공 — sessionDate =", selectedDate());
   } catch (e) {
     console.warn("Firestore 실시간 구독 연결 실패 — 초기 목록만 표시됩니다", e);
+    onFirestoreUnhealthy("연결 실패");
   }
 }
 

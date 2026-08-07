@@ -71,6 +71,9 @@ public class MonitorRespDTO {
      */
     @Data
     public static class BookPageDTO {
+        // 여러 학생 것을 한 쿼리로 묶어 받을 때(findTodayBooksByStudentIds) 어느 카드 것인지
+        // 가르는 용도 — 단건 조회(findTodayBooks)에서는 안 채워도 된다(2026-08-07).
+        private String studentId;
         // 이 페이지가 어느 추천(도전)인지 — 문제풀이 기록 삭제(resetQuiz)의 대상 식별자다.
         // 같은 책을 나중에 다시 추천받으면 content_id는 같아도 recommend_id가 달라서, 지울 회차를
         // 정확히 집으려면 content_id가 아니라 이 값을 써야 한다.

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방 학부모 앱 설치</title>
+  <meta name="theme-color" content="#0988d8" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(160deg, #0988d8, #0768a8);
+      font-family: "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+      color: #16324a;
+      padding: 24px;
+    }
+    .install-card {
+      width: 460px;
+      max-width: 100%;
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+    }
+    .app-icon {
+      width: 96px;
+      height: 96px;
+      border-radius: 22px;
+      margin: 0 auto 20px;
+      display: block;
+      box-shadow: 0 8px 20px rgba(9, 136, 216, .35);
+    }
+    .install-card h1 { font-size: 22px; margin-bottom: 6px; }
+    .install-card .sub { font-size: 14px; color: #6b7c8c; margin-bottom: 28px; }
+    .install-btn {
+      display: block;
+      width: 100%;
+      padding: 16px;
+      font-size: 18px;
+      font-weight: 700;
+      color: #fff;
+      background: #0988d8;
+      border: none;
+      border-radius: 14px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background .15s;
+    }
+    .install-btn:hover { background: #0872b8; }
+    .install-btn i { margin-right: 6px; }
+    .hint {
+      margin-top: 22px;
+      padding: 18px;
+      background: #f2f7fb;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #3d5266;
+      text-align: left;
+    }
+    .hint b { color: #0988d8; }
+    .hint .step { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; }
+    .hint .step i { color: #0988d8; margin-top: 3px; }
+    .hint .step:first-child { margin-top: 0; }
+  </style>
+</head>
+
+<body>
+  <div class="install-card">
+    <img class="app-icon" th:src="@{/images/icons/icon-192.png}" alt="호호책방" />
+    <h1>호호책방 학부모 앱</h1>
+    <p class="sub">아래 버튼을 눌러 앱을 내려받아 설치하세요.</p>
+
+    <!--
+      네이티브 APK 다운로드 — 학생 PWA(app-install.html)와 달리 beforeinstallprompt를 쓰지
+      않는다. 이건 브라우저에 설치되는 웹앱이 아니라 진짜 안드로이드 앱(Flutter)이라, 그냥
+      .apk 파일을 내려받아 안드로이드가 직접 설치하게 하는 것 말고는 방법이 없다.
+      파일은 static/apk/books_pay.apk에 직접 올려서 이 서버가 정적 파일로 서빙한다.
+    -->
+    <a class="install-btn" th:href="@{/apk/books_pay.apk}" download>
+      <i class="fa-solid fa-download"></i> 안드로이드 앱 다운로드
+    </a>
+
+    <div class="hint">
+      <b>설치 안내</b>
+      <div class="step"><i class="fa-solid fa-circle-exclamation"></i><span>iOS(아이폰/아이패드)는 아직 지원하지 않아요. 안드로이드 기기에서만 설치할 수 있어요.</span></div>
+      <div class="step"><i class="fa-solid fa-download"></i><span>다운로드가 끝나면 알림에서 파일을 눌러 설치를 시작하세요.</span></div>
+      <div class="step"><i class="fa-solid fa-shield-halved"></i><span>"출처를 알 수 없는 앱" 경고가 뜨면 <b>설치 허용</b>을 눌러주세요. 앱스토어가 아닌 파일로 설치할 때 안드로이드가 항상 띄우는 안내예요.</span></div>
+    </div>
+  </div>
+</body>
+
+</html>

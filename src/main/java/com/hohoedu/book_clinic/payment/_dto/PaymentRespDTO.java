@@ -90,6 +90,24 @@ public class PaymentRespDTO {
         private LocalDateTime paidAt;
     }
 
+    /**
+     * 운영자 수동 확인 필요 목록 한 줄 — 금액 불일치·망취소 실패·승인 확정 실패처럼 코드가
+     * 스스로 못 끝내고 사람이 이니시스 상점관리자에서 직접 봐야 하는 결제 건(2026-08-07).
+     */
+    @Data
+    public static class ReviewDTO {
+        private int paymentId;
+        private String orderNo;
+        private String groupOrderNo;
+        private String studentId;
+        private String centerCode;
+        private String productName;
+        private int amount;
+        private String status;
+        private String reviewReason;
+        private LocalDateTime requestedAt;
+    }
+
     // ───────────────────────────── 내부 조회용 ─────────────────────────────
 
     /** 상품 조회 결과 */
@@ -117,6 +135,7 @@ public class PaymentRespDTO {
         private String centerCode;
         private int productId;
         private String productName;
+        private String serviceCode;
         private int amount;
         private int refundAmount;
         private String status;

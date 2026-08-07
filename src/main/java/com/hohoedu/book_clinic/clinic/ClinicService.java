@@ -52,6 +52,33 @@ public class ClinicService {
     // erp_bookstore_code(gubun='S')에 등록된 학년 코드 범위 — 규칙 5(윗학년 순차 추천)의 상한
     private static final int MAX_SCHOOLYEAR = 7;
 
+    /**
+     * erp_student.grade_key는 book_clinic 자체 코드(01~07)가 아니라 올패스(외부 학생 마스터) 학년
+     * 코드가 그대로 들어온다(2026-08-07 확인 — 예: grade_key='13'인 학생이 실제로는 초3인데,
+     * schoolyear=13으로 취급되면서 priority_draft(01~07만 존재)에서 아무 것도 못 찾고 상위학년
+     * 확장 루프(current+1..MAX_SCHOOLYEAR)도 13이 이미 7을 넘어 한 번도 안 돌아 추천이 통째로
+     * 실패했다). erp_student는 올패스와 공유하는 테이블이라 grade_key 값 자체를 book_clinic
+     * 코드로 덮어쓸 수 없고(올패스 쪽이 자기 코드로 읽어야 한다), 이 맵은 grade_key →
+     * clinic_grade_key(아래 참고)를 최초 1회 채울 때만 쓴다. 유치원(05/06/07=5·6·7세)은
+     * "어떻게 될지 몰라도 일단 추천은 받게 해달라"는 요청으로 초1 수준(FALLBACK_SCHOOLYEAR)에
+     * 매핑했다 — 매핑 없이 그대로 넘기면 하필 book_clinic 자체 코드의 초5/초6/중등과 숫자가
+     * 겹쳐 엉뚱한 학년으로 추천될 뻔했다.
+     */
+    private static final Map<String, String> OLPASS_GRADE_TO_SCHOOLYEAR = Map.ofEntries(
+            Map.entry("05", "01"),   // 유치원 5세 → 일단 초1 수준부터
+            Map.entry("06", "01"),   // 유치원 6세
+            Map.entry("07", "01"),   // 유치원 7세
+            Map.entry("11", "01"),   // 초1
+            Map.entry("12", "02"),   // 초2
+            Map.entry("13", "03"),   // 초3
+            Map.entry("14", "04"),   // 초4
+            Map.entry("15", "05"),   // 초5
+            Map.entry("16", "06"),   // 초6
+            Map.entry("21", "07"),   // 중1
+            Map.entry("22", "07"),   // 중2
+            Map.entry("23", "07")    // 중3
+    );
+
     // 단계(학년)별 최고 레벨(만렙) — 각 학년이 레벨 1~12를 가진다
     private static final int MAX_LEVEL = 12;
 
@@ -563,8 +590,35 @@ public class ClinicService {
     }
 
     /** 학생의 실제 학년(grade_key)을 학년 기준 로직에 쓸 S코드로 변환 — 미등록 학생은 기본값으로 대체 */
+    /**
+     * 클리닉 추천 기준 학년 — clinic_grade_key(book_clinic 자체 관리)가 있으면 그대로 쓰고,
+     * 없으면 grade_key(올패스 코드)를 변환해서 최초 1회 채워넣는다(lazy init). 한 번 채워지면
+     * 이후 올패스 쪽에서 grade_key(진급 등)가 바뀌어도 이 값은 따라가지 않는다 — "초1인데 초2
+     * 수준 책을 추천받는" 것처럼 실제 학년과 클리닉 추천 기준을 분리하기 위해서다(2026-08-07).
+     */
     private String resolveSchoolyear(String studentId) {
+        String clinicGradeKey = clinicRepository.findClinicGradeKey(studentId);
+        if (clinicGradeKey != null && !clinicGradeKey.isBlank()) {
+            return clinicGradeKey;
+        }
+
         String gradeKey = clinicRepository.findGradeKey(studentId);
-        return (gradeKey == null || gradeKey.isBlank()) ? FALLBACK_SCHOOLYEAR : gradeKey;
+        String schoolyear;
+        if (gradeKey == null || gradeKey.isBlank()) {
+            schoolyear = FALLBACK_SCHOOLYEAR;
+        } else {
+            String mapped = OLPASS_GRADE_TO_SCHOOLYEAR.get(gradeKey);
+            if (mapped != null) {
+                schoolyear = mapped;
+            } else {
+                // 매핑에 없는 값 — 이런 코드가 나타나면 올패스 코드표가 바뀌었다는 뜻이니 위
+                // 맵을 다시 확인해야 한다. book_clinic 자체 코드(01~07)일 가능성도 있어 그대로 쓴다.
+                log.warn("학생 {}의 grade_key({})가 올패스 매핑에 없습니다 — 원본 값을 그대로 사용합니다", studentId, gradeKey);
+                schoolyear = gradeKey;
+            }
+        }
+
+        clinicRepository.updateClinicGradeKey(studentId, schoolyear);
+        return schoolyear;
     }
 }
