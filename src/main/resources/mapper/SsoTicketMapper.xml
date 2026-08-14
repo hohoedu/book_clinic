@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic._core.sso.SsoTicketRepository">
+
+    <insert id="insert">
+        INSERT INTO sso_ticket (jti, issuer, user_id, redirect_url, used_yn, issued_at, expires_at)
+        VALUES (#{jti}, #{issuer}, #{userId}, #{redirectUrl}, 0, DATEADD(HOUR, 9, GETUTCDATE()), #{expiresAt})
+    </insert>
+
+    <!-- used_yn=0 → 1 전이가 1행이면 최초 소비. WHERE에 만료 조건까지 넣어 검증-소비를 한 번에 처리한다. -->
+    <update id="consume">
+        UPDATE sso_ticket
+        SET used_yn = 1
+        WHERE jti = #{jti}
+          AND used_yn = 0
+          AND expires_at > DATEADD(HOUR, 9, GETUTCDATE())
+    </update>
+
+
+</mapper>

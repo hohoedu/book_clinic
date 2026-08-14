@@ -25,10 +25,16 @@
 
       <header class="page-header">
         <h1>독서일지</h1>
-        <button class="guide-btn">
-          <i class="fa-regular fa-circle-question"></i>
-          사용 가이드
-        </button>
+        <div class="page-header-actions">
+          <a class="guide-btn" th:href="@{/sso/to-all-pass(redirectUrl='/class/record')}">
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+            수업일지 바로가기
+          </a>
+          <button class="guide-btn">
+            <i class="fa-regular fa-circle-question"></i>
+            사용 가이드
+          </button>
+        </div>
       </header>
 
       <section class="diary-toolbar">

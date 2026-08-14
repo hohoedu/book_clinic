@@ -74,6 +74,14 @@ button {
   color: #555;
 }
 
+/* <a>로 쓰이는 guide-btn(예: 수업일지 바로가기)은 <button>과 달리 기본 박스/정렬이 없어 보정한다 */
+a.guide-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+}
+
 .btn {
   height: 40px;
   padding: 0 18px;

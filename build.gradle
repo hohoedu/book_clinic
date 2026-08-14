@@ -46,6 +46,11 @@ dependencies {
 
 	// 가비아 이미지 호스팅 FTP 업로드
 	implementation 'commons-net:commons-net:3.11.1'
+
+	// 올패스 ↔ 호호책방 SSO 토큰 브릿지 서명/검증용 (all_pass와 버전 통일)
+	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 }
 
 tasks.named('test') {
