@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.schedule.ScheduleRepository">
+
+    <!--
+      baseDate에 유효한 버전 = 그 날짜 이하의 effective_from 중 가장 늦은 것.
+      요일마다 버전 개수가 다를 수 있어 GROUP BY로 요일별 최댓값을 먼저 뽑고 원본에 되붙인다.
+    -->
+    <sql id="effectiveVersion">
+        SELECT day_of_week, MAX(effective_from) AS effective_from
+        FROM erp_bookstore_schedule
+        WHERE center_code = #{centerCode}
+          AND effective_from &lt;= #{baseDate}
+        GROUP BY day_of_week
+    </sql>
+
+    <select id="findEffectiveDays" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$DayDTO">
+        SELECT
+            s.day_of_week      AS dayOfWeek,
+            s.effective_from   AS effectiveFrom,
+            s.is_open          AS isOpen,
+            s.open_time        AS openTime,
+            s.close_time       AS closeTime,
+            s.slot_minutes     AS slotMinutes,
+            s.break_minutes    AS breakMinutes,
+            s.default_capacity AS defaultCapacity
+        FROM erp_bookstore_schedule s
+        JOIN (<include refid="effectiveVersion"/>) v
+          ON v.day_of_week = s.day_of_week
+         AND v.effective_from = s.effective_from
+        WHERE s.center_code = #{centerCode}
+        ORDER BY s.day_of_week ASC
+    </select>
+
+    <select id="findEffectiveSlots" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$SlotDTO">
+        SELECT
+            t.slot_template_id AS slotTemplateId,
+            t.day_of_week      AS dayOfWeek,
+            t.seq              AS seq,
+            t.start_time       AS startTime,
+            t.end_time         AS endTime,
+            t.capacity         AS capacity
+        FROM erp_bookstore_schedule_slot t
+        JOIN (<include refid="effectiveVersion"/>) v
+          ON v.day_of_week = t.day_of_week
+         AND v.effective_from = t.effective_from
+        WHERE t.center_code = #{centerCode}
+        ORDER BY t.day_of_week ASC, t.seq ASC
+    </select>
+
+    <select id="findUpcomingVersions" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$VersionDTO">
+        SELECT
+            day_of_week    AS dayOfWeek,
+            effective_from AS effectiveFrom
+        FROM erp_bookstore_schedule
+        WHERE center_code = #{centerCode}
+          AND effective_from &gt; #{baseDate}
+        ORDER BY day_of_week ASC, effective_from ASC
+    </select>
+
+    <select id="findSlotsByVersion" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$SlotDTO">
+        SELECT
+            slot_template_id AS slotTemplateId,
+            day_of_week      AS dayOfWeek,
+            seq              AS seq,
+            start_time       AS startTime,
+            end_time         AS endTime,
+            capacity         AS capacity
+        FROM erp_bookstore_schedule_slot
+        WHERE center_code = #{centerCode}
+          AND day_of_week = #{dayOfWeek}
+          AND effective_from = #{effectiveFrom}
+        ORDER BY seq ASC
+    </select>
+
+    <select id="existsVersion" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM erp_bookstore_schedule
+            WHERE center_code = #{centerCode}
+              AND day_of_week = #{dayOfWeek}
+              AND effective_from = #{effectiveFrom}
+        ) THEN 1 ELSE 0 END
+    </select>
+
+    <!--
+      DATEPART(WEEKDAY)는 서버의 SET DATEFIRST 설정에 따라 결과가 달라져 쓸 수 없다.
+      1900-01-01이 월요일이므로 그날로부터의 경과일수 % 7 + 1이 항상 ISO 요일(1=월)이 된다.
+    -->
+    <select id="countAffectedReservations" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE si.center_code = #{centerCode}
+          AND si.service_date &gt;= #{fromDate}
+          AND ((DATEDIFF(day, '19000101', si.service_date) % 7) + 1) = #{dayOfWeek}
+          AND r.status = 'RESERVED'
+    </select>
+
+    <insert id="archiveSchedule">
+        INSERT INTO erp_bookstore_schedule_del
+            (log_type, logged_by, center_code, day_of_week, effective_from, is_open,
+             open_time, close_time, slot_minutes, break_minutes, default_capacity,
+             created_at, created_by, updated_at, updated_by)
+        SELECT
+            #{logType}, #{loggedBy}, center_code, day_of_week, effective_from, is_open,
+            open_time, close_time, slot_minutes, break_minutes, default_capacity,
+            created_at, created_by, updated_at, updated_by
+        FROM erp_bookstore_schedule
+        WHERE center_code = #{centerCode}
+          AND day_of_week = #{dayOfWeek}
+          AND effective_from = #{effectiveFrom}
+    </insert>
+
+    <insert id="archiveScheduleSlots">
+        INSERT INTO erp_bookstore_schedule_slot_del
+            (log_type, logged_by, slot_template_id, center_code, day_of_week, effective_from,
+             seq, start_time, end_time, capacity)
+        SELECT
+            #{logType}, #{loggedBy}, slot_template_id, center_code, day_of_week, effective_from,
+            seq, start_time, end_time, capacity
+        FROM erp_bookstore_schedule_slot
+        WHERE center_code = #{centerCode}
+          AND day_of_week = #{dayOfWeek}
+          AND effective_from = #{effectiveFrom}
+    </insert>
+
+    <!-- schedule_slot은 FK ON DELETE CASCADE라 함께 삭제된다 -->
+    <delete id="deleteVersion">
+        DELETE FROM erp_bookstore_schedule
+        WHERE center_code = #{centerCode}
+          AND day_of_week = #{dayOfWeek}
+          AND effective_from = #{effectiveFrom}
+    </delete>
+
+    <insert id="insertSchedule">
+        INSERT INTO erp_bookstore_schedule
+            (center_code, day_of_week, effective_from, is_open, open_time, close_time,
+             slot_minutes, break_minutes, default_capacity, created_by)
+        VALUES (
+            #{centerCode},
+            #{day.dayOfWeek},
+            #{effectiveFrom},
+            #{day.isOpen},
+            <!-- 휴무일은 open/close가 null이다. jdbcType을 빼면 MyBatis가 setNull(OTHER)로 넘겨
+                 mssql이 varbinary로 해석하고 TIME 컬럼 변환에서 실패한다(오류 257). -->
+            #{day.openTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+            #{day.closeTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+            #{day.slotMinutes},
+            #{day.breakMinutes},
+            #{day.defaultCapacity},
+            #{userId}
+        )
+    </insert>
+
+    <!--
+      seq는 서비스가 시작시각 순으로 정렬해 넘긴 순서대로 1부터 부여한다(UX_schedule_slot_seq와 일치).
+      capacity는 서비스가 이미 기본 인원으로 채워 넘기므로 여기서 분기하지 않는다.
+    -->
+    <insert id="insertSlots">
+        INSERT INTO erp_bookstore_schedule_slot
+            (center_code, day_of_week, effective_from, seq, start_time, end_time, capacity)
+        VALUES
+        <foreach collection="slots" item="s" index="i" separator=",">
+            (#{centerCode}, #{dayOfWeek}, #{effectiveFrom}, #{i} + 1,
+             #{s.startTime,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+             #{s.endTime,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+             #{s.capacity})
+        </foreach>
+    </insert>
+
+</mapper>
