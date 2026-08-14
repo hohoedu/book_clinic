@@ -53,6 +53,12 @@ public class AdminViewController {
         return "book/book-priority";
     }
 
+    /** 운영 스케줄 설정 — 정적 스캐폴딩 단계, 저장/조회 API 연동은 다음 작업에서 이어감 (2026-08-14) */
+    @GetMapping("/admin/operation/schedule")
+    public String operationSchedule() {
+        return "operation/operation-schedule";
+    }
+
     /** 실시간 모니터링 — 카드 그리드는 화면 진입 시 1회 API 호출 + Firestore 구독으로 채워진다 */
     @GetMapping("/admin/monitor/live-view")
     public String monitorLive(Model model, @AuthenticationPrincipal CustomUserDetails userDetails) {

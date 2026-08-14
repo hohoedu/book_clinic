@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>운영 스케줄 설정</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/operation/operation-schedule.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+  <script th:src="@{/js/operation/operation-schedule.js}" defer></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content">
+
+      <header class="page-header">
+        <h1>운영 스케줄 설정</h1>
+        <div class="page-header-actions">
+          <button type="button" id="btnGuide" class="guide-btn">
+            <i class="fa-regular fa-circle-question"></i>
+            사용 가이드
+          </button>
+        </div>
+      </header>
+
+      <div class="schedule-scroll">
+
+        <!-- 운영 요일 선택 -->
+        <section class="day-select-card">
+          <div class="day-select-head">
+            <div class="day-select-left">
+              <div class="day-select-title">
+                <h2>운영 요일 선택</h2>
+                <p>설정할 요일을 선택해주세요.</p>
+              </div>
+
+              <div class="day-tabs" id="dayTabs">
+                <button type="button" class="day-tab" data-day="mon" data-state="open">
+                  <span class="day-tab-label">월</span>
+                  <span class="day-tab-state">운영</span>
+                </button>
+                <button type="button" class="day-tab active" data-day="tue" data-state="open">
+                  <span class="day-tab-label">화</span>
+                  <span class="day-tab-state">운영</span>
+                </button>
+                <button type="button" class="day-tab" data-day="wed" data-state="closed">
+                  <span class="day-tab-label">수</span>
+                  <span class="day-tab-state closed">휴무</span>
+                </button>
+                <button type="button" class="day-tab" data-day="thu" data-state="open">
+                  <span class="day-tab-label">목</span>
+                  <span class="day-tab-state">운영</span>
+                </button>
+                <button type="button" class="day-tab" data-day="fri" data-state="open">
+                  <span class="day-tab-label">금</span>
+                  <span class="day-tab-state">운영</span>
+                </button>
+                <button type="button" class="day-tab" data-day="sat" data-state="open">
+                  <span class="day-tab-label">토</span>
+                  <span class="day-tab-state">운영</span>
+                </button>
+                <button type="button" class="day-tab" data-day="sun" data-state="closed">
+                  <span class="day-tab-label">일</span>
+                  <span class="day-tab-state closed">휴무</span>
+                </button>
+              </div>
+            </div>
+            <div class="effective-date-group">
+              <label for="effectiveFromDate">적용 시작일</label>
+              <input type="date" id="effectiveFromDate" value="2026-08-14" />
+              <label class="apply-now-check">
+                <input type="checkbox" id="applyNowCheck" checked />
+                즉시 적용
+              </label>
+            </div>
+            <button type="button" id="btnSaveSchedule" class="btn primary">저장</button>
+          </div>
+        </section>
+
+        <div class="schedule-grid">
+
+          <!-- 왼쪽: 선택 요일 스케줄 -->
+          <div class="schedule-main">
+
+            <section class="panel-card lockable" id="dayHoursCard">
+              <div class="panel-lock-overlay">
+                <i class="fa-solid fa-lock"></i>
+                <p>예외 유형에서 <strong>운영시간 변경</strong>을 선택하면 여기서 설정할 수 있어요.</p>
+              </div>
+              <div class="panel-head">
+                <div class="panel-head-left">
+                  <h2 id="dayScheduleTitle">화요일 스케줄</h2>
+                  <span class="badge badge-open" id="dayScheduleBadge">운영중</span>
+                </div>
+                <label class="ios-switch">
+                  <input type="checkbox" id="dayScheduleStateToggle" checked />
+                  <span class="ios-switch-track"></span>
+                </label>
+              </div>
+              <p class="panel-desc">해당 요일의 운영 시간과 회차, 예약 가능 인원을 설정합니다.</p>
+
+              <div class="day-schedule-fields">
+                <div class="field-group field-group-wide">
+                  <label>운영시간</label>
+                  <div class="time-range">
+                    <div class="time-input">
+                      <i class="fa-regular fa-clock"></i>
+                      <input type="time" id="dayOpenTime" value="13:00" />
+                    </div>
+                    <span class="time-sep">-</span>
+                    <div class="time-input">
+                      <i class="fa-regular fa-clock"></i>
+                      <input type="time" id="dayCloseTime" value="19:00" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="field-group">
+                  <label>회차 기본 시간</label>
+                  <select id="roundDefaultMinutes">
+                    <option value="30">30분</option>
+                    <option value="40">40분</option>
+                    <option value="50" selected>50분</option>
+                    <option value="60">60분</option>
+                  </select>
+                </div>
+
+                <div class="field-group">
+                  <label>최대 예약 인원</label>
+                  <div class="stepper" data-stepper-target="maxCapacity">
+                    <button type="button" class="stepper-minus">-</button>
+                    <input type="text" class="stepper-value" id="maxCapacity" value="10명" inputmode="numeric" />
+                    <button type="button" class="stepper-plus">+</button>
+                  </div>
+                </div>
+
+                <button type="button" id="btnAutoGenerate" class="btn primary">회차 자동 생성</button>
+              </div>
+            </section>
+
+            <section class="panel-card round-card lockable" id="roundManageCard">
+              <div class="panel-lock-overlay">
+                <i class="fa-solid fa-lock"></i>
+                <p>예외 유형에서 <strong>운영회차 변경</strong>을 선택하면 여기서 설정할 수 있어요.</p>
+              </div>
+              <div class="panel-head">
+                <h2>회차 관리</h2>
+                <button type="button" id="btnCopySchedule" class="btn outline">스케줄 복사</button>
+              </div>
+              <p class="panel-desc">회차 시간과 타임별 예약 가능 인원을 설정합니다.</p>
+
+              <div class="round-table-wrap">
+                <table class="round-table round-table-head">
+                  <colgroup>
+                    <col style="width:5%">
+                    <col style="width:10%">
+                    <col style="width:20%">
+                    <col style="width:20%">
+                    <col style="width:20%">
+                    <col style="width:20%">
+                    <col style="width:5%">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>회차</th>
+                      <th>시작시간</th>
+                      <th>종료시간</th>
+                      <th>회차 시간</th>
+                      <th>예약 가능 인원</th>
+                      <th>삭제</th>
+                    </tr>
+                  </thead>
+                </table>
+                <div class="round-table-body-scroll">
+                  <table class="round-table round-table-body">
+                    <colgroup>
+                      <col style="width:5%">
+                      <col style="width:10%">
+                      <col style="width:20%">
+                      <col style="width:20%">
+                      <col style="width:20%">
+                      <col style="width:20%">
+                      <col style="width:5%">
+                    </colgroup>
+                    <tbody id="roundListBody">
+                      <!-- 회차 행은 operation-schedule.js에서 렌더링 -->
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+          </div>
+
+          <!-- 오른쪽: 특정일 예외 설정 -->
+          <aside class="panel-card exception-panel">
+            <div class="panel-head">
+              <h2>특정일 예외 설정</h2>
+            </div>
+            <p class="panel-desc">기본 운영 스케줄과 다르게 운영하는 날짜를 등록합니다.</p>
+
+            <div class="field-group">
+              <label>예외 기간</label>
+              <div class="date-range">
+                <input type="date" class="date-input-native" id="exceptionStartDate" value="2026-08-15" />
+                <span class="date-sep">~</span>
+                <input type="date" class="date-input-native" id="exceptionEndDate" value="2026-08-15" />
+              </div>
+            </div>
+
+            <div class="field-group">
+              <label>운영 여부</label>
+              <div class="check-group" id="exceptionTypeGroup">
+                <label class="check-pill checked" data-exception-type="closed">
+                  <input type="radio" name="exceptionType" value="closed" checked />
+                  휴무
+                </label>
+                <label class="check-pill" data-exception-type="time">
+                  <input type="radio" name="exceptionType" value="time" />
+                  운영시간 변경
+                </label>
+                <label class="check-pill" data-exception-type="round">
+                  <input type="radio" name="exceptionType" value="round" />
+                  운영회차 변경
+                </label>
+              </div>
+              <p class="exception-edit-hint" id="exceptionEditHint" hidden>왼쪽에서 일정을 변경한 후 예외 일정 등록을 눌러주세요.</p>
+            </div>
+
+            <div class="field-group">
+              <label for="exceptionReason">변경 사유</label>
+              <textarea id="exceptionReason" rows="3" placeholder="변경 사유를 작성하세요."></textarea>
+            </div>
+
+            <button type="button" id="btnRegisterException" class="btn primary block">예외 일정 등록</button>
+
+            <div class="exception-list-head">
+              <h3>등록된 예외 일정</h3>
+            </div>
+
+            <ul class="exception-list" id="exceptionList">
+              <li class="exception-item">
+                <div class="exception-date">
+                  <strong>2026-08-15</strong>
+                  <span>(토)</span>
+                </div>
+                <div class="exception-body">
+                  <span class="exception-type type-closed">휴무</span>
+                  <p>광복절</p>
+                </div>
+                <button type="button" class="exception-delete" aria-label="삭제">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </li>
+              <li class="exception-item">
+                <div class="exception-date">
+                  <strong>2026-09-15</strong>
+                  <span>(화)</span>
+                </div>
+                <div class="exception-body">
+                  <span class="exception-type type-round">운영회차 변경</span>
+                  <p>3, 4회차 마감</p>
+                </div>
+                <button type="button" class="exception-delete" aria-label="삭제">
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </li>
+            </ul>
+
+          </aside>
+
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+</body>
+
+</html>

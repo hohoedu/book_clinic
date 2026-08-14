@@ -1,0 +1,743 @@
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  flex: 0 0 56px;
+}
+
+/* 페이지 자체는 스크롤하지 않고, 남는 세로 공간을 schedule-grid에 그대로 넘겨
+   회차 관리/등록된 예외 일정만 각자 내부에서 스크롤하도록 한다 */
+.schedule-scroll {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 16px 28px 28px;
+}
+
+/* 공용 패널 스타일 */
+.day-select-card,
+.panel-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  padding: 20px 22px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+/* 예외 유형(운영시간/운영회차 변경) 선택 전에는 좌측 카드를 잠가둔다 */
+.lockable {
+  position: relative;
+}
+
+.panel-lock-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 20px;
+  background: rgba(255, 255, 255, .88);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.lockable.locked .panel-lock-overlay {
+  display: flex;
+}
+
+.lockable.locked > *:not(.panel-lock-overlay) {
+  filter: blur(1px);
+}
+
+.panel-lock-overlay i {
+  font-size: 18px;
+  color: #b7bec3;
+}
+
+.panel-lock-overlay p {
+  margin: 0;
+  max-width: 260px;
+  font-size: 13px;
+  color: #8b959b;
+  line-height: 1.5;
+}
+
+.panel-lock-overlay strong {
+  color: #6b757b;
+}
+
+.panel-head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* 운영중/휴무 iOS 스타일 스위치 */
+.ios-switch {
+  position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  cursor: pointer;
+}
+
+.ios-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ios-switch-track {
+  position: absolute;
+  inset: 0;
+  background: #d8dde2;
+  border-radius: 999px;
+  transition: background .2s ease;
+}
+
+.ios-switch-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  transition: transform .2s ease;
+}
+
+.ios-switch input:checked + .ios-switch-track {
+  background: #008b7a;
+}
+
+.ios-switch input:checked + .ios-switch-track::before {
+  transform: translateX(20px);
+}
+
+.ios-switch input:disabled + .ios-switch-track {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.panel-desc {
+  margin: 4px 0 18px;
+  font-size: 13px;
+  color: #8b959b;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.field-group > label {
+  font-size: 13px;
+  color: #666;
+}
+
+/* 운영 요일 선택 */
+.day-select-card {
+  flex: 0 0 auto;
+  margin-bottom: 16px;
+}
+
+.day-select-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.day-select-left {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.day-select-title {
+  flex: 0 0 auto;
+}
+
+.day-select-head h2 {
+  margin: 0 0 4px;
+  font-size: 17px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.day-select-head p {
+  margin: 0;
+  font-size: 13px;
+  color: #8b959b;
+  white-space: nowrap;
+}
+
+#btnSaveSchedule {
+  flex: 0 0 auto;
+}
+
+.effective-date-group {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.effective-date-group label[for="effectiveFromDate"] {
+  font-size: 13px;
+  color: #666;
+}
+
+#effectiveFromDate {
+  width: 150px;
+}
+
+#effectiveFromDate:disabled {
+  background: #f5f7f8;
+  color: #b9c0c4;
+}
+
+.apply-now-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 12px;
+  border: 1px solid #e0e5e9;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+
+.apply-now-check input {
+  accent-color: #008b7a;
+}
+
+.day-tabs {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 10px;
+}
+
+.day-tab {
+  flex: 0 0 76px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 14px 0;
+  border: 1px solid #e2e7ea;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.day-tab-label {
+  font-size: 16px;
+  font-weight: 700;
+  color: #333;
+}
+
+.day-tab-state {
+  font-size: 12px;
+  color: #8b959b;
+}
+
+.day-tab-state.closed {
+  color: #e23c7b;
+  font-weight: 700;
+}
+
+.day-tab.active {
+  background: #f2b134;
+  border-color: #f2b134;
+}
+
+.day-tab.active .day-tab-label,
+.day-tab.active .day-tab-state {
+  color: #fff;
+}
+
+/* 좌우 그리드 — 남은 세로 공간을 전부 차지해야 아래 round-table-body-scroll/exception-list가
+   실제로 넘치는 만큼만 내부 스크롤된다 (schedule-scroll이 페이지를 대신 스크롤해버리면 동작하지 않음) */
+.schedule-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 3fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.schedule-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* 배지 */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge-open {
+  background: #d7f5ec;
+  color: #008b7a;
+}
+
+/* 화요일 스케줄 카드 */
+.day-schedule-fields {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.day-schedule-fields .field-group {
+  margin-bottom: 0;
+}
+
+.field-group-wide {
+  flex: 0 0 auto;
+}
+
+.time-range {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.time-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.time-input i {
+  position: absolute;
+  left: 14px;
+  color: #9aa5ab;
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.time-input input[type="time"] {
+  width: 190px;
+  padding-left: 36px;
+}
+
+.time-sep {
+  color: #9aa5ab;
+}
+
+.day-schedule-fields select {
+  width: 140px;
+}
+
+#btnAutoGenerate {
+  margin-left: auto;
+}
+
+/* 스테퍼 */
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e0e5e9;
+  border-radius: 8px;
+  background: #fbfcfc;
+  overflow: hidden;
+  height: 38px;
+}
+
+.stepper button {
+  width: 34px;
+  height: 100%;
+  font-size: 16px;
+  color: #7b868c;
+  background: transparent;
+}
+
+.stepper button:hover {
+  color: #008b7a;
+  background: #f1f5f5;
+}
+
+.stepper-value {
+  width: 60px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-left: 1px solid #e0e5e9;
+  border-right: 1px solid #e0e5e9;
+  border-radius: 0;
+  background: #fff;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.stepper-value:focus {
+  outline: none;
+  background: #f3fbfa;
+}
+
+/* 최대 예약 인원을 넘겨 설정하려 할 때 잠깐 경고 표시 */
+.stepper-value.stepper-limit {
+  background: #fdecec;
+  color: #d92b2b;
+}
+
+/* 회차 관리 카드 — 오른쪽 패널 높이만큼 늘어나고, 내용이 넘치면 테이블 영역만 스크롤 */
+.round-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.round-card > .panel-head,
+.round-card > .panel-desc {
+  flex: 0 0 auto;
+}
+
+/* 회차 관리 테이블 — 헤더 테이블은 고정, tbody가 담긴 테이블만 별도로 스크롤 */
+.round-table-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.round-table-head {
+  flex: 0 0 auto;
+}
+
+.round-table-body-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.round-table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.round-table th,
+.round-table td {
+  padding: 14px 16px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.round-table-head th {
+  color: #8b959b;
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.round-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.round-drag {
+  color: #c3cad0;
+  cursor: grab;
+}
+
+.round-name {
+  font-weight: 700;
+  color: #222;
+  text-align: left;
+}
+
+.round-table input[type="time"] {
+  width: 100%;
+}
+
+.round-table select {
+  width: 100%;
+}
+
+.round-table .stepper {
+  justify-content: center;
+}
+
+.round-delete {
+  color: #ff5b4f;
+  font-size: 15px;
+  padding: 6px;
+}
+
+.round-delete:hover {
+  color: #d92b2b;
+}
+
+/* 특정일 예외 설정 */
+.exception-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.exception-panel > *:not(.exception-list) {
+  flex: 0 0 auto;
+}
+
+.check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exception-edit-hint {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  background: #fff6e6;
+  border: 1px solid #f0dcb2;
+  border-radius: 8px;
+  color: #b8720a;
+  font-size: 13px;
+}
+
+.exception-edit-hint[hidden] {
+  display: none;
+}
+
+.check-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid #e0e5e9;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+}
+
+.check-pill input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.check-pill::before {
+  font-family: "Font Awesome 6 Free";
+  font-weight: 400;
+  content: "\f0c8";
+  font-size: 15px;
+  color: #c3cad0;
+}
+
+.check-pill.checked {
+  border-color: transparent;
+  color: #fff;
+}
+
+.check-pill.checked::before {
+  font-weight: 900;
+  content: "\f14a";
+  color: #fff;
+}
+
+.check-pill.checked {
+  background: #e8a33d;
+}
+
+.date-range {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.date-input-native {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-sep {
+  color: #9aa5ab;
+}
+
+.btn.small {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.exception-list-head {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f3;
+}
+
+.exception-list-head h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.exception-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.exception-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px;
+  border: 1px solid #eef1f3;
+  border-radius: 10px;
+}
+
+.exception-date {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.3;
+}
+
+.exception-date strong {
+  font-size: 13px;
+  color: #333;
+}
+
+.exception-date span {
+  font-size: 12px;
+  color: #9aa5ab;
+}
+
+.exception-body {
+  flex: 2;
+  min-width: 0;
+}
+
+.exception-type {
+  display: inline-block;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.exception-type.type-closed {
+  color: #dd8200;
+}
+
+.exception-type.type-time {
+  color: #338fca;
+}
+
+.exception-type.type-round {
+  color: #008b7a;
+}
+
+.exception-body p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.exception-delete {
+  flex: 0 0 auto;
+  color: #ff5b4f;
+  font-size: 15px;
+  padding: 6px;
+}
+
+.exception-delete:hover {
+  color: #d92b2b;
+}
+
+@media (max-width: 1200px) {
+  /* 세로로 쌓이면 두 카드 높이를 맞출 이유가 없으니 페이지 스크롤로 되돌린다 */
+  .schedule-scroll {
+    overflow-y: auto;
+  }
+
+  .schedule-grid {
+    flex: 0 0 auto;
+    grid-template-columns: 1fr;
+  }
+
+  .round-card,
+  .round-table-wrap,
+  .round-table-body-scroll,
+  .exception-list {
+    flex: none;
+  }
+
+  .round-table-body-scroll,
+  .exception-list {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 900px) {
+  .day-select-head {
+    flex-wrap: wrap;
+  }
+
+  .day-select-left {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .day-tabs {
+    flex: 1 1 100%;
+    overflow-x: auto;
+  }
+}

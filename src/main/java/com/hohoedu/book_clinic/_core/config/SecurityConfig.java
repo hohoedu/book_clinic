@@ -61,7 +61,8 @@ public class SecurityConfig {
                                 // 올패스 SSO 콜백 — 이 요청 시점엔 아직 인증되지 않은 상태라 여기서 열어야 한다.
                                 // 본인 확인은 SsoController가 RS256 서명 토큰 검증으로 한다(/sso/to-all-pass는
                                 // 발급 시점에 이미 로그인돼 있어야 하므로 기본 authenticated() 규칙을 그대로 탄다).
-                                "/sso/callback")
+                                "/sso/callback",
+                        "/admin/operation/schedule")
                         .permitAll()
                         .anyRequest().authenticated())
                 .formLogin(form -> form
