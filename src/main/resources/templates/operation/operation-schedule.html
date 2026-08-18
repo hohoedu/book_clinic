@@ -32,6 +32,14 @@
             <i class="fa-regular fa-circle-question"></i>
             사용 가이드
           </button>
+          <!-- 편집 토글 — 끄면 화면 전체가 읽기 전용이 되고 저장도 잠긴다 -->
+          <label class="edit-mode-switch">
+            <span class="edit-mode-label">편집</span>
+            <span class="ios-switch">
+              <input type="checkbox" id="editModeToggle" />
+              <span class="ios-switch-track"></span>
+            </span>
+          </label>
         </div>
       </header>
 
@@ -47,45 +55,46 @@
               </div>
 
               <div class="day-tabs" id="dayTabs">
-                <button type="button" class="day-tab" data-day="mon" data-state="open">
+                <button type="button" class="day-tab" data-day="mon" data-state="closed">
                   <span class="day-tab-label">월</span>
-                  <span class="day-tab-state">운영</span>
+                  <span class="day-tab-state closed">휴무</span>
                 </button>
-                <button type="button" class="day-tab active" data-day="tue" data-state="open">
+                <button type="button" class="day-tab" data-day="tue" data-state="closed">
                   <span class="day-tab-label">화</span>
-                  <span class="day-tab-state">운영</span>
+                  <span class="day-tab-state closed">휴무</span>
                 </button>
                 <button type="button" class="day-tab" data-day="wed" data-state="closed">
                   <span class="day-tab-label">수</span>
                   <span class="day-tab-state closed">휴무</span>
                 </button>
-                <button type="button" class="day-tab" data-day="thu" data-state="open">
+                <button type="button" class="day-tab" data-day="thu" data-state="closed">
                   <span class="day-tab-label">목</span>
-                  <span class="day-tab-state">운영</span>
+                  <span class="day-tab-state closed">휴무</span>
                 </button>
-                <button type="button" class="day-tab" data-day="fri" data-state="open">
+                <button type="button" class="day-tab" data-day="fri" data-state="closed">
                   <span class="day-tab-label">금</span>
-                  <span class="day-tab-state">운영</span>
+                  <span class="day-tab-state closed">휴무</span>
                 </button>
-                <button type="button" class="day-tab" data-day="sat" data-state="open">
+                <button type="button" class="day-tab" data-day="sat" data-state="closed">
                   <span class="day-tab-label">토</span>
-                  <span class="day-tab-state">운영</span>
+                  <span class="day-tab-state closed">휴무</span>
                 </button>
                 <button type="button" class="day-tab" data-day="sun" data-state="closed">
                   <span class="day-tab-label">일</span>
                   <span class="day-tab-state closed">휴무</span>
                 </button>
               </div>
-            </div>
-            <div class="day-select-right">
               <div class="effective-date-group">
                 <label for="effectiveFromDate">적용 시작일</label>
-                <input type="date" id="effectiveFromDate" value="2026-08-14" />
+                <input type="date" id="effectiveFromDate" />
                 <label class="apply-now-check">
                   <input type="checkbox" id="applyNowCheck" checked />
                   즉시 적용
                 </label>
               </div>
+            </div>
+            <div class="day-select-right">
+              <button type="button" id="btnRecordSchedule" class="btn outline">예약 변경 이력</button>
               <button type="button" id="btnSaveSchedule" class="btn primary">저장</button>
             </div>
           </div>
@@ -208,7 +217,7 @@
           </div>
 
           <!-- 오른쪽: 특정일 예외 설정 -->
-          <aside class="panel-card exception-panel">
+          <aside class="panel-card exception-panel" id="exceptionPanel">
             <div class="panel-head">
               <h2>특정일 예외 설정</h2>
             </div>
@@ -217,9 +226,9 @@
             <div class="field-group">
               <label>예외 기간</label>
               <div class="date-range">
-                <input type="date" class="date-input-native" id="exceptionStartDate" value="2026-08-15" />
+                <input type="date" class="date-input-native" id="exceptionStartDate" />
                 <span class="date-sep">~</span>
-                <input type="date" class="date-input-native" id="exceptionEndDate" value="2026-08-15" />
+                <input type="date" class="date-input-native" id="exceptionEndDate" />
               </div>
             </div>
 
@@ -239,7 +248,7 @@
                   운영회차 변경
                 </label>
               </div>
-              <p class="exception-edit-hint" id="exceptionEditHint" hidden>왼쪽에서 일정을 변경한 후 예외 일정 등록을 눌러주세요.</p>
+              <p class="exception-edit-hint" id="exceptionEditHint" hidden>왼쪽에서 운영 시간과 회차를 그날에 맞게 고친 뒤 예외 일정 등록을 눌러주세요.</p>
             </div>
 
             <div class="field-group">
@@ -254,34 +263,21 @@
             </div>
 
             <ul class="exception-list" id="exceptionList">
-              <li class="exception-item">
-                <div class="exception-date">
-                  <strong>2026-08-15</strong>
-                  <span>(토)</span>
-                </div>
-                <div class="exception-body">
-                  <span class="exception-type type-closed">휴무</span>
-                  <p>광복절</p>
-                </div>
-                <button type="button" class="exception-delete" aria-label="삭제">
-                  <i class="fa-solid fa-trash-can"></i>
-                </button>
-              </li>
-              <li class="exception-item">
-                <div class="exception-date">
-                  <strong>2026-09-15</strong>
-                  <span>(화)</span>
-                </div>
-                <div class="exception-body">
-                  <span class="exception-type type-round">운영회차 변경</span>
-                  <p>3, 4회차 마감</p>
-                </div>
-                <button type="button" class="exception-delete" aria-label="삭제">
-                  <i class="fa-solid fa-trash-can"></i>
-                </button>
-              </li>
+              <!-- 예외 항목은 operation-schedule.js가 /admin/operation/schedule/exception 응답으로 렌더링 -->
             </ul>
 
+          </aside>
+
+          <!-- 오른쪽(토글): 예약 변경 이력 — 예외 설정 패널과 같은 자리를 번갈아 쓴다 -->
+          <aside class="panel-card history-panel" id="historyPanel" hidden>
+            <div class="panel-head">
+              <h2>스케줄 변경 예약 이력</h2>
+            </div>
+            <p class="panel-desc">변경을 예약한 운영 스케줄과 특정일 예외를 함께 관리할 수 있습니다.</p>
+
+            <ul class="history-list" id="historyList">
+              <!-- 버전 카드는 operation-schedule.js가 /admin/operation/schedule/versions 응답으로 렌더링 -->
+            </ul>
           </aside>
 
         </div>

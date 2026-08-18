@@ -324,8 +324,14 @@
 }
 
 .badge-open {
-  background: #d7f5ec;
-  color: #008b7a;
+  background: #9ec907;
+  color: #fff;
+}
+
+/* 휴무 — 요일 탭의 휴무 표시(.day-tab-state.closed)와 같은 색을 쓴다 */
+.badge-closed {
+  background: #fde8f1;
+  color: #e23c7b;
 }
 
 /* 화요일 스케줄 카드 */
@@ -681,8 +687,9 @@
   font-weight: 700;
 }
 
+/* 휴지통 아이콘(.exception-delete)과 같은 색 — 같은 카드 안에서 "지운다/쉰다"가 같은 계열로 읽힌다 */
 .exception-type.type-closed {
-  color: #dd8200;
+  color: #ff5b4f;
 }
 
 .exception-type.type-time {
@@ -690,7 +697,7 @@
 }
 
 .exception-type.type-round {
-  color: #008b7a;
+  color: #eaa425;
 }
 
 .exception-body p {
@@ -753,4 +760,257 @@
     flex: 1 1 100%;
     overflow-x: auto;
   }
+}
+
+/* ── 서버 연동으로 추가된 상태 표시 (2026-08-18) ───────────────────────── */
+
+/* 예외가 하나도 없을 때 — 빈 목록은 로딩 실패와 구분이 안 돼서 문구를 명시한다 */
+.exception-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #9aa5ab;
+}
+
+/* 이미 지난 예외 — 기록으로 남겨두되 손댈 수 없다는 걸 색으로 알린다(삭제 버튼도 없다) */
+.exception-item.past {
+  opacity: 0.55;
+  background: #fafbfc;
+}
+
+/* 기간 예외는 "2026-08-15 ~ 2026-08-20"이라 한 줄에 안 들어간다 */
+.exception-date strong {
+  word-break: keep-all;
+  text-align: center;
+}
+
+/* ── 예약 변경 이력 패널 (예외 설정과 토글, 2026-08-18) ────────────────── */
+
+/* 예외 패널과 같은 그리드 칸을 번갈아 쓰므로 세로 레이아웃 규칙도 동일해야 한다 */
+.history-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.history-panel > *:not(.history-list) {
+  flex: 0 0 auto;
+}
+
+.history-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* 버전 카드 — 내용(왼쪽) / 버튼(오른쪽) 2열.
+   버튼 묶음을 상태 뱃지 한 줄에만 붙이면, 버튼이 2개일 때 그 줄이 통째로 늘어나 뱃지 옆이
+   비어 보인다. 버튼 열을 카드 내용 전체와 나란히 두면 버튼 개수가 레이아웃을 흔들지 않는다.
+   상세 펼침은 두 열 아래를 가로로 다 쓰므로 그리드로 잡는다. */
+.version-item {
+  padding: 14px;
+  border: 1px solid #eef1f3;
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 12px;
+  align-items: start;
+}
+
+.version-body {
+  min-width: 0;
+}
+
+.version-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 글자 수가 다른 "상세보기"/"삭제"의 폭을 고정해 오른쪽 끝을 맞춘다 */
+.version-actions .btn {
+  height: 25px;
+  width: 75px;
+  padding: 0 12px;
+  font-size: 12px;
+  justify-content: center;
+}
+
+/* 삭제는 되돌릴 수 없는 동작이라 다른 버튼과 색으로 구분한다 */
+.version-delete-btn {
+  border: 1px solid #f0b4b4;
+  background: #fff;
+  color: #d64545;
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* 상태 뱃지는 셋 다 색을 채우고 글자를 흰색으로 둔다 — 운영중/예정/이전이 같은 무게로 읽혀야
+   목록에서 상태를 먼저 훑고 내용을 보게 된다. 운영중은 .badge-open과 같은 색이다. */
+.version-badge.badge-current { background: #9ec907; color: #fff; }
+.version-badge.badge-upcoming { background: #3295e2; color: #fff; }
+.version-badge.badge-past { background: #c6c6c6; color: #fff; }
+
+.version-range {
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #333;
+}
+
+.version-days {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: #8b969c;
+}
+
+/* 두 열 아래를 가로로 다 쓴다 */
+.version-detail {
+  grid-column: 1 / -1;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #e3e8ea;
+}
+
+.version-detail-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: #666;
+}
+
+.version-detail-row strong {
+  color: #333;
+  white-space: nowrap;
+}
+
+.version-detail-row.closed span {
+  color: #b0b8bc;
+}
+
+.history-empty {
+  padding: 24px 12px;
+  text-align: center;
+  font-size: 13px;
+  color: #9aa5ab;
+}
+
+/* hidden 속성이 flex/grid 표시 규칙에 밀리지 않도록 못박는다 */
+.panel-card[hidden] {
+  display: none;
+}
+
+/* 토글 버튼 — 라벨이 바뀌어도 폭이 흔들리지 않게. 실제 고정 폭은 JS가 두 라벨을 재서 넣는다 */
+#btnRecordSchedule {
+  white-space: nowrap;
+  justify-content: center;
+}
+
+/* 이력 타임라인에 섞여 들어간 예외 카드 — 버전 카드와 구분되도록 왼쪽에 색 띠를 준다 */
+.version-item.exception-entry {
+  border-left: 3px solid #f0dcb2;
+}
+
+.version-item.exception-entry .version-days {
+  color: #666;
+  line-height: 1.6;
+}
+
+.version-item.exception-entry .exception-type {
+  margin-right: 2px;
+}
+
+/* ── 보기/편집 모드 (2026-08-18) ──────────────────────────────────────── */
+
+/* 보기 모드는 읽기 전용 — 입력처럼 보이면 고쳐도 되는 줄 안다 */
+.panel-card.view-locked input,
+.panel-card.view-locked select {
+  background: #f7f8f9;
+  color: #6b7579;
+  border-color: #eceff1;
+}
+
+.panel-card.view-locked .round-delete,
+.panel-card.view-locked .round-drag {
+  opacity: 0.3;
+}
+
+/* 그날만 마감된 회차 */
+.round-closed {
+  opacity: 0.55;
+}
+
+.round-closed-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #fdecec;
+  color: #d64545;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 헤더의 편집 토글 — 사용 가이드 옆.
+   .page-header-actions의 flex 배치는 common.css가 이미 잡고 있어 여기서 다시 정의하지 않는다 */
+.edit-mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.edit-mode-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: #4a5459;
+}
+
+/* 저장 버튼이 잠긴 상태를 눈으로 알 수 있어야 한다 — 눌러보고 알게 하면 안 된다 */
+#btnSaveSchedule:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* 예외 입력 중에는 어떤 요일도 선택되지 않은 상태로 둔다 —
+   다루는 대상이 요일이 아니라 특정 날짜라, 어느 요일이 켜져 있으면 그것을 편집하는 줄 안다 */
+.day-tabs.tabs-locked .day-tab {
+  cursor: default;
+}
+
+/* 사유가 딸려 있다는 신호 — 화살표에 작은 메뉴가 붙은 커서라 "이 요소에 뭔가 더 있다"로 읽힌다 */
+.exception-type[data-reason] {
+  cursor: context-menu;
+}
+
+/* 즉시 뜨는 사유 툴팁. body 직속이라 목록 스크롤 영역에 잘리지 않는다 */
+.reason-tooltip {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  max-width: 260px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: keep-all;
+  pointer-events: none;   /* 툴팁 위에 커서가 올라가 깜빡이는 것을 막는다 */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .18);
 }

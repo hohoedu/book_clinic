@@ -50,29 +50,28 @@
         ORDER BY t.day_of_week ASC, t.seq ASC
     </select>
 
-    <select id="findUpcomingVersions" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$VersionDTO">
+    <!--
+      요일별로 흩어져 있는 버전 행을 전부 가져와 서비스가 기간·주간구성으로 조립한다.
+      SQL에서 바로 묶지 않는 이유는 "그 시점의 주간 전체 구성"이 요일마다 서로 다른 버전을
+      골라야 나오는 값이라(요일별 MAX(effective_from <= 기준일)) 집합 연산으로 표현하면
+      쿼리가 훨씬 복잡해지고, 버전 수는 많아야 수십 건이라 메모리에서 도는 편이 명료해서다.
+    -->
+    <select id="findAllVersionDays" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$VersionDayDTO">
         SELECT
             day_of_week    AS dayOfWeek,
-            effective_from AS effectiveFrom
+            effective_from AS effectiveFrom,
+            is_open        AS isOpen
         FROM erp_bookstore_schedule
         WHERE center_code = #{centerCode}
-          AND effective_from &gt; #{baseDate}
-        ORDER BY day_of_week ASC, effective_from ASC
+        ORDER BY effective_from ASC, day_of_week ASC
     </select>
 
-    <select id="findSlotsByVersion" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$SlotDTO">
-        SELECT
-            slot_template_id AS slotTemplateId,
-            day_of_week      AS dayOfWeek,
-            seq              AS seq,
-            start_time       AS startTime,
-            end_time         AS endTime,
-            capacity         AS capacity
-        FROM erp_bookstore_schedule_slot
+    <select id="findVersionDayOfWeeks" resultType="int">
+        SELECT day_of_week
+        FROM erp_bookstore_schedule
         WHERE center_code = #{centerCode}
-          AND day_of_week = #{dayOfWeek}
           AND effective_from = #{effectiveFrom}
-        ORDER BY seq ASC
+        ORDER BY day_of_week ASC
     </select>
 
     <select id="existsVersion" resultType="boolean">

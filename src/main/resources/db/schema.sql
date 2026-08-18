@@ -1075,7 +1075,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_payment_log_order' AND
 --   ex = exception[center] 중 start_date <= date <= end_date 인 행 (있으면)
 --   if   ex.type = CLOSED                → 슬롯 없음
 --   elif not day_ver.is_open and no ex   → 슬롯 없음
---   elif ex.type = TIME_CHANGE           → ex의 운영시간으로 회차 재생성
+--   elif ex.type = TIME_CHANGE           → ex의 회차(schedule_exception_slot)를 그대로 사용.
+--                                          회차를 따로 지정하지 않았으면 요일 템플릿 중
+--                                          바뀐 운영시간 안에 온전히 들어가는 회차만 남긴다
 --   else                                 → day_ver에 속한 schedule_slot 사용
 --   ex.type = SLOT_CHANGE 이면 해당 회차만 오버라이드 적용 (is_closed, capacity)
 --   MERGE INTO slot_instance (center_code, service_date, seq)
@@ -1231,9 +1233,16 @@ CREATE TABLE erp_bookstore_schedule_exception_del (
 IF OBJECT_ID('erp_bookstore_schedule_exception_slot', 'U') IS NULL
 CREATE TABLE erp_bookstore_schedule_exception_slot (
     exception_id     INT       NOT NULL,   -- erp_bookstore_schedule_exception.exception_id
-    seq              TINYINT   NOT NULL,   -- 대상 회차 번호
+    seq              TINYINT   NOT NULL,   -- 회차 번호 (SLOT_CHANGE는 대상 회차, TIME_CHANGE는 그날 회차 번호)
     is_closed        BIT       NOT NULL DEFAULT 0,  -- 1이면 해당 회차만 예약 불가
     capacity         SMALLINT,             -- NULL이면 템플릿 인원 유지 (0과 의미 다름)
+    -- 시각은 TIME_CHANGE 전용 (2026-08-18 추가). 운영시간을 바꾸면 회차를 그대로 쓸 수도,
+    -- 늘어난 시간에 회차를 더할 수도, 아예 다시 짤 수도 있어야 해서 관리자가 확정한 회차를
+    -- 여기 그대로 저장한다. SLOT_CHANGE는 템플릿 회차를 가리키기만 하므로 NULL이다.
+    start_time       TIME(0),
+    end_time         TIME(0),
+    CONSTRAINT CK_schedule_exc_slot_time CHECK (
+        start_time IS NULL OR end_time IS NULL OR start_time < end_time),
     CONSTRAINT PK_erp_bookstore_schedule_exception_slot PRIMARY KEY (exception_id, seq),
     FOREIGN KEY (exception_id) REFERENCES erp_bookstore_schedule_exception (exception_id) ON DELETE CASCADE
 );
@@ -1248,7 +1257,9 @@ CREATE TABLE erp_bookstore_schedule_exception_slot_del (
     exception_id     INT,
     seq              TINYINT,
     is_closed        BIT,
-    capacity         SMALLINT
+    capacity         SMALLINT,
+    start_time       TIME(0),
+    end_time         TIME(0)
 );
 
 -- ── 실체: 예약 슬롯 (★ 예약이 붙는 유일한 대상) ───────────────────────

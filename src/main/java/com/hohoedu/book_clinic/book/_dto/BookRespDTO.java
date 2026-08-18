@@ -161,7 +161,7 @@ public class BookRespDTO {
         private Integer logId;
         private Integer beforeQty;
         private Integer afterQty;
-        private String memo;       // 감소 사유 (늘린 변경이면 null)
+        private String memo;       // 감소 사유 (늘린 변경이면 "추가")
         private String changedBy;
         private LocalDateTime changedAt;
     }

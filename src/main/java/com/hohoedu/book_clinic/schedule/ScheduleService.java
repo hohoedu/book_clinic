@@ -14,7 +14,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
+import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
+import com.hohoedu.book_clinic.schedule._dto.MaterializeDTO;
 import com.hohoedu.book_clinic.schedule._dto.ScheduleReqDTO;
 import com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO;
 
@@ -29,8 +31,10 @@ import lombok.extern.slf4j.Slf4j;
  * 지나간 날의 회차가 실제로 몇 시였는지도 사라진다. 그래서 저장은 항상 (센터, 요일, 적용시작일)
  * 세대를 새로 만들고, 조회는 "그 날짜 이하의 적용시작일 중 최댓값"을 고른다.
  *
- * [여기서 슬롯을 찍지 않는 이유] 실제 예약이 붙는 대상은 slot_instance이고 그건 materialize()가
- * 만든다. 이 클래스는 그 입력값인 규칙만 다룬다 — materialize() 연동은 다음 작업.
+ * [규칙과 슬롯의 분리] 실제 예약이 붙는 대상은 slot_instance이고 그건 ScheduleMaterializer가
+ * 만든다. 이 클래스는 그 입력값인 규칙만 다루되, 규칙을 저장한 뒤에는 곧바로 엔진을 호출해
+ * 예약 오픈 기간 안의 해당 요일을 다시 찍는다 — 규칙만 바뀌고 슬롯이 옛날 그대로면 관리자가
+ * 화면에서 본 것과 학생이 예약하는 시간이 어긋난다.
  */
 @Slf4j
 @Service
@@ -43,6 +47,7 @@ public class ScheduleService {
     private static final int CAPACITY_MAX = 200;
 
     private final ScheduleRepository scheduleRepository;
+    private final ScheduleMaterializer scheduleMaterializer;
 
     /**
      * 요일별 스케줄 조회. baseDate가 null이면 오늘(KST) 기준.
@@ -60,11 +65,6 @@ public class ScheduleService {
                 scheduleRepository.findEffectiveSlots(centerCode, base)
                         .stream().collect(Collectors.groupingBy(ScheduleRespDTO.SlotDTO::getDayOfWeek));
 
-        Map<Integer, List<LocalDate>> upcomingByDay =
-                scheduleRepository.findUpcomingVersions(centerCode, base)
-                        .stream().collect(Collectors.groupingBy(ScheduleRespDTO.VersionDTO::getDayOfWeek,
-                                Collectors.mapping(ScheduleRespDTO.VersionDTO::getEffectiveFrom, Collectors.toList())));
-
         List<ScheduleRespDTO.DayDTO> days = new ArrayList<>();
         for (int dow = 1; dow <= 7; dow++) {
             ScheduleRespDTO.DayDTO day = saved.get(dow);
@@ -72,7 +72,6 @@ public class ScheduleService {
                 day = emptyDay(dow);
             }
             day.setSlots(slotsByDay.getOrDefault(dow, List.of()));
-            day.setUpcomingVersions(upcomingByDay.getOrDefault(dow, List.of()));
             days.add(day);
         }
 
@@ -148,6 +147,17 @@ public class ScheduleService {
 
             if (Boolean.TRUE.equals(day.getIsOpen())) {
                 scheduleRepository.insertSlots(centerCode, dow, effectiveFrom, day.getSlots());
+            }
+        }
+
+        // 저장한 요일만 다시 찍는다. 바로 위에서 예약이 걸린 요일은 이미 막았으므로 여기서
+        // blockedDates가 나올 일은 없지만, 나오면 규칙과 슬롯이 어긋난 상태라 로그로 남겨둔다.
+        for (Integer dow : seen) {
+            MaterializeDTO.ResultDTO result =
+                    scheduleMaterializer.materializeDayOfWeek(centerCode, dow, effectiveFrom);
+            if (!result.getBlockedDates().isEmpty()) {
+                log.warn("[운영스케줄] 규칙은 저장됐지만 슬롯을 갱신하지 못한 날짜 — center={}, dow={}, dates={}",
+                        centerCode, dow, result.getBlockedDates());
             }
         }
 
@@ -245,6 +255,133 @@ public class ScheduleService {
             case 7 -> "일요일";
             default -> dayOfWeek + "요일";
         };
+    }
+
+    // ── 스케줄 변경 예약 이력 ─────────────────────────────────────────────
+
+    /**
+     * 버전 목록. 화면 오른쪽 "스케줄 변경 예약 이력" 패널용.
+     *
+     * [기간이 어떻게 나오나] 테이블에는 "언제부터"만 있다. 종료일은 다음 버전 시작일에서 하루를
+     * 뺀 값으로 만든다 — 종료일을 컬럼으로 들고 있으면 새 버전을 저장할 때마다 직전 버전을 같이
+     * 고쳐야 하고, 두 값이 어긋나면 어느 쪽이 진실인지 알 수 없게 된다.
+     *
+     * [요일 구성은 "그 시점의 주간 전체"다] 이 버전에서 바뀐 요일만 보여주지 않는다. 관리자가
+     * 궁금한 것은 "그날부터 우리 학원이 어떻게 도는가"이지 "그때 무엇을 눌렀는가"가 아니다.
+     * 그래서 요일마다 그 시점에 유효한 버전(effective_from <= 기준일 중 최대)을 각각 골라 합친다.
+     */
+    public List<ScheduleRespDTO.VersionSummaryDTO> findVersions(String centerCode) {
+        List<ScheduleRespDTO.VersionDayDTO> rows = scheduleRepository.findAllVersionDays(centerCode);
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+
+        List<LocalDate> boundaries = rows.stream()
+                .map(ScheduleRespDTO.VersionDayDTO::getEffectiveFrom)
+                .distinct().sorted().toList();
+
+        LocalDate today = KstClock.today();
+        List<ScheduleRespDTO.VersionSummaryDTO> versions = new ArrayList<>();
+
+        for (int i = 0; i < boundaries.size(); i++) {
+            LocalDate start = boundaries.get(i);
+            LocalDate end = (i + 1 < boundaries.size()) ? boundaries.get(i + 1).minusDays(1) : null;
+
+            ScheduleRespDTO.VersionSummaryDTO version = new ScheduleRespDTO.VersionSummaryDTO();
+            version.setEffectiveFrom(start);
+            version.setEndDate(end);
+
+            List<Integer> openDays = new ArrayList<>();
+            for (int dow = 1; dow <= 7; dow++) {
+                if (Boolean.TRUE.equals(effectiveOpenAt(rows, dow, start))) {
+                    openDays.add(dow);
+                }
+            }
+            version.setOpenDays(openDays);
+            version.setOpenDayLabel(openDays.stream().map(this::shortDayLabel).collect(Collectors.joining(", ")));
+
+            String status = start.isAfter(today) ? "UPCOMING"
+                    : (end != null && end.isBefore(today)) ? "PAST" : "CURRENT";
+            version.setStatus(status);
+            version.setStatusLabel(switch (status) {
+                case "UPCOMING" -> "예정";
+                case "PAST" -> "이전";
+                default -> "운영중";
+            });
+            // 이미 지나갔거나 지금 돌고 있는 버전은 기록이라 지울 수 없다
+            version.setDeletable("UPCOMING".equals(status));
+
+            versions.add(version);
+        }
+
+        // 화면 순서: 운영중 → 예정(가까운 순) → 이전(최근 순)
+        versions.sort(Comparator
+                .comparingInt((ScheduleRespDTO.VersionSummaryDTO v) -> switch (v.getStatus()) {
+                    case "CURRENT" -> 0;
+                    case "UPCOMING" -> 1;
+                    default -> 2;
+                })
+                .thenComparing(v -> "PAST".equals(v.getStatus())
+                        ? LocalDate.MAX.toEpochDay() - v.getEffectiveFrom().toEpochDay()
+                        : v.getEffectiveFrom().toEpochDay()));
+        return versions;
+    }
+
+    /** 기준일에 그 요일이 운영인지 — 요일별로 effective_from <= 기준일 중 가장 늦은 버전을 고른다 */
+    private Boolean effectiveOpenAt(List<ScheduleRespDTO.VersionDayDTO> rows, int dayOfWeek, LocalDate baseDate) {
+        Boolean open = null;
+        for (ScheduleRespDTO.VersionDayDTO row : rows) {   // 조회가 effective_from 오름차순이라 마지막 통과분이 최신
+            if (row.getDayOfWeek() == dayOfWeek && !row.getEffectiveFrom().isAfter(baseDate)) {
+                open = row.getIsOpen();
+            }
+        }
+        return open;
+    }
+
+    /**
+     * 예정 버전 삭제. 지우면 그 기간은 이전 버전 규칙으로 되돌아간다.
+     *
+     * 수정 API는 없다(결정 2) — 예정 버전을 고치는 것은 같은 적용시작일로 다시 저장하면 되고,
+     * 그건 saveWeek가 덮어쓰기로 처리한다.
+     */
+    @Transactional
+    public void deleteVersion(String centerCode, String userId, LocalDate effectiveFrom) {
+        LocalDate today = KstClock.today();
+        if (!effectiveFrom.isAfter(today)) {
+            throw new Exception400("아직 적용되지 않은 예정 버전만 삭제할 수 있습니다.");
+        }
+
+        List<Integer> dayOfWeeks = scheduleRepository.findVersionDayOfWeeks(centerCode, effectiveFrom);
+        if (dayOfWeeks.isEmpty()) {
+            throw new Exception404("해당 버전을 찾을 수 없습니다.");
+        }
+
+        // 결정 4 — 예약이 걸린 요일은 손대지 않는다. 삭제도 슬롯을 다시 찍는 일이라 저장과 같은 기준이다.
+        for (Integer dow : dayOfWeeks) {
+            int reserved = scheduleRepository.countAffectedReservations(centerCode, dow, effectiveFrom);
+            if (reserved > 0) {
+                throw new Exception400(dayLabel(dow) + "에 이미 " + reserved
+                        + "건의 예약이 있어 삭제할 수 없습니다. 예약을 확인한 뒤 다시 시도해주세요.");
+            }
+        }
+
+        for (Integer dow : dayOfWeeks) {
+            scheduleRepository.archiveScheduleSlots(centerCode, dow, effectiveFrom, "DELETE", userId);
+            scheduleRepository.archiveSchedule(centerCode, dow, effectiveFrom, "DELETE", userId);
+            scheduleRepository.deleteVersion(centerCode, dow, effectiveFrom);
+        }
+
+        // 지운 뒤에 다시 찍어야 이전 버전 규칙으로 복구된다 (순서가 바뀌면 지운 버전이 그대로 반영된다)
+        for (Integer dow : dayOfWeeks) {
+            scheduleMaterializer.materializeDayOfWeek(centerCode, dow, effectiveFrom);
+        }
+
+        log.info("[운영스케줄] 예정 버전 삭제 — center={}, effectiveFrom={}, days={}, by={}",
+                centerCode, effectiveFrom, dayOfWeeks, userId);
+    }
+
+    private String shortDayLabel(int dayOfWeek) {
+        return dayLabel(dayOfWeek).substring(0, 1);
     }
 
 }

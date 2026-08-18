@@ -21,14 +21,12 @@ public interface ScheduleRepository {
     List<ScheduleRespDTO.SlotDTO> findEffectiveSlots(@Param("centerCode") String centerCode,
                                                       @Param("baseDate") LocalDate baseDate);
 
-    /** baseDate 이후 적용 예정인 버전들 (요일, 적용시작일) */
-    List<ScheduleRespDTO.VersionDTO> findUpcomingVersions(@Param("centerCode") String centerCode,
-                                                          @Param("baseDate") LocalDate baseDate);
+    /** 센터의 모든 요일 버전 (적용시작일 오름차순) — 버전 목록 계산의 원본 */
+    List<ScheduleRespDTO.VersionDayDTO> findAllVersionDays(@Param("centerCode") String centerCode);
 
-    /** 특정 요일 버전에 속한 회차 템플릿 (버전 미리보기용) */
-    List<ScheduleRespDTO.SlotDTO> findSlotsByVersion(@Param("centerCode") String centerCode,
-                                                      @Param("dayOfWeek") int dayOfWeek,
-                                                      @Param("effectiveFrom") LocalDate effectiveFrom);
+    /** 특정 적용시작일 버전에 실제로 포함된 요일들 — 삭제 대상 판별용 */
+    List<Integer> findVersionDayOfWeeks(@Param("centerCode") String centerCode,
+                                        @Param("effectiveFrom") LocalDate effectiveFrom);
 
     /** 같은 (센터, 요일, 적용시작일) 버전이 이미 있는지 — 있으면 덮어쓰기(스냅샷 후 재생성) */
     boolean existsVersion(@Param("centerCode") String centerCode,

@@ -7,6 +7,7 @@ import java.util.List;
 import com.fasterxml.jackson.annotation.JsonFormat;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -70,6 +71,68 @@ public class ScheduleReqDTO {
         private LocalTime endTime;
 
         private Integer capacity;
+    }
+
+    /**
+     * 예외 일정 등록 요청.
+     *
+     * 수정 API가 없는 것은 의도다(결정 2) — 예외는 "8/15 광복절 휴무"처럼 한 덩어리로 의미를 갖는
+     * 데이터라, 기간과 종류를 부분 수정하게 두면 검증 조합이 급격히 늘어난다. 고칠 일이 생기면
+     * 삭제 후 다시 등록한다.
+     */
+    @Data
+    public static class SaveExceptionReqDTO {
+
+        /** INSERT 후 MyBatis가 채워 넣는 자동 채번 값 — 요청 본문으로 받는 값이 아니다 */
+        private Integer exceptionId;
+
+        @NotNull(message = "예외 시작일이 없습니다.")
+        private LocalDate startDate;
+
+        @NotNull(message = "예외 종료일이 없습니다.")
+        private LocalDate endDate;
+
+        /** CLOSED(휴무) / TIME_CHANGE(운영시간 변경) / SLOT_CHANGE(회차 변경) */
+        @NotBlank(message = "예외 종류를 선택해주세요.")
+        private String exceptionType;
+
+        @NotBlank(message = "변경 사유를 입력해주세요.")
+        private String reason;
+
+        /** TIME_CHANGE 전용 */
+        @JsonFormat(pattern = "HH:mm")
+        private LocalTime openTime;
+        @JsonFormat(pattern = "HH:mm")
+        private LocalTime closeTime;
+
+        /** SLOT_CHANGE 전용 — 조정할 회차만 담는다 */
+        @Valid
+        private List<ExceptionSlotReqDTO> slots;
+    }
+
+    /**
+     * 예외의 회차 1건. 종류에 따라 뜻이 다르다.
+     *
+     *   SLOT_CHANGE  기존 회차를 가리켜 마감하거나 정원만 바꾼다 (seq만 의미 있음)
+     *   TIME_CHANGE  그날 회차를 통째로 확정한다 (시각까지 함께 보낸다)
+     */
+    @Data
+    public static class ExceptionSlotReqDTO {
+
+        /** SLOT_CHANGE에서는 대상 회차 번호. TIME_CHANGE에서는 서버가 시작시각 순으로 다시 매긴다 */
+        private Integer seq;
+
+        /** true면 그 회차만 마감 */
+        private Boolean isClosed;
+
+        /** null이면 원래 정원 유지 — 0(정원 0명)과 의미가 다르므로 빈 값을 0으로 바꾸지 말 것 */
+        private Integer capacity;
+
+        /** TIME_CHANGE 전용 — 그날 그 회차의 실제 시각 */
+        @JsonFormat(pattern = "HH:mm")
+        private LocalTime startTime;
+        @JsonFormat(pattern = "HH:mm")
+        private LocalTime endTime;
     }
 
 }

@@ -371,4 +371,15 @@ firebase-service-account.json
 .prettierrc
 
 
+
+# curl로 API 수동 테스트할 때 나오는 부산물 (JSESSIONID 쿠키 / CSRF 토큰) — 커밋 금지
+c.txt
+xsrf.txt
+cookies.txt
+*.cookies
+
+# 서버 실행 로그 — 운영 서버 경로·세션 정보가 그대로 남는다
+catalina.out
+*.log
+
 # End of https://www.toptal.com/developers/gitignore/api/windows,macos,linux,intellij+all,visualstudiocode,eclipse,gradle,java,maven

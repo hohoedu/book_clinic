@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.schedule.ScheduleExceptionRepository">
+
+    <sql id="exceptionColumns">
+        exception_id   AS exceptionId,
+        start_date     AS startDate,
+        end_date       AS endDate,
+        exception_type AS exceptionType,
+        reason         AS reason,
+        open_time      AS openTime,
+        close_time     AS closeTime
+    </sql>
+
+    <!--
+      끝난 예외를 곧바로 감추지 않고 fromDate(서비스가 오늘-7일을 넘긴다)까지 남겨두는 이유는,
+      "지난주 휴무가 왜 걸렸더라"를 확인할 데가 이 목록뿐이어서다. 지난 건은 past=1로 내려서
+      화면이 흐리게 처리하고 삭제 버튼을 감춘다.
+    -->
+    <select id="findExceptions" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$ExceptionDTO">
+        SELECT
+            <include refid="exceptionColumns"/>,
+            CASE WHEN end_date &lt; CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE) THEN 1 ELSE 0 END AS past
+        FROM erp_bookstore_schedule_exception
+        WHERE center_code = #{centerCode}
+          AND end_date &gt;= #{fromDate}
+        ORDER BY start_date ASC, exception_id ASC
+    </select>
+
+    <select id="findExceptionSlots" resultType="com.hohoedu.book_clinic.schedule._dto.MaterializeDTO$ExceptionSlotDTO">
+        SELECT
+            exception_id AS exceptionId,
+            seq          AS seq,
+            is_closed    AS isClosed,
+            capacity     AS capacity,
+            start_time   AS startTime,
+            end_time     AS endTime
+        FROM erp_bookstore_schedule_exception_slot
+        WHERE exception_id IN
+        <foreach collection="exceptionIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
+        ORDER BY exception_id ASC, seq ASC
+    </select>
+
+    <!-- 하루라도 겹치면 걸린다. SLOT_CHANGE는 기간 예외와 공존이 허용돼 대상에서 뺀다 -->
+    <select id="findOverlappingPeriods" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$ExceptionDTO">
+        SELECT <include refid="exceptionColumns"/>
+        FROM erp_bookstore_schedule_exception
+        WHERE center_code = #{centerCode}
+          AND exception_type &lt;&gt; 'SLOT_CHANGE'
+          AND start_date &lt;= #{endDate}
+          AND end_date   &gt;= #{startDate}
+        ORDER BY start_date ASC
+    </select>
+
+    <select id="findSlotChangeOn" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$ExceptionDTO">
+        SELECT <include refid="exceptionColumns"/>
+        FROM erp_bookstore_schedule_exception
+        WHERE center_code = #{centerCode}
+          AND exception_type = 'SLOT_CHANGE'
+          AND start_date = #{targetDate}
+    </select>
+
+    <insert id="insertException" useGeneratedKeys="true" keyProperty="req.exceptionId" keyColumn="exception_id">
+        INSERT INTO erp_bookstore_schedule_exception
+            (center_code, start_date, end_date, exception_type, reason, open_time, close_time, created_by)
+        VALUES (
+            #{centerCode},
+            #{req.startDate},
+            #{req.endDate},
+            #{req.exceptionType},
+            #{req.reason},
+            <!-- TIME_CHANGE가 아니면 null이다. ScheduleMapper.insertSchedule과 같은 이유로
+                 jdbcType을 명시하지 않으면 mssql이 varbinary로 해석해 TIME 변환에서 실패한다. -->
+            #{req.openTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+            #{req.closeTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+            #{userId}
+        )
+    </insert>
+
+    <insert id="insertExceptionSlots">
+        INSERT INTO erp_bookstore_schedule_exception_slot
+            (exception_id, seq, is_closed, capacity, start_time, end_time)
+        VALUES
+        <foreach collection="slots" item="s" separator=",">
+            (#{exceptionId}, #{s.seq}, #{s.isClosed}, #{s.capacity,jdbcType=SMALLINT},
+             #{s.startTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+             #{s.endTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler})
+        </foreach>
+    </insert>
+
+    <select id="findById" resultType="com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO$ExceptionDTO">
+        SELECT
+            <include refid="exceptionColumns"/>,
+            CASE WHEN end_date &lt; CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE) THEN 1 ELSE 0 END AS past
+        FROM erp_bookstore_schedule_exception
+        WHERE center_code = #{centerCode}
+          AND exception_id = #{exceptionId}
+    </select>
+
+    <insert id="archiveException">
+        INSERT INTO erp_bookstore_schedule_exception_del
+            (log_type, logged_by, exception_id, center_code, start_date, end_date,
+             exception_type, reason, open_time, close_time, created_at, created_by)
+        SELECT
+            #{logType}, #{loggedBy}, exception_id, center_code, start_date, end_date,
+            exception_type, reason, open_time, close_time, created_at, created_by
+        FROM erp_bookstore_schedule_exception
+        WHERE exception_id = #{exceptionId}
+    </insert>
+
+    <insert id="archiveExceptionSlots">
+        INSERT INTO erp_bookstore_schedule_exception_slot_del
+            (log_type, logged_by, exception_id, seq, is_closed, capacity, start_time, end_time)
+        SELECT
+            #{logType}, #{loggedBy}, exception_id, seq, is_closed, capacity, start_time, end_time
+        FROM erp_bookstore_schedule_exception_slot
+        WHERE exception_id = #{exceptionId}
+    </insert>
+
+    <delete id="deleteException">
+        DELETE FROM erp_bookstore_schedule_exception
+        WHERE center_code = #{centerCode}
+          AND exception_id = #{exceptionId}
+    </delete>
+
+</mapper>

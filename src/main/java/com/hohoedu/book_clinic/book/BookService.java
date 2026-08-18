@@ -305,7 +305,7 @@ public class BookService {
         }
 
         int after = bookRepository.countItemsByContentCenter(contentId, centerCode);
-        bookRepository.insertStockLog(contentId, centerCode, before, after, target < before ? memo : null, changedBy);
+        bookRepository.insertStockLog(contentId, centerCode, before, after, target < before ? memo : "추가", changedBy);
         return after;
     }
 
@@ -399,7 +399,7 @@ public class BookService {
 
         int bcodeAfter = bookRepository.countItemsByBcodeCenter(bcode, centerCode);
         int contentAfter = bookRepository.countItemsByContentCenter(contentId, centerCode);
-        bookRepository.insertStockLog(contentId, centerCode, contentBefore, contentAfter, target < bcodeBefore ? memo : null, changedBy);
+        bookRepository.insertStockLog(contentId, centerCode, contentBefore, contentAfter, target < bcodeBefore ? memo : "추가", changedBy);
         return bcodeAfter;
     }
 
