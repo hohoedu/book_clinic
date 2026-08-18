@@ -421,15 +421,18 @@ CREATE TABLE erp_bookstore_clinic_session (
     result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — 홈으로/재도전 등 화면 이탈 시 NULL로 초기화
 );
 
--- 클리닉 예약 — "해당 타임에 올 예정인 학생" 마스터. 상태 컬럼 없이 clinic_session 존재 여부로 입실/미입실을 파생시킨다
-IF OBJECT_ID('erp_bookstore_clinic_reservation', 'U') IS NULL
-CREATE TABLE erp_bookstore_clinic_reservation (
-    reservation_id   INT           IDENTITY(1,1) PRIMARY KEY,
-    student_id       VARCHAR(100)  NOT NULL,   -- erp_student.student_id (FK 없이 값으로만 연결)
-    reservation_date DATE          NOT NULL,   -- 예약일 (조회 필터 기준)
-    time_slot        VARCHAR(10)   NOT NULL,   -- '1'~'4' (monitor-live.js TIME_SLOTS.key와 매칭)
-    created_at       DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
-);
+-- 클리닉 예약 — DEPRECATED (2026-08-18). erp_bookstore_reservation(+ slot_instance)로 이관 완료.
+-- 신규 설치에서는 만들지 않는다. 기존 환경의 실 테이블/데이터는 별도 정리 전까지 그대로 둔다 —
+-- 이 CREATE 문을 지운다고 이미 만들어진 테이블이 없어지지는 않는다(IF OBJECT_ID NULL 가드라 신규
+-- 설치에만 영향).
+-- IF OBJECT_ID('erp_bookstore_clinic_reservation', 'U') IS NULL
+-- CREATE TABLE erp_bookstore_clinic_reservation (
+--     reservation_id   INT           IDENTITY(1,1) PRIMARY KEY,
+--     student_id       VARCHAR(100)  NOT NULL,
+--     reservation_date DATE          NOT NULL,
+--     time_slot        VARCHAR(10)   NOT NULL,
+--     created_at       DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
+-- );
 
 -- 독서일지 헤더 — 학생의 하루(입실 1회)에 1건
 IF OBJECT_ID('erp_bookstore_diary', 'U') IS NULL
@@ -438,7 +441,7 @@ CREATE TABLE erp_bookstore_diary (
     session_id   INT           NOT NULL UNIQUE,  -- erp_bookstore_clinic_session.session_id (입실 세션 1건 = 일지 1건)
     student_id   VARCHAR(20)  NOT NULL,  -- erp_student.student_id (UNIQUE 제약이 없어 FK 없이 값으로 연결)
     record_date  DATE          NOT NULL,  -- 일지 기준일 (= 세션의 session_date)
-    record_time  VARCHAR(1),              -- 교시 '1'~'4' (clinic_reservation.time_slot과 동일 도메인)
+    record_time  VARCHAR(2),              -- 회차 번호(slot_instance.seq) — 2026-08-18 신규 예약 이관
     in_time      DATETIME2,               -- 입실 시각(KST) — 세션 entered_at 스냅샷, 직원 보정 가능
     out_time     DATETIME2,               -- 퇴실 시각(KST) — 세션 exited_at 스냅샷, 직원 보정 가능
     help_needed  BIT           NOT NULL DEFAULT 0,  -- 도움 필요 여부(그날 일지 스냅샷)

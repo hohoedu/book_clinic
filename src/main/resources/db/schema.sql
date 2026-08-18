@@ -545,17 +545,9 @@ CREATE TABLE erp_bookstore_clinic_session (
     result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — 홈으로/재도전 등 화면 이탈 시 NULL로 초기화. "결과 확인중" 카드 상태의 기준
 );
 
--- 클리닉 예약 (2026-07-23 실시간 모니터링 — 예약 기준 미입실/입실 전환) — "해당 타임에 올 예정인
--- 학생" 마스터. 상태 컬럼을 따로 두지 않는다: 같은 (student_id, reservation_date)로 매칭되는
--- erp_bookstore_clinic_session 행이 있으면 입실, 없으면 미입실로 조회 시점에 파생시킨다.
--- 예약 등록 화면은 별도 작업 범위라 아직 없음 — 현재는 시드/수동 INSERT로만 채워짐.
-CREATE TABLE erp_bookstore_clinic_reservation (
-    reservation_id   INT           IDENTITY(1,1) PRIMARY KEY,
-    student_id       VARCHAR(100)  NOT NULL,   -- erp_student.student_id (FK 없이 값으로만 연결)
-    reservation_date DATE          NOT NULL,   -- 예약일 (조회 필터 기준)
-    time_slot        VARCHAR(10)   NOT NULL,   -- '1'~'4' (monitor-live.js TIME_SLOTS.key와 매칭)
-    created_at       DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
-);
+-- 클리닉 예약 — DEPRECATED (2026-08-18). erp_bookstore_reservation(+ slot_instance, ddl-core.sql)로
+-- 이관 완료. 구 테이블은 erp_bookstore_reading_log와 같은 방식으로 정리한다: 상단 DROP 문만 남겨
+-- 기존 개발 DB에 남은 잔재를 지우고, CREATE는 제거해 이후 재기동부터는 아예 안 만든다.
 
 -- ────────────────────────────────────────────────────────
 -- 독서일지 재설계 (2026-07-28) — 구 erp_bookstore_reading_log 폐기하고 대체
@@ -569,13 +561,15 @@ CREATE TABLE erp_bookstore_clinic_reservation (
 -- 독서일지 헤더 — 학생의 하루(입실 1회)에 1건.
 -- in_time/out_time은 세션(entered_at/exited_at)과 같은 값이라 session_id로 세션을 물고,
 -- 두 컬럼은 "일지 작성 시점 스냅샷"으로 둔다(직원이 화면에서 보정할 수 있어야 해서 파생이 아닌 저장).
--- record_time은 erp_bookstore_clinic_reservation.time_slot과 같은 도메인('1'~'4')을 쓴다.
+-- record_time은 신규 예약(slot_instance.seq)의 회차 번호를 문자열로 담는다(2026-08-18).
+-- old(erp_bookstore_clinic_reservation.time_slot)는 '1'~'4' 고정 4교시였지만, 신규는 센터마다
+-- 회차 수가 달라 두 자리까지 여유를 둔다(VARCHAR(1)이면 10회차부터 잘린다).
 CREATE TABLE erp_bookstore_diary (
     diary_key    INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK (기존 관례는 _id지만 설계안 이름을 유지)
     session_id   INT           NOT NULL UNIQUE,  -- erp_bookstore_clinic_session.session_id (입실 세션 1건 = 일지 1건)
     student_id   VARCHAR(20)  NOT NULL,  -- erp_student.student_id (UNIQUE 제약이 없어 FK 없이 값으로 연결)
     record_date  DATE          NOT NULL,  -- 일지 기준일 (= 세션의 session_date)
-    record_time  VARCHAR(1),              -- 교시 '1'~'4' (clinic_reservation.time_slot과 동일 도메인)
+    record_time  VARCHAR(2),              -- 회차 번호(slot_instance.seq)
     in_time      DATETIME2,               -- 입실 시각(KST) — 세션 entered_at 스냅샷, 직원 보정 가능
     out_time     DATETIME2,               -- 퇴실 시각(KST) — 세션 exited_at 스냅샷, 직원 보정 가능
     -- 도움 필요 여부 — "그날 일지에 기록된 값"(스냅샷)이다. 현재 상태는 erp_student.help_needed가

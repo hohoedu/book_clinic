@@ -5,14 +5,16 @@
 <mapper namespace="com.hohoedu.book_clinic.diary.DiaryRepository">
 
     <!--
-      독서일지 목록 — 예약(erp_bookstore_clinic_reservation)을 루트로 깔고, 그 위에 세션/일지를
-      덮어씌운다(2026-07-30). MonitorMapper.reservationCardColumns와 같은 정책이다:
+      독서일지 목록 — 예약(erp_bookstore_reservation + slot_instance)을 루트로 깔고, 그 위에
+      세션/일지를 덮어씌운다(2026-07-30, 2026-08-18 신규 예약 스키마로 이관). MonitorMapper의
+      reservationCardColumns와 같은 정책이다:
         · 예약만 있고 세션이 없으면(미입실) 세션/일지 컬럼이 전부 NULL로 내려온다.
         · 세션은 그 학생·그 날짜의 최신 1건만 붙인다(재입실로 여러 건 생겨도 최신 1건).
         · 교시/등하원 시각은 일지 값이 있으면 그쪽이 이긴다 — 일지의 record_time/in_time/out_time은
           직원이 화면에서 보정할 수 있는 값이라, 예약·세션 원본보다 우선한다.
       한 학생이 같은 날 두 타임을 예약하면 행이 두 개 나오고, 세션/일지는 날짜 단위라 양쪽 행에
       같은 값이 붙는다(예약 단위 세션 개념이 없어 현재 구조에서는 구분 불가).
+      timeSlot은 이제 "n교시" 고정이 아니라 회차 번호(seq) 문자열이다.
     -->
     <select id="findDiaryRows" resultType="com.hohoedu.book_clinic.diary._dto.DiaryRespDTO$RowDTO">
         SELECT
@@ -21,7 +23,7 @@
             st.student_name  AS studentName,
             st.grade_key     AS gradeKey,
             cd.codeNm        AS gradeName,
-            COALESCE(dia.record_time, r.time_slot) AS timeSlot,
+            COALESCE(dia.record_time, CAST(si.seq AS VARCHAR(2))) AS timeSlot,
 
             cs.session_id    AS sessionId,
             cs.status        AS sessionStatus,
@@ -39,13 +41,14 @@
             -- 전송 버튼 아이콘 판별용 — 앱 미가입(토큰 없음/빈 문자열)이면 발송 자체가 불가하다
             CAST(CASE WHEN NULLIF(st.app_token, '') IS NULL THEN 0 ELSE 1 END AS BIT) AS hasAppToken,
             att.attitudeCodes AS attitudeCodesRaw
-        FROM erp_bookstore_clinic_reservation r
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         JOIN erp_student st ON st.student_id = r.student_id
         LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
         OUTER APPLY (
             SELECT TOP 1 session_id, status, entered_at, exited_at
             FROM erp_bookstore_clinic_session
-            WHERE student_id = r.student_id AND session_date = r.reservation_date
+            WHERE student_id = r.student_id AND session_date = si.service_date
             ORDER BY session_id DESC
         ) cs
         LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
@@ -60,15 +63,16 @@
                 FOR XML PATH('')
             ), 1, 1, '') AS attitudeCodes
         ) att
-        WHERE r.reservation_date = #{date}
-          AND st.center_code = #{centerCode}
+        WHERE si.service_date = #{date}
+          AND si.center_code = #{centerCode}
+          AND r.status = 'RESERVED'
         <if test="timeSlot != null and timeSlot != ''">
-          AND COALESCE(dia.record_time, r.time_slot) = #{timeSlot}
+          AND COALESCE(dia.record_time, CAST(si.seq AS VARCHAR(2))) = #{timeSlot}
         </if>
         <if test="keyword != null and keyword != ''">
           AND st.student_name LIKE '%' + #{keyword} + '%'
         </if>
-        ORDER BY COALESCE(dia.record_time, r.time_slot) ASC, st.student_name ASC
+        ORDER BY COALESCE(dia.record_time, CAST(si.seq AS VARCHAR(2))) ASC, st.student_name ASC
     </select>
 
     <!--
@@ -162,9 +166,10 @@
                 cs.entered_at,
                 cs.exited_at,
                 st.help_needed,
-                (SELECT TOP 1 r.time_slot
-                 FROM erp_bookstore_clinic_reservation r
-                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
+                 FROM erp_bookstore_reservation r
+                 JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
             JOIN erp_student st ON st.student_id = cs.student_id
@@ -198,9 +203,10 @@
                 cs.student_id,
                 cs.session_date,
                 st.help_needed,
-                (SELECT TOP 1 r.time_slot
-                 FROM erp_bookstore_clinic_reservation r
-                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
+                 FROM erp_bookstore_reservation r
+                 JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
                  ORDER BY r.reservation_id DESC) AS time_slot,
                 CASE WHEN NULLIF(#{inTime,jdbcType=VARCHAR}, '') IS NULL THEN NULL
                      ELSE CAST(CONVERT(VARCHAR(10), cs.session_date, 23) + ' ' + #{inTime,jdbcType=VARCHAR} AS DATETIME2)

@@ -5,7 +5,6 @@ import java.time.LocalTime;
 import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.hohoedu.book_clinic.schedule._dto.MaterializeDTO;
 
 import lombok.Data;
 

@@ -4,21 +4,15 @@
 // 저장 경로는 두 개다: 등/퇴실 시각은 행의 "변경" 버튼으로 즉시(POST /time), 독서태도·기타
 // 전달사항은 상단 "저장" 버튼으로 바뀐 행만 모아 일괄(POST /save).
 
-// 교시 목록은 별도 마스터 데이터가 없어 monitor-live.js/reservation.js와 같은 고정 목록을 쓴다
-// (교시당 50분 수업 + 10분 휴식, KST, 2026-08-07 확정)
-const TIME_SLOTS = [
-  { key: "", label: "전체" },
-  { key: "1", label: "1교시(10:00~10:50)" },
-  { key: "2", label: "2교시(11:00~11:50)" },
-  { key: "3", label: "3교시(12:00~12:50)" },
-  { key: "4", label: "4교시(13:00~13:50)" },
-];
-
 // 문제풀이 합격선 = 전체 문항의 2/3 (ClinicService.QUIZ_PASS_RATIO와 같은 규칙 — 서버가 뱃지
 // 등급을 따로 내려주지 않아 화면에서 같은 식으로 다시 판정한다)
 const QUIZ_PASS_RATIO = 2 / 3;
 
 let attitudeCodeOptions = [];
+// 서버가 timeSlot(회차)으로도 필터링해주지만, 회차 드롭다운 자체를 채우려면 먼저 그날 데이터를
+// 봐야 한다(센터마다 회차 수가 달라 고정 목록을 둘 수 없다, 2026-08-18). 그래서 날짜·검색어
+// 기준으로만 서버에 요청해 전체를 받아두고, 회차 필터는 여기서 클라이언트가 직접 거른다.
+let allRows = [];
 
 document.addEventListener("DOMContentLoaded", () => {
   initDatePicker();
@@ -83,14 +77,33 @@ function updateDateDisplay(input, display) {
 
 function initSlotPicker() {
   const select = document.getElementById("diarySlot");
-  select.innerHTML = "";
-  TIME_SLOTS.forEach(({ key, label }) => {
+  select.innerHTML = `<option value="">전체</option>`;
+  select.addEventListener("change", () => renderRows(filterRowsBySlot(allRows)));
+}
+
+/* 회차 드롭다운을 그날 실제로 내려온 행들의 timeSlot 값으로 채운다. 선택돼 있던 값이
+   새 목록에도 있으면 유지한다(같은 날짜 안에서 검색어만 바꾼 경우 등). */
+function refreshSlotOptions(rows) {
+  const select = document.getElementById("diarySlot");
+  const current = select.value;
+  const slots = [...new Set(rows.map((r) => r.timeSlot).filter(Boolean))].sort(
+    (a, b) => Number(a) - Number(b)
+  );
+
+  select.innerHTML = `<option value="">전체</option>`;
+  slots.forEach((seq) => {
     const option = document.createElement("option");
-    option.value = key;
-    option.textContent = label;
+    option.value = seq;
+    option.textContent = `${seq}회차`;
     select.appendChild(option);
   });
-  select.addEventListener("change", loadDiaryList);
+
+  select.value = current === "" || slots.includes(current) ? current : "";
+}
+
+function filterRowsBySlot(rows) {
+  const slot = document.getElementById("diarySlot").value;
+  return slot ? rows.filter((r) => r.timeSlot === slot) : rows;
 }
 
 function initSearchControls() {
@@ -151,15 +164,15 @@ function collectDirtyItems() {
 
 async function loadDiaryList() {
   const params = new URLSearchParams({ date: document.getElementById("diaryDate").value || todayStr() });
-  const slot = document.getElementById("diarySlot").value;
   const keyword = document.getElementById("diaryStudentKeyword").value.trim();
-  if (slot) params.set("timeSlot", slot);
   if (keyword) params.set("keyword", keyword);
 
   try {
     const view = await getJson(`/admin/growth/diary/list?${params}`);
     attitudeCodeOptions = view.attitudeCodeOptions ?? [];
-    renderRows(view.rows ?? []);
+    allRows = view.rows ?? [];
+    refreshSlotOptions(allRows);
+    renderRows(filterRowsBySlot(allRows));
   } catch (e) {
     console.error("독서일지 조회 실패", e);
   }

@@ -109,6 +109,15 @@
 
   const numberOf = (value) => parseInt(String(value).replace(/\D/g, ""), 10) || 0;
 
+  /**
+   * 회차 사이 쉬는 시간(분).
+   *
+   * 자동 생성이 회차를 연달아 붙이면 앞 수업이 끝나는 순간 다음 수업이 시작돼 실제 운영과 맞지 않는다.
+   * 기존 1~4교시 체계도 50분 수업 + 10분 휴식이라 같은 값을 쓴다. 화면에 입력란이 없어 상수로 두되,
+   * 저장할 때 schedule.break_minutes에 함께 기록해 DB가 실제 운영과 어긋나지 않게 한다.
+   */
+  const BREAK_MINUTES = 10;
+
   /* ── 회차 표 ─────────────────────────────────────────────────────────── */
 
   // data-seq는 서버가 매긴 회차 번호다. 화면 순서와 분리해 두는 이유는 예외(회차 변경)에서
@@ -186,7 +195,7 @@
       const next = addMinutes(cursor, minutes);
       if (toMinutes(next) > toMinutes(close)) break;
       slots.push({ seq: slots.length + 1, startTime: cursor, endTime: next, capacity });
-      cursor = next;
+      cursor = addMinutes(next, BREAK_MINUTES);   // 다음 회차는 쉬는 시간만큼 밀린다
     }
     return slots;
   }
@@ -203,6 +212,7 @@
       return;
     }
     renderRounds(slots);
+    if (state.days[state.activeDow]) state.days[state.activeDow].breakMinutes = BREAK_MINUTES;
     markDirty();
   }
 

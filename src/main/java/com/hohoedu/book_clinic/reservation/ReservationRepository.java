@@ -6,24 +6,82 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import com.hohoedu.book_clinic.reservation._dto.ReservationReqDTO;
 import com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO;
 
-/** 클리닉 예약(erp_bookstore_clinic_reservation) 등록/삭제/조회 MyBatis 매퍼 인터페이스 (2026-07-23) */
+/**
+ * 예약(erp_bookstore_reservation / slot_instance) 매퍼 (2026-08-18).
+ * old erp_bookstore_clinic_reservation을 완전히 대체한다 — 정원 개념이 없던 old 스키마와 달리
+ * capacity/reserved_count를 다루므로 조건부 UPDATE 기반 동시성 제어가 이 매퍼의 핵심이다.
+ */
 @Mapper
 public interface ReservationRepository {
 
-    /** 같은 (studentId, date, timeSlot) 예약이 이미 있는지 — 중복 등록 방지 */
-    boolean existsReservation(@Param("studentId") String studentId, @Param("date") LocalDate date,
-                               @Param("timeSlot") String timeSlot);
+    /** 학생이 고를 수 있는 열린(OPEN) 슬롯 목록 — 예약 화면 기본 조회 */
+    List<ReservationRespDTO.SlotOptionDTO> findOpenSlots(@Param("centerCode") String centerCode,
+                                                      @Param("fromDate") LocalDate fromDate,
+                                                      @Param("toDate") LocalDate toDate,
+                                                      @Param("studentId") String studentId);
 
-    /** 신규 예약 등록 */
-    void insertReservation(@Param("studentId") String studentId, @Param("date") LocalDate date,
-                            @Param("timeSlot") String timeSlot);
+    /** 특정 요일·회차에 해당하는 날짜들의 슬롯 — 4주 일괄 미리보기용. OPEN이 아닌 슬롯도 포함한다 */
+    List<ReservationRespDTO.SlotOptionDTO> findSlotsByDates(@Param("centerCode") String centerCode,
+                                                         @Param("dates") List<LocalDate> dates,
+                                                         @Param("seq") Integer seq,
+                                                         @Param("studentId") String studentId);
 
-    /** 예약 삭제 */
-    void deleteReservation(@Param("reservationId") Integer reservationId);
+    /** id 목록으로 슬롯 조회 — 배치 확정 시 날짜 오름차순 잠금 순서를 정하기 위해 필요 */
+    List<ReservationRespDTO.SlotOptionDTO> findSlotsByIds(@Param("ids") List<Long> ids);
 
-    /** 특정 날짜의 예약 목록 (타임슬롯 오름차순, 학생명순) */
-    List<ReservationRespDTO.ReservationRowDTO> findByDate(@Param("date") LocalDate date);
+    /** 슬롯 1건 — 예약 실패 시 안내 문구("9월 23일 목요일 2회차는 마감되었습니다")를 만들 때 쓴다 */
+    ReservationRespDTO.SlotOptionDTO findSlotOptionById(@Param("slotInstanceId") Long slotInstanceId);
+
+    /**
+     * 같은 학생이 같은 날짜에 다른 회차를 이미 예약해뒀는지 — "하루 1회차만" 정책(2026-08-18) 판정용.
+     * slotInstanceId로 지금 시도 중인 슬롯 자체는 제외한다(같은 슬롯 재예약 시도는 이 규칙이 아니라
+     * 중복예약 유니크 인덱스가 걸러야 정확한 메시지가 나간다).
+     */
+    int countOtherReservedOnDate(@Param("studentId") String studentId,
+                                 @Param("serviceDate") LocalDate serviceDate,
+                                 @Param("slotInstanceId") Long slotInstanceId);
+
+    /**
+     * 조건부 증가 — "OPEN이고 정원 여유가 있으면"만 1 늘린다. 확인과 갱신을 한 문장으로 묶어
+     * DB 행 락으로 동시 요청을 한 명씩 처리하게 만드는 것이 동시성 제어의 핵심이다.
+     * 영향행수 0이면 마감(혹은 존재하지 않음)이라는 뜻이다.
+     */
+    int incrementReservedCount(@Param("slotInstanceId") Long slotInstanceId);
+
+    /** 취소 시 정원 반납. 0 밑으로 내려가지 않도록 방어 조건을 같이 둔다 */
+    int decrementReservedCount(@Param("slotInstanceId") Long slotInstanceId);
+
+    /** 예약 INSERT — command.reservationId에 생성키가 채워져 돌아온다 */
+    void insertReservation(ReservationReqDTO.InsertReservationDTO command);
+
+    /** 상태 전환 이력 — 예약 생성이면 fromStatus는 null */
+    void insertLog(@Param("reservationId") Long reservationId,
+                   @Param("fromStatus") String fromStatus,
+                   @Param("toStatus") String toStatus,
+                   @Param("changedBy") String changedBy,
+                   @Param("changedByRole") String changedByRole,
+                   @Param("reason") String reason);
+
+    /** 조건부 취소 — RESERVED 상태의 본인(대상 학생) 예약만 전환한다(이중취소·타인 예약 취소 방지) */
+    int cancelReservation(@Param("reservationId") Long reservationId,
+                          @Param("studentId") String studentId,
+                          @Param("reason") String reason);
+
+    /** 취소 전 정원 반납 대상 슬롯을 알아내기 위한 조회. 대상 학생 소유가 아니면 null */
+    Long findSlotInstanceIdByReservationId(@Param("reservationId") Long reservationId,
+                                           @Param("studentId") String studentId);
+
+    ReservationRespDTO.ReservationItemDTO findReservationById(@Param("reservationId") Long reservationId);
+
+    /** 학생 본인의 RESERVED 예약 목록 (기본: 오늘 이후) */
+    List<ReservationRespDTO.ReservationItemDTO> findMyReservations(@Param("studentId") String studentId,
+                                                                @Param("fromDate") LocalDate fromDate);
+
+    /** 대리 예약 화면(관리자) — 특정 센터·날짜의 예약 목록 */
+    List<ReservationRespDTO.AdminReservationRowDTO> findReservationsByDate(@Param("centerCode") String centerCode,
+                                                                       @Param("date") LocalDate date);
 
 }

@@ -10,7 +10,7 @@ import lombok.Data;
 public class DiaryRespDTO {
 
     /**
-     * 일지 목록 1행 — 루트는 예약(erp_bookstore_clinic_reservation)이고, 세션/일지는 있으면 붙는다.
+     * 일지 목록 1행 — 루트는 예약(erp_bookstore_reservation + slot_instance)이고, 세션/일지는 있으면 붙는다.
      * 시각·교시는 일지 값이 있으면 그쪽으로(직원 보정값 우선), 없으면 예약/세션 값으로 채워진다.
      */
     @Data

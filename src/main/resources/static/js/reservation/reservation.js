@@ -13,15 +13,6 @@ function getCsrfToken() {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
-// 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — monitor-live.js/diary.js의 TIME_SLOTS와
-// 값('1'~'4')·시간(KST) 모두 맞춘다(교시당 50분 수업 + 10분 휴식, 2026-08-07 확정).
-const TIME_SLOTS = [
-  { key: "1", label: "1교시(10:00~10:50)" },
-  { key: "2", label: "2교시(11:00~11:50)" },
-  { key: "3", label: "3교시(12:00~12:50)" },
-  { key: "4", label: "4교시(13:00~13:50)" },
-];
-
 let selectedStudent = null;
 
 /* 공통 요청 헬퍼 */
@@ -32,9 +23,9 @@ async function getJson(url) {
   return data.response;
 }
 
-async function postJson(url, body, method = "POST") {
+async function postJson(url, body) {
   const response = await fetch(url, {
-    method,
+    method: "POST",
     headers: { "Content-Type": "application/json", [CSRF_HEADER]: getCsrfToken() },
     body: JSON.stringify(body),
   });
@@ -46,6 +37,11 @@ async function postJson(url, body, method = "POST") {
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// 서버가 내려주는 "yyyy-MM-ddTHH:mm:ss" 문자열에서 "HH:mm"만 잘라 쓴다
+function formatTime(isoDateTime) {
+  return isoDateTime ? isoDateTime.slice(11, 16) : "";
 }
 
 function initDatePicker() {
@@ -61,6 +57,8 @@ function initDatePicker() {
   input.addEventListener("change", async () => {
     updateDateDisplay(input, display);
     await loadReservationList();
+    // 날짜가 바뀌면 이전 날짜 기준으로 골라둔 회차는 더 이상 유효하지 않다
+    if (selectedStudent) await loadSlotOptions();
   });
 }
 
@@ -73,15 +71,50 @@ function selectedDate() {
   return document.getElementById("reservationDate").value || todayStr();
 }
 
+/* ── 회차 선택 ──
+   old(TIME_SLOTS 고정 4개) 대신, 신규 예약 스키마는 센터마다 회차 수·시간이 달라 화면 로드
+   시점엔 무엇을 보여줄지 알 수 없다. 학생을 고르면 그 학생 센터의 그 날짜 회차를 서버에서
+   받아와 채운다(2026-08-18). */
 function initSlotPicker() {
   const select = document.getElementById("reservationSlot");
-  select.innerHTML = "";
-  TIME_SLOTS.forEach(({ key, label }) => {
-    const option = document.createElement("option");
-    option.value = key;
-    option.textContent = label;
-    select.appendChild(option);
-  });
+  select.innerHTML = `<option value="">학생을 먼저 선택해주세요</option>`;
+  select.disabled = true;
+}
+
+async function loadSlotOptions() {
+  const select = document.getElementById("reservationSlot");
+  select.innerHTML = `<option value="">불러오는 중…</option>`;
+  select.disabled = true;
+
+  try {
+    const date = selectedDate();
+    const slots = await getJson(
+      `/admin/monitor/reservation/slots?studentId=${encodeURIComponent(selectedStudent.studentId)}&fromDate=${date}&toDate=${date}`
+    );
+
+    select.innerHTML = "";
+    if (slots.length === 0) {
+      select.innerHTML = `<option value="">이 날짜에 열린 회차가 없습니다</option>`;
+      return;
+    }
+
+    slots.forEach((slot) => {
+      const option = document.createElement("option");
+      option.value = slot.slotInstanceId;
+      const full = slot.reservedCount >= slot.capacity;
+      const already = slot.reservedByMe;
+      option.textContent =
+        `${slot.seq}회차 (${formatTime(slot.startsAt)}~${formatTime(slot.endsAt)})` +
+        ` · ${slot.reservedCount}/${slot.capacity}` +
+        (already ? " · 이미 예약됨" : full ? " · 마감" : "");
+      option.disabled = full || already;
+      select.appendChild(option);
+    });
+    select.disabled = false;
+  } catch (e) {
+    select.innerHTML = `<option value="">회차를 불러오지 못했습니다</option>`;
+    console.error("회차 조회 실패", e);
+  }
 }
 
 /* ── 학생 검색 ── */
@@ -127,26 +160,32 @@ function renderSearchResults(students) {
   });
 }
 
-function selectStudent(student) {
+async function selectStudent(student) {
   selectedStudent = student;
   document.getElementById("selectedStudentName").textContent = `${student.studentName} (${student.appId ?? ""})`;
   document.getElementById("selectedStudentBox").hidden = false;
+  await loadSlotOptions();
 }
 
 async function registerReservation() {
   if (!selectedStudent) return;
 
-  const timeSlot = document.getElementById("reservationSlot").value;
+  const slotInstanceId = document.getElementById("reservationSlot").value;
+  if (!slotInstanceId) {
+    alert("예약할 회차를 선택해주세요.");
+    return;
+  }
+
   try {
     await postJson("/admin/monitor/reservation/register", {
       studentId: selectedStudent.studentId,
-      reservationDate: selectedDate(),
-      timeSlot,
+      slotInstanceId: Number(slotInstanceId),
     });
     selectedStudent = null;
     document.getElementById("selectedStudentBox").hidden = true;
     document.getElementById("studentKeyword").value = "";
     document.getElementById("studentSearchResults").innerHTML = "";
+    initSlotPicker();
     await loadReservationList();
   } catch (e) {
     alert(e.message);
@@ -164,10 +203,6 @@ async function loadReservationList() {
   }
 }
 
-function slotLabel(key) {
-  return TIME_SLOTS.find((s) => s.key === key)?.label ?? key;
-}
-
 function renderReservationList(list) {
   const body = document.getElementById("reservationListBody");
   body.innerHTML = "";
@@ -180,22 +215,22 @@ function renderReservationList(list) {
   list.forEach((row) => {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${slotLabel(row.timeSlot)}</td>
+      <td>${row.seq}회차 (${formatTime(row.startsAt)}~${formatTime(row.endsAt)})</td>
       <td>${row.studentName ?? ""}</td>
       <td>${row.school ?? "-"}</td>
       <td>${row.gradeKey ?? "-"}</td>
-      <td><button type="button" class="btn outline small btn-delete">삭제</button></td>
+      <td><button type="button" class="btn outline small btn-delete">취소</button></td>
     `;
-    tr.querySelector(".btn-delete").addEventListener("click", () => deleteReservation(row.reservationId));
+    tr.querySelector(".btn-delete").addEventListener("click", () => cancelReservation(row.reservationId, row.studentId));
     body.appendChild(tr);
   });
 }
 
-async function deleteReservation(reservationId) {
-  if (!confirm("이 예약을 삭제할까요?")) return;
+async function cancelReservation(reservationId, studentId) {
+  if (!confirm("이 예약을 취소할까요?")) return;
 
   try {
-    await postJson("/admin/monitor/reservation/delete", { reservationId }, "DELETE");
+    await postJson("/admin/monitor/reservation/cancel", { reservationId, studentId });
     await loadReservationList();
   } catch (e) {
     alert(e.message);

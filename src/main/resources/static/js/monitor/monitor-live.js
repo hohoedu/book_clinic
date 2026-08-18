@@ -49,17 +49,6 @@ function getCsrfToken() {
 
 const HELP_NEEDED_CODES = [{ code: "ALONE_HARD", label: "혼자 읽기 어려워요!" }];
 
-// 교시 마스터 데이터가 아직 없어 고정 목록으로 둔다 — 예약(erp_bookstore_clinic_reservation)의
-// time_slot 값('1'~'4')과 그대로 매칭한다. 시간(KST)은 reservation.js/diary.js와 반드시 맞춘다
-// (교시당 50분 수업 + 10분 휴식, 2026-08-07 확정).
-const TIME_SLOTS = [
-  { key: "ALL", label: "전체" },
-  { key: "1", label: "1교시(10:00~10:50)" },
-  { key: "2", label: "2교시(11:00~11:50)" },
-  { key: "3", label: "3교시(12:00~12:50)" },
-  { key: "4", label: "4교시(13:00~13:50)" },
-];
-
 const FILTERS = [
   { key: "ALL", label: "전체", countKey: "total", cls: "chip-all" },
   { key: "NOT_ENTERED", label: "미입실", countKey: "notEntered", cls: "chip-not-entered" },
@@ -145,17 +134,33 @@ function selectedDate() {
 
 function initSlotPicker() {
   const select = document.getElementById("monitorSlot");
-  select.innerHTML = "";
-  TIME_SLOTS.forEach(({ key, label }) => {
-    const option = document.createElement("option");
-    option.value = key;
-    option.textContent = label;
-    select.appendChild(option);
-  });
+  select.innerHTML = `<option value="ALL">전체</option>`;
   select.addEventListener("change", () => {
     activeSlot = select.value;
     render();
   });
+}
+
+/* 회차(교시) 마스터 데이터가 없다 — 센터마다 회차 수·시간이 달라(2026-08-18 신규 예약 스키마)
+   고정 목록을 둘 수 없으므로, 그날 실제로 불러온 카드들의 timeSlot(회차 번호) 값에서
+   드롭다운을 그때그때 만든다. 선택돼 있던 값이 새 목록에도 있으면 그대로 유지한다. */
+function refreshSlotOptions() {
+  const select = document.getElementById("monitorSlot");
+  const current = select.value || "ALL";
+  const slots = [...new Set(cards.map((c) => c.timeSlot).filter(Boolean))].sort(
+    (a, b) => Number(a) - Number(b)
+  );
+
+  select.innerHTML = `<option value="ALL">전체</option>`;
+  slots.forEach((seq) => {
+    const option = document.createElement("option");
+    option.value = seq;
+    option.textContent = `${seq}회차`;
+    select.appendChild(option);
+  });
+
+  select.value = current === "ALL" || slots.includes(current) ? current : "ALL";
+  activeSlot = select.value;
 }
 
 /* 일지 헤더(diaryKey)는 채점 제출만 해도 시스템이 자동 생성한다(recordDiaryDetail→ensureDiary) —
@@ -177,6 +182,7 @@ async function loadLiveView() {
     const now = Date.now();
     cards.forEach((c) => (c._syncedAt = now)); // 경과시간 로컬 카운트업 기준점
     initAttitudeCheckboxesOnce(view.attitudeCodeOptions);
+    refreshSlotOptions();
     render();
   } catch (e) {
     console.error("실시간 모니터링 초기 조회 실패", e);
@@ -195,6 +201,7 @@ function applyFirestoreCard(doc) {
   const idx = cards.findIndex((c) => c.studentId === doc.studentId && c.timeSlot === doc.timeSlot);
   if (idx === -1) cards.push(doc);
   else cards[idx] = doc;
+  refreshSlotOptions();
   render();
 }
 

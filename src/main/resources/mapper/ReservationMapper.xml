@@ -4,34 +4,190 @@
 
 <mapper namespace="com.hohoedu.book_clinic.reservation.ReservationRepository">
 
-    <select id="existsReservation" resultType="boolean">
-        SELECT CASE WHEN EXISTS (
-            SELECT 1 FROM erp_bookstore_clinic_reservation
-            WHERE student_id = #{studentId} AND reservation_date = #{date} AND time_slot = #{timeSlot}
-        ) THEN 1 ELSE 0 END
+    <select id="findOpenSlots" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$SlotOptionDTO">
+        SELECT
+            si.slot_instance_id AS slotInstanceId,
+            si.service_date     AS serviceDate,
+            si.seq               AS seq,
+            si.starts_at         AS startsAt,
+            si.ends_at           AS endsAt,
+            si.capacity          AS capacity,
+            si.reserved_count    AS reservedCount,
+            si.status            AS status,
+            CAST(CASE WHEN r.reservation_id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS reservedByMe
+        FROM erp_bookstore_slot_instance si
+        LEFT JOIN erp_bookstore_reservation r
+            ON r.slot_instance_id = si.slot_instance_id
+           AND r.student_id = #{studentId}
+           AND r.status = 'RESERVED'
+        WHERE si.center_code = #{centerCode}
+          AND si.service_date BETWEEN #{fromDate} AND #{toDate}
+          AND si.status = 'OPEN'
+        ORDER BY si.service_date ASC, si.seq ASC
     </select>
 
-    <insert id="insertReservation">
-        INSERT INTO erp_bookstore_clinic_reservation (student_id, reservation_date, time_slot)
-        VALUES (#{studentId}, #{date}, #{timeSlot})
+    <!-- 배치 미리보기용 — OPEN 여부와 무관하게 대상 날짜의 슬롯을 전부 가져와야 CLOSED/FULL을 구분해 보여줄 수 있다 -->
+    <select id="findSlotsByDates" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$SlotOptionDTO">
+        SELECT
+            si.slot_instance_id AS slotInstanceId,
+            si.service_date     AS serviceDate,
+            si.seq               AS seq,
+            si.starts_at         AS startsAt,
+            si.ends_at           AS endsAt,
+            si.capacity          AS capacity,
+            si.reserved_count    AS reservedCount,
+            si.status            AS status,
+            CAST(CASE WHEN r.reservation_id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS reservedByMe
+        FROM erp_bookstore_slot_instance si
+        LEFT JOIN erp_bookstore_reservation r
+            ON r.slot_instance_id = si.slot_instance_id
+           AND r.student_id = #{studentId}
+           AND r.status = 'RESERVED'
+        WHERE si.center_code = #{centerCode}
+          AND si.seq = #{seq}
+          AND si.service_date IN
+          <foreach collection="dates" item="d" open="(" close=")" separator=",">#{d}</foreach>
+    </select>
+
+    <select id="findSlotsByIds" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$SlotOptionDTO">
+        SELECT
+            slot_instance_id AS slotInstanceId,
+            service_date     AS serviceDate,
+            seq               AS seq,
+            starts_at         AS startsAt,
+            ends_at           AS endsAt,
+            capacity          AS capacity,
+            reserved_count    AS reservedCount,
+            status            AS status
+        FROM erp_bookstore_slot_instance
+        WHERE slot_instance_id IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </select>
+
+    <select id="findSlotOptionById" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$SlotOptionDTO">
+        SELECT
+            slot_instance_id AS slotInstanceId,
+            service_date     AS serviceDate,
+            seq               AS seq,
+            starts_at         AS startsAt,
+            ends_at           AS endsAt,
+            capacity          AS capacity,
+            reserved_count    AS reservedCount,
+            status            AS status
+        FROM erp_bookstore_slot_instance
+        WHERE slot_instance_id = #{slotInstanceId}
+    </select>
+
+    <select id="countOtherReservedOnDate" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.student_id = #{studentId}
+          AND si.service_date = #{serviceDate}
+          AND r.status = 'RESERVED'
+          AND r.slot_instance_id &lt;&gt; #{slotInstanceId}
+    </select>
+
+    <!--
+      정원 동시성 제어의 핵심. "정원 여유 확인"과 "1 증가"를 한 문장으로 묶어, 같은 슬롯에
+      대한 동시 요청이 DB 행 락에 의해 한 명씩 순서대로 처리되게 만든다. 영향행수가 0이면
+      그 시점의 실제 reserved_count가 이미 capacity에 도달했다는 뜻이다.
+    -->
+    <update id="incrementReservedCount">
+        UPDATE erp_bookstore_slot_instance
+        SET reserved_count = reserved_count + 1
+        WHERE slot_instance_id = #{slotInstanceId}
+          AND status = 'OPEN'
+          AND reserved_count &lt; capacity
+    </update>
+
+    <update id="decrementReservedCount">
+        UPDATE erp_bookstore_slot_instance
+        SET reserved_count = reserved_count - 1
+        WHERE slot_instance_id = #{slotInstanceId}
+          AND reserved_count &gt; 0
+    </update>
+
+    <insert id="insertReservation" useGeneratedKeys="true" keyProperty="reservationId" keyColumn="reservation_id">
+        INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, status)
+        VALUES (#{slotInstanceId}, #{studentId}, 'RESERVED')
     </insert>
 
-    <delete id="deleteReservation">
-        DELETE FROM erp_bookstore_clinic_reservation WHERE reservation_id = #{reservationId}
-    </delete>
+    <insert id="insertLog">
+        INSERT INTO erp_bookstore_reservation_log
+            (reservation_id, from_status, to_status, changed_by, changed_by_role, reason)
+        VALUES
+            (#{reservationId}, #{fromStatus}, #{toStatus}, #{changedBy}, #{changedByRole}, #{reason})
+    </insert>
 
-    <select id="findByDate" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationRowDTO">
+    <update id="cancelReservation">
+        UPDATE erp_bookstore_reservation
+        SET status = 'CANCELED',
+            canceled_at = DATEADD(HOUR, 9, GETUTCDATE()),
+            cancel_reason = #{reason}
+        WHERE reservation_id = #{reservationId}
+          AND student_id = #{studentId}
+          AND status = 'RESERVED'
+    </update>
+
+    <!-- studentId까지 같이 조건에 넣어, 존재하지 않는 예약과 본인 소유가 아닌 예약을 같은 결과(null)로 취급한다 -->
+    <select id="findSlotInstanceIdByReservationId" resultType="long">
+        SELECT slot_instance_id
+        FROM erp_bookstore_reservation
+        WHERE reservation_id = #{reservationId}
+          AND student_id = #{studentId}
+    </select>
+
+    <select id="findReservationById" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationItemDTO">
+        SELECT
+            r.reservation_id   AS reservationId,
+            r.slot_instance_id AS slotInstanceId,
+            si.service_date    AS serviceDate,
+            si.seq              AS seq,
+            si.starts_at        AS startsAt,
+            si.ends_at          AS endsAt,
+            r.status            AS status,
+            r.reserved_at       AS reservedAt
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.reservation_id = #{reservationId}
+    </select>
+
+    <select id="findMyReservations" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationItemDTO">
+        SELECT
+            r.reservation_id   AS reservationId,
+            r.slot_instance_id AS slotInstanceId,
+            si.service_date    AS serviceDate,
+            si.seq              AS seq,
+            si.starts_at        AS startsAt,
+            si.ends_at          AS endsAt,
+            r.status            AS status,
+            r.reserved_at       AS reservedAt
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.student_id = #{studentId}
+          AND r.status = 'RESERVED'
+          <if test="fromDate != null">AND si.service_date &gt;= #{fromDate}</if>
+        ORDER BY si.service_date ASC, si.seq ASC
+    </select>
+
+    <select id="findReservationsByDate" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AdminReservationRowDTO">
         SELECT
             r.reservation_id AS reservationId,
             r.student_id     AS studentId,
             st.student_name  AS studentName,
             st.school        AS school,
             st.grade_key     AS gradeKey,
-            r.time_slot      AS timeSlot
-        FROM erp_bookstore_clinic_reservation r
+            si.seq            AS seq,
+            si.starts_at      AS startsAt,
+            si.ends_at        AS endsAt
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         JOIN erp_student st ON st.student_id = r.student_id
-        WHERE r.reservation_date = #{date}
-        ORDER BY r.time_slot ASC, st.student_name ASC
+        WHERE si.service_date = #{date}
+          AND si.center_code = #{centerCode}
+          AND r.status = 'RESERVED'
+        ORDER BY si.seq ASC, st.student_name ASC
     </select>
 
 </mapper>

@@ -65,7 +65,7 @@
             st.center_code     AS centerCode,
             cs.status          AS sessionStatus,
             cs.session_date    AS sessionDate,
-            r.time_slot        AS timeSlot,
+            CAST(r.seq AS VARCHAR(2)) AS timeSlot,
             cs.entered_at      AS enteredAt,
             cs.exited_at       AS exitedAt,
             cs.quiz_started_at AS quizStartedAt,
@@ -105,8 +105,15 @@
             dia.memo         AS memo
         FROM erp_bookstore_clinic_session cs
         JOIN erp_student st ON st.student_id = cs.student_id
-        LEFT JOIN erp_bookstore_clinic_reservation r
-            ON r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+        OUTER APPLY (
+            -- 한 학생이 같은 날 여러 회차를 예약할 수 있는지는 아직 미정(2026-08-18) — 여러 건이면
+            -- 회차 오름차순 첫 건만 표시한다(그 학생이 그날 처음 올 시간대라는 뜻).
+            SELECT TOP 1 si.seq
+            FROM erp_bookstore_reservation r
+            JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+            WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
+            ORDER BY si.seq ASC
+        ) r
         OUTER APPLY (
             SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, total_count, status
             FROM erp_bookstore_recommend_log
@@ -163,10 +170,12 @@
     </select>
 
     <!--
-      예약 기준 카드 목록 — cardColumns와 달리 erp_bookstore_clinic_reservation을 루트로 두고,
-      세션은 OUTER APPLY로 그 학생·그 날짜의 최신 세션 1건만 붙인다(재입실로 같은 날 세션이
-      여러 건 생겨도 최신 1건만 반영). 세션이 없으면(아직 미입실) 세션/추천/독서일지 관련
+      예약 기준 카드 목록 — cardColumns와 달리 erp_bookstore_reservation(+ slot_instance)을
+      루트로 두고, 세션은 OUTER APPLY로 그 학생·그 날짜의 최신 세션 1건만 붙인다(재입실로 같은 날
+      세션이 여러 건 생겨도 최신 1건만 반영). 세션이 없으면(아직 미입실) 세션/추천/독서일지 관련
       컬럼이 전부 NULL로 내려오고, MonitorService가 sessionId==null을 NOT_ENTERED로 해석한다.
+      2026-08-18: old erp_bookstore_clinic_reservation(고정 4교시)에서 이관 — 회차(seq)가
+      센터마다 가변이라 timeSlot은 이제 "n교시" 대신 회차 번호 문자열이다.
     -->
     <sql id="reservationCardColumns">
         SELECT
@@ -175,8 +184,8 @@
             st.student_name    AS studentName,
             st.center_code     AS centerCode,
             cs.status          AS sessionStatus,
-            r.reservation_date AS sessionDate,
-            r.time_slot        AS timeSlot,
+            si.service_date    AS sessionDate,
+            CAST(si.seq AS VARCHAR(2)) AS timeSlot,
             cs.entered_at      AS enteredAt,
             cs.exited_at       AS exitedAt,
             cs.quiz_started_at AS quizStartedAt,
@@ -211,12 +220,13 @@
             -- 한 번 켜면 다음 수업에도 계속 켜진 채로 보여야 하는 값이다(2026-07-30)
             st.help_needed   AS helpNeeded,
             dia.memo         AS memo
-        FROM erp_bookstore_clinic_reservation r
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         JOIN erp_student st ON st.student_id = r.student_id
         OUTER APPLY (
             SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at, result_viewed_at
             FROM erp_bookstore_clinic_session
-            WHERE student_id = r.student_id AND session_date = r.reservation_date
+            WHERE student_id = r.student_id AND session_date = si.service_date
             ORDER BY session_id DESC
         ) cs
         OUTER APPLY (
@@ -270,9 +280,10 @@
 
     <select id="findReservationCards" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
         <include refid="reservationCardColumns" />
-        WHERE r.reservation_date = #{date}
-          AND st.center_code = #{centerCode}
-        ORDER BY r.time_slot ASC, st.student_name ASC
+        WHERE si.service_date = #{date}
+          AND si.center_code = #{centerCode}
+          AND r.status = 'RESERVED'
+        ORDER BY si.seq ASC, st.student_name ASC
     </select>
 
     <select id="findActiveAttitudeCodes" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$AttitudeCodeDTO">
@@ -436,9 +447,10 @@
                 cs.session_date,
                 cs.entered_at,
                 cs.exited_at,
-                (SELECT TOP 1 r.time_slot
-                 FROM erp_bookstore_clinic_reservation r
-                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
+                 FROM erp_bookstore_reservation r
+                 JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
             WHERE cs.session_id = #{sessionId}
@@ -497,9 +509,10 @@
             SELECT
                 cs.session_id, cs.student_id, cs.session_date, cs.entered_at, cs.exited_at,
                 st.help_needed,
-                (SELECT TOP 1 r.time_slot
-                 FROM erp_bookstore_clinic_reservation r
-                 WHERE r.student_id = cs.student_id AND r.reservation_date = cs.session_date
+                (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
+                 FROM erp_bookstore_reservation r
+                 JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
             JOIN erp_student st ON st.student_id = cs.student_id
