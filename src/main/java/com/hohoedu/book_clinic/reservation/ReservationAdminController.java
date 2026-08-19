@@ -47,33 +47,55 @@ public class ReservationAdminController {
                 reservationService.findReservationsByDate(centerCode, LocalDate.parse(date))));
     }
 
-    /** 예약 가능한 슬롯 목록(대리 등록 대상 선택용) */
+    /** 특정 날짜의 회차별 정원 요약(회차 카드 표시용) */
+    @GetMapping("/summary")
+    public ResponseEntity<?> summary(@RequestParam("date") String date,
+                                     @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = requireCenterCode(userDetails);
+        return ResponseEntity.ok(ApiUtils.success(
+                reservationService.findSlotSummary(centerCode, LocalDate.parse(date))));
+    }
+
+    /**
+     * 예약 가능한 슬롯 목록(대리 등록 대상 선택용). studentId는 아직 학생을 고르지 않은
+     * "등록" 모드에선 빈 값으로 넘어온다 — 그래서 센터는 studentId가 아니라 로그인한 직원
+     * 기준으로 정한다(학생 앱용 findOpenSlots를 그대로 썼다가 빈 studentId에 401이 났던 지점).
+     */
     @GetMapping("/slots")
-    public ResponseEntity<?> slots(@RequestParam("studentId") String studentId,
+    public ResponseEntity<?> slots(@RequestParam(value = "studentId", required = false) String studentId,
                                    @RequestParam(value = "fromDate", required = false) String fromDate,
-                                   @RequestParam(value = "toDate", required = false) String toDate) {
+                                   @RequestParam(value = "toDate", required = false) String toDate,
+                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = requireCenterCode(userDetails);
         LocalDate from = (fromDate == null || fromDate.isBlank()) ? null : LocalDate.parse(fromDate);
         LocalDate to = (toDate == null || toDate.isBlank()) ? null : LocalDate.parse(toDate);
-        return ResponseEntity.ok(ApiUtils.success(reservationService.findOpenSlots(studentId, from, to)));
+        return ResponseEntity.ok(ApiUtils.success(reservationService.findOpenSlotsByCenter(centerCode, from, to, studentId)));
     }
 
-    /** 이름/appId로 학생 검색 */
+    /** 이름/appId로 학생 검색 — 로그인한 직원의 센터 소속 학생만 */
     @GetMapping("/students")
-    public ResponseEntity<?> searchStudents(@RequestParam("keyword") String keyword) {
-        return ResponseEntity.ok(ApiUtils.success(reservationService.searchStudents(keyword)));
+    public ResponseEntity<?> searchStudents(@RequestParam(value = "keyword", required = false) String keyword,
+                                            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = requireCenterCode(userDetails);
+        return ResponseEntity.ok(ApiUtils.success(
+                reservationService.searchStudents(centerCode, keyword == null ? "" : keyword)));
     }
 
-    /** 예약 등록(대리) */
+    /** 예약 등록(대리) — changed_by_role을 ADMIN으로 남겨야 예약 현황 화면에 "센터 예약"으로 뜬다 */
     @PostMapping("/register")
-    public ResponseEntity<?> register(@RequestBody ReservationReqDTO.AdminReserveReqDTO reqDTO) {
+    public ResponseEntity<?> register(@RequestBody ReservationReqDTO.AdminReserveReqDTO reqDTO,
+                                      @AuthenticationPrincipal CustomUserDetails userDetails) {
+        requireCenterCode(userDetails);
         return ResponseEntity.ok(ApiUtils.success(
-                reservationService.reserve(reqDTO.getStudentId(), reqDTO.getSlotInstanceId())));
+                reservationService.reserveByAdmin(reqDTO.getStudentId(), reqDTO.getSlotInstanceId(), userDetails.getLoginUser().getUserId())));
     }
 
     /** 예약 취소(대리) */
     @PostMapping("/cancel")
-    public ResponseEntity<?> cancel(@RequestBody ReservationReqDTO.AdminCancelReqDTO reqDTO) {
-        reservationService.cancel(reqDTO.getStudentId(), reqDTO.getReservationId(), reqDTO.getReason());
+    public ResponseEntity<?> cancel(@RequestBody ReservationReqDTO.AdminCancelReqDTO reqDTO,
+                                    @AuthenticationPrincipal CustomUserDetails userDetails) {
+        requireCenterCode(userDetails);
+        reservationService.cancelByAdmin(reqDTO.getStudentId(), reqDTO.getReservationId(), reqDTO.getReason(), userDetails.getLoginUser().getUserId());
         return ResponseEntity.ok(ApiUtils.success("취소되었습니다."));
     }
 

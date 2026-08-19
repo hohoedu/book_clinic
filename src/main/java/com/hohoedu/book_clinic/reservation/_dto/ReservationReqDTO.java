@@ -50,6 +50,8 @@ public class ReservationReqDTO {
     public static class InsertReservationDTO {
         private Long slotInstanceId;
         private String studentId;
+        /** STUDENT/PARENT/ADMIN/SYSTEM — 예약 현황 화면의 "직접 예약"/"센터 예약" 표시에 그대로 쓰인다 */
+        private String channel;
         private Long reservationId;
     }
 

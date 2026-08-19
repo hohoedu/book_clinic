@@ -53,7 +53,11 @@ public class ReservationRespDTO {
         private LocalDateTime reservedAt;
     }
 
-    /** 대리 예약 화면(관리자)의 날짜별 목록 1행 */
+    /**
+     * 대리 예약 화면(관리자)의 날짜별 목록 1행 (2026-08-19, 전체 필드 확장).
+     * status: RESERVED/CANCELED/ATTENDED/NOSHOW. channel: 예약 생성 로그의 changed_by_role
+     * (STUDENT/PARENT → 직접 예약, ADMIN → 센터 예약)을 그대로 내려주고 화면에서 라벨링한다.
+     */
     @Data
     public static class AdminReservationRowDTO {
         private Long reservationId;
@@ -61,9 +65,14 @@ public class ReservationRespDTO {
         private String studentName;
         private String school;
         private String gradeKey;
+        private String contact;
         private Integer seq;
         private LocalDateTime startsAt;
         private LocalDateTime endsAt;
+        private String status;
+        private String channel;
+        private String reason;
+        private Integer monthlyAttendCount;
     }
 
     /** 학생 검색 결과 1건 — 대리 예약 화면 좌측 학생 검색용 */
@@ -74,6 +83,7 @@ public class ReservationRespDTO {
         private String school;
         private String gradeKey;
         private String appId;
+        private String contact;
     }
 
 }

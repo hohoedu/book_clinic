@@ -321,62 +321,57 @@ INSERT INTO erp_student (center_code, grade_key, status_key, school, student_id,
 ('PUS002', '05', 'ACTIVE', N'남천 초등학교', 'PUS002T16', N'테스트생16', '8016', 0, 1, 1);
 
 -- ────────────────────────────────────────────────────────
--- 클리닉 예약 테스트 데이터 (2026-08-18, erp_bookstore_reservation/slot_instance로 이관):
--- 센터별 16명을 4개 회차(seq 1~4)에 4명씩 오늘자로 예약. 신규 스키마는 슬롯(정원을 가진 대상)이
--- 먼저 있어야 예약을 붙일 수 있어, 운영 스케줄 설정 여부와 무관하게 테스트용 슬롯을 오늘 날짜에
--- 직접 만들어둔다. 매 재기동마다 실행되므로 같은 날 두 번 돌아도 안전하도록 존재 여부를
--- 먼저 확인한다(슬롯: (센터,날짜,회차) 유니크, 예약: (슬롯,학생) 필터드 유니크 인덱스).
+-- 클리닉 예약 테스트 데이터 (2026-08-18, erp_bookstore_reservation/slot_instance로 이관)
+-- — 2026-08-19 주석 처리. 매 재기동마다 오늘자 더미 슬롯/예약을 새로 찍어서 예약 현황
+-- 화면 실데이터 확인을 방해해 껐다. 운영 스케줄 화면에서 요일 규칙을 등록하면
+-- ScheduleMaterializer가 실제 슬롯을 만들어주므로 이 더미는 더 이상 필요 없다.
 -- ────────────────────────────────────────────────────────
 
--- 테스트용 슬롯 4개(seq 1~4, 정원 4명, 13시부터 1시간 단위) — 실제 운영 스케줄(13시 개원)과
--- 시간대를 맞춘다. 오늘 날짜에 없으면 생성
-INSERT INTO erp_bookstore_slot_instance
-    (center_code, service_date, seq, starts_at, ends_at, capacity, status, reserved_count, source_type)
-SELECT c.center_code,
-       CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE),
-       s.seq,
-       DATEADD(HOUR, 12 + s.seq, CAST(CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE) AS DATETIME2)),
-       DATEADD(HOUR, 13 + s.seq, CAST(CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE) AS DATETIME2)),
-       4, 'OPEN', 0, 'TEMPLATE'
-FROM (VALUES ('DAE001'), ('PUS002')) AS c(center_code)
-CROSS JOIN (VALUES (1), (2), (3), (4)) AS s(seq)
-WHERE NOT EXISTS (
-    SELECT 1 FROM erp_bookstore_slot_instance si
-    WHERE si.center_code = c.center_code
-      AND si.service_date = CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
-      AND si.seq = s.seq
-);
-
--- 학생 16명 x 2센터를 위 슬롯에 4명씩 예약 — 이미 예약돼 있으면 건너뛴다
-INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, status)
-SELECT si.slot_instance_id, st.student_id, 'RESERVED'
-FROM erp_student st
-JOIN erp_bookstore_slot_instance si
-    ON si.center_code = st.center_code
-   AND si.service_date = CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
-   AND si.seq = CASE
-        WHEN RIGHT(st.student_id, 2) BETWEEN '01' AND '04' THEN 1
-        WHEN RIGHT(st.student_id, 2) BETWEEN '05' AND '08' THEN 2
-        WHEN RIGHT(st.student_id, 2) BETWEEN '09' AND '12' THEN 3
-        ELSE 4
-    END
-WHERE (st.student_id LIKE 'DAE001T%' OR st.student_id LIKE 'PUS002T%')
-  AND NOT EXISTS (
-      SELECT 1 FROM erp_bookstore_reservation r
-      WHERE r.slot_instance_id = si.slot_instance_id
-        AND r.student_id = st.student_id
-        AND r.status = 'RESERVED'
-  );
-
--- 위에서 만든 예약 수만큼 슬롯의 reserved_count를 맞춘다(INSERT는 카운터를 건드리지 않는다)
-UPDATE si
-SET reserved_count = (
-    SELECT COUNT(*) FROM erp_bookstore_reservation r
-    WHERE r.slot_instance_id = si.slot_instance_id AND r.status = 'RESERVED'
-)
-FROM erp_bookstore_slot_instance si
-WHERE si.center_code IN ('DAE001', 'PUS002')
-  AND si.service_date = CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE);
+-- INSERT INTO erp_bookstore_slot_instance
+--     (center_code, service_date, seq, starts_at, ends_at, capacity, status, reserved_count, source_type)
+-- SELECT c.center_code,
+--        CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE),
+--        s.seq,
+--        DATEADD(HOUR, 12 + s.seq, CAST(CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE) AS DATETIME2)),
+--        DATEADD(HOUR, 13 + s.seq, CAST(CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE) AS DATETIME2)),
+--        4, 'OPEN', 0, 'TEMPLATE'
+-- FROM (VALUES ('DAE001'), ('PUS002')) AS c(center_code)
+-- CROSS JOIN (VALUES (1), (2), (3), (4)) AS s(seq)
+-- WHERE NOT EXISTS (
+--     SELECT 1 FROM erp_bookstore_slot_instance si
+--     WHERE si.center_code = c.center_code
+--       AND si.service_date = CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+--       AND si.seq = s.seq
+-- );
+--
+-- INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, status)
+-- SELECT si.slot_instance_id, st.student_id, 'RESERVED'
+-- FROM erp_student st
+-- JOIN erp_bookstore_slot_instance si
+--     ON si.center_code = st.center_code
+--    AND si.service_date = CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+--    AND si.seq = CASE
+--         WHEN RIGHT(st.student_id, 2) BETWEEN '01' AND '04' THEN 1
+--         WHEN RIGHT(st.student_id, 2) BETWEEN '05' AND '08' THEN 2
+--         WHEN RIGHT(st.student_id, 2) BETWEEN '09' AND '12' THEN 3
+--         ELSE 4
+--     END
+-- WHERE (st.student_id LIKE 'DAE001T%' OR st.student_id LIKE 'PUS002T%')
+--   AND NOT EXISTS (
+--       SELECT 1 FROM erp_bookstore_reservation r
+--       WHERE r.slot_instance_id = si.slot_instance_id
+--         AND r.student_id = st.student_id
+--         AND r.status = 'RESERVED'
+--   );
+--
+-- UPDATE si
+-- SET reserved_count = (
+--     SELECT COUNT(*) FROM erp_bookstore_reservation r
+--     WHERE r.slot_instance_id = si.slot_instance_id AND r.status = 'RESERVED'
+-- )
+-- FROM erp_bookstore_slot_instance si
+-- WHERE si.center_code IN ('DAE001', 'PUS002')
+--   AND si.service_date = CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE);
 
 
 

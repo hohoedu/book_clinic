@@ -55,15 +55,26 @@ public class ReservationService {
 
     // ── 조회 ─────────────────────────────────────────────────────────────
 
-    /** 예약 가능한 열린 슬롯 목록. 기간 미지정 시 오늘부터 4주(28일) */
+    /** 예약 가능한 열린 슬롯 목록(학생 앱). 기간 미지정 시 오늘부터 4주(28일) */
     public List<ReservationRespDTO.SlotOptionDTO> findOpenSlots(String studentId, LocalDate fromDate, LocalDate toDate) {
         Student student = requireStudent(studentId);
+        return findOpenSlotsByCenter(student.getCenterCode(), fromDate, toDate, studentId);
+    }
+
+    /**
+     * 예약 가능한 열린 슬롯 목록(센터 직원 대리 예약 화면 전용). 등록 패널은 학생을 고르기 전에도
+     * 회차 목록부터 보여줘야 해서, studentId로 학생을 조회해 센터를 알아내는 학생 앱용 경로를
+     * 그대로 쓸 수 없다 — studentId가 아직 빈 값일 수 있기 때문이다(위 findOpenSlots가 빈 값이면
+     * "로그인이 필요합니다"를 던져 오작동했던 지점). 대신 로그인한 직원의 센터를 그대로 쓴다.
+     * studentId는 비어 있어도 되며, 값이 있으면 그 학생이 이미 예약한 슬롯 표시(reservedByMe)에만 쓰인다.
+     */
+    public List<ReservationRespDTO.SlotOptionDTO> findOpenSlotsByCenter(String centerCode, LocalDate fromDate, LocalDate toDate, String studentId) {
         LocalDate from = fromDate != null ? fromDate : KstClock.today();
         LocalDate to = toDate != null ? toDate : from.plusDays(BATCH_WEEKS * 7 - 1);
         if (to.isBefore(from)) {
             throw new Exception400("조회 기간이 올바르지 않습니다.");
         }
-        return repository.findOpenSlots(student.getCenterCode(), from, to, studentId);
+        return repository.findOpenSlots(centerCode, from, to, studentId == null ? "" : studentId);
     }
 
     public List<ReservationRespDTO.ReservationItemDTO> findMyReservations(String studentId) {
@@ -76,9 +87,14 @@ public class ReservationService {
         return repository.findReservationsByDate(centerCode, date);
     }
 
-    /** 이름/appId로 학생 검색 — 대리 예약 화면의 학생 선택용 */
-    public List<ReservationRespDTO.StudentSearchDTO> searchStudents(String keyword) {
-        return studentRepository.searchByKeyword(keyword).stream()
+    /** 대리 예약 화면(관리자) — 특정 날짜의 회차별 정원 요약(회차 카드) */
+    public List<ReservationRespDTO.SlotOptionDTO> findSlotSummary(String centerCode, LocalDate date) {
+        return repository.findSlotsByDate(centerCode, date);
+    }
+
+    /** 이름/appId로 학생 검색 — 대리 예약 화면의 학생 선택용. 로그인한 직원의 센터로 한정한다 */
+    public List<ReservationRespDTO.StudentSearchDTO> searchStudents(String centerCode, String keyword) {
+        return studentRepository.searchByKeyword(centerCode, keyword).stream()
                 .map(this::toStudentSearchDTO)
                 .toList();
     }
@@ -133,11 +149,36 @@ public class ReservationService {
             throw new Exception400("예약할 회차를 선택해주세요.");
         }
         Student student = requireStudent(studentId);
-        return reserveOne(student, slotInstanceId);
+        return reserveOne(student, slotInstanceId, studentId, "STUDENT");
+    }
+
+    /**
+     * 센터 직원 대리 예약(2026-08-19) — 예약방법 표시("직접 예약"/"센터 예약")가 생성 로그의
+     * changed_by_role을 그대로 쓰기 때문에, 학생용 reserve()를 그대로 부르면 대리 등록도
+     * STUDENT로 기록돼 화면에 "직접 예약"으로 잘못 뜬다. adminUserId를 changed_by로 남겨
+     * 누가 대신 등록했는지도 함께 추적한다.
+     */
+    @Transactional
+    public ReservationRespDTO.ReservationItemDTO reserveByAdmin(String studentId, Long slotInstanceId, String adminUserId) {
+        if (slotInstanceId == null) {
+            throw new Exception400("예약할 회차를 선택해주세요.");
+        }
+        Student student = requireStudent(studentId);
+        return reserveOne(student, slotInstanceId, adminUserId, "ADMIN");
     }
 
     @Transactional
     public void cancel(String studentId, Long reservationId, String reason) {
+        cancelInternal(studentId, reservationId, reason, studentId, "STUDENT");
+    }
+
+    /** 센터 직원 대리 취소 — 생성 로그와 마찬가지로 changed_by_role을 ADMIN으로 남긴다 */
+    @Transactional
+    public void cancelByAdmin(String studentId, Long reservationId, String reason, String adminUserId) {
+        cancelInternal(studentId, reservationId, reason, adminUserId, "ADMIN");
+    }
+
+    private void cancelInternal(String studentId, Long reservationId, String reason, String changedBy, String changedByRole) {
         if (reservationId == null) {
             throw new Exception400("취소할 예약을 선택해주세요.");
         }
@@ -154,7 +195,7 @@ public class ReservationService {
         }
 
         repository.decrementReservedCount(slotInstanceId);
-        repository.insertLog(reservationId, "RESERVED", "CANCELED", studentId, "STUDENT", reason);
+        repository.insertLog(reservationId, "RESERVED", "CANCELED", changedBy, changedByRole, reason);
 
         log.info("[예약] 취소 — reservationId={}, studentId={}, reason={}", reservationId, studentId, reason);
     }
@@ -239,7 +280,7 @@ public class ReservationService {
 
         List<ReservationRespDTO.ReservationItemDTO> reserved = new ArrayList<>();
         for (Long slotInstanceId : ordered) {
-            reserved.add(reserveOne(student, slotInstanceId));
+            reserved.add(reserveOne(student, slotInstanceId, studentId, "STUDENT"));
         }
 
         log.info("[예약] 4주 일괄 확정 — studentId={}, slotInstanceIds={}", studentId, ordered);
@@ -248,7 +289,7 @@ public class ReservationService {
 
     // ── 내부 ─────────────────────────────────────────────────────────────
 
-    private ReservationRespDTO.ReservationItemDTO reserveOne(Student student, Long slotInstanceId) {
+    private ReservationRespDTO.ReservationItemDTO reserveOne(Student student, Long slotInstanceId, String changedBy, String changedByRole) {
         ReservationRespDTO.SlotOptionDTO slot = repository.findSlotOptionById(slotInstanceId);
         if (slot == null) {
             throw new Exception404("존재하지 않는 회차입니다.");
@@ -269,6 +310,7 @@ public class ReservationService {
         ReservationReqDTO.InsertReservationDTO command = new ReservationReqDTO.InsertReservationDTO();
         command.setSlotInstanceId(slotInstanceId);
         command.setStudentId(student.getStudentId());
+        command.setChannel(changedByRole);
         try {
             repository.insertReservation(command);
         } catch (DuplicateKeyException e) {
@@ -276,7 +318,7 @@ public class ReservationService {
             throw new Exception400("이미 예약된 회차입니다.");
         }
 
-        repository.insertLog(command.getReservationId(), null, "RESERVED", student.getStudentId(), "STUDENT", null);
+        repository.insertLog(command.getReservationId(), null, "RESERVED", changedBy, changedByRole, null);
         return repository.findReservationById(command.getReservationId());
     }
 
@@ -295,6 +337,7 @@ public class ReservationService {
         dto.setSchool(student.getSchool());
         dto.setGradeKey(student.getGradeKey());
         dto.setAppId(student.getAppId());
+        dto.setContact(student.getBillingPhone());
         return dto;
     }
 

@@ -253,10 +253,14 @@ CREATE TABLE erp_bookstore_reservation (
     slot_instance_id INT           NOT NULL,
     student_id       VARCHAR(100)  NOT NULL,  -- erp_student.student_id (기존 관례상 FK 없이 값으로 연결)
     status           VARCHAR(12)   NOT NULL DEFAULT 'RESERVED',  -- RESERVED/CANCELED/ATTENDED/NOSHOW
+    -- 예약방법(2026-08-19) — 누가 등록했는지. STUDENT/PARENT=학생 앱 직접 예약, ADMIN=센터 직원 대리
+    -- 등록. 생성 시점에 고정해서 저장한다(예약 현황 화면의 "직접 예약"/"센터 예약" 표시가 이 값을 그대로 씀).
+    channel          VARCHAR(20)   NOT NULL DEFAULT 'STUDENT',
     reserved_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     canceled_at      DATETIME2,               -- 취소 일시(KST)
     cancel_reason    VARCHAR(200),            -- 휴무 지정에 의한 관리자 취소 사유 등
     CONSTRAINT CK_reservation_status CHECK (status IN ('RESERVED', 'CANCELED', 'ATTENDED', 'NOSHOW')),
+    CONSTRAINT CK_reservation_channel CHECK (channel IN ('STUDENT', 'PARENT', 'ADMIN', 'SYSTEM')),
     FOREIGN KEY (slot_instance_id) REFERENCES erp_bookstore_slot_instance (slot_instance_id)
     -- 예약이 있으면 슬롯 삭제 불가 (기본 RESTRICT)
 );

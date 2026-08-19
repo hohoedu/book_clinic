@@ -97,10 +97,12 @@
                school                 AS school,
                student_id             AS studentId,
                student_name           AS studentName,
-               app_id                 AS appId
+               app_id                 AS appId,
+               billing_phone          AS billingPhone
         FROM erp_student
-        WHERE student_name LIKE '%' + #{keyword} + '%'
-           OR app_id LIKE '%' + #{keyword} + '%'
+        WHERE center_code = #{centerCode}
+          AND (student_name LIKE '%' + #{keyword} + '%'
+           OR app_id LIKE '%' + #{keyword} + '%')
         ORDER BY student_name ASC
     </select>
 

@@ -109,8 +109,8 @@
     </update>
 
     <insert id="insertReservation" useGeneratedKeys="true" keyProperty="reservationId" keyColumn="reservation_id">
-        INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, status)
-        VALUES (#{slotInstanceId}, #{studentId}, 'RESERVED')
+        INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, status, channel)
+        VALUES (#{slotInstanceId}, #{studentId}, 'RESERVED', #{channel})
     </insert>
 
     <insert id="insertLog">
@@ -171,6 +171,8 @@
         ORDER BY si.service_date ASC, si.seq ASC
     </select>
 
+    <!-- 그날의 예약을 상태 구분 없이 전부 보여준다(취소·이용완료·결석 포함) — 예약 현황 화면은
+         "오늘 이 회차에 무슨 일이 있었는지" 전체를 봐야 하므로 RESERVED만 필터링하지 않는다 -->
     <select id="findReservationsByDate" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AdminReservationRowDTO">
         SELECT
             r.reservation_id AS reservationId,
@@ -178,16 +180,43 @@
             st.student_name  AS studentName,
             st.school        AS school,
             st.grade_key     AS gradeKey,
+            st.billing_phone AS contact,
             si.seq            AS seq,
             si.starts_at      AS startsAt,
-            si.ends_at        AS endsAt
+            si.ends_at        AS endsAt,
+            r.status          AS status,
+            r.channel         AS channel,
+            r.cancel_reason   AS reason,
+            (SELECT COUNT(*)
+               FROM erp_bookstore_reservation r2
+               JOIN erp_bookstore_slot_instance si2 ON si2.slot_instance_id = r2.slot_instance_id
+              WHERE r2.student_id = r.student_id
+                AND r2.status = 'ATTENDED'
+                AND YEAR(si2.service_date) = YEAR(si.service_date)
+                AND MONTH(si2.service_date) = MONTH(si.service_date)) AS monthlyAttendCount
         FROM erp_bookstore_reservation r
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         JOIN erp_student st ON st.student_id = r.student_id
         WHERE si.service_date = #{date}
           AND si.center_code = #{centerCode}
-          AND r.status = 'RESERVED'
         ORDER BY si.seq ASC, st.student_name ASC
+    </select>
+
+    <!-- 회차별 정원 요약(회차 카드) — 특정 학생 관점이 아니라 그날 슬롯 전체를 보여준다 -->
+    <select id="findSlotsByDate" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$SlotOptionDTO">
+        SELECT
+            slot_instance_id AS slotInstanceId,
+            service_date     AS serviceDate,
+            seq               AS seq,
+            starts_at         AS startsAt,
+            ends_at           AS endsAt,
+            capacity          AS capacity,
+            reserved_count    AS reservedCount,
+            status            AS status
+        FROM erp_bookstore_slot_instance
+        WHERE center_code = #{centerCode}
+          AND service_date = #{date}
+        ORDER BY seq ASC
     </select>
 
     <!-- ── 출결 전환 (ATTENDED/NOSHOW, 2026-08-18) ───────────────────────── -->

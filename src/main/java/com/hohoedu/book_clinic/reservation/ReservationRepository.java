@@ -81,9 +81,13 @@ public interface ReservationRepository {
     List<ReservationRespDTO.ReservationItemDTO> findMyReservations(@Param("studentId") String studentId,
                                                                 @Param("fromDate") LocalDate fromDate);
 
-    /** 대리 예약 화면(관리자) — 특정 센터·날짜의 예약 목록 */
+    /** 대리 예약 화면(관리자) — 특정 센터·날짜의 예약 목록(모든 상태 포함) */
     List<ReservationRespDTO.AdminReservationRowDTO> findReservationsByDate(@Param("centerCode") String centerCode,
                                                                        @Param("date") LocalDate date);
+
+    /** 특정 센터·날짜의 회차별 정원 요약(회차 카드용) — 학생 구분 없이 그날의 슬롯을 전부 가져온다 */
+    List<ReservationRespDTO.SlotOptionDTO> findSlotsByDate(@Param("centerCode") String centerCode,
+                                                        @Param("date") LocalDate date);
 
     // ── 출결 전환 (ATTENDED/NOSHOW, 2026-08-18) ─────────────────────────
 
