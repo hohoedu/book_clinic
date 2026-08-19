@@ -143,6 +143,13 @@
   cursor: not-allowed;
 }
 
+/* 요소를 안 보이게만 하고 자리는 그대로 둔다. display:none/hidden 속성을 쓰면 그 자리만큼
+   레이아웃이 줄어들어서, "오늘 일정 보기" 전환 때마다 카드 높이가 들쭉날쭉해진다. */
+.view-invisible {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .panel-desc {
   margin: 4px 0 18px;
   font-size: 13px;
@@ -370,9 +377,15 @@
   pointer-events: none;
 }
 
-.time-input input[type="time"] {
+.time-input input.time-value {
   width: 190px;
   padding-left: 36px;
+}
+
+/* 커스텀 시간 선택기를 여는 입력칸 — 브라우저 기본 time input 대신 직접 만든 목록을 띄운다 */
+input.time-value {
+  cursor: pointer;
+  background: #fff;
 }
 
 .time-sep {
@@ -502,7 +515,7 @@
   text-align: left;
 }
 
-.round-table input[type="time"] {
+.round-table input.time-value {
   width: 100%;
 }
 
@@ -935,19 +948,93 @@
   margin-right: 2px;
 }
 
-/* ── 보기/편집 모드 (2026-08-18) ──────────────────────────────────────── */
-
-/* 보기 모드는 읽기 전용 — 입력처럼 보이면 고쳐도 되는 줄 안다 */
-.panel-card.view-locked input,
-.panel-card.view-locked select {
-  background: #f7f8f9;
-  color: #6b7579;
-  border-color: #eceff1;
+/* 회차 관리 카드 제목 옆 토글 — 가장 가까운 그 요일에 예외가 걸려 있을 때만 나타난다.
+   꺼져 있으면 편집 가능한 평소 규칙 그대로, 켜면 예외가 적용된 결과를 같은 표 자리에
+   읽기전용으로 바꿔 보여준다(별도 박스를 두지 않는다). */
+.round-view-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
 }
 
-.panel-card.view-locked .round-delete,
-.panel-card.view-locked .round-drag {
-  opacity: 0.3;
+/* display를 직접 지정한 요소는 브라우저 기본 [hidden] 규칙과 동률(0,1,0)이라, 나중에 선언된
+   이 규칙이 이겨버려 hidden 속성이 무시된다. 명시적으로 다시 눌러준다. */
+.round-view-toggle[hidden] {
+  display: none;
+}
+
+.round-view-toggle-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #7b868c;
+}
+
+/* '오늘 일정 보기'에서 휴무일 때만 쓰는 안내 행 — 회차 자체가 없어서 표 대신 이 한 줄만 보여준다 */
+.round-readonly-empty {
+  padding: 24px 0;
+  text-align: center;
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+/* ── 커스텀 시간 선택기 ────────────────────────────────────────────────
+   브라우저 기본 time input 피커는 여닫는 동작이 브라우저마다 제각각이라, 클릭 한 번으로
+   바로 선택되고 닫히는 목록을 직접 만든다. 10분 단위로만 고를 수 있다 — 회차 구조 자체가
+   이미 10분 단위(BREAK_MINUTES)로 돌아가서 그 이상 세분화할 이유가 없다. 시/분을 한 줄로
+   쭉 이어붙이면 스크롤이 너무 길어져서, 두 열(시/분)로 나눠 각자 짧게 스크롤하게 한다. */
+.time-picker-popover {
+  position: absolute;
+  z-index: 30;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
+  border: 1px solid #eceff1;
+  padding: 4px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity .12s ease, transform .12s ease;
+}
+
+.time-picker-popover.open {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.time-picker-columns {
+  display: flex;
+  gap: 2px;
+}
+
+.time-picker-col {
+  width: 66px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.time-picker-col + .time-picker-col {
+  border-left: 1px solid #f1f3f4;
+  padding-left: 2px;
+}
+
+.time-picker-item {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
+  color: #555;
+}
+
+.time-picker-item:hover {
+  background: #f1f5f5;
+}
+
+.time-picker-item.selected {
+  background: #e6f4f2;
+  color: #008b7a;
+  font-weight: 700;
 }
 
 /* 그날만 마감된 회차 */
@@ -966,25 +1053,30 @@
   font-weight: 700;
 }
 
-/* 헤더의 편집 토글 — 사용 가이드 옆.
-   .page-header-actions의 flex 배치는 common.css가 이미 잡고 있어 여기서 다시 정의하지 않는다 */
-.edit-mode-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
-.edit-mode-label {
-  font-size: 14px;
-  font-weight: 700;
-  color: #4a5459;
-}
-
 /* 저장 버튼이 잠긴 상태를 눈으로 알 수 있어야 한다 — 눌러보고 알게 하면 안 된다 */
 #btnSaveSchedule:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* "오늘 일정 보기" 중에는 dayHoursCard·roundManageCard 안의 입력을 disabled로 막지만,
+   화면은 "평소 규칙"과 완전히 똑같아야 한다 — 브라우저 기본 회색 처리를 지워서 편집 가능한
+   화면과 똑같은 색으로 보이게 한다(막혀 있다는 건 클릭이 안 먹는 것만으로 충분히 드러난다). */
+#dayHoursCard input:disabled,
+#dayHoursCard select:disabled,
+#dayHoursCard button:disabled,
+#roundManageCard input:disabled,
+#roundManageCard select:disabled,
+#roundManageCard button:disabled {
+  opacity: 1;
+  color: inherit;
+  background: inherit;
+  -webkit-text-fill-color: inherit;
+  cursor: default;
+}
+
+#dayHoursCard .ios-switch input:disabled + .ios-switch-track {
+  opacity: 1;
 }
 
 /* 예외 입력 중에는 어떤 요일도 선택되지 않은 상태로 둔다 —

@@ -17,6 +17,7 @@ import com.hohoedu.book_clinic.book.BookService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
 import com.hohoedu.book_clinic.pass.PassService;
+import com.hohoedu.book_clinic.reservation.ReservationService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,6 +39,7 @@ public class MonitorService {
     private final MonitorSyncService monitorSyncService;
     private final BookService bookService;
     private final PassService passService;
+    private final ReservationService reservationService;
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
@@ -59,6 +61,9 @@ public class MonitorService {
             monitorRepository.insertSession(studentId, today);
             sessionId = monitorRepository.findOpenSessionId(studentId, today);
         }
+        // 오늘 예약이 있었다면 실제로 왔다는 뜻이니 ATTENDED로 전환한다(2026-08-18). 예약 없이
+        // 온 경우엔 markAttended가 조용히 넘어가므로 입실 자체를 막지 않는다.
+        reservationService.markAttended(studentId, today);
         if (passService.consume(studentId, "BOOK", sessionId) == -1) {
             throw new Exception400("이용권이 모두 소진되었습니다. 재결제 후 이용해주세요.");
         }

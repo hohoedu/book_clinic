@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.reservation;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -80,6 +81,48 @@ public class ReservationService {
         return studentRepository.searchByKeyword(keyword).stream()
                 .map(this::toStudentSearchDTO)
                 .toList();
+    }
+
+    // ── 출결 전환 (2026-08-18) ───────────────────────────────────────────
+
+    /**
+     * 입실 시점에 그날 예약을 ATTENDED로 전환한다. {@code MonitorService.enterSession}이 부른다.
+     * 예약 없이 온 경우(도보 방문 등)엔 전환할 대상이 없으므로 조용히 넘어간다 — 예약이
+     * 필수가 아닌 한 이걸 에러로 취급하면 입실 자체가 막혀버린다.
+     *
+     * 같은 학생이 하루에 두 번 로그인해도 안전하다 — transitionStatus가 RESERVED일 때만
+     * 전환하므로, 이미 ATTENDED인 상태에서 다시 불려도 0건 갱신되고 로그도 중복으로 안 쌓인다.
+     */
+    @Transactional
+    public void markAttended(String studentId, LocalDate serviceDate) {
+        Long reservationId = repository.findReservedReservationIdByStudentAndDate(studentId, serviceDate);
+        if (reservationId == null) {
+            return;
+        }
+        int updated = repository.transitionStatus(reservationId, "RESERVED", "ATTENDED");
+        if (updated > 0) {
+            repository.insertLog(reservationId, "RESERVED", "ATTENDED", studentId, "STUDENT", null);
+        }
+    }
+
+    /**
+     * 노쇼 배치 — 슬롯 종료 시각(ends_at)이 지났는데 아직 RESERVED로 남은 예약을 NOSHOW로
+     * 전환한다. {@code ReservationNoShowJob}이 매일 새벽 호출한다.
+     *
+     * @return 실제로 전환된 건수
+     */
+    @Transactional
+    public int markNoShows(LocalDateTime asOf) {
+        List<Long> candidates = repository.findNoShowCandidates(asOf);
+        int count = 0;
+        for (Long reservationId : candidates) {
+            int updated = repository.transitionStatus(reservationId, "RESERVED", "NOSHOW");
+            if (updated > 0) {
+                repository.insertLog(reservationId, "RESERVED", "NOSHOW", null, "SYSTEM", "미입실 자동 처리");
+                count++;
+            }
+        }
+        return count;
     }
 
     // ── 단건 예약 ────────────────────────────────────────────────────────

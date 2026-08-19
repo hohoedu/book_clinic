@@ -5,6 +5,8 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -60,8 +62,16 @@ public class MaterializeDTO {
         private Boolean isClosed;
         /** null이면 템플릿 인원 유지 — 0(정원 0명)과 의미가 다르다 */
         private Integer capacity;
-        /** TIME_CHANGE에서 관리자가 확정한 회차 시각. SLOT_CHANGE면 null */
+        /**
+         * TIME_CHANGE에서 관리자가 확정한 회차 시각. SLOT_CHANGE면 null.
+         *
+         * 이 DTO는 엔진 전용이지만 ExceptionDTO.slotOverrides로 화면까지 그대로 실려 나가고,
+         * 화면은 이 값을 input[type=time]에 바로 넣는다. 포맷을 지정하지 않으면 "15:00:00"으로
+         * 내려가 다른 시각 필드("15:00")와 어긋나므로 여기서도 HH:mm으로 맞춘다.
+         */
+        @JsonFormat(pattern = "HH:mm")
         private LocalTime startTime;
+        @JsonFormat(pattern = "HH:mm")
         private LocalTime endTime;
     }
 

@@ -190,4 +190,33 @@
         ORDER BY si.seq ASC, st.student_name ASC
     </select>
 
+    <!-- ── 출결 전환 (ATTENDED/NOSHOW, 2026-08-18) ───────────────────────── -->
+
+    <!-- TOP 1인 이유: "하루 1회차만" 정책은 응용 계층 체크라 DB 유니크 제약이 아니다 —
+         드문 경합으로 같은 날 RESERVED가 2건 생기더라도 배치/입실 처리가 죽지 않게 방어한다 -->
+    <select id="findReservedReservationIdByStudentAndDate" resultType="long">
+        SELECT TOP 1 r.reservation_id
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.student_id = #{studentId}
+          AND si.service_date = #{serviceDate}
+          AND r.status = 'RESERVED'
+        ORDER BY r.reservation_id ASC
+    </select>
+
+    <update id="transitionStatus">
+        UPDATE erp_bookstore_reservation
+        SET status = #{toStatus}
+        WHERE reservation_id = #{reservationId}
+          AND status = #{fromStatus}
+    </update>
+
+    <select id="findNoShowCandidates" resultType="long">
+        SELECT r.reservation_id
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.status = 'RESERVED'
+          AND si.ends_at &lt; #{asOf}
+    </select>
+
 </mapper>

@@ -1,47 +1,91 @@
-document.addEventListener("DOMContentLoaded", async () => {
+document.addEventListener("DOMContentLoaded", () => {
   initDatePicker();
-  initSlotPicker();
-  initSearch();
-  await loadReservationList();
+  initDateNav();
+  initRoundCardSelect();
+  initRoundPickSelect();
+  initStudentPickSelect();
+  initStudentPickSearch();
+  initRowSelect();
+  initChangePanelMode();
 });
 
-const CSRF_HEADER = "X-XSRF-TOKEN";
-// 서버가 세션마다 다른 값을 XSRF-TOKEN 쿠키로 내려준다(CookieCsrfTokenRepository, 2026-07-31) —
-// 예전처럼 고정 문자열을 하드코딩하지 않고 매 요청마다 쿠키에서 읽는다.
-function getCsrfToken() {
-  const match = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : "";
-}
-
-let selectedStudent = null;
-
-/* 공통 요청 헬퍼 */
-async function getJson(url) {
-  const response = await fetch(url);
-  const data = await response.json();
-  if (!data.success) throw new Error(data.error?.message ?? "요청 처리에 실패했습니다.");
-  return data.response;
-}
-
-async function postJson(url, body) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", [CSRF_HEADER]: getCsrfToken() },
-    body: JSON.stringify(body),
+function initStudentPickSelect() {
+  const items = document.querySelectorAll(".student-pick-item");
+  items.forEach((item) => {
+    const input = item.querySelector("input");
+    item.addEventListener("click", (e) => {
+      // 체크박스 자체를 클릭한 경우는 브라우저가 이미 토글해서 change 이벤트가 따로 온다
+      if (e.target === input) return;
+      input.checked = !input.checked;
+      input.dispatchEvent(new Event("change"));
+    });
+    input.addEventListener("change", () => {
+      item.classList.toggle("checked", input.checked);
+    });
   });
-  const data = await response.json();
-  if (!data.success) throw new Error(data.error?.message ?? "요청 처리에 실패했습니다.");
-  return data.response;
 }
 
-function todayStr() {
-  const d = new Date();
+function initStudentPickSearch() {
+  const input = document.getElementById("studentPickSearch");
+  const items = document.querySelectorAll(".student-pick-item");
+
+  const applyFilter = () => {
+    const keyword = input.value.trim();
+    items.forEach((item) => {
+      const name = item.querySelector(".student-pick-name").textContent;
+      item.hidden = keyword !== "" && !name.includes(keyword);
+    });
+  };
+
+  input.addEventListener("input", applyFilter);
+  document.getElementById("btnStudentPickSearch").addEventListener("click", applyFilter);
+}
+
+const CHANGE_PANEL_TEXT = {
+  create: {
+    title: "예약 등록",
+    desc: "학생을 선택한 날짜/회차에 새로 등록합니다.",
+    dateLabel: "등록 날짜",
+    roundLabel: "등록 회차",
+    reasonLabel: "등록 사유",
+    saveLabel: "예약 등록",
+  },
+  change: {
+    title: "예약 변경",
+    desc: "선택한 학생의 예약을 다른 날짜/회차로 변경합니다.",
+    dateLabel: "변경 날짜",
+    roundLabel: "변경 회차",
+    reasonLabel: "변경 사유",
+    saveLabel: "예약 변경",
+  },
+};
+
+function initChangePanelMode() {
+  document.getElementById("btnAddReservation").addEventListener("click", () => setChangePanelMode("create"));
+  setChangePanelMode("create");
+}
+
+function setChangePanelMode(mode) {
+  const text = CHANGE_PANEL_TEXT[mode];
+  document.getElementById("changePanelTitle").textContent = text.title;
+  document.getElementById("changePanelDesc").textContent = text.desc;
+  document.getElementById("changeDateLabel").textContent = text.dateLabel;
+  document.getElementById("changeRoundLabel").textContent = text.roundLabel;
+  document.getElementById("changeReasonLabel").textContent = text.reasonLabel;
+  document.getElementById("btnSaveChange").textContent = text.saveLabel;
+  document.getElementById("currentReservationBox").hidden = mode !== "change";
+  document.getElementById("btnCancelReservation").hidden = mode !== "change";
+  document.getElementById("changeReasonGroup").hidden = mode !== "change";
+  document.getElementById("studentPickGroup").hidden = mode !== "create";
+}
+
+function todayStr(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-// 서버가 내려주는 "yyyy-MM-ddTHH:mm:ss" 문자열에서 "HH:mm"만 잘라 쓴다
-function formatTime(isoDateTime) {
-  return isoDateTime ? isoDateTime.slice(11, 16) : "";
+function updateDateDisplay(input, display) {
+  const [y, m, d] = input.value.split("-");
+  display.textContent = `${y}-${m}-${d}`;
 }
 
 function initDatePicker() {
@@ -49,190 +93,60 @@ function initDatePicker() {
   const display = document.getElementById("reservationDateDisplay");
   const trigger = document.querySelector(".monitor-date-trigger");
 
-  input.value = todayStr();
-  updateDateDisplay(input, display);
-
   trigger.addEventListener("click", () => input.showPicker());
+  input.addEventListener("change", () => updateDateDisplay(input, display));
+}
 
-  input.addEventListener("change", async () => {
+function initDateNav() {
+  const input = document.getElementById("reservationDate");
+  const display = document.getElementById("reservationDateDisplay");
+
+  const shiftDay = (days) => {
+    const current = new Date(input.value || todayStr());
+    current.setDate(current.getDate() + days);
+    input.value = todayStr(current);
     updateDateDisplay(input, display);
-    await loadReservationList();
-    // 날짜가 바뀌면 이전 날짜 기준으로 골라둔 회차는 더 이상 유효하지 않다
-    if (selectedStudent) await loadSlotOptions();
+  };
+
+  document.getElementById("btnPrevDay").addEventListener("click", () => shiftDay(-1));
+  document.getElementById("btnNextDay").addEventListener("click", () => shiftDay(1));
+  document.getElementById("btnToday").addEventListener("click", () => {
+    input.value = todayStr();
+    updateDateDisplay(input, display);
   });
 }
 
-function updateDateDisplay(input, display) {
-  const [y, m, d] = input.value.split("-");
-  display.textContent = `${y}. ${m}. ${d}`;
-}
-
-function selectedDate() {
-  return document.getElementById("reservationDate").value || todayStr();
-}
-
-/* ── 회차 선택 ──
-   old(TIME_SLOTS 고정 4개) 대신, 신규 예약 스키마는 센터마다 회차 수·시간이 달라 화면 로드
-   시점엔 무엇을 보여줄지 알 수 없다. 학생을 고르면 그 학생 센터의 그 날짜 회차를 서버에서
-   받아와 채운다(2026-08-18). */
-function initSlotPicker() {
-  const select = document.getElementById("reservationSlot");
-  select.innerHTML = `<option value="">학생을 먼저 선택해주세요</option>`;
-  select.disabled = true;
-}
-
-async function loadSlotOptions() {
-  const select = document.getElementById("reservationSlot");
-  select.innerHTML = `<option value="">불러오는 중…</option>`;
-  select.disabled = true;
-
-  try {
-    const date = selectedDate();
-    const slots = await getJson(
-      `/admin/monitor/reservation/slots?studentId=${encodeURIComponent(selectedStudent.studentId)}&fromDate=${date}&toDate=${date}`
-    );
-
-    select.innerHTML = "";
-    if (slots.length === 0) {
-      select.innerHTML = `<option value="">이 날짜에 열린 회차가 없습니다</option>`;
-      return;
-    }
-
-    slots.forEach((slot) => {
-      const option = document.createElement("option");
-      option.value = slot.slotInstanceId;
-      const full = slot.reservedCount >= slot.capacity;
-      const already = slot.reservedByMe;
-      option.textContent =
-        `${slot.seq}회차 (${formatTime(slot.startsAt)}~${formatTime(slot.endsAt)})` +
-        ` · ${slot.reservedCount}/${slot.capacity}` +
-        (already ? " · 이미 예약됨" : full ? " · 마감" : "");
-      option.disabled = full || already;
-      select.appendChild(option);
+function initRoundCardSelect() {
+  const cards = document.querySelectorAll(".round-status-card");
+  cards.forEach((card) => {
+    card.addEventListener("click", () => {
+      cards.forEach((c) => c.classList.remove("active"));
+      card.classList.add("active");
     });
-    select.disabled = false;
-  } catch (e) {
-    select.innerHTML = `<option value="">회차를 불러오지 못했습니다</option>`;
-    console.error("회차 조회 실패", e);
-  }
-}
-
-/* ── 학생 검색 ── */
-
-function initSearch() {
-  const keywordInput = document.getElementById("studentKeyword");
-  document.getElementById("btnSearchStudent").addEventListener("click", searchStudents);
-  keywordInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") searchStudents();
-  });
-  document.getElementById("btnRegisterReservation").addEventListener("click", registerReservation);
-}
-
-async function searchStudents() {
-  const keyword = document.getElementById("studentKeyword").value.trim();
-  if (!keyword) return;
-
-  try {
-    const students = await getJson(`/admin/monitor/reservation/students?keyword=${encodeURIComponent(keyword)}`);
-    renderSearchResults(students);
-  } catch (e) {
-    alert(e.message);
-  }
-}
-
-function renderSearchResults(students) {
-  const list = document.getElementById("studentSearchResults");
-  list.innerHTML = "";
-
-  if (students.length === 0) {
-    list.innerHTML = `<li class="empty">검색 결과가 없습니다.</li>`;
-    return;
-  }
-
-  students.forEach((student) => {
-    const li = document.createElement("li");
-    li.innerHTML = `
-      <span class="result-name">${student.studentName}</span>
-      <span class="result-sub">${[student.school, student.gradeKey].filter(Boolean).join(" · ")}</span>
-    `;
-    li.addEventListener("click", () => selectStudent(student));
-    list.appendChild(li);
   });
 }
 
-async function selectStudent(student) {
-  selectedStudent = student;
-  document.getElementById("selectedStudentName").textContent = `${student.studentName} (${student.appId ?? ""})`;
-  document.getElementById("selectedStudentBox").hidden = false;
-  await loadSlotOptions();
-}
-
-async function registerReservation() {
-  if (!selectedStudent) return;
-
-  const slotInstanceId = document.getElementById("reservationSlot").value;
-  if (!slotInstanceId) {
-    alert("예약할 회차를 선택해주세요.");
-    return;
-  }
-
-  try {
-    await postJson("/admin/monitor/reservation/register", {
-      studentId: selectedStudent.studentId,
-      slotInstanceId: Number(slotInstanceId),
+function initRoundPickSelect() {
+  const items = document.querySelectorAll(".round-pick:not(.disabled)");
+  items.forEach((item) => {
+    const input = item.querySelector("input");
+    item.addEventListener("click", () => {
+      document.querySelectorAll(".round-pick").forEach((i) => i.classList.remove("checked"));
+      input.checked = true;
+      item.classList.add("checked");
     });
-    selectedStudent = null;
-    document.getElementById("selectedStudentBox").hidden = true;
-    document.getElementById("studentKeyword").value = "";
-    document.getElementById("studentSearchResults").innerHTML = "";
-    initSlotPicker();
-    await loadReservationList();
-  } catch (e) {
-    alert(e.message);
-  }
-}
-
-/* ── 예약 목록 ── */
-
-async function loadReservationList() {
-  try {
-    const list = await getJson(`/admin/monitor/reservation/list?date=${selectedDate()}`);
-    renderReservationList(list);
-  } catch (e) {
-    console.error("예약 목록 조회 실패", e);
-  }
-}
-
-function renderReservationList(list) {
-  const body = document.getElementById("reservationListBody");
-  body.innerHTML = "";
-
-  if (list.length === 0) {
-    body.innerHTML = `<tr><td colspan="5" class="empty">등록된 예약이 없습니다.</td></tr>`;
-    return;
-  }
-
-  list.forEach((row) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${row.seq}회차 (${formatTime(row.startsAt)}~${formatTime(row.endsAt)})</td>
-      <td>${row.studentName ?? ""}</td>
-      <td>${row.school ?? "-"}</td>
-      <td>${row.gradeKey ?? "-"}</td>
-      <td><button type="button" class="btn outline small btn-delete">취소</button></td>
-    `;
-    tr.querySelector(".btn-delete").addEventListener("click", () => cancelReservation(row.reservationId, row.studentId));
-    body.appendChild(tr);
   });
 }
 
-async function cancelReservation(reservationId, studentId) {
-  if (!confirm("이 예약을 취소할까요?")) return;
-
-  try {
-    await postJson("/admin/monitor/reservation/cancel", { reservationId, studentId });
-    await loadReservationList();
-  } catch (e) {
-    alert(e.message);
-  }
+function initRowSelect() {
+  const rows = document.querySelectorAll("#reservationListBody tr");
+  rows.forEach((row) => {
+    row.querySelector(".btn-row-change").addEventListener("click", () => {
+      rows.forEach((r) => r.classList.remove("selected"));
+      row.classList.add("selected");
+      const name = row.querySelector(".cell-name").textContent;
+      document.getElementById("changeTargetName").textContent = name;
+      setChangePanelMode("change");
+    });
+  });
 }

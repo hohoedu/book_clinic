@@ -73,10 +73,10 @@ public class AdminViewController {
         return "monitor/monitor-live";
     }
 
-    /** 클리닉 예약 등록 — 학생을 날짜+타임슬롯에 배정하는 화면 (2026-07-23) */
+    /** 예약 현황 — 회차별 예약 현황 조회 및 예약 변경/취소 화면 (2026-08-19) */
     @GetMapping("/admin/monitor/reservation-view")
     public String reservation() {
-        return "monitor/reservation";
+        return "reservation/reservation";
     }
 
     /** 독서일지 — 정적 스캐폴딩 단계, 조회/저장 API 연동은 다음 작업에서 이어감 (2026-07-29) */

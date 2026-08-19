@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.reservation;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -83,5 +84,22 @@ public interface ReservationRepository {
     /** 대리 예약 화면(관리자) — 특정 센터·날짜의 예약 목록 */
     List<ReservationRespDTO.AdminReservationRowDTO> findReservationsByDate(@Param("centerCode") String centerCode,
                                                                        @Param("date") LocalDate date);
+
+    // ── 출결 전환 (ATTENDED/NOSHOW, 2026-08-18) ─────────────────────────
+
+    /** 그 학생의 그날 RESERVED 예약 — 입실 시 ATTENDED로 전환할 대상을 찾는다. 없으면 null */
+    Long findReservedReservationIdByStudentAndDate(@Param("studentId") String studentId,
+                                                    @Param("serviceDate") LocalDate serviceDate);
+
+    /**
+     * 조건부 상태 전환 — fromStatus일 때만 toStatus로 바꾼다. cancelReservation과 같은 패턴을
+     * ATTENDED/NOSHOW에도 재사용한다(이미 전환된 건 다시 안 건드림 = 여러 번 불려도 안전).
+     */
+    int transitionStatus(@Param("reservationId") Long reservationId,
+                         @Param("fromStatus") String fromStatus,
+                         @Param("toStatus") String toStatus);
+
+    /** 슬롯이 끝났는데(ends_at < asOf) 아직 RESERVED로 남아있는 예약 id들 — 노쇼 배치 대상 */
+    List<Long> findNoShowCandidates(@Param("asOf") LocalDateTime asOf);
 
 }

@@ -57,13 +57,16 @@
   const dayScheduleTitle = document.getElementById("dayScheduleTitle");
   const dayScheduleBadge = document.getElementById("dayScheduleBadge");
   const dayScheduleStateToggle = document.getElementById("dayScheduleStateToggle");
+  const dayScheduleStateToggleWrap = document.getElementById("dayScheduleStateToggleWrap");
   const roundListBody = document.getElementById("roundListBody");
   const roundDefaultMinutes = document.getElementById("roundDefaultMinutes");
   const btnAutoGenerate = document.getElementById("btnAutoGenerate");
   const btnSaveSchedule = document.getElementById("btnSaveSchedule");
-  const editModeToggle = document.getElementById("editModeToggle");
   const dayHoursCard = document.getElementById("dayHoursCard");
   const roundManageCard = document.getElementById("roundManageCard");
+  const roundViewToggle = document.getElementById("roundViewToggle");
+  const roundViewCheckbox = document.getElementById("roundViewCheckbox");
+  const btnCopySchedule = document.getElementById("btnCopySchedule");
   const maxCapacityInput = document.getElementById("maxCapacity");
   const dayOpenTime = document.getElementById("dayOpenTime");
   const dayCloseTime = document.getElementById("dayCloseTime");
@@ -87,8 +90,9 @@
      days[dow] = 서버에서 받은 요일 규칙 + 화면에서 편집 중인 값.
      dirty = 사용자가 실제로 건드린 요일만 담는다. 저장할 때 이 요일들만 서버로 보낸다 —
      7개를 항상 다 보내면, 예약이 걸린 요일 하나 때문에 나머지 6개까지 저장이 거부된다. */
-  // mode: view(기본, 읽기 전용) / edit(요일 규칙 편집) / exception(예외 입력)
-  const state = { days: {}, dirty: new Set(), exceptions: [], activeDow: 1, loaded: false, mode: "view" };
+  // mode: edit(기본, 요일 규칙 편집) / exception(예외 입력)
+  // roundView: rule(평소 규칙, 편집 가능) / exception(실제 적용, 읽기전용) — 회차 관리 탭 상태
+  const state = { days: {}, dirty: new Set(), exceptions: [], activeDow: 1, loaded: false, mode: "edit", roundView: "rule" };
 
   function todayStr() {
     const d = new Date();
@@ -130,8 +134,8 @@
     tr.innerHTML = `
       <td><i class="fa-solid fa-grip-vertical round-drag"></i></td>
       <td class="round-name">${seq}회차${closed ? ' <span class="round-closed-tag">마감</span>' : ""}</td>
-      <td><input type="time" value="${startTime}" /></td>
-      <td><input type="time" value="${endTime}" /></td>
+      <td><input type="text" class="time-value" value="${startTime}" readonly /></td>
+      <td><input type="text" class="time-value" value="${endTime}" readonly /></td>
       <td>
         <select>
           ${[30, 40, 50, 60].map((m) => `<option value="${m}" ${minutes === m ? "selected" : ""}>${m}분</option>`).join("")}
@@ -201,6 +205,11 @@
   }
 
   function autoGenerateRounds() {
+    // 자동 생성은 항상 평소 규칙을 만드는 동작이다 — "실제 적용" 보기 중이었다면 되돌린다
+    if (state.roundView !== "rule") {
+      state.roundView = "rule";
+      updateRoundViewToggle();
+    }
     const slots = buildSlotGrid(
       dayOpenTime.value || "13:00",
       dayCloseTime.value || "19:00",
@@ -216,14 +225,168 @@
     markDirty();
   }
 
+  /* ── 스케줄 복사 ───────────────────────────────────────────────────────
+     복사-붙여넣기 방식. 한 요일에서 "스케줄 복사"를 누르면 그 요일의 운영시간·회차 기본 시간·
+     최대 인원·회차 목록을 통째로 클립보드에 담아두고, 다른 요일로 이동하면 버튼이 "스케줄
+     붙여넣기"로 바뀐다 — 그걸 누르면 그 요일 전체를 복사해둔 내용으로 덮어쓴다. */
+  let copiedSchedule = null;
+  let copiedFromDow = null;
+
+  function isPasteReady() {
+    return !!copiedSchedule && copiedFromDow !== state.activeDow
+      && state.mode !== "exception" && state.roundView === "rule";
+  }
+
+  function updateCopyButtonLabel() {
+    btnCopySchedule.textContent = isPasteReady() ? "스케줄 붙여넣기" : "스케줄 복사";
+  }
+
+  function handleCopySchedule() {
+    if (state.mode === "exception") return;
+    if (state.roundView !== "rule") {
+      alert("\"오늘 일정 보기\"를 끈 평소 규칙 상태에서만 복사·붙여넣기할 수 있습니다.");
+      return;
+    }
+
+    if (isPasteReady()) {
+      const day = state.days[state.activeDow];
+      const wasClosed = !day.isOpen;
+      day.openTime = copiedSchedule.openTime;
+      day.closeTime = copiedSchedule.closeTime;
+      day.slotMinutes = copiedSchedule.slotMinutes;
+      day.defaultCapacity = copiedSchedule.defaultCapacity;
+      day.slots = copiedSchedule.slots.map((r) => ({ ...r }));
+      if (wasClosed) day.isOpen = true;   // 스케줄을 붙여넣었으니 그 요일도 운영으로 켠다
+      state.dirty.add(state.activeDow);
+      renderDay(state.activeDow);
+      alert(`${labelOf(copiedFromDow)} 스케줄을 ${labelOf(state.activeDow)}에 붙여넣었습니다.`
+        + `${wasClosed ? " (휴무였던 요일은 운영으로 전환됨)" : ""}\n저장을 눌러야 반영됩니다.`);
+      return;
+    }
+
+    const rounds = readRounds();
+    if (!rounds.length) {
+      alert("복사할 회차가 없습니다.");
+      return;
+    }
+    copiedSchedule = {
+      openTime: dayOpenTime.value,
+      closeTime: dayCloseTime.value,
+      slotMinutes: Number(roundDefaultMinutes.value) || 50,
+      defaultCapacity: numberOf(maxCapacityInput.value),
+      slots: rounds.map((r) => ({ ...r })),
+    };
+    copiedFromDow = state.activeDow;
+    updateCopyButtonLabel();
+    alert(`${labelOf(copiedFromDow)} 스케줄(운영시간·회차)을 복사했습니다. 붙여넣을 요일로 이동해 "스케줄 붙여넣기"를 눌러주세요.`);
+  }
+
+  /* ── 커스텀 시간 선택기 ──────────────────────────────────────────────
+     브라우저 기본 time input은 피커가 열리고 닫히는 동작이 브라우저마다 제각각이라, 클릭 한
+     번으로 바로 선택되고 닫히는 목록을 직접 만든다. 10분 단위로만 고를 수 있다 — 회차 구조
+     자체가 이미 10분 단위(BREAK_MINUTES)로 돌아가서 그 이상 세분화할 이유가 없다. 이 목록이
+     쓰는 input은 type="text" readonly라 값은 여전히 "HH:mm" 문자열이고, readRounds() 등
+     기존 코드는 손대지 않아도 그대로 동작한다. */
+  let timePickerPopover = null;
+  let timePickerTarget = null;
+
+  function closeTimePicker() {
+    if (!timePickerPopover) return;
+    timePickerPopover.remove();
+    timePickerPopover = null;
+    timePickerTarget = null;
+    document.removeEventListener("mousedown", handleTimePickerOutsideClick, true);
+    document.removeEventListener("keydown", handleTimePickerKeydown, true);
+  }
+
+  function handleTimePickerOutsideClick(e) {
+    if (timePickerPopover && !timePickerPopover.contains(e.target) && e.target !== timePickerTarget) {
+      closeTimePicker();
+    }
+  }
+
+  function handleTimePickerKeydown(e) {
+    if (e.key === "Escape") closeTimePicker();
+  }
+
+  /** 시/분 두 열로 나눠서 각자 스크롤한다 — 24개 구간을 세로로 쭉 이어붙이면 스크롤이 너무 길다 */
+  function buildTimePickerColumn(col, values, format, current) {
+    const items = values.map((v) => {
+      const value = String(v).padStart(2, "0");
+      return `<button type="button" class="time-picker-item ${value === current ? "selected" : ""}" data-col="${col}" data-value="${value}">${format(value)}</button>`;
+    }).join("");
+    return `<div class="time-picker-col" data-col="${col}">${items}</div>`;
+  }
+
+  function openTimePicker(input) {
+    const reopening = timePickerTarget === input;
+    closeTimePicker();
+    if (reopening) return;   // 같은 입력칸을 다시 클릭하면 그냥 닫는다
+
+    const [currentHour, currentMinute] = (input.value || "00:00").split(":");
+    timePickerPopover = document.createElement("div");
+    timePickerPopover.className = "time-picker-popover";
+    timePickerPopover.innerHTML = `<div class="time-picker-columns">`
+      + buildTimePickerColumn("hour", [...Array(24).keys()], (v) => `${v}시`, currentHour)
+      + buildTimePickerColumn("minute", [0, 10, 20, 30, 40, 50], (v) => `${v}분`, currentMinute)
+      + `</div>`;
+
+    // 위치를 잡기 전에 안 보이는 상태로 붙여 실제 크기를 재고, 화면 밖으로 넘치면 반대쪽에 띄운다
+    timePickerPopover.style.visibility = "hidden";
+    document.body.appendChild(timePickerPopover);
+
+    const rect = input.getBoundingClientRect();
+    const popRect = timePickerPopover.getBoundingClientRect();
+    const fitsBelow = rect.bottom + popRect.height + 6 <= window.innerHeight;
+    const top = fitsBelow ? rect.bottom + 4 : rect.top - popRect.height - 4;
+    const left = Math.min(rect.left, window.innerWidth - popRect.width - 8);
+
+    timePickerPopover.style.top = `${Math.max(8, top) + window.scrollY}px`;
+    timePickerPopover.style.left = `${Math.max(8, left) + window.scrollX}px`;
+    timePickerPopover.style.visibility = "visible";
+    timePickerPopover.classList.add("open");
+
+    timePickerTarget = input;
+    timePickerPopover.querySelectorAll(".time-picker-item.selected")
+      .forEach((el) => el.scrollIntoView({ block: "center" }));
+
+    // 시는 눌러도 안 닫힌다 — 이어서 분까지 골라야 시간이 완성되기 때문. 분을 누르면 시/분이
+    // 다 정해진 것이므로 그 자리에서 바로 닫는다(시만 바꾸고 싶을 때도 결국 분을 눌러 마무리).
+    timePickerPopover.addEventListener("click", (e) => {
+      const item = e.target.closest(".time-picker-item");
+      if (!item) return;
+      const [hour, minute] = input.value.split(":");
+      input.value = item.dataset.col === "hour"
+        ? `${item.dataset.value}:${minute}`
+        : `${hour}:${item.dataset.value}`;
+      // 값 표시 필드가 아니라 실제 상태를 바꾸는 신호라, 기존 change/input 리스너(markDirty 등)가
+      // 그대로 반응하도록 진짜 이벤트를 발생시킨다.
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+
+      if (item.dataset.col === "minute") {
+        closeTimePicker();   // 분을 고르면 시/분이 다 정해진 것이니 그걸로 끝
+        return;
+      }
+
+      item.closest(".time-picker-col").querySelectorAll(".time-picker-item.selected")
+        .forEach((el) => el.classList.remove("selected"));
+      item.classList.add("selected");
+    });
+
+    setTimeout(() => {
+      document.addEventListener("mousedown", handleTimePickerOutsideClick, true);
+      document.addEventListener("keydown", handleTimePickerKeydown, true);
+    }, 0);
+  }
+
   /* ── 요일 렌더링 ─────────────────────────────────────────────────────── */
 
   /**
    * 요일 탭의 운영/휴무 표시.
    *
-   * 보기 모드에서는 이번 주 실제 상태를 보여준다 — 8/21(금)이 예외로 휴무면 금요일 탭도
-   * 휴무여야 한다. 왼쪽 카드는 그날 모습을 보여주는데 탭만 "운영"이면 서로 어긋난다.
-   * 편집 모드에서는 고치는 대상이 평소 규칙이므로 규칙 그대로 표시한다.
+   * 가장 가까운 그 요일의 실제 상태를 보여준다 — 다음 금요일이 예외로 휴무면 금요일 탭도
+   * 휴무로 표시한다. 다만 이건 표시일 뿐이고, 왼쪽 카드에서 고치는 대상은 항상 평소 요일 규칙이다.
    */
   function renderTabs() {
     dayTabs.querySelectorAll(".day-tab").forEach((tab) => {
@@ -231,11 +394,9 @@
       const day = state.days[dow];
 
       let isOpen = !!day?.isOpen;
-      if (state.mode === "view") {
-        const closedByException = (thisWeekExceptionFor(dow)?.exceptions ?? [])
-          .some((ex) => ex.exceptionType === "CLOSED");
-        if (closedByException) isOpen = false;
-      }
+      const closedByException = (nearestExceptionFor(dow)?.exceptions ?? [])
+        .some((ex) => ex.exceptionType === "CLOSED");
+      if (closedByException) isOpen = false;
 
       tab.dataset.state = isOpen ? "open" : "closed";
       // 예외 입력 중에는 어떤 요일도 선택 상태로 두지 않는다
@@ -246,24 +407,32 @@
     });
   }
 
-  /** 이번 주(월~일) 안에서 그 요일에 해당하는 날짜 */
-  function dateInThisWeek(dow) {
+  /**
+   * 오늘부터 가장 가까운(오늘 포함) 그 요일의 날짜.
+   *
+   * 월~일로 딱 떨어지는 "이번 주" 기준으로 계산하면, 예를 들어 오늘이 일요일일 때 바로 다음 날인
+   * 월요일은 "다음 주"로 밀려나 예외 미리보기에서 빠져버린다. 관리자가 궁금한 건 달력상의 주가
+   * 아니라 "그 요일이 다음에 언제 오는가"이므로, 오늘 기준으로 가장 가까운 날짜를 고른다.
+   */
+  function nextDateForDow(dow) {
     const now = new Date();
     const todayDow = now.getDay() === 0 ? 7 : now.getDay();
+    let diff = dow - todayDow;
+    if (diff < 0) diff += 7;
     const target = new Date(now);
-    target.setDate(now.getDate() - (todayDow - 1) + (dow - 1));
+    target.setDate(now.getDate() + diff);
     return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, "0")}-${String(target.getDate()).padStart(2, "0")}`;
   }
 
   /**
-   * 이번 주 그 요일에 걸린 예외.
+   * 가장 가까운 그 요일에 걸린 예외.
    *
-   * 다음 주 이후의 예외는 보여주지 않는다 — 편집기는 "이번 주 수요일이 어떻게 돌아가는가"를
-   * 확인하는 자리이고, 2주 뒤 예외까지 끌어오면 지금 화면이 어느 날짜를 말하는지 흐려진다.
+   * 그보다 먼 미래의 예외는 보여주지 않는다 — 편집기는 "다음 수요일이 어떻게 돌아가는가"를
+   * 확인하는 자리이고, 몇 주 뒤 예외까지 끌어오면 지금 화면이 어느 날짜를 말하는지 흐려진다.
    * 먼 미래의 예외는 이력 패널에서 기간과 함께 본다.
    */
-  function thisWeekExceptionFor(dow) {
-    const date = dateInThisWeek(dow);
+  function nearestExceptionFor(dow) {
+    const date = nextDateForDow(dow);
     const exceptions = (state.exceptions ?? [])
       .filter((ex) => !ex.past && ex.startDate <= date && ex.endDate >= date);
     return exceptions.length ? { date, exceptions } : null;
@@ -272,12 +441,12 @@
   /**
    * 요일 화면 그리기. 모드에 따라 보여주는 값이 다르다.
    *
-   *   view      기본. 이번 주 그 요일의 실제 모습(예외 적용)을 읽기 전용으로 보여준다.
-   *   edit      [편집]을 눌렀을 때. 평소 요일 규칙만 보여주고 고칠 수 있다.
+   *   edit      기본. 평소 요일 규칙을 보여주고, 그 자리에서 언제든 고쳐서 저장할 수 있다.
    *   exception 오른쪽에서 운영시간/회차 변경을 골랐을 때. 그 카드만 예외 입력 폼이 된다.
    *
-   * 모드를 나눈 이유는, 한 카드가 "그날 모습"과 "요일 규칙" 두 가지를 상황에 따라 보여주면
-   * 지금 화면의 값이 저장 대상인지 아닌지를 사용자도 코드도 헷갈리기 때문이다.
+   * 편집 필드(dayOpenTime 등, round-table)는 항상 평소 요일 규칙만 보여준다 — 예외 적용값을
+   * 여기에 띄우면 고쳐서 저장했을 때 하루짜리 예외가 평소 규칙으로 굳어버린다. 다음번 그
+   * 요일의 실제 모습이 궁금할 땐 회차 관리 카드의 "실제 적용" 탭에서 같은 표 자리를 읽기전용으로 본다.
    */
   /** 예외 입력 중에는 선택한 예외 날짜의 요일이 기준이다 (요일 탭이 아니라) */
   function exceptionDow() {
@@ -298,53 +467,92 @@
 
     const day = state.days[dow];
 
-    dayOpenTime.value = day.openTime || "13:00";
-    dayCloseTime.value = day.closeTime || "19:00";
-    maxCapacityInput.value = `${day.defaultCapacity ?? 10}명`;
-
     const minutesOption = [...roundDefaultMinutes.options].find((o) => Number(o.value) === day.slotMinutes);
     if (minutesOption) roundDefaultMinutes.value = String(day.slotMinutes);
+    maxCapacityInput.value = `${day.defaultCapacity ?? 10}명`;
 
     // 예외는 하루일 수도 기간일 수도 있어 제목에 날짜를 박지 않는다
     dayScheduleTitle.textContent = state.mode === "exception"
       ? "예외일 스케줄"
       : `${labelOf(dow)} 스케줄`;
 
-    if (state.mode === "view") {
-      renderDayView(dow, day);
-    } else {
-      // 편집·예외 입력은 둘 다 평소 요일 규칙에서 출발한다
-      applyDayBadge(!!day.isOpen);
-      renderRounds(day.slots ?? []);
-    }
+    // 요일을 새로 그릴 때는 항상 편집 가능한 "평소 규칙" 상태에서 시작한다
+    state.roundView = "rule";
+    const preview = state.mode === "exception" ? null : nearestExceptionFor(dow);
+    // 예외가 등록돼 있어도 실제 운영시간·회차가 평소 규칙과 똑같으면 토글을 보여줄 이유가 없다
+    roundViewToggle.hidden = !preview || !exceptionDiffersFromRule(day, computeExceptionResult(day, preview));
+    updateRoundViewToggle();
+    applyRoundView(dow, day, preview);
 
     renderTabs();       // 예외로 휴무가 되는 날이 있으면 탭 표시도 함께 바뀐다
     applyModeLock();
+    updateCopyButtonLabel();
   }
 
-  /** 보기 모드 — 이번 주 그 요일에 예외가 걸려 있으면 적용된 결과를 그린다 */
-  function renderDayView(dow, day) {
-    const preview = thisWeekExceptionFor(dow);
-    if (!preview) {
+  function updateRoundViewToggle() {
+    roundViewCheckbox.checked = state.roundView === "exception";
+  }
+
+  /**
+   * 토글 상태(평소 규칙 / 오늘 일정 보기)에 맞춰 화면을 그린다.
+   *
+   * "오늘 일정 보기"를 켜면 회차 표만이 아니라 운영시간·운영 배지도 오늘 실제로 적용되는
+   * 값으로 바뀐다 — 그래야 이 카드가 "오늘 진짜 이렇게 돈다"를 보여준다. 회차 기본 시간·최대
+   * 예약 인원은 그대로 둔다 — 예외는 회차 하나하나를 따로 조정하는 거라 "오늘의 기본 시간·
+   * 기본 인원"이라는 게 따로 없고, 회차 표에 이미 실제 인원이 다 나와 있다.
+   */
+  function applyRoundView(dow, day, preview) {
+    const showingException = state.roundView === "exception" && preview;
+
+    if (showingException) {
+      const result = computeExceptionResult(day, preview);
+      dayOpenTime.value = result.closed ? "" : result.openTime;
+      dayCloseTime.value = result.closed ? "" : result.closeTime;
+      applyDayBadge(!result.closed);
+      if (result.closed) {
+        roundListBody.innerHTML = '<tr><td colspan="7" class="round-readonly-empty">오늘은 휴무입니다</td></tr>';
+      } else {
+        // "평소 규칙"과 완전히 같은 행을 그대로 쓴다(드래그 손잡이·셀렉트·스테퍼 포함) — 그 위에
+        // disabled만 씌우면 화면이 자연스럽게 똑같아진다. 회차 삭제 버튼도 disabled라 안 눌린다.
+        renderRounds(result.slots);
+      }
+    } else {
+      dayOpenTime.value = day.openTime || "13:00";
+      dayCloseTime.value = day.closeTime || "19:00";
       applyDayBadge(!!day.isOpen);
       renderRounds(day.slots ?? []);
-      return;
     }
 
+    // 오늘 일정 보기 중에는 편집이 아예 의미가 없다 — 평소 규칙으로 돌아가야 고칠 수 있다.
+    // 예외 유형 잠금(.locked, 안내 문구)과는 다른 잠금이라 setCardLocked를 그대로 쓰지 않는다.
+    setFieldsDisabled(dayHoursCard, showingException);
+    setFieldsDisabled(roundManageCard, showingException, [roundViewCheckbox]);
+
+    // "운영중/휴무" 전환과 "회차 자동 생성"은 순수 편집 동작이라 오늘 일정 보기에서는 존재
+    // 이유가 없다 — 비활성화해서 회색으로 죽어있게 두는 대신 안 보이게 한다. hidden 속성으로
+    // 레이아웃에서 아예 빼면 그 자리가 줄어들면서 카드 높이가 들쭉날쭉해져서, 자리는 그대로 두고
+    // visibility만 지운다.
+    dayScheduleStateToggleWrap.classList.toggle("view-invisible", showingException);
+    btnAutoGenerate.classList.toggle("view-invisible", showingException);
+  }
+
+  /**
+   * 가장 가까운 그 요일에 예외가 적용된 결과(운영시간·회차)를 계산한다. 값을 보여주기만 할 뿐
+   * 어디에도 쓰지 않으므로, 이 결과를 편집 필드에 다시 채워 넣지 않는다.
+   */
+  function computeExceptionResult(day, preview) {
     const period = preview.exceptions.find((ex) => ex.exceptionType !== "SLOT_CHANGE");
     const slotChange = preview.exceptions.find((ex) => ex.exceptionType === "SLOT_CHANGE");
     const closed = period?.exceptionType === "CLOSED" || !day.isOpen;
-    applyDayBadge(!closed);
+    if (closed) return { closed: true, openTime: null, closeTime: null, slots: [] };
 
-    if (period?.exceptionType === "TIME_CHANGE") {
-      dayOpenTime.value = period.openTime;
-      dayCloseTime.value = period.closeTime;
-    }
+    const openTime = period?.exceptionType === "TIME_CHANGE" ? period.openTime : day.openTime;
+    const closeTime = period?.exceptionType === "TIME_CHANGE" ? period.closeTime : day.closeTime;
 
-    let slots = closed ? [] : (day.slots ?? []).map((slot) => ({ ...slot }));
+    let slots = (day.slots ?? []).map((slot) => ({ ...slot }));
 
     // 아래 단계는 서버 ScheduleMaterializer와 같은 순서·같은 규칙이어야 한다.
-    if (!closed && period?.exceptionType === "TIME_CHANGE") {
+    if (period?.exceptionType === "TIME_CHANGE") {
       // 등록할 때 확정한 회차가 있으면 그것이 그날의 회차다. 템플릿에서 걸러내는 것은
       // 회차를 따로 저장하지 않던 시절의 예외를 위한 폴백일 뿐이다(서버 로직과 동일).
       const defined = (period.slotOverrides ?? []).filter((o) => o.startTime && o.endTime);
@@ -362,7 +570,7 @@
         slots = slots.filter((slot) => toMinutes(slot.startTime) >= open && toMinutes(slot.endTime) <= close);
       }
     }
-    if (!closed && slotChange) {
+    if (slotChange) {
       slots = slots.map((slot) => {
         const override = (slotChange.slotOverrides ?? []).find((o) => o.seq === slot.seq);
         return override
@@ -371,21 +579,30 @@
       });
     }
 
-    renderRounds(slots);
+    return { closed: false, openTime, closeTime, slots };
   }
 
-  /** 편집 모드에서만 입력이 열린다. 저장 버튼도 그때만 쓸 수 있다 */
-  function applyModeLock() {
-    const editable = state.mode === "edit";
-    [dayHoursCard, roundManageCard].forEach((card) => {
-      card.classList.toggle("view-locked", !editable && state.mode !== "exception");
-      card.querySelectorAll("input, select, button").forEach((el) => {
-        el.disabled = !editable;
-      });
-    });
-    dayScheduleStateToggle.disabled = !editable;
-    btnSaveSchedule.disabled = !editable;
+  /**
+   * 예외 적용 결과가 평소 규칙과 실제로 다른지 비교한다. 예외가 등록돼 있어도 결과가 규칙과
+   * 같으면(예: 회차 변경 예외가 정원을 원래 값으로 되돌려놓은 경우) 탭을 보여줄 필요가 없다.
+   */
+  function exceptionDiffersFromRule(day, result) {
+    const ruleClosed = !day.isOpen;
+    if (result.closed !== ruleClosed) return true;
+    if (result.closed) return false;
+    if (result.openTime !== day.openTime || result.closeTime !== day.closeTime) return true;
 
+    const ruleSlots = day.slots ?? [];
+    if (result.slots.length !== ruleSlots.length) return true;
+    return result.slots.some((slot, idx) => {
+      const rule = ruleSlots[idx];
+      return !rule || slot.startTime !== rule.startTime || slot.endTime !== rule.endTime
+        || slot.capacity !== rule.capacity || !!slot.closed;
+    });
+  }
+
+  /** 편집은 항상 열려 있다. 예외 입력 중에만 예외 유형에 따라 카드가 잠긴다 */
+  function applyModeLock() {
     // 예외 입력 중에는 요일 탭을 잠근다 — 지금 다루는 것은 "요일"이 아니라 "그 날짜"라서,
     // 탭이 눌리면 어느 쪽을 편집하는 중인지 화면이 스스로 모순된다.
     const tabsLocked = state.mode === "exception";
@@ -394,8 +611,14 @@
       tab.disabled = tabsLocked;
     });
 
-    // 예외 입력 모드의 잠금은 예외 유형이 결정한다(운영시간/회차 중 하나만 열림)
-    if (state.mode === "exception") applyExceptionCardLock(currentExceptionType());
+    // 예외 입력 모드의 잠금은 예외 유형이 결정한다(운영시간/회차 중 하나만 열림).
+    // "오늘 일정 보기" 중의 잠금은 applyRoundView()가 이미 걸어뒀으니 여기서 건드리지 않는다.
+    if (state.mode === "exception") {
+      applyExceptionCardLock(currentExceptionType());
+    } else if (state.roundView !== "exception") {
+      setCardLocked(dayHoursCard, false);
+      setCardLocked(roundManageCard, false);
+    }
   }
 
   function applyDayBadge(isOpen) {
@@ -407,9 +630,11 @@
 
   /** 화면의 입력값을 상태로 걷어온다. 요일 탭을 옮기거나 저장할 때 호출 */
   function captureDay(dow) {
-    // 편집 모드에서 들어온 값만 규칙으로 걷어간다. 보기 화면에는 예외가 적용된 값이 떠 있을 수
-    // 있어서, 그걸 걷어가면 하루짜리 예외가 요일 규칙으로 굳어버린다.
-    if (!state.loaded || state.mode !== "edit") return;
+    // 예외 입력 중에는 걷어가지 않는다 — 그 카드는 지금 예외 폼으로 쓰이고 있어서,
+    // 걷어가면 예외로 고친 값이 요일 규칙으로 섞여 들어간다.
+    // "오늘 일정 보기" 중에도 걷어가지 않는다 — 그때 필드에는 오늘 실제 적용값이 떠 있어서,
+    // 그대로 걷으면 하루짜리 예외가 평소 규칙으로 굳어버린다.
+    if (!state.loaded || state.mode !== "edit" || state.roundView !== "rule") return;
     const day = state.days[dow];
     if (!day) return;
 
@@ -445,6 +670,11 @@
     const list = await getJson(`${API}/exception`);
     state.exceptions = list;
     renderTabs();                 // 예외가 걸린 요일 표시를 갱신한다
+
+    // 왼쪽 카드도 다시 그려서 방금 바뀐 예외를 반영한다. loadExceptions()는 저장 직후나
+    // 초기 로드처럼 편집 중인 입력값이 없을 때만 불린다.
+    if (state.mode !== "exception") renderDay(state.activeDow);
+
     exceptionList.innerHTML = "";
 
     if (!list.length) {
@@ -578,10 +808,6 @@
   }
 
   async function saveSchedule() {
-    if (state.mode !== "edit") {
-      alert("편집을 켠 뒤 수정하고 저장해주세요.");
-      return;
-    }
     captureDay(state.activeDow);
 
     if (!state.dirty.size) {
@@ -604,20 +830,18 @@
       };
     });
 
-    // 안전장치 — 이번 주에 예외가 걸린 요일을 저장할 때 그 사실을 알려준다. 규칙을 바꿔도 예외는
-    // 그대로 남아 그날만 다르게 운영되는데, 모르고 저장하면 "왜 그날만 안 바뀌지"가 된다.
-    // 범위를 이번 주로 맞춘 것은 보기 화면이 보여주는 범위와 같게 하기 위해서다 — 화면에 없던
-    // 날짜가 확인창에만 튀어나오면 무엇을 확인하라는 것인지 알 수 없다.
+    // 안내 — 가장 가까운 그 요일에 예외가 걸려 있는 채로 저장할 때 그 사실을 알려준다. 규칙을
+    // 바꿔도 예외는 그대로 남아 그날만 다르게 운영되는데, 모르고 저장하면 "왜 그날만 안 바뀌지"가 된다.
     const warned = [...state.dirty]
-      .map((dow) => ({ dow, preview: thisWeekExceptionFor(dow) }))
+      .map((dow) => ({ dow, preview: nearestExceptionFor(dow) }))
       .filter(({ preview }) => preview)
-      .map(({ dow, preview }) => `${labelOf(dow)} — ${preview.date} `
+      .map(({ dow, preview }) => `· ${preview.date}(${labelOf(dow)}) `
         + preview.exceptions.map((ex) => ex.exceptionTypeLabel).join(", "));
 
     if (warned.length) {
       const ok = await customConfirm(
-        `이번 주 아래 날짜에는 예외 일정이 등록돼 있습니다.\n\n${warned.join("\n")}\n\n`
-        + "예외는 그대로 유지되어 그날은 다르게 운영됩니다. 저장할까요?");
+        `지금 저장하는 요일 규칙을 바꿔도, 아래 날짜는 이미 등록된 예외대로 그대로 운영됩니다.\n\n${warned.join("\n")}\n\n`
+        + "이대로 저장할까요?");
       if (!ok) return;
     }
 
@@ -630,8 +854,6 @@
     await withBusy(btnSaveSchedule, async () => {
       const message = await sendJson(`${API}/week`, payload);
       alert(message);
-      state.mode = "view";    // 저장이 끝났으면 편집을 닫고 보기 화면으로
-      editModeToggle.checked = false;
       await loadWeek();       // 서버가 매긴 회차 번호·적용일로 화면을 다시 맞춘다
       await loadExceptions();
       await refreshHistoryIfVisible();   // 방금 만든 버전이 이력에 바로 보여야 한다
@@ -682,7 +904,7 @@
       const message = await sendJson(`${API}/exception`, payload);
       alert(message);
       exceptionReason.value = "";
-      state.mode = editModeToggle.checked ? "edit" : "view";
+      state.mode = "edit";
       resetExceptionType();         // 예외 입력용으로 바꿔둔 왼쪽 카드를 원래 상태로
       await refreshAfterExceptionChange();
     });
@@ -769,6 +991,19 @@
   }
 
   /**
+   * setCardLocked와 달리 .locked 클래스를 건드리지 않는다 — 그 클래스는 panel-lock-overlay(예외
+   * 유형을 먼저 고르라는 안내)를 띄우는데, "오늘 일정 보기" 때 잠그는 이유는 그것과 달라서 같은
+   * 안내를 띄우면 엉뚱하다. exclude에 넣은 요소는 꺼지지 않는다 — 토글 자신이 잠겨서 다시 못 켜는
+   * 사고를 막기 위함.
+   */
+  function setFieldsDisabled(card, disabled, exclude = []) {
+    card.querySelectorAll("input, select, button").forEach((el) => {
+      if (exclude.includes(el)) return;
+      el.disabled = disabled;
+    });
+  }
+
+  /**
    * 예외 입력 중 열어둘 카드.
    *
    * 운영시간 변경은 시간과 회차를 함께 고쳐야 한다 — 시간을 늘리거나 옮기면 그 시간대에
@@ -790,10 +1025,9 @@
     exceptionEndDate.disabled = type === "round";
     if (type === "round") exceptionEndDate.value = exceptionStartDate.value;
 
-    // 휴무 예외는 날짜만 있으면 되므로 왼쪽 카드를 쓰지 않는다 → 보기 모드로 되돌린다
+    // 휴무 예외는 날짜만 있으면 되므로 왼쪽 카드를 쓰지 않는다 → 요일 편집으로 되돌린다
     if (type === "closed") {
-      // 예외 입력을 벗어나면 편집 토글 상태로 돌아간다
-      if (state.mode === "exception") state.mode = editModeToggle.checked ? "edit" : "view";
+      if (state.mode === "exception") state.mode = "edit";
       if (state.loaded) renderDay(state.activeDow);
       return;
     }
@@ -851,43 +1085,11 @@
 
     captureDay(state.activeDow);        // 탭을 옮겨도 편집 중이던 값이 날아가지 않게 먼저 걷어둔다
     state.activeDow = dowOf(tab.dataset.day);
-    state.mode = editModeToggle.checked ? "edit" : "view";
+    state.mode = "edit";
 
     resetExceptionType();
     renderTabs();
     renderDay(state.activeDow);
-  });
-
-  /**
-   * 편집 토글 — 켜면 요일 규칙을 고칠 수 있고 저장이 열린다. 끄면 전부 읽기 전용.
-   *
-   * 끌 때 고치던 값을 버리는 이유는, 화면에는 편집 결과가 남아 있는데 저장은 잠긴 어정쩡한
-   * 상태가 가장 헷갈리기 때문이다. 버릴 게 있으면 먼저 물어본다.
-   */
-  editModeToggle.addEventListener("change", async () => {
-    if (editModeToggle.checked) {
-      state.mode = "edit";
-      resetExceptionType();       // 예외 입력 중이었다면 정리하고 규칙 편집으로 들어간다
-      state.mode = "edit";
-      renderDay(state.activeDow);
-      return;
-    }
-
-    if (state.dirty.size) {
-      const ok = await customConfirm("저장하지 않은 변경이 있습니다.\n편집을 끄면 변경한 내용이 사라집니다. 계속할까요?");
-      if (!ok) {
-        editModeToggle.checked = true;
-        return;
-      }
-    }
-
-    state.mode = "view";
-    state.dirty.clear();
-    try {
-      await loadWeek();           // 서버 값으로 되돌린다
-    } catch (err) {
-      alert(err.message);
-    }
   });
 
   dayScheduleStateToggle.addEventListener("change", () => {
@@ -954,6 +1156,25 @@
 
   btnAutoGenerate.addEventListener("click", autoGenerateRounds);
   btnSaveSchedule.addEventListener("click", saveSchedule);
+  btnCopySchedule.addEventListener("click", handleCopySchedule);
+
+  roundViewCheckbox.addEventListener("change", () => {
+    if (!state.loaded) return;
+    const view = roundViewCheckbox.checked ? "exception" : "rule";
+
+    captureDay(state.activeDow);   // "평소 규칙"을 떠나기 전에 지금까지 편집한 값을 걷어둔다
+    state.roundView = view;
+    updateRoundViewToggle();
+    const dow = baseDow();
+    applyRoundView(dow, state.days[dow], nearestExceptionFor(dow));
+    updateCopyButtonLabel();
+  });
+
+  document.addEventListener("click", (e) => {
+    const input = e.target.closest("input.time-value");
+    if (input) openTimePicker(input);
+  });
+
   btnRegisterException.addEventListener("click", registerException);
 
   exceptionTypeGroup.addEventListener("click", (e) => {

@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>클리닉 예약 등록</title>
+  <title>예약 현황</title>
 
   <link rel="stylesheet" th:href="@{/css/common.css}" />
   <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
-  <link rel="stylesheet" th:href="@{/css/monitor/reservation.css}" />
+  <link rel="stylesheet" th:href="@{/css/reservation/reservation.css}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 
   <script th:src="@{/js/common.js}"></script>
@@ -24,61 +24,460 @@
     <main class="content reservation-content">
 
       <header class="page-header">
-        <h1>클리닉 예약 등록</h1>
+        <h1>예약 현황</h1>
+        <button type="button" id="btnGuide" class="guide-btn">
+          <i class="fa-regular fa-circle-question"></i>
+          사용 가이드
+        </button>
       </header>
 
-      <section class="reservation-toolbar">
-        <div class="monitor-date-picker">
-          <span class="monitor-date-display" id="reservationDateDisplay">2026. 07. 23</span>
-          <div class="monitor-date-trigger">
-            <i class="fa-regular fa-calendar"></i>
-            <input type="date" id="reservationDate" value="2026-07-23" />
+      <div class="reservation-scroll">
+
+        <!-- 조회 날짜 / 검색 -->
+        <section class="reservation-toolbar">
+          <div class="toolbar-group">
+            <span class="toolbar-label">조회 날짜</span>
+            <div class="date-picker-wrap">
+              <div class="monitor-date-picker">
+                <span class="monitor-date-display" id="reservationDateDisplay">2026-08-14</span>
+                <div class="monitor-date-trigger">
+                  <i class="fa-regular fa-calendar"></i>
+                  <input type="date" id="reservationDate" value="2026-08-14" />
+                </div>
+              </div>
+              <div class="date-nav">
+                <button type="button" id="btnPrevDay" class="btn outline small"><i class="fa-solid fa-chevron-left"></i>
+                  이전 날</button>
+                <button type="button" id="btnToday" class="btn outline small">오늘</button>
+                <button type="button" id="btnNextDay" class="btn outline small">다음 날 <i
+                    class="fa-solid fa-chevron-right"></i></button>
+              </div>
+            </div>
           </div>
+
+          <div class="toolbar-group">
+            <span class="toolbar-label">검색</span>
+            <div class="serch-box-wrap">
+              <div class="search-box">
+                <input type="text" id="studentSearchKeyword" placeholder="이름 검색" />
+                <i class="fa-solid fa-magnifying-glass"></i>
+              </div>
+              <button type="button" id="btnSearch" class="btn primary small" style="width: 100px;">조회</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="reservation-grid">
+
+          <!-- 왼쪽: 회차별 현황 + 예약자 목록 -->
+          <div class="reservation-main">
+            <section class="panel-card">
+              <div class="panel-head">
+                <h2>회차별 예약 현황</h2>
+              </div>
+              <p class="panel-desc">선택한 날짜는 총 6회차 운영이며 13:00부터 18:50까지 진행됩니다.</p>
+
+              <div class="round-card-grid" id="roundCardGrid">
+                <button type="button" class="round-status-card" data-state="available">
+                  <div class="round-status-top">
+                    <span class="round-status-no">1회차</span>
+                    <span class="round-status-badge badge-available">여유</span>
+                  </div>
+                  <span class="round-status-time">13:00 ~ 13:50</span>
+                  <span class="round-status-count">6 <em>/ 10명</em></span>
+                </button>
+
+                <button type="button" class="round-status-card active" data-state="full">
+                  <div class="round-status-top">
+                    <span class="round-status-no">2회차</span>
+                    <span class="round-status-badge badge-full">마감</span>
+                  </div>
+                  <span class="round-status-time">14:00 ~ 14:50</span>
+                  <span class="round-status-count">10 <em>/ 10명</em></span>
+                </button>
+
+                <button type="button" class="round-status-card" data-state="available">
+                  <div class="round-status-top">
+                    <span class="round-status-no">3회차</span>
+                    <span class="round-status-badge badge-available">여유</span>
+                  </div>
+                  <span class="round-status-time">15:00 ~ 15:50</span>
+                  <span class="round-status-count">2 <em>/ 10명</em></span>
+                </button>
+
+                <button type="button" class="round-status-card" data-state="none">
+                  <div class="round-status-top">
+                    <span class="round-status-no">4회차</span>
+                    <span class="round-status-badge badge-none">없음</span>
+                  </div>
+                  <span class="round-status-time">16:00 ~ 16:50</span>
+                  <span class="round-status-count">0 <em>/ 10명</em></span>
+                </button>
+
+                <button type="button" class="round-status-card" data-state="soon">
+                  <div class="round-status-top">
+                    <span class="round-status-no">5회차</span>
+                    <span class="round-status-badge badge-soon">임박</span>
+                  </div>
+                  <span class="round-status-time">17:00 ~ 17:50</span>
+                  <span class="round-status-count">8 <em>/ 10명</em></span>
+                </button>
+
+                <button type="button" class="round-status-card" data-state="available">
+                  <div class="round-status-top">
+                    <span class="round-status-no">6회차</span>
+                    <span class="round-status-badge badge-available">여유</span>
+                  </div>
+                  <span class="round-status-time">18:00 ~ 18:50</span>
+                  <span class="round-status-count">6 <em>/ 10명</em></span>
+                </button>
+              </div>
+            </section>
+
+            <section class="panel-card reservation-list-card">
+              <div class="panel-head">
+                <h2><span class="round-highlight">2회차</span> 예약자 목록 <span class="round-list-sub">| 14:00 ~ 14:50 | 예약
+                    9/10명</span></h2>
+                <button type="button" id="btnAddReservation" class="btn outline small"><i class="fa-solid fa-plus"></i>
+                  예약 등록</button>
+              </div>
+
+              <div class="reservation-table-wrap">
+                <table class="reservation-table reservation-table-head">
+                  <colgroup>
+                    <col style="width:6%">
+                    <col style="width:10%">
+                    <col style="width:8%">
+                    <col style="width:14%">
+                    <col style="width:12%">
+                    <col style="width:12%">
+                    <col style="width:14%">
+                    <col style="width:10%">
+                    <col style="width:14%">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>No</th>
+                      <th>학생</th>
+                      <th>학년</th>
+                      <th>연락처</th>
+                      <th>예약방법</th>
+                      <th>상태</th>
+                      <th>사유</th>
+                      <th>이번 달 출석</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                </table>
+                <div class="reservation-table-body-scroll">
+                  <table class="reservation-table reservation-table-body">
+                    <colgroup>
+                      <col style="width:6%">
+                      <col style="width:10%">
+                      <col style="width:8%">
+                      <col style="width:14%">
+                      <col style="width:12%">
+                      <col style="width:12%">
+                      <col style="width:14%">
+                      <col style="width:10%">
+                      <col style="width:14%">
+                    </colgroup>
+                    <tbody id="reservationListBody">
+                    <tr class="selected">
+                      <td>1</td>
+                      <td class="cell-name">김호호</td>
+                      <td>초2</td>
+                      <td>010-0000-0000</td>
+                      <td>직접 예약</td>
+                      <td><span class="status-pill status-complete">예약 완료</span></td>
+                      <td></td>
+                      <td>2회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>2</td>
+                      <td class="cell-name">이하니</td>
+                      <td>초3</td>
+                      <td>010-0000-0000</td>
+                      <td>직접 예약</td>
+                      <td><span class="status-pill status-used">이용 완료</span></td>
+                      <td></td>
+                      <td>3회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>3</td>
+                      <td class="cell-name">박부키</td>
+                      <td>초1</td>
+                      <td>010-0000-0000</td>
+                      <td class="cell-center">센터 예약</td>
+                      <td><span class="status-pill status-changed">예약 변경</span></td>
+                      <td>개인 일정</td>
+                      <td>1회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>4</td>
+                      <td class="cell-name">최책방</td>
+                      <td>초1</td>
+                      <td>010-0000-0000</td>
+                      <td>직접 예약</td>
+                      <td><span class="status-pill status-cancelled">예약 취소</span></td>
+                      <td>병원 방문</td>
+                      <td>2회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>5</td>
+                      <td class="cell-name">송하나</td>
+                      <td>초1</td>
+                      <td>010-0000-0000</td>
+                      <td>직접 예약</td>
+                      <td><span class="status-pill status-complete">예약 완료</span></td>
+                      <td></td>
+                      <td>3회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>6</td>
+                      <td class="cell-name">강도서</td>
+                      <td>초2</td>
+                      <td>010-0000-0000</td>
+                      <td>직접 예약</td>
+                      <td><span class="status-pill status-absent">결석</span></td>
+                      <td></td>
+                      <td>3회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>7</td>
+                      <td class="cell-name">윤읽기</td>
+                      <td>초2</td>
+                      <td>010-0000-0000</td>
+                      <td>직접 예약</td>
+                      <td><span class="status-pill status-complete">예약 완료</span></td>
+                      <td></td>
+                      <td>2회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                    <tr>
+                      <td>8</td>
+                      <td class="cell-name">김독서</td>
+                      <td>초1</td>
+                      <td>010-0000-0000</td>
+                      <td class="cell-center">센터 예약</td>
+                      <td><span class="status-pill status-used">이용 완료</span></td>
+                      <td></td>
+                      <td>1회</td>
+                      <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+                    </tr>
+                  </tbody>
+                  </table>
+                </div>
+              </div>
+            </section>
+
+          </div>
+
+          <!-- 오른쪽: 예약 변경 패널 -->
+          <aside class="panel-card change-panel" id="changePanel">
+            <div class="panel-head">
+              <h2 id="changePanelTitle">예약 등록</h2>
+            </div>
+            <p class="panel-desc" id="changePanelDesc">선택한 학생의 예약을 등록합니다.</p>
+
+            <!-- 내용이 패널 높이를 넘어서면(화면 확대 등) 카드 밖으로 튀어나오지 않고 이 안에서만
+                 스크롤되게 한다 — 버튼 영역(change-panel-actions)은 항상 바닥에 고정 -->
+            <div class="change-panel-body" id="changePanelBody">
+
+            <div class="current-reservation-box" id="currentReservationBox" hidden>
+              <span class="current-reservation-title"><span id="changeTargetName">김호호</span> 학생의 현재 예약정보</span>
+              <div class="current-reservation-info">
+                <div class="info-cell">
+                  <span class="info-label">예약 날짜</span>
+                  <span class="info-value">2026-08-14 (금)</span>
+                </div>
+                <div class="info-cell">
+                  <span class="info-label">예약 회차</span>
+                  <span class="info-value">2회차 14:00 ~ 14:50</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-group divider-group">
+              <label for="changeDate" id="changeDateLabel">등록 날짜</label>
+              <div class="date-input-wrap">
+                <input type="date" id="changeDate" value="2026-08-15" />
+              </div>
+            </div>
+
+            <div class="field-group divider-group">
+              <label id="changeRoundLabel">등록 회차</label>
+              <div class="round-pick-scroll">
+                <ul class="round-pick-list" id="roundPickList">
+                  <li class="round-pick checked">
+                    <label>
+                      <input type="radio" name="changeRound" value="1" checked />
+                      <span class="round-pick-left">
+                        <span class="round-pick-checkbox"></span>
+                        <span class="round-pick-time">1회차 13:00 ~ 13:50</span>
+                      </span>
+                      <span class="round-pick-remain">잔여 4명</span>
+                    </label>
+                  </li>
+                  <li class="round-pick disabled">
+                    <label>
+                      <input type="radio" name="changeRound" value="2" disabled />
+                      <span class="round-pick-left">
+                        <span class="round-pick-checkbox"></span>
+                        <span class="round-pick-time">2회차 14:00 ~ 14:50</span>
+                      </span>
+                      <span class="round-pick-remain">예약 마감</span>
+                    </label>
+                  </li>
+                  <li class="round-pick">
+                    <label>
+                      <input type="radio" name="changeRound" value="3" />
+                      <span class="round-pick-left">
+                        <span class="round-pick-checkbox"></span>
+                        <span class="round-pick-time">3회차 15:00 ~ 15:50</span>
+                      </span>
+                      <span class="round-pick-remain">잔여 8명</span>
+                    </label>
+                  </li>
+                  <li class="round-pick disabled">
+                    <label>
+                      <input type="radio" name="changeRound" value="4" disabled />
+                      <span class="round-pick-left">
+                        <span class="round-pick-checkbox"></span>
+                        <span class="round-pick-time">4회차 16:00 ~ 16:50</span>
+                      </span>
+                      <span class="round-pick-remain">운영 없음</span>
+                    </label>
+                  </li>
+                  <li class="round-pick">
+                    <label>
+                      <input type="radio" name="changeRound" value="5" />
+                      <span class="round-pick-left">
+                        <span class="round-pick-checkbox"></span>
+                        <span class="round-pick-time">5회차 17:00 ~ 17:50</span>
+                      </span>
+                      <span class="round-pick-remain">잔여 2명</span>
+                    </label>
+                  </li>
+                  <li class="round-pick">
+                    <label>
+                      <input type="radio" name="changeRound" value="6" />
+                      <span class="round-pick-left">
+                        <span class="round-pick-checkbox"></span>
+                        <span class="round-pick-time">6회차 18:00 ~ 18:50</span>
+                      </span>
+                      <span class="round-pick-remain">잔여 4명</span>
+                    </label>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- 예약 등록 모드에서만 노출 — 선택한 회차에 이미 예약된 학생을 제외한 학생 목록 -->
+            <div class="field-group student-pick-group" id="studentPickGroup">
+              <div class="student-pick-head">
+                <label>학생 목록</label>
+                <div class="student-pick-search-group">
+                  <input type="text" id="studentPickSearch" class="student-pick-search" placeholder="이름 검색" />
+                  <button type="button" id="btnStudentPickSearch" class="btn primary student-pick-search-btn">조회</button>
+                </div>
+              </div>
+              <div class="student-pick-table-wrap">
+                <table class="student-pick-table student-pick-table-head">
+                  <colgroup>
+                    <col style="width:10%">
+                    <col style="width:20%">
+                    <col style="width:20%">
+                    <col style="width:50%">
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th>이름</th>
+                      <th>학년</th>
+                      <th>연락처</th>
+                    </tr>
+                  </thead>
+                </table>
+                <div class="student-pick-list" id="studentPickList">
+                <table class="student-pick-table student-pick-table-body">
+                  <colgroup>
+                    <col style="width:10%">
+                    <col style="width:20%">
+                    <col style="width:20%">
+                    <col style="width:50%">
+                  </colgroup>
+                  <tbody>
+                    <tr class="student-pick-item">
+                      <td><span class="student-pick-checkbox"></span><input type="checkbox" name="pickStudent" value="1" /></td>
+                      <td class="student-pick-name">이하늘</td>
+                      <td class="student-pick-grade">초2</td>
+                      <td class="student-pick-contact">010-1234-5678</td>
+                    </tr>
+                    <tr class="student-pick-item">
+                      <td><span class="student-pick-checkbox"></span><input type="checkbox" name="pickStudent" value="2" /></td>
+                      <td class="student-pick-name">박서준</td>
+                      <td class="student-pick-grade">초1</td>
+                      <td class="student-pick-contact">010-2345-6789</td>
+                    </tr>
+                    <tr class="student-pick-item">
+                      <td><span class="student-pick-checkbox"></span><input type="checkbox" name="pickStudent" value="3" /></td>
+                      <td class="student-pick-name">김도윤</td>
+                      <td class="student-pick-grade">초3</td>
+                      <td class="student-pick-contact">010-3456-7890</td>
+                    </tr>
+                    <tr class="student-pick-item">
+                      <td><span class="student-pick-checkbox"></span><input type="checkbox" name="pickStudent" value="4" /></td>
+                      <td class="student-pick-name">최지우</td>
+                      <td class="student-pick-grade">초2</td>
+                      <td class="student-pick-contact">010-4567-8901</td>
+                    </tr>
+                    <tr class="student-pick-item">
+                      <td><span class="student-pick-checkbox"></span><input type="checkbox" name="pickStudent" value="5" /></td>
+                      <td class="student-pick-name">정하윤</td>
+                      <td class="student-pick-grade">초1</td>
+                      <td class="student-pick-contact">010-5678-9012</td>
+                    </tr>
+                    <tr class="student-pick-item">
+                      <td><span class="student-pick-checkbox"></span><input type="checkbox" name="pickStudent" value="6" /></td>
+                      <td class="student-pick-name">윤시우</td>
+                      <td class="student-pick-grade">초3</td>
+                      <td class="student-pick-contact">010-6789-0123</td>
+                    </tr>
+                  </tbody>
+                </table>
+                </div>
+              </div>
+            </div>
+
+            <div class="field-group" id="changeReasonGroup">
+              <label for="changeReason" id="changeReasonLabel">등록 사유</label>
+              <textarea id="changeReason" rows="3" placeholder="사유를 작성해 주세요."></textarea>
+            </div>
+
+            </div>
+
+            <div class="change-panel-actions">
+              <button type="button" id="btnCancelReservation" class="btn danger-outline" hidden>예약 취소</button>
+              <button type="button" id="btnSaveChange" class="btn primary">예약 등록</button>
+            </div>
+          </aside>
+
         </div>
-      </section>
 
-      <section class="reservation-body">
-
-        <aside class="reservation-search-panel">
-          <h3>학생 검색 · 등록</h3>
-
-          <div class="search-row">
-            <input type="text" id="studentKeyword" placeholder="학생 이름 또는 앱 아이디로 검색" />
-            <button type="button" id="btnSearchStudent" class="btn primary small">검색</button>
-          </div>
-
-          <ul class="student-search-results" id="studentSearchResults"></ul>
-
-          <div class="selected-student" id="selectedStudentBox" hidden>
-            <div class="selected-student-name" id="selectedStudentName"></div>
-            <select class="monitor-slot-picker" id="reservationSlot"></select>
-            <button type="button" id="btnRegisterReservation" class="btn primary small">예약 등록</button>
-          </div>
-        </aside>
-
-        <div class="reservation-list-panel">
-          <h3>선택한 날짜의 예약 현황</h3>
-          <table class="reservation-table">
-            <thead>
-              <tr>
-                <th>회차</th>
-                <th>학생명</th>
-                <th>학교</th>
-                <th>학년</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody id="reservationListBody"></tbody>
-          </table>
-        </div>
-
-      </section>
+      </div>
 
     </main>
 
   </div>
 
-  <script th:src="@{/js/monitor/reservation.js}"></script>
+  <script th:src="@{/js/reservation/reservation.js}"></script>
 </body>
 
 </html>
