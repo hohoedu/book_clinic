@@ -9,7 +9,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   initFilters();
   initHistoryModal();
   initBulkModal();
-  initPwaInstallButton();
   await loadStocks();
 });
 
@@ -781,30 +780,3 @@ async function saveBulkTab() {
   }
 }
 
-/* ===================== PWA 설치 버튼 ===================== */
-
-function initPwaInstallButton() {
-  const installBtn = document.getElementById("pwaInstallBtn");
-  if (!installBtn) return;
-
-  let deferredInstallPrompt = null;
-
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event;
-    installBtn.hidden = false;
-  });
-
-  installBtn.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    installBtn.hidden = true;
-  });
-
-  window.addEventListener("appinstalled", () => {
-    installBtn.hidden = true;
-    deferredInstallPrompt = null;
-  });
-}

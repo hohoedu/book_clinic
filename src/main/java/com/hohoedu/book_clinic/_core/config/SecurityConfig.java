@@ -67,7 +67,8 @@ public class SecurityConfig {
                                                                 // 발급 시점에 이미 로그인돼 있어야 하므로 기본 authenticated() 규칙을 그대로
                                                                 // 탄다).
                                                                 "/sso/callback",
-                                                                "/admin/monitor/reservation-view")
+                                                                // 기기 등록 — 유효한 키 원문을 알아야만 통과하므로 그 자체가 자격 증명이다
+                                                                "/kiosk/register")
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .formLogin(form -> form

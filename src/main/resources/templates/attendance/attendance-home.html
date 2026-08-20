@@ -19,7 +19,8 @@
 </head>
 
 <body>
-  <div class="attendance-viewport">
+  <!-- 기기 등록이 끝난 평소 화면 -->
+  <div class="attendance-viewport" th:if="${registered}">
     <img class="attendance-logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
     <h1 class="attendance-title">입실 또는 퇴실을 선택해주세요</h1>
     <div class="attendance-buttons">
@@ -32,6 +33,25 @@
         <span>퇴실</span>
       </button>
     </div>
+    <!-- 기기 반납·센터 이전용. 학생이 잘못 누르지 않도록 작게 두고 확인을 한 번 받는다 -->
+    <button type="button" class="unregister-btn" id="unregisterBtn">기기 등록 해제</button>
+  </div>
+
+  <!--
+    아직 이 기기에 라이선스 키가 없을 때. 설치 담당 직원이 본사에서 받은 키를 한 번 입력하면
+    끝나고, 이후로는 위 화면만 보인다. 키가 없으면 학생 로그인 자체가 막히므로 입실/퇴실 버튼을
+    보여줄 이유가 없다.
+  -->
+  <div class="attendance-viewport register" th:unless="${registered}">
+    <img class="attendance-logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
+    <h1 class="attendance-title">기기 등록이 필요합니다</h1>
+    <p class="register-desc">본사에서 받은 라이선스 키를 입력해주세요. 처음 한 번만 하면 됩니다.</p>
+    <form class="register-form" id="registerForm">
+      <input type="text" id="licenseKeyInput" placeholder="XXXX-XXXX-XXXX-XXXX"
+             autocomplete="off" autocapitalize="characters" spellcheck="false" />
+      <button type="submit" class="attendance-btn enter">등록하기</button>
+    </form>
+    <p class="register-error" id="registerError" hidden></p>
   </div>
 
   <script th:src="@{/js/vendor/jsqr/jsQR.js}"></script>

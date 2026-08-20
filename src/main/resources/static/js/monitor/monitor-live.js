@@ -199,6 +199,15 @@ async function loadLiveView() {
 function applyFirestoreCard(doc) {
   doc._syncedAt = Date.now(); // 경과시간 로컬 카운트업 기준점 (이 카드가 서버 값으로 갱신된 시각)
   const idx = cards.findIndex((c) => c.studentId === doc.studentId && c.timeSlot === doc.timeSlot);
+  // 예약 취소 동기화(MonitorService.syncCanceledReservationCard)는 cardStatus를 "CANCELED"로
+  // 강제 표시해서 보낸다 — Firestore 문서 삭제(type="removed")는 프론트가 안 듣고 있으므로
+  // (connectFirestore 참고), 삭제 대신 이 값을 신호로 받아 카드를 직접 목록에서 제거한다(2026-08-20).
+  if (doc.cardStatus === "CANCELED") {
+    if (idx !== -1) cards.splice(idx, 1);
+    refreshSlotOptions();
+    render();
+    return;
+  }
   if (idx === -1) cards.push(doc);
   else cards[idx] = doc;
   refreshSlotOptions();
@@ -699,6 +708,7 @@ function closeReadingLogPanel() {
 
 async function saveReadingLog() {
   if (!selectedCard) return;
+  if (!confirm("저장하시겠습니까?")) return;
 
   const attitudeCodes = [...document.querySelectorAll("#attitudeCheckboxGroup input:checked")].map((cb) => cb.value);
   const helpNeeded = !!document.querySelector("#helpNeededCheckboxGroup input:checked");
@@ -713,6 +723,8 @@ async function saveReadingLog() {
       memo,
     });
     await loadLiveView();
+    alert("저장되었습니다.");
+    closeReadingLogPanel();
   } catch (e) {
     alert(e.message);
   }

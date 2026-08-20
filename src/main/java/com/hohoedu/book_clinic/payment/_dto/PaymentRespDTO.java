@@ -160,6 +160,22 @@ public class PaymentRespDTO {
         private int usedCount;
     }
 
+    /**
+     * 형제 선택 UI에 필요한 최소 정보만 담는다(2026-08-20).
+     *
+     * 이전에는 Student 엔티티를 그대로 돌려줘서 appPassword/appToken 같은 인증 관련 필드가
+     * 응답 스키마에 그대로 노출됐다(값은 조회 쿼리가 안 채워 null이었지만, 쿼리에 컬럼이
+     * 하나 추가되는 순간 그대로 새어나가는 구조였다). 필요한 필드만 골라 담는다.
+     */
+    @Data
+    public static class SiblingDTO {
+        private String studentId;
+        private String studentName;
+        private String centerCode;
+        private String gradeKey;
+        private String school;
+    }
+
     /** 환불 규정 한 건 */
     @Data
     public static class RefundRuleDTO {

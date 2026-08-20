@@ -159,6 +159,15 @@
     </div>
   </div>
 
+  <div class="pass-exhausted-overlay" th:if="${noReservation}" id="noReservationModal">
+    <div class="pass-exhausted-box">
+      <i class="fa-solid fa-calendar-xmark" aria-hidden="true"></i>
+      <h2>오늘은 등록된 예약이 없어요</h2>
+      <p>선생님께 말씀드려요.</p>
+      <button type="button" id="noReservationOk">확인</button>
+    </div>
+  </div>
+
   <div class="login-viewport">
     <form class="login-card" id="loginForm" th:action="@{/student/login}" method="post">
       <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
@@ -187,6 +196,11 @@
     const passExhaustedModal = document.getElementById('passExhaustedModal');
     if (passExhaustedModal) {
       document.getElementById('passExhaustedOk').addEventListener('click', () => passExhaustedModal.remove());
+    }
+
+    const noReservationModal = document.getElementById('noReservationModal');
+    if (noReservationModal) {
+      document.getElementById('noReservationOk').addEventListener('click', () => noReservationModal.remove());
     }
 
     document.getElementById('qrLoginBtn').addEventListener('click', async () => {

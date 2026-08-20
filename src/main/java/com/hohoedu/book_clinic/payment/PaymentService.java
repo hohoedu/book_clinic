@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.handler.exception.Exception500;
+import org.springframework.web.client.HttpClientErrorException;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.clinic.ClinicRepository;
 import com.hohoedu.book_clinic.pass.PassService;
@@ -219,7 +220,7 @@ public class PaymentService {
             paymentRepository.insertLog(reqDTO.getOrderNo(), null, "APPROVE", null, null, null, e.toString());
             netCancel(reqDTO, "승인 호출 실패");
             paymentTxService.confirmFailed(reqDTO.getOrderNo(), null);
-            throw new Exception500("결제 승인에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            throw approveCallFailure(e);
         }
 
         paymentRepository.insertLog(reqDTO.getOrderNo(), result.get("tid"), "APPROVE",
@@ -355,7 +356,7 @@ public class PaymentService {
             log.error("[결제] 모바일 승인 호출 실패 — orderNo={}", orderNo, e);
             paymentRepository.insertLog(orderNo, tid, "APPROVE", null, null, null, e.toString());
             paymentTxService.confirmFailed(orderNo, null);
-            throw new Exception500("결제 승인에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            throw approveCallFailure(e);
         }
 
         paymentRepository.insertLog(orderNo, result.get("P_TID"), "APPROVE",
@@ -451,7 +452,7 @@ public class PaymentService {
             log.error("[결제] 모바일 승인 호출 실패(그룹) — groupOrderNo={}", groupOrderNo, e);
             paymentRepository.insertLog(groupOrderNo, tid, "APPROVE", null, null, null, e.toString());
             paymentTxService.confirmFailedGroup(orderNosOf(group), null);
-            throw new Exception500("결제 승인에 실패했습니다. 잠시 후 다시 시도해주세요.");
+            throw approveCallFailure(e);
         }
 
         paymentRepository.insertLog(groupOrderNo, result.get("P_TID"), "APPROVE",
@@ -884,6 +885,21 @@ public class PaymentService {
             return null;
         }
         return raw.replaceAll("(\\d{6})\\d{4,9}(\\d{4})", "$1******$2");
+    }
+
+    /**
+     * 승인 호출이 던진 예외를 사용자 응답으로 바꾼다(2026-08-20).
+     *
+     * 이니시스가 4xx로 답했다는 건 "요청이 잘못됐다"고 확정적으로 거절한 것이라(위조 authToken 등)
+     * 재시도해도 결과가 같다 — 서버 장애가 아니므로 400으로 알린다. 타임아웃·연결 실패·5xx는
+     * 우리 쪽이나 PG 쪽 문제이고 재시도로 풀릴 수 있으므로 기존대로 500을 유지한다.
+     * (망취소/실패 확정 처리는 호출부에서 이미 끝낸 뒤에 부른다 — 분류만 담당한다.)
+     */
+    private RuntimeException approveCallFailure(Exception e) {
+        if (e instanceof HttpClientErrorException) {
+            return new Exception400("결제 승인 요청이 거부되었습니다. 결제를 다시 시도해주세요.");
+        }
+        return new Exception500("결제 승인에 실패했습니다. 잠시 후 다시 시도해주세요.");
     }
 
     private String nvl(String value, String fallback) {

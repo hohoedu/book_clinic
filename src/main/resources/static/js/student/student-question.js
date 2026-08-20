@@ -219,15 +219,9 @@
   }
 
   async function showResult() {
-    // 풀이 중에는 정답 여부를 계산하지 않으므로, 결과 시점에 문항별 선택과 itempool.ans를 대조해 집계한다
-    // (qlevel=01은 어차피 서버가 다시 채점하고, 이 값은 서버 오류 폴백 표시에만 쓰인다)
-    const correctCount = questions.filter((q, i) => answered[i] && Number(q.ans) === answered[i].selected).length;
+    // 정답(itempool.ans)은 더 이상 화면으로 내려오지 않는다(2026-08-20, 정답 노출 차단) —
+    // 정답 수도 오답 문항 목록도 전부 서버 채점 결과(/clinic/quiz/submit)를 쓴다.
     const totalCount = questions.length;
-    // "틀린 문제 풀기"(독서친구 등급)에서 쓸 오답 문항 번호 — 서버가 문항별 정오답을 내려주지 않으므로
-    // 방금 푼 문제 목록(q.ans)과 대조한 클라이언트 집계값을 그대로 넘긴다
-    const wrongQnums = questions
-      .filter((q, i) => answered[i] && Number(q.ans) !== answered[i].selected)
-      .map((q) => q.qnum);
 
     showState('grading');
 
@@ -250,21 +244,22 @@
       if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');
       result = isAdvanced
         ? { advanced: true, correctCount: data.response.correctCount, totalCount: data.response.totalCount, newBadges: data.response.newBadges }
-        : { advanced: false, wrongQnums, bookTitle: currentBookTitle, ...data.response };
+        : { advanced: false, bookTitle: currentBookTitle, ...data.response };  // wrongQnums도 응답에 들어있다
     } catch (err) {
       console.error(err);
-      // 채점 서버 호출이 실패해도 학생이 결과를 볼 수 있도록 클라이언트 집계값으로 대체 표시(재도전 취급)
+      // 채점 서버 호출이 실패한 경우. 정답을 모르니 점수를 계산할 수 없어 0점으로 두고 재도전으로
+      // 표시한다 — 틀린 문제 목록도 만들 수 없으므로 비운다(재도전 버튼은 전체 다시 풀기로 동작).
       result = isAdvanced
-        ? { advanced: true, correctCount, totalCount, newBadges: null }
+        ? { advanced: true, correctCount: 0, totalCount, newBadges: null }
         : {
             advanced: false,
             passed: false,
             grade: null,
-            correctCount,
+            correctCount: 0,
             totalCount,
             passLine: Math.ceil(totalCount * (2 / 3)),
             expGained: null,
-            wrongQnums,
+            wrongQnums: [],
           };
     }
 

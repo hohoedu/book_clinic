@@ -79,6 +79,12 @@ public class AdminViewController {
         return "reservation/reservation";
     }
 
+    /** 기기 라이선스 — 본사가 센터 기기용 키를 발급/폐기하는 화면 (2026-08-20). API가 assertHq로 다시 막는다 */
+    @GetMapping("/admin/operation/kiosk-view")
+    public String kioskLicense() {
+        return "operation/kiosk-license";
+    }
+
     /** 독서일지 — 정적 스캐폴딩 단계, 조회/저장 API 연동은 다음 작업에서 이어감 (2026-07-29) */
     @GetMapping("/admin/growth/diary")
     public String diary() {

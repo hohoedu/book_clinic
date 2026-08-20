@@ -20,6 +20,8 @@ import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.pass.PassService;
+import com.hohoedu.book_clinic.reservation.ReservationService;
+import com.hohoedu.book_clinic.kiosk.KioskService;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -51,7 +53,9 @@ public class StudentViewController {
     private final StudentRepository studentRepository;
     private final ClinicService clinicService;
     private final MonitorService monitorService;
+    private final KioskService kioskService;
     private final PassService passService;
+    private final ReservationService reservationService;
 
     /**
      * 세션에 로그인된 studentId가 없으면(로그인 안 함/세션 만료) null. 세션은 있는데 URL의
@@ -87,13 +91,15 @@ public class StudentViewController {
      */
     @PostMapping("/exit")
     @ResponseBody
-    public ResponseEntity<?> exitByQr(@RequestBody Map<String, String> body) {
+    public ResponseEntity<?> exitByQr(@RequestBody Map<String, String> body, HttpServletRequest request) {
         String studentId = body.get("studentId");
         String appId = body.get("appId");
         Student student = studentRepository.findByAppId(appId);
         if (student == null) {
             throw new Exception404("일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
         }
+        // 등록된 기기라도 남의 센터 학생까지 퇴실시킬 수 있으면 안 된다(2026-08-20)
+        kioskService.assertSameCenter(request, student.getCenterCode());
         if (studentId != null && !studentId.isBlank() && !student.getStudentId().equals(studentId)) {
             throw new Exception400("본인 학생증 QR이 아니에요. 다시 확인해주세요.");
         }
@@ -119,6 +125,17 @@ public class StudentViewController {
         Student student = studentRepository.findByAppId(appId);
         if (student == null) {
             redirectAttributes.addFlashAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. 다시 확인해주세요.");
+            return "redirect:/student/login";
+        }
+        // appId는 학생증에 인쇄된 값이라 비밀이 아니다. "등록된 센터 기기에서 왔는가"는
+        // KioskTokenInterceptor가 보고, "그 기기의 센터 학생인가"는 여기서 본다(2026-08-20).
+        kioskService.assertSameCenter(request, student.getCenterCode());
+        // 오늘 예약이 없으면 메인 화면까지 들여보내지 않고 로그인 단계에서 바로 막는다(2026-08-20,
+        // 예약 필수 정책). 어차피 안 막아도 홈 화면 진입(getHomeState → enterSession → markAttended)
+        // 에서 같은 이유로 막히지만, 그때는 이미 세션까지 만들고 나서 롤백하는 것보다 로그인
+        // 단계에서 끊는 편이 더 이르고 명확하다 — 이용권 소진 차단과 같은 이유·같은 패턴.
+        if (!reservationService.hasReservationToday(student.getStudentId())) {
+            redirectAttributes.addFlashAttribute("noReservation", true);
             return "redirect:/student/login";
         }
         // 이용권이 없으면 메인 화면까지 들여보내지 않고 로그인 단계에서 바로 막는다(2026-08-05).

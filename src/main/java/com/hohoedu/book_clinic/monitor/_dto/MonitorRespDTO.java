@@ -15,6 +15,7 @@ public class MonitorRespDTO {
      */
     @Data
     public static class CardDTO {
+        private Long reservationId;     // Firestore 문서 키(2026-08-20) — 예약 생성 시점부터 존재해 미입실 상태도 실시간 동기화 가능
         private Integer sessionId;
         private String studentId;
         private String studentName;

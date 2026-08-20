@@ -181,9 +181,11 @@
 
     <select id="findRecommendLogStatus" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendLogStatusDTO">
         SELECT TOP 1
-               recommend_id AS recommendId,
-               status       AS status,
-               grade        AS grade
+               recommend_id  AS recommendId,
+               status        AS status,
+               grade         AS grade,
+               correct_count AS correctCount,
+               total_count   AS totalCount
         FROM erp_bookstore_recommend_log
         WHERE student_id = #{studentId} AND content_id = #{contentId}
         ORDER BY recommend_id DESC

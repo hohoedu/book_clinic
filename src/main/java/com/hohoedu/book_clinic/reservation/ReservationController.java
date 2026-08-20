@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.reservation;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,7 +13,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.reservation._dto.ReservationReqDTO;
+import com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -34,6 +37,7 @@ public class ReservationController {
     private static final String SESSION_STUDENT_ID = "studentId";
 
     private final ReservationService reservationService;
+    private final MonitorService monitorService;
 
     /** 예약 가능한 슬롯 목록. fromDate/toDate 생략 시 오늘부터 4주 */
     @GetMapping("/slots")
@@ -56,8 +60,12 @@ public class ReservationController {
     @PostMapping
     public ResponseEntity<?> reserve(@RequestBody ReservationReqDTO.ReserveReqDTO reqDTO, HttpServletRequest request) {
         String studentId = requireStudentId(request);
-        return ResponseEntity.ok(ApiUtils.success(
-                reservationService.reserve(studentId, reqDTO.getSlotInstanceId())));
+        ReservationRespDTO.ReservationItemDTO reservation =
+                reservationService.reserve(studentId, reqDTO.getSlotInstanceId());
+        // 예약 완료 즉시 실시간 모니터링에 뜨도록 Firestore 동기화(2026-08-20) — 실패해도 예약
+        // 자체는 이미 커밋된 뒤라 응답은 그대로 성공으로 내려간다(syncReservationCard가 내부에서 삼킴).
+        monitorService.syncReservationCard(reservation.getReservationId());
+        return ResponseEntity.ok(ApiUtils.success(reservation));
     }
 
     /** 예약 취소 */
@@ -65,6 +73,7 @@ public class ReservationController {
     public ResponseEntity<?> cancel(@RequestBody ReservationReqDTO.CancelReqDTO reqDTO, HttpServletRequest request) {
         String studentId = requireStudentId(request);
         reservationService.cancel(studentId, reqDTO.getReservationId(), reqDTO.getReason());
+        monitorService.syncCanceledReservationCard(reqDTO.getReservationId());
         return ResponseEntity.ok(ApiUtils.success("예약이 취소되었습니다."));
     }
 
@@ -82,8 +91,12 @@ public class ReservationController {
     public ResponseEntity<?> batchReserve(@RequestBody ReservationReqDTO.BatchReserveReqDTO reqDTO,
                                           HttpServletRequest request) {
         String studentId = requireStudentId(request);
-        return ResponseEntity.ok(ApiUtils.success(
-                reservationService.reserveBatch(studentId, reqDTO.getSlotInstanceIds())));
+        List<ReservationRespDTO.ReservationItemDTO> reservations =
+                reservationService.reserveBatch(studentId, reqDTO.getSlotInstanceIds());
+        // 오늘치가 섞여 있으면 그것도 바로 모니터링에 떠야 하니 전부 동기화한다 — 오늘이 아닌 건
+        // 어차피 모니터링 화면의 날짜 필터에 안 걸려서 그냥 무해하게 넘어간다.
+        reservations.forEach(r -> monitorService.syncReservationCard(r.getReservationId()));
+        return ResponseEntity.ok(ApiUtils.success(reservations));
     }
 
     private LocalDate parseDate(String value) {

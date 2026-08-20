@@ -16,6 +16,7 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.payment._dto.PaymentReqDTO;
+import com.hohoedu.book_clinic.payment._dto.PaymentRespDTO;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -78,8 +79,21 @@ public class PaymentController {
     @GetMapping("/siblings")
     public ResponseEntity<?> siblings(@RequestParam("studentId") String studentId, HttpServletRequest request) {
         requireOwnStudent(request, studentId);
-        List<Student> siblings = studentRepository.findSiblingGroup(studentId);
+        // 엔티티를 그대로 내보내지 않는다 — 화면에 필요한 필드만 옮겨 담는다(PaymentRespDTO.SiblingDTO 주석 참고)
+        List<PaymentRespDTO.SiblingDTO> siblings = studentRepository.findSiblingGroup(studentId).stream()
+                .map(PaymentController::toSiblingDTO)
+                .toList();
         return ResponseEntity.ok(ApiUtils.success(siblings));
+    }
+
+    private static PaymentRespDTO.SiblingDTO toSiblingDTO(Student student) {
+        PaymentRespDTO.SiblingDTO dto = new PaymentRespDTO.SiblingDTO();
+        dto.setStudentId(student.getStudentId());
+        dto.setStudentName(student.getStudentName());
+        dto.setCenterCode(student.getCenterCode());
+        dto.setGradeKey(student.getGradeKey());
+        dto.setSchool(student.getSchool());
+        return dto;
     }
 
     /**

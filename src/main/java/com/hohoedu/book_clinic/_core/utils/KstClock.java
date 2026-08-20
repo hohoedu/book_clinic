@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic._core.utils;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 
 /**
@@ -18,5 +19,10 @@ public final class KstClock {
 
     public static LocalDate today() {
         return LocalDate.now(ZONE);
+    }
+
+    /** DB의 DATEADD(HOUR, 9, GETUTCDATE())와 같은 벽시계 값 — 시각 비교(입실 허용 시간대 등)에 쓴다 */
+    public static LocalDateTime now() {
+        return LocalDateTime.now(ZONE);
     }
 }

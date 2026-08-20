@@ -207,7 +207,14 @@
   }
 
   function slotBadge(slot) {
-    if (slot.status !== "OPEN" || slot.reservedCount >= slot.capacity) return { state: "full", label: "마감" };
+    const ended = new Date(slot.endsAt) <= new Date();
+    if (ended || slot.status !== "OPEN" || slot.reservedCount >= slot.capacity) {
+      return { state: "full", label: "마감" };
+    }
+    if (slot.reservedCount === 0) {
+      if (state.date === todayStr()) return { state: "none", label: "없음" };
+      return { state: "available", label: "여유" };
+    }
     if (slot.reservedCount / slot.capacity >= 0.8) return { state: "soon", label: "임박" };
     return { state: "available", label: "여유" };
   }

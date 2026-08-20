@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.reservation._dto;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import lombok.Data;
@@ -50,6 +51,8 @@ public class ReservationReqDTO {
     public static class InsertReservationDTO {
         private Long slotInstanceId;
         private String studentId;
+        /** 슬롯에서 복사해 넣는다 — UX_reservation_student_date가 이 컬럼으로 하루 한 회차를 강제한다 */
+        private LocalDate serviceDate;
         /** STUDENT/PARENT/ADMIN/SYSTEM — 예약 현황 화면의 "직접 예약"/"센터 예약" 표시에 그대로 쓰인다 */
         private String channel;
         private Long reservationId;

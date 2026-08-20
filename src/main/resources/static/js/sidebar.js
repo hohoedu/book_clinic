@@ -1,4 +1,21 @@
 document.addEventListener("DOMContentLoaded", initSidebar);
+document.addEventListener("DOMContentLoaded", hideHqOnlyMenus);
+
+/* 본사 전용 메뉴 숨김 — 화면에서 숨기는 것만으로는 API 직접 호출을 못 막으므로
+   서버(CenterPolicy.assertHq)가 항상 한 번 더 검사한다. 여기는 표시 정리용이다. */
+async function hideHqOnlyMenus() {
+  const hqOnly = document.querySelectorAll("[data-hq-only]");
+  if (!hqOnly.length) return;
+
+  try {
+    const res = await fetch("/api/user/me");
+    const data = await res.json();
+    if (data.success && data.response.centerCode === "PUS001") return;
+  } catch {
+    /* 조회에 실패하면 숨긴 채로 둔다 — 잘못 보여주는 쪽보다 안전하다 */
+  }
+  hqOnly.forEach((el) => el.remove());
+}
 
 function initSidebar() {
   const layout = document.querySelector(".admin-layout");

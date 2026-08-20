@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.question;
 
 import java.io.IOException;
+import java.util.List;
 
 import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.http.ContentDisposition;
@@ -70,14 +71,25 @@ public class QuestionController {
     /**
      * 도서별 문제 목록 조회
      * contentId 필수, qtype/state 선택 필터
+     *
+     * [정답 노출] 이 엔드포인트는 학생 문제풀이 화면과 관리자 도서 데이터 화면이 같이 쓴다.
+     * 학생 화면 때문에 permitAll이라, 정답(ans)까지 그대로 내려주면 로그인 없이도 정답을 볼 수
+     * 있었다(2026-08-20 발견). 문제 편집이 필요한 관리자에게만 ans를 채워 보내고, 그 외에는
+     * 비운다 — 채점은 어차피 서버가 itempool.ans로 직접 하므로 학생 화면엔 필요 없고,
+     * "틀린 문제 풀기"용 오답 목록은 /clinic/quiz/submit 응답의 wrongQnums가 대신한다.
      */
     @GetMapping("/search")
     public ResponseEntity<?> searchQuestions(
             @RequestParam(value = "contentId", required = true) Integer contentId,
             @RequestParam(value = "qlevel", required = false) String qlevel,
             @RequestParam(value = "qtype", required = false) String qtype,
-            @RequestParam(value = "state", required = false) String state) {
-        return ResponseEntity.ok(ApiUtils.success(questionService.searchQuestions(contentId, qlevel, qtype, state)));
+            @RequestParam(value = "state", required = false) String state,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        List<QuestionRespDTO.QuestionDTO> questions = questionService.searchQuestions(contentId, qlevel, qtype, state);
+        if (userDetails == null) {
+            questions.forEach(q -> q.setAns(null));
+        }
+        return ResponseEntity.ok(ApiUtils.success(questions));
     }
 
     /** 삭제된 문제 목록 조회 (복구 화면용) */

@@ -65,7 +65,7 @@
         ) att
         WHERE si.service_date = #{date}
           AND si.center_code = #{centerCode}
-          AND r.status = 'RESERVED'
+          AND r.status &lt;&gt; 'CANCELED'
         <if test="timeSlot != null and timeSlot != ''">
           AND COALESCE(dia.record_time, CAST(si.seq AS VARCHAR(2))) = #{timeSlot}
         </if>
@@ -169,7 +169,7 @@
                 (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
                  FROM erp_bookstore_reservation r
                  JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status &lt;&gt; 'CANCELED'
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
             JOIN erp_student st ON st.student_id = cs.student_id
@@ -206,7 +206,7 @@
                 (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
                  FROM erp_bookstore_reservation r
                  JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status &lt;&gt; 'CANCELED'
                  ORDER BY r.reservation_id DESC) AS time_slot,
                 CASE WHEN NULLIF(#{inTime,jdbcType=VARCHAR}, '') IS NULL THEN NULL
                      ELSE CAST(CONVERT(VARCHAR(10), cs.session_date, 23) + ' ' + #{inTime,jdbcType=VARCHAR} AS DATETIME2)

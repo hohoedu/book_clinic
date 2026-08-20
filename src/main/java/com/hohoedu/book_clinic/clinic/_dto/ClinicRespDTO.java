@@ -60,6 +60,10 @@ public class ClinicRespDTO {
         private Integer recommendId;
         private String status;  // PENDING / DONE
         private String grade;   // KING / FRIEND / null
+        // 이미 완독(DONE)한 책을 재제출했을 때 "그때 받은 점수"를 그대로 다시 보여주기 위해 함께 읽는다
+        // (2026-08-20 — 이 값이 없어서 재제출분의 즉석 채점 결과가 grade와 어긋나 표시됐다)
+        private Integer correctCount;
+        private Integer totalCount;
     }
 
     /** student-main 화면 레벨 카드에 내려줄 최종 계산 결과 */
@@ -112,6 +116,9 @@ public class ClinicRespDTO {
         private int correctCount;
         private int totalCount;
         private int passLine;          // 합격에 필요한 최소 정답 수
+        // 이번 제출에서 틀린 문항 번호 — "틀린 문제 풀기"가 쓴다. 화면이 정답(itempool.ans)을
+        // 직접 대조해 만들던 값을 서버 계산으로 옮긴 것이다(2026-08-20, 정답 노출 차단).
+        private List<String> wrongQnums;
         private boolean alreadyCompleted;  // 이미 DONE 처리된 책을 재제출한 경우 (레벨 재계산 없음)
         private Integer levelNo;           // 이번 완독 반영 후 현재 레벨 (합격 시에만, 아니면 null)
         private String levelTitle;         // 현재 레벨 칭호 (합격 시에만, 미시딩이면 null)

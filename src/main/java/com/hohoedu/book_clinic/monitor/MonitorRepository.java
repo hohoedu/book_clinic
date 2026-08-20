@@ -57,6 +57,9 @@ public interface MonitorRepository {
     /** 세션 1건의 카드 상세 — Firestore 동기화/저장 직후 최신값 재조회용 */
     MonitorRespDTO.CardDTO findCardBySessionId(@Param("sessionId") Integer sessionId);
 
+    /** 예약 1건의 카드 상세(세션 없어도 조회 가능) — 예약 생성 직후 Firestore 동기화용(2026-08-20) */
+    MonitorRespDTO.CardDTO findReservationCardById(@Param("reservationId") Long reservationId);
+
     /** 독서일지 upsert (세션당 1건) */
     /** 독서일지 헤더 upsert — record_date/record_time/in_time은 세션·예약에서 끌어와 최초 1회만 채운다 */
     void upsertDiary(@Param("sessionId") Integer sessionId, @Param("helpNeeded") Boolean helpNeeded,

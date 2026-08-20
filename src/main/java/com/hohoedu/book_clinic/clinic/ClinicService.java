@@ -298,6 +298,12 @@ public class ClinicService {
         resp.setCorrectCount(correctCount);
         resp.setTotalCount(totalCount);
         resp.setPassLine(passLine);
+        // 오답 문항은 서버가 알려준다 — 화면이 정답을 들고 있지 않아도 "틀린 문제 풀기"가 동작해야
+        // /question/search에서 ans를 빼도 기능이 깨지지 않는다(2026-08-20).
+        resp.setWrongQnums(answerLogs.stream()
+                .filter(row -> !row.isCorrect())
+                .map(ClinicReqDTO.AnswerLogDTO::getQnum)
+                .toList());
 
         ClinicRespDTO.RecommendLogStatusDTO logStatus = clinicRepository.findRecommendLogStatus(studentId, contentId);
         if (logStatus == null) throw new Exception404("추천 이력을 찾을 수 없습니다: studentId=" + studentId + ", contentId=" + contentId);
@@ -326,6 +332,13 @@ public class ClinicService {
             // 이미 완독한 책의 재제출 — 첫 시도가 아니므로 새 뱃지 없음
             resp.setPassed(true);
             resp.setGrade(logStatus.getGrade());
+            // 점수는 이번 제출분이 아니라 완독 당시 기록을 돌려준다. 재제출은 채점 결과를 갱신하지
+            // 않으므로(updateRecommendResult를 타지 않는다) 즉석 채점값을 그대로 내보내면
+            // "0/12인데 KING" 같은 응답이 나갔다(2026-08-20 발견). 옛 기록이 비어 있으면 이번 값 유지.
+            if (logStatus.getCorrectCount() != null && logStatus.getTotalCount() != null) {
+                resp.setCorrectCount(logStatus.getCorrectCount());
+                resp.setTotalCount(logStatus.getTotalCount());
+            }
             resp.setAlreadyCompleted(true);
             resp.setLeveledUp(false);
             resp.setNewBadges(List.of());

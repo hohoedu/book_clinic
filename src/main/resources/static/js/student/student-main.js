@@ -161,6 +161,12 @@
         showState('passExhausted');
         return;
       }
+      // 하루 추천 한도(2권) 초과는 에러 카드로 붙잡아두지 않고 바로 홈으로 돌려보낸다(2026-08-20) —
+      // 학생이 "추천받기"를 다시 눌러도 매번 같은 에러만 반복되는 상황을 만들지 않기 위해서다.
+      if (err.message && err.message.includes('초과할 수 없습니다')) {
+        loadHomeState();
+        return;
+      }
       emptyMsgEl.textContent = err.message || '추천할 수 있는 도서를 찾지 못했어요.';
       showState('empty');
     }

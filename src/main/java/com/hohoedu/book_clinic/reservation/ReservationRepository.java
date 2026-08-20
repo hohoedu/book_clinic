@@ -91,9 +91,9 @@ public interface ReservationRepository {
 
     // ── 출결 전환 (ATTENDED/NOSHOW, 2026-08-18) ─────────────────────────
 
-    /** 그 학생의 그날 RESERVED 예약 — 입실 시 ATTENDED로 전환할 대상을 찾는다. 없으면 null */
-    Long findReservedReservationIdByStudentAndDate(@Param("studentId") String studentId,
-                                                    @Param("serviceDate") LocalDate serviceDate);
+    /** 그 학생의 그날 RESERVED 예약(+회차 시작/종료 시각) — 입실 시 ATTENDED 전환 대상 + 시간대 검증용. 없으면 null */
+    ReservationRespDTO.ReservationItemDTO findReservedSlotByStudentAndDate(@Param("studentId") String studentId,
+                                                                            @Param("serviceDate") LocalDate serviceDate);
 
     /**
      * 조건부 상태 전환 — fromStatus일 때만 toStatus로 바꾼다. cancelReservation과 같은 패턴을

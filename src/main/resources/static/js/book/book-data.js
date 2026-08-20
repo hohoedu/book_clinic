@@ -22,7 +22,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   initQuestionTabs();
   initGradeSelectChange();
   initGuideLogout();
-  initPwaInstallButton();
   initUnsavedChangesGuard();
 
   loadGradeOptions();
@@ -245,32 +244,6 @@ function initGuideLogout() {
   });
 }
 
-/* PWA 설치 버튼 — 브라우저가 설치 가능하다고 판단하면 beforeinstallprompt가 발생함 */
-function initPwaInstallButton() {
-  const installBtn = document.getElementById("pwaInstallBtn");
-  if (!installBtn) return;
-
-  let deferredInstallPrompt = null;
-
-  window.addEventListener("beforeinstallprompt", (event) => {
-    event.preventDefault();
-    deferredInstallPrompt = event;
-    installBtn.hidden = false;
-  });
-
-  installBtn.addEventListener("click", async () => {
-    if (!deferredInstallPrompt) return;
-    deferredInstallPrompt.prompt();
-    await deferredInstallPrompt.userChoice;
-    deferredInstallPrompt = null;
-    installBtn.hidden = true;
-  });
-
-  window.addEventListener("appinstalled", () => {
-    installBtn.hidden = true;
-    deferredInstallPrompt = null;
-  });
-}
 
 /* 저장 안 된 변경사항이 있을 때 뒤로가기/새로고침/브라우저 닫기 경고 */
 function initUnsavedChangesGuard() {

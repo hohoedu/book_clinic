@@ -1,0 +1,94 @@
+
+select * from  erp_bookstore_attitude
+
+select * from  erp_bookstore_attitude_code
+
+select * from  erp_bookstore_badge
+
+select * from  erp_bookstore_clinic_session
+
+select * from  erp_bookstore_code
+
+select * from  erp_bookstore_content
+
+select * from  erp_bookstore_content_del
+
+select * from  erp_bookstore_content_detail
+
+select * from  erp_bookstore_content_detail_del
+
+select * from  erp_bookstore_diary
+
+select * from  erp_bookstore_diary_detail
+
+select * from  erp_bookstore_item
+
+select * from  erp_bookstore_item_del
+
+select * from  erp_bookstore_item_loan
+
+select * from  erp_bookstore_item_stock_log
+
+select * from  erp_bookstore_itempool
+
+select * from  erp_bookstore_itempool_del
+
+select * from  erp_bookstore_level
+
+select * from  erp_bookstore_level_rule
+
+select * from  erp_bookstore_pass
+
+select * from  erp_bookstore_pass_use
+
+select * from  erp_bookstore_payment
+
+select * from  erp_bookstore_payment_cancel
+
+select * from  erp_bookstore_payment_log
+
+select * from  erp_bookstore_priority
+
+select * from  erp_bookstore_priority_del
+
+select * from  erp_bookstore_priority_draft
+
+select * from  erp_bookstore_priority_draft_del
+
+select * from  erp_bookstore_product
+
+select * from  erp_bookstore_quiz_answer_log
+
+select * from  erp_bookstore_quiz_reset_log
+
+select * from  erp_bookstore_reading
+
+select * from  erp_bookstore_recommend_log
+
+select * from  erp_bookstore_refund_rule
+
+select * from  erp_bookstore_reservation
+
+select * from  erp_bookstore_reservation_log
+
+select * from  erp_bookstore_schedule
+
+select * from  erp_bookstore_schedule_del
+
+select * from  erp_bookstore_schedule_exception
+
+select * from  erp_bookstore_schedule_exception_del
+
+select * from  erp_bookstore_schedule_exception_slot
+
+select * from  erp_bookstore_schedule_exception_slot_del
+
+select * from  erp_bookstore_schedule_slot
+
+select * from  erp_bookstore_schedule_slot_del
+
+select * from  erp_bookstore_slot_instance
+
+select * from  erp_bookstore_student_badge
+
+select * from  erp_bookstore_student_card

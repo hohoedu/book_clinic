@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.google.firebase.auth.FirebaseAuth;
+import com.hohoedu.book_clinic._core.auth.CenterAccessGuard;
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.handler.exception.Exception500;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
@@ -30,28 +31,39 @@ import lombok.RequiredArgsConstructor;
 public class MonitorController {
 
     private final MonitorService monitorService;
+    private final CenterAccessGuard centerAccessGuard;
 
     /** 화면 최초 진입용 카드 목록 — 이후 갱신은 Firestore 구독으로 받는다 */
     @GetMapping("/live")
     public ResponseEntity<?> live(@RequestParam(value = "date", required = false) String date,
                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
         LocalDate targetDate = date == null || date.isBlank() ? KstClock.today() : LocalDate.parse(date);
-        String centerCode = userDetails.getLoginUser().getCenterCode();
+        String centerCode = centerAccessGuard.requireCenterCode(userDetails);
         return ResponseEntity.ok(ApiUtils.success(monitorService.getLiveView(targetDate, centerCode)));
     }
 
-    /** 퇴실 처리 */
+    /**
+     * 퇴실 처리 — 대상 학생을 요청 본문으로 지정하므로 로그인한 직원의 센터 소속인지 대조한다.
+     * 검증이 없으면 다른 센터 관리자가 남의 센터 학생을 임의로 강제 퇴실시킬 수 있었다(2026-08-20).
+     */
     @PostMapping("/exit")
-    public ResponseEntity<?> exit(@RequestBody @Valid MonitorReqDTO.ExitReqDTO reqDTO) {
+    public ResponseEntity<?> exit(@RequestBody @Valid MonitorReqDTO.ExitReqDTO reqDTO,
+                                  @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
         monitorService.exitSession(reqDTO.getStudentId());
         return ResponseEntity.ok(ApiUtils.success(null));
     }
 
-    /** 독서일지 저장(upsert) */
+    /**
+     * 독서일지 저장(upsert) — exit과 같은 이유로 대상 학생의 센터를 대조한다.
+     * sessionId가 정말 그 학생의 세션인지는 MonitorService.saveDiary가 한 번 더 확인한다
+     * (내 센터 학생 이름표를 달고 남의 센터 세션에 일지를 쓰는 것을 막는다).
+     */
     @PostMapping("/diary")
     public ResponseEntity<?> saveDiary(@RequestBody @Valid MonitorReqDTO.DiaryReqDTO reqDTO,
-                                       Authentication authentication) {
-        monitorService.saveDiary(reqDTO, authentication.getName());
+                                       @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
+        monitorService.saveDiary(reqDTO, userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success(null));
     }
 
@@ -61,8 +73,9 @@ public class MonitorController {
      */
     @PostMapping("/quiz/reset")
     public ResponseEntity<?> resetQuiz(@RequestBody @Valid MonitorReqDTO.QuizResetReqDTO reqDTO,
-                                       Authentication authentication) {
-        return ResponseEntity.ok(ApiUtils.success(monitorService.resetQuiz(reqDTO, authentication.getName())));
+                                       @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
+        return ResponseEntity.ok(ApiUtils.success(monitorService.resetQuiz(reqDTO, userDetails.getUsername())));
     }
 
     /**

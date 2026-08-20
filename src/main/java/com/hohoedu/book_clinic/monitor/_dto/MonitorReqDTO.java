@@ -4,6 +4,7 @@ import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 /** 실시간 모니터링 요청 DTO 모음 */
@@ -25,6 +26,10 @@ public class MonitorReqDTO {
         private String studentId;
         private List<String> attitudeCodes;  // 독서 태도 체크(복수 선택) — attitude 테이블에 1행씩 저장
         private Boolean helpNeeded;          // 도움 필요 여부 ("혼자 읽기 어려워요") — 선택지가 하나뿐이라 플래그
+        // erp_bookstore_diary.memo가 VARCHAR(500)이라 그대로 넘기면 DataIntegrityViolationException으로
+        // 500 크래시가 났다(2026-08-20 스트레스 테스트로 발견) — diary._dto.DiaryReqDTO.SaveItemDTO에는
+        // 이미 있던 같은 제약을 여기도 맞췄다.
+        @Size(max = 500, message = "전달사항은 500자까지 입력할 수 있습니다.")
         private String memo;                 // 기타 전달사항
     }
 

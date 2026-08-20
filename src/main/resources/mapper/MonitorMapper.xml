@@ -59,6 +59,7 @@
     -->
     <sql id="cardColumns">
         SELECT
+            r.reservation_id   AS reservationId,
             cs.session_id      AS sessionId,
             cs.student_id      AS studentId,
             st.student_name    AS studentName,
@@ -108,10 +109,11 @@
         OUTER APPLY (
             -- 한 학생이 같은 날 여러 회차를 예약할 수 있는지는 아직 미정(2026-08-18) — 여러 건이면
             -- 회차 오름차순 첫 건만 표시한다(그 학생이 그날 처음 올 시간대라는 뜻).
-            SELECT TOP 1 si.seq
+            -- reservation_id도 같이 뽑는다 — Firestore 문서 키(2026-08-20)로 쓴다.
+            SELECT TOP 1 si.seq, r.reservation_id
             FROM erp_bookstore_reservation r
             JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-            WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
+            WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status &lt;&gt; 'CANCELED'
             ORDER BY si.seq ASC
         ) r
         OUTER APPLY (
@@ -179,6 +181,7 @@
     -->
     <sql id="reservationCardColumns">
         SELECT
+            r.reservation_id   AS reservationId,
             cs.session_id      AS sessionId,
             r.student_id       AS studentId,
             st.student_name    AS studentName,
@@ -282,8 +285,15 @@
         <include refid="reservationCardColumns" />
         WHERE si.service_date = #{date}
           AND si.center_code = #{centerCode}
-          AND r.status = 'RESERVED'
+          AND r.status &lt;&gt; 'CANCELED'
         ORDER BY si.seq ASC, st.student_name ASC
+    </select>
+
+    <!-- 예약 생성 직후 Firestore 동기화용(2026-08-20) — 아직 세션이 없는(미입실) 카드도 이 쿼리로
+         조립할 수 있다(reservationCardColumns는 세션 유무와 무관하게 예약을 루트로 두므로). -->
+    <select id="findReservationCardById" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$CardDTO">
+        <include refid="reservationCardColumns" />
+        WHERE r.reservation_id = #{reservationId}
     </select>
 
     <select id="findActiveAttitudeCodes" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$AttitudeCodeDTO">
@@ -450,7 +460,7 @@
                 (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
                  FROM erp_bookstore_reservation r
                  JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status &lt;&gt; 'CANCELED'
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
             WHERE cs.session_id = #{sessionId}
@@ -512,7 +522,7 @@
                 (SELECT TOP 1 CAST(si.seq AS VARCHAR(2))
                  FROM erp_bookstore_reservation r
                  JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status = 'RESERVED'
+                 WHERE r.student_id = cs.student_id AND si.service_date = cs.session_date AND r.status &lt;&gt; 'CANCELED'
                  ORDER BY r.reservation_id DESC) AS time_slot
             FROM erp_bookstore_clinic_session cs
             JOIN erp_student st ON st.student_id = cs.student_id

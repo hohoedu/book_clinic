@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
+import com.hohoedu.book_clinic._core.handler.exception.Exception403;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
@@ -61,8 +62,10 @@ public class MonitorService {
             monitorRepository.insertSession(studentId, today);
             sessionId = monitorRepository.findOpenSessionId(studentId, today);
         }
-        // 오늘 예약이 있었다면 실제로 왔다는 뜻이니 ATTENDED로 전환한다(2026-08-18). 예약 없이
-        // 온 경우엔 markAttended가 조용히 넘어가므로 입실 자체를 막지 않는다.
+        // 오늘 예약이 있었다면 실제로 왔다는 뜻이니 ATTENDED로 전환한다(2026-08-18). 오늘 예약
+        // 자체가 없거나 예약 회차 시간이 아니면 markAttended가 예외를 던져 입실을 막는다
+        // (2026-08-20 예약 필수 정책) — 그러면 @Transactional이 방금 만든 세션 insert까지
+        // 함께 롤백해서 "입실은 막혔는데 세션만 남는" 상태가 생기지 않는다.
         reservationService.markAttended(studentId, today);
         if (passService.consume(studentId, "BOOK", sessionId) == -1) {
             throw new Exception400("이용권이 모두 소진되었습니다. 재결제 후 이용해주세요.");
@@ -130,9 +133,21 @@ public class MonitorService {
      *   · erp_student.help_needed  — 풀릴 때까지 유지되는 학생 상태값. 다음 수업에도 켜진 채로 보인다.
      *   · erp_bookstore_diary.help_needed — 그날 일지의 스냅샷. 나중에 상태를 풀어도 과거 일지엔 남는다.
      * 화면(모니터링 카드)이 읽는 값은 상태값 쪽이다(MonitorMapper의 st.help_needed).
+     *
+     * sessionId와 studentId를 둘 다 요청으로 받으면서 서로 맞는지는 확인하지 않았다(2026-08-20).
+     * 컨트롤러가 studentId의 센터만 대조하므로, 내 센터 학생 id에 남의 센터 sessionId를 붙이면
+     * 그 세션의 일지가 덮어써졌다. 세션의 실제 주인과 대조해서 막는다.
      */
     @Transactional
     public void saveDiary(MonitorReqDTO.DiaryReqDTO req, String staffName) {
+        MonitorRespDTO.CardDTO session = monitorRepository.findCardBySessionId(req.getSessionId());
+        if (session == null) {
+            throw new Exception404("독서일지를 저장할 세션을 찾을 수 없습니다: sessionId=" + req.getSessionId());
+        }
+        if (!session.getStudentId().equals(req.getStudentId())) {
+            throw new Exception403("해당 학생의 세션이 아닙니다.");
+        }
+
         boolean helpNeeded = Boolean.TRUE.equals(req.getHelpNeeded());
         monitorRepository.updateStudentHelpNeeded(req.getStudentId(), helpNeeded);
         monitorRepository.upsertDiary(req.getSessionId(), helpNeeded, req.getMemo(), staffName);
@@ -328,6 +343,52 @@ public class MonitorService {
      */
     public void syncSession(Integer sessionId) {
         syncSafely(sessionId);
+    }
+
+    /**
+     * 예약 생성 직후 호출 — 아직 세션이 없는(미입실) 카드도 Firestore에 반영해, 예약 완료 즉시
+     * 실시간 모니터링 화면에 뜨게 한다(2026-08-20). 그 전까지는 syncSafely(세션 기준)만 있어서
+     * 입실 전까지는 아무 것도 동기화가 안 됐다 — "예약해도 모니터링에 안 뜬다"는 버그의 원인.
+     */
+    public void syncReservationCard(Long reservationId) {
+        if (reservationId == null) return;
+        try {
+            MonitorRespDTO.CardDTO card = monitorRepository.findReservationCardById(reservationId);
+            if (card == null) {
+                log.warn("Firestore 동기화 건너뜀 — reservationId={}에 해당하는 카드 없음", reservationId);
+                return;
+            }
+            fillDerivedFields(card);
+            monitorSyncService.syncCard(card);
+            log.info("Firestore 동기화 성공(예약) — reservationId={}, studentId={}, cardStatus={}",
+                    reservationId, card.getStudentId(), card.getCardStatus());
+        } catch (Exception e) {
+            log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: reservationId={}", reservationId, e);
+        }
+    }
+
+    /**
+     * 예약 취소 직후 호출 — 모니터링 화면에서 그 카드를 실시간으로 지운다(2026-08-20).
+     * cardStatus를 강제로 "CANCELED"로 덮어써서 내려보낸다 — monitor-live.js의 applyFirestoreCard가
+     * 이 값을 보고 카드를 목록에서 제거한다(일반 카드 갱신과 달리 upsert가 아니라 삭제).
+     * 세션이 있었더라도(입실 후 관리자가 취소하는 특수 케이스) 상관없이 그냥 지운다 — 취소된
+     * 예약은 더 이상 모니터링 대상이 아니다.
+     */
+    public void syncCanceledReservationCard(Long reservationId) {
+        if (reservationId == null) return;
+        try {
+            MonitorRespDTO.CardDTO card = monitorRepository.findReservationCardById(reservationId);
+            if (card == null) {
+                log.warn("Firestore 취소 동기화 건너뜀 — reservationId={}에 해당하는 카드 없음", reservationId);
+                return;
+            }
+            fillDerivedFields(card);
+            card.setCardStatus("CANCELED");
+            monitorSyncService.syncCard(card);
+            log.info("Firestore 동기화 성공(취소) — reservationId={}, studentId={}", reservationId, card.getStudentId());
+        } catch (Exception e) {
+            log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: reservationId={}", reservationId, e);
+        }
     }
 
     private void syncSafely(Integer sessionId) {

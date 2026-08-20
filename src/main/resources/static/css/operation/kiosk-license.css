@@ -1,0 +1,251 @@
+/* 기기 라이선스 화면 (2026-08-20) */
+
+.page-desc {
+  margin: 0 0 20px;
+  color: #6b7280;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.issue-card,
+.list-card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.issue-card h2,
+.list-card h2 {
+  margin: 0 0 16px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.issue-form {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.issue-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.issue-form select,
+.issue-form input {
+  height: 38px;
+  min-width: 220px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+/* 발급 결과 — 키 원문은 이 순간이 아니면 다시 볼 수 없어서 눈에 띄게 만든다 */
+.issued-box {
+  margin-top: 20px;
+  padding: 16px 18px;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  border-radius: 10px;
+}
+
+.issued-warn {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #92400e;
+  line-height: 1.6;
+}
+
+.issued-key {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.issued-key code {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 24px;
+  letter-spacing: 2px;
+  font-weight: 600;
+  color: #111827;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px 16px;
+}
+
+.issued-meta {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.list-head h2 {
+  margin: 0;
+}
+
+.list-head .filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.list-head .filter select {
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.kiosk-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.kiosk-table th,
+.kiosk-table td {
+  padding: 12px 10px;
+  text-align: left;
+  border-bottom: 1px solid #f1f3f5;
+}
+
+.kiosk-table th {
+  font-size: 13px;
+  font-weight: 600;
+  color: #6b7280;
+  background: #fafafa;
+}
+
+.kiosk-table td .by {
+  display: block;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.kiosk-table td .pending {
+  color: #b45309;
+  font-size: 13px;
+}
+
+.kiosk-table tr.empty td {
+  text-align: center;
+  color: #9ca3af;
+  padding: 32px 0;
+}
+
+.btn.sm {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.btn.danger {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.btn.danger:hover {
+  background: #fecaca;
+}
+
+/* 등록 기기 수 / 기기 목록 (2026-08-20) */
+.issue-form label small {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 14px;
+  color: #2563eb;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-btn .count {
+  font-weight: 600;
+}
+
+.link-btn .count.full {
+  color: #b45309;
+}
+
+.device-row td {
+  background: #fafafa;
+  padding: 0;
+}
+
+.device-list {
+  padding: 12px 16px;
+}
+
+.device-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid #eef0f2;
+}
+
+.device-item:last-child {
+  border-bottom: none;
+}
+
+.device-item .ua {
+  display: block;
+  font-size: 13px;
+  color: #374151;
+  word-break: break-all;
+}
+
+.device-item .meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.device-empty {
+  margin: 0;
+  padding: 8px 0;
+  font-size: 13px;
+  color: #9ca3af;
+}
+
+/* 전 센터 키 — 어느 센터 학생이든 처리하므로 목록에서 바로 눈에 띄어야 한다 */
+.all-centers {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 12px;
+  font-weight: 600;
+}

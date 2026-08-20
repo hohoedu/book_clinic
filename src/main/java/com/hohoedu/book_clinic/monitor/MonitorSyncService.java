@@ -15,10 +15,15 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * SQL이 원본인 모니터링 카드 상태를 Firestore `clinic_monitor/{sessionId}` 문서로 미러링한다.
+ * SQL이 원본인 모니터링 카드 상태를 Firestore `clinic_monitor/{reservationId}` 문서로 미러링한다.
  * 관리자 브라우저는 이 컬렉션을 onSnapshot으로 구독해 실시간 갱신을 받는다 (2026-07-15).
  * Firestore 쓰기 실패는 원본 SQL 트랜잭션에 영향을 주면 안 되므로 호출부(MonitorService)에서
  * 항상 try/catch로 감싸 호출한다 — 이 서비스 자체는 실패를 그대로 던진다.
+ *
+ * [문서 키가 sessionId가 아니라 reservationId인 이유(2026-08-20)] 예약 생성 시점엔 아직 세션이
+ * 없어(sessionId=null) 그때는 동기화가 아예 안 됐었다 — 예약 완료 직후 모니터링에 안 뜨는
+ * 버그의 원인. reservationId는 예약 생성 순간부터 세션 생성 전까지 쭉 존재하고 하루에 유일하므로,
+ * 예약→입실→퇴실 전 구간에서 항상 같은 문서 하나를 갱신하도록 문서 키를 이걸로 통일했다.
  */
 @Slf4j
 @Service
@@ -30,7 +35,12 @@ public class MonitorSyncService {
     private final Firestore firestore;
 
     public void syncCard(MonitorRespDTO.CardDTO card) {
+        if (card.getReservationId() == null) {
+            log.warn("Firestore 동기화 건너뜀 — reservationId 없는 카드: studentId={}", card.getStudentId());
+            return;
+        }
         Map<String, Object> doc = new HashMap<>();
+        doc.put("reservationId", card.getReservationId());
         doc.put("sessionId", card.getSessionId());
         doc.put("studentId", card.getStudentId());
         doc.put("studentName", card.getStudentName());
@@ -71,11 +81,11 @@ public class MonitorSyncService {
         try {
             // 동기 대기로 처리 — 실패 시 예외가 그대로 던져지도록 해서 호출부(MonitorService)의
             // try/catch가 실제로 실패를 잡을 수 있게 한다 (fire-and-forget이면 실패가 조용히 묻힘)
-            firestore.collection(COLLECTION).document(String.valueOf(card.getSessionId())).set(doc).get();
-            log.debug("Firestore 카드 동기화: sessionId={}, cardStatus={}", card.getSessionId(), card.getCardStatus());
+            firestore.collection(COLLECTION).document(String.valueOf(card.getReservationId())).set(doc).get();
+            log.debug("Firestore 카드 동기화: reservationId={}, cardStatus={}", card.getReservationId(), card.getCardStatus());
         } catch (InterruptedException | ExecutionException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Firestore 동기화 실패: sessionId=" + card.getSessionId(), e);
+            throw new RuntimeException("Firestore 동기화 실패: reservationId=" + card.getReservationId(), e);
         }
     }
 

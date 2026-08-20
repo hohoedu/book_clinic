@@ -4,6 +4,13 @@
 
 <mapper namespace="com.hohoedu.book_clinic.reservation.ReservationRepository">
 
+    <!--
+      이미 끝난 회차는 status를 CLOSED로 바꿔 내려준다(2026-08-20). DB의 si.status는 "운영자가 닫았는가"
+      만 나타내서 지난 회차도 OPEN인 채로 남는데, 그대로 내려주면 화면이 예약 가능한 것처럼 보여주고
+      실제로 예약도 된다. 그런데 입실은 회차 시간대(ReservationService.markAttended)에만 되므로,
+      지난 회차를 예약한 학생은 이용권만 묶인 채 아무것도 못 하는 상태가 된다.
+      기준 시각은 ends_at — 이미 시작한 회차는 아직 입실이 가능하므로 끝나기 전까지는 열어둔다.
+    -->
     <select id="findOpenSlots" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$SlotOptionDTO">
         SELECT
             si.slot_instance_id AS slotInstanceId,
@@ -13,13 +20,13 @@
             si.ends_at           AS endsAt,
             si.capacity          AS capacity,
             si.reserved_count    AS reservedCount,
-            si.status            AS status,
+            CASE WHEN si.ends_at &lt;= DATEADD(HOUR, 9, GETUTCDATE()) THEN 'CLOSED' ELSE si.status END AS status,
             CAST(CASE WHEN r.reservation_id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS reservedByMe
         FROM erp_bookstore_slot_instance si
         LEFT JOIN erp_bookstore_reservation r
             ON r.slot_instance_id = si.slot_instance_id
            AND r.student_id = #{studentId}
-           AND r.status = 'RESERVED'
+           AND r.status IN ('RESERVED', 'ATTENDED')
         WHERE si.center_code = #{centerCode}
           AND si.service_date BETWEEN #{fromDate} AND #{toDate}
           AND si.status = 'OPEN'
@@ -36,13 +43,13 @@
             si.ends_at           AS endsAt,
             si.capacity          AS capacity,
             si.reserved_count    AS reservedCount,
-            si.status            AS status,
+            CASE WHEN si.ends_at &lt;= DATEADD(HOUR, 9, GETUTCDATE()) THEN 'CLOSED' ELSE si.status END AS status,
             CAST(CASE WHEN r.reservation_id IS NOT NULL THEN 1 ELSE 0 END AS BIT) AS reservedByMe
         FROM erp_bookstore_slot_instance si
         LEFT JOIN erp_bookstore_reservation r
             ON r.slot_instance_id = si.slot_instance_id
            AND r.student_id = #{studentId}
-           AND r.status = 'RESERVED'
+           AND r.status IN ('RESERVED', 'ATTENDED')
         WHERE si.center_code = #{centerCode}
           AND si.seq = #{seq}
           AND si.service_date IN
@@ -78,14 +85,19 @@
         WHERE slot_instance_id = #{slotInstanceId}
     </select>
 
+    <!-- CANCELED만 제외 — ATTENDED(이미 이용)까지 막아야 이용 완료 후 같은 날 재예약이
+         새로 생기는 걸 차단한다(2026-08-20 버그). slotInstanceId 제외 조건은 일부러 뺐다 —
+         "같은 슬롯 재예약"을 유니크 인덱스(UX_reservation_slot_student, status='RESERVED'만 필터링)
+         에만 맡겨뒀더니, 이미 ATTENDED가 된 그 슬롯을 다시 예약하는 게 막히지 않고 실제로
+         재현됐다(reservation_id 3413 ATTENDED 상태에서 같은 슬롯으로 3417이 새로 생성됨).
+         이제 "같은 슬롯 재예약"도 여기서 먼저 걸러진다. -->
     <select id="countOtherReservedOnDate" resultType="int">
         SELECT COUNT(*)
         FROM erp_bookstore_reservation r
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         WHERE r.student_id = #{studentId}
           AND si.service_date = #{serviceDate}
-          AND r.status = 'RESERVED'
-          AND r.slot_instance_id &lt;&gt; #{slotInstanceId}
+          AND r.status &lt;&gt; 'CANCELED'
     </select>
 
     <!--
@@ -109,8 +121,8 @@
     </update>
 
     <insert id="insertReservation" useGeneratedKeys="true" keyProperty="reservationId" keyColumn="reservation_id">
-        INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, status, channel)
-        VALUES (#{slotInstanceId}, #{studentId}, 'RESERVED', #{channel})
+        INSERT INTO erp_bookstore_reservation (slot_instance_id, student_id, service_date, status, channel)
+        VALUES (#{slotInstanceId}, #{studentId}, #{serviceDate}, 'RESERVED', #{channel})
     </insert>
 
     <insert id="insertLog">
@@ -166,7 +178,7 @@
         FROM erp_bookstore_reservation r
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         WHERE r.student_id = #{studentId}
-          AND r.status = 'RESERVED'
+          AND r.status &lt;&gt; 'CANCELED'
           <if test="fromDate != null">AND si.service_date &gt;= #{fromDate}</if>
         ORDER BY si.service_date ASC, si.seq ASC
     </select>
@@ -222,14 +234,27 @@
     <!-- ── 출결 전환 (ATTENDED/NOSHOW, 2026-08-18) ───────────────────────── -->
 
     <!-- TOP 1인 이유: "하루 1회차만" 정책은 응용 계층 체크라 DB 유니크 제약이 아니다 —
-         드문 경합으로 같은 날 RESERVED가 2건 생기더라도 배치/입실 처리가 죽지 않게 방어한다 -->
-    <select id="findReservedReservationIdByStudentAndDate" resultType="long">
-        SELECT TOP 1 r.reservation_id
+         드문 경합으로 같은 날 RESERVED가 2건 생기더라도 배치/입실 처리가 죽지 않게 방어한다.
+         회차 시작/종료 시각도 같이 내려줘서, 서비스 레이어(markAttended)가 "지금이 그 회차
+         이용 가능 시간인지"를 판단한다(2026-08-20 — 입실 시간대 검증 추가).
+         status는 RESERVED뿐 아니라 ATTENDED도 잡는다 — "예약 필수" 정책(2026-08-20)이라
+         재로그인(이미 ATTENDED)과 "오늘 예약 자체가 없음"을 이 한 쿼리 결과로 구분해야 해서다:
+         null이면 진짜 예약이 없는 것, status=ATTENDED면 이미 입실 처리된 재로그인. -->
+    <select id="findReservedSlotByStudentAndDate" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationItemDTO">
+        SELECT TOP 1
+            r.reservation_id  AS reservationId,
+            si.slot_instance_id AS slotInstanceId,
+            si.service_date    AS serviceDate,
+            si.seq              AS seq,
+            si.starts_at        AS startsAt,
+            si.ends_at          AS endsAt,
+            r.status            AS status,
+            r.reserved_at       AS reservedAt
         FROM erp_bookstore_reservation r
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         WHERE r.student_id = #{studentId}
           AND si.service_date = #{serviceDate}
-          AND r.status = 'RESERVED'
+          AND r.status IN ('RESERVED', 'ATTENDED')
         ORDER BY r.reservation_id ASC
     </select>
 
