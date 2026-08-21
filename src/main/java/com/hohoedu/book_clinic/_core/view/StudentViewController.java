@@ -283,8 +283,7 @@ public class StudentViewController {
      * 퇴실: QR 스캔 → /student/exit 호출(로그인 컨텍스트 없이 studentId 생략) → 완료 메시지 후 이 화면으로 복귀
      */
     @GetMapping({ "/attendance", "/attendance/" })
-    public String getAttendanceHomePage(Model model, HttpServletRequest request) {
-        model.addAttribute("registered", kioskService.resolveFromRequest(request) != null);
+    public String getAttendanceHomePage() {
         return "/student/attendance-home";
     }
 

@@ -416,12 +416,45 @@
   }
 
   // ── 학생 검색(등록 모드) ─────────────────────────────────────────────────
+  // 새로고침해도 검색어가 남아있도록 sessionStorage에 저장한다 — 등록 실패 후 습관적으로
+  // 새로고침해버리면 검색어까지 날아가 "누구를 찾고 있었는지"부터 다시 해야 했다(2026-08-21).
+  const STUDENT_PICK_KEYWORD_KEY = "reservation.studentPickKeyword";
+
+  function saveStudentPickKeyword(keyword) {
+    try {
+      if (keyword) sessionStorage.setItem(STUDENT_PICK_KEYWORD_KEY, keyword);
+      else sessionStorage.removeItem(STUDENT_PICK_KEYWORD_KEY);
+    } catch (ignored) {
+      // 시크릿 모드 등 sessionStorage 접근이 막힌 환경 — 새로고침 유지만 안 될 뿐 기능엔 지장 없다
+    }
+  }
+
+  function loadStudentPickKeyword() {
+    try {
+      return sessionStorage.getItem(STUDENT_PICK_KEYWORD_KEY) || "";
+    } catch (ignored) {
+      return "";
+    }
+  }
+
+  function clearSavedStudentPickKeyword() {
+    saveStudentPickKeyword("");
+  }
+
   function initStudentPickSearch() {
     const apply = () => searchStudentsForPick();
     el.btnStudentPickSearch.addEventListener("click", apply);
     el.studentPickSearch.addEventListener("keydown", (e) => {
       if (e.key === "Enter") apply();
     });
+
+    // setChangePanelMode("create")가 초기 진입 시 검색창을 비우고 한 번 검색하는데, 저장된
+    // 검색어가 있으면 그걸로 덮어써서 다시 채운다.
+    const savedKeyword = loadStudentPickKeyword();
+    if (savedKeyword) {
+      el.studentPickSearch.value = savedKeyword;
+      searchStudentsForPick();
+    }
   }
 
   let studentPickResults = [];
@@ -430,6 +463,7 @@
     const keyword = el.studentPickSearch.value.trim();
     try {
       studentPickResults = await getJson(`${API}/students?keyword=${encodeURIComponent(keyword)}`);
+      saveStudentPickKeyword(keyword);
       renderStudentPickList();
     } catch (err) {
       el.studentPickBody.innerHTML = `<tr><td colspan="4" style="text-align:center;">${err.message}</td></tr>`;
@@ -494,15 +528,22 @@
       for (const studentId of studentIds) {
         try {
           await sendJson(`${API}/register`, { studentId, slotInstanceId });
+          state.checkedStudents.delete(studentId);
         } catch (err) {
           const student = state.checkedStudents.get(studentId);
           failures.push(`${student ? student.studentName : studentId}: ${err.message}`);
         }
       }
-      state.checkedStudents.clear();
-      studentPickResults = [];
-      el.studentPickSearch.value = "";
-      if (failures.length > 0) alert(`일부 등록에 실패했습니다.\n${failures.join("\n")}`);
+      if (failures.length > 0) {
+        // 실패한 학생은 검색 결과·선택 상태를 그대로 남겨서 다시 눌러 재시도할 수 있게 한다.
+        // 전부 지워버리면 "검색된 학생이 없습니다"만 남아 실패 사실도, 대상 학생도 알 수 없게 된다.
+        alert(`일부 등록에 실패했습니다.\n${failures.join("\n")}`);
+        renderStudentPickList();
+      } else {
+        studentPickResults = [];
+        el.studentPickSearch.value = "";
+        clearSavedStudentPickKeyword();
+      }
       await loadDay();
       await loadChangeDateData();
     } else {

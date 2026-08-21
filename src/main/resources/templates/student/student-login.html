@@ -146,6 +146,20 @@
       font-size: 15px;
       font-weight: 800;
     }
+
+    .change-mode-btn {
+      margin-top: 20px;
+      background: none;
+      border: none;
+      color: #9ca3af;
+      font-size: 13px;
+      text-decoration: underline;
+      cursor: pointer;
+    }
+
+    .change-mode-btn:hover {
+      color: #6b7280;
+    }
   </style>
 </head>
 
@@ -181,6 +195,8 @@
       <input type="text" name="appId" placeholder="앱 아이디 (appId)" required />
       <button type="submit">입장하기</button>
     </form>
+    <!-- 이 기기를 출석체크용으로 바꾸고 싶을 때. 다시 /launch로 보내 용도를 새로 고른다 -->
+    <button type="button" class="change-mode-btn" id="changeModeBtn">기기 용도 변경</button>
   </div>
   <script th:src="@{/js/vendor/jsqr/jsQR.js}"></script>
   <script th:src="@{/js/student/qr-scan.js}"></script>
@@ -202,6 +218,12 @@
     if (noReservationModal) {
       document.getElementById('noReservationOk').addEventListener('click', () => noReservationModal.remove());
     }
+
+    // 이 기기 용도(문제풀이/출석체크)를 다시 고르고 싶을 때 — launcher.js가 쓰는 키와 같아야 한다
+    document.getElementById('changeModeBtn').addEventListener('click', () => {
+      try { localStorage.removeItem('hohobook.appMode'); } catch (err) { /* 저장소 접근 불가 시에도 이동은 진행 */ }
+      window.location.href = '/launch';
+    });
 
     document.getElementById('qrLoginBtn').addEventListener('click', async () => {
       try {

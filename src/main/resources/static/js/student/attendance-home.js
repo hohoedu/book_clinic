@@ -48,34 +48,6 @@
     return match ? decodeURIComponent(match[1]) : null;
   }
 
-  // 기기 등록 화면 — 아직 라이선스 키가 없을 때만 마크업에 존재한다
-  const registerForm = document.getElementById('registerForm');
-  if (registerForm) {
-    const errorEl = document.getElementById('registerError');
-    registerForm.addEventListener('submit', async (event) => {
-      event.preventDefault();
-      errorEl.hidden = true;
-      const licenseKey = document.getElementById('licenseKeyInput').value.trim();
-      if (!licenseKey) return;
-
-      try {
-        const res = await fetch('/kiosk/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': readCsrfToken() ?? '' },
-          body: JSON.stringify({ licenseKey }),
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error?.message ?? '등록에 실패했어요.');
-        // 서버가 심어준 쿠키를 반영하려면 화면을 새로 받아야 한다
-        window.location.reload();
-      } catch (err) {
-        errorEl.textContent = err.message;
-        errorEl.hidden = false;
-      }
-    });
-  }
-
-  // 등록 전 화면에는 입실/퇴실 버튼이 아예 없다 — 아래 등록은 그때를 위한 것이라 존재 확인이 필요하다
   const enterBtn = document.getElementById('enterBtn');
   const exitBtn = document.getElementById('exitBtn');
 
@@ -104,21 +76,11 @@
     }
   });
 
-  // 기기 반납이나 센터 이전 때만 쓴다 — 해제하면 이 기기에서는 학생 로그인이 바로 막힌다
-  const unregisterBtn = document.getElementById('unregisterBtn');
-  if (unregisterBtn) unregisterBtn.addEventListener('click', async () => {
-    if (!confirm('이 기기의 등록을 해제할까요?\n해제하면 학생 로그인이 막히고, 다시 쓰려면 라이선스 키를 새로 입력해야 합니다.')) return;
-    try {
-      const res = await fetch('/kiosk/register', {
-        method: 'DELETE',
-        headers: { 'X-XSRF-TOKEN': readCsrfToken() ?? '' },
-      });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error?.message ?? '해제에 실패했어요.');
-      window.location.reload();
-    } catch (err) {
-      showToast('error', err.message);
-    }
+  // 이 기기 용도(문제풀이/출석체크)를 다시 고르고 싶을 때 — launcher.js가 쓰는 키와 같아야 한다
+  const changeModeBtn = document.getElementById('changeModeBtn');
+  if (changeModeBtn) changeModeBtn.addEventListener('click', () => {
+    try { localStorage.removeItem('hohobook.appMode'); } catch (err) { /* 저장소 접근 불가 시에도 이동은 진행 */ }
+    window.location.href = '/launch';
   });
 
   if ('serviceWorker' in navigator) {

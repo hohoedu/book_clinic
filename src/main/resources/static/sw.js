@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-clinic-student-v9';
+const CACHE_NAME = 'book-clinic-student-v10';
 
 // 앱은 하나(manifest.json, start_url=/launch)지만 그 안에 문제풀이(/student/**)/출석체크
 // (/attendance/**) 두 화면이 있다 — 오프라인 폴백은 지금 들어가려던 화면이 어느 쪽인지에 따라

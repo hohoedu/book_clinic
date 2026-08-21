@@ -252,6 +252,10 @@ CREATE TABLE erp_bookstore_reservation (
     reservation_id   INT IDENTITY(1,1) PRIMARY KEY,
     slot_instance_id INT           NOT NULL,
     student_id       VARCHAR(100)  NOT NULL,  -- erp_student.student_id (기존 관례상 FK 없이 값으로 연결)
+    -- slot_instance.service_date의 사본(2026-08-20). 조회 편의가 아니라 "하루 한 회차" 제약을
+    -- 인덱스로 걸기 위해 필요하다 — 유니크 인덱스는 조인한 컬럼에 걸 수 없어서, 날짜가 예약 행
+    -- 자체에 있어야만 UX_reservation_student_date가 성립한다. 값은 항상 슬롯에서 복사한다.
+    service_date     DATE          NOT NULL,
     status           VARCHAR(12)   NOT NULL DEFAULT 'RESERVED',  -- RESERVED/CANCELED/ATTENDED/NOSHOW
     -- 예약방법(2026-08-19) — 누가 등록했는지. STUDENT/PARENT=학생 앱 직접 예약, ADMIN=센터 직원 대리
     -- 등록. 생성 시점에 고정해서 저장한다(예약 현황 화면의 "직접 예약"/"센터 예약" 표시가 이 값을 그대로 씀).
@@ -269,6 +273,15 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_slot_stude
     CREATE UNIQUE INDEX UX_reservation_slot_student
         ON erp_bookstore_reservation (slot_instance_id, student_id)
         WHERE status = 'RESERVED';  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스)
+
+-- "하루 한 회차" 제약의 실제 집행자(2026-08-20). 응용 계층의 countOtherReservedOnDate는 평문
+-- SELECT라 확인과 INSERT 사이에 다른 요청이 끼어들 수 있고(TOCTOU), 서로 다른 슬롯으로 동시에
+-- 요청하면 위 UX_reservation_slot_student(슬롯 기준)에도 걸리지 않아 하루에 여러 회차가 잡혔다.
+-- 상태 집합은 countOtherReservedOnDate와 같게 맞춘다(취소된 예약만 제외).
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_student_date' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
+    CREATE UNIQUE INDEX UX_reservation_student_date
+        ON erp_bookstore_reservation (student_id, service_date)
+        WHERE status IN ('RESERVED', 'ATTENDED', 'NOSHOW');
 
 -- ── 이력: 예약 상태 변경 전체 로그 (★ 신규 — 취소 주체 분쟁 방지) ─────
 IF OBJECT_ID('erp_bookstore_reservation_log', 'U') IS NULL
