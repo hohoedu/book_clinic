@@ -1,9 +1,27 @@
 package com.hohoedu.book_clinic.book;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import org.apache.poi.ss.usermodel.BorderStyle;
+import org.apache.poi.ss.usermodel.Cell;
+import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.FillPatternType;
+import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
+import org.apache.poi.ss.usermodel.IndexedColors;
+import org.apache.poi.ss.usermodel.PrintSetup;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.ss.usermodel.Sheet;
+import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -129,6 +147,145 @@ public class BookService {
     public List<BookRespDTO.ContentRespDTO> searchContents(String title, String author, String genre, String schoolYear,
             String keyword, String contentType, String state) {
         return bookRepository.searchContents(title, author, genre, schoolYear, keyword, contentType, state);
+    }
+
+    /** 학년별 도서 목록 엑셀 다운로드 — 학년(codeNm)별로 시트를 나누고, 시트 맨 위에 "OO 도서목록" 제목을 붙인다.
+     *  content_id 대신 시트 내 순번(NO)을 매긴다 */
+    public byte[] buildGradeExcelWorkbook() {
+        Map<String, List<BookRespDTO.GradeListRespDTO>> byGrade = bookRepository.findContentsForGradeExcel().stream()
+                .collect(Collectors.groupingBy(BookRespDTO.GradeListRespDTO::getSchoolyearName, LinkedHashMap::new, Collectors.toList()));
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            CellStyle titleStyle = createGradeExcelTitleStyle(workbook);
+            CellStyle headerStyle = createGradeExcelHeaderStyle(workbook);
+            CellStyle bodyStyle = createGradeExcelBodyStyle(workbook);
+
+            byGrade.forEach((gradeName, rows) -> {
+                Sheet sheet = workbook.createSheet(gradeName);
+                writeGradeExcelTitle(sheet, gradeName, titleStyle);
+                writeGradeExcelHeader(sheet, headerStyle);
+                writeGradeExcelRows(sheet, rows, bodyStyle);
+                sheet.createFreezePane(0, 2);
+                applyGradeExcelPrintSetup(workbook, sheet, rows.size());
+
+                sheet.setColumnWidth(0, 6 * 256);
+                sheet.setColumnWidth(1, 30 * 256);
+                sheet.setColumnWidth(2, 16 * 256);
+                sheet.setColumnWidth(3, 10 * 256);
+            });
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException("엑셀 생성 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    private CellStyle createGradeExcelTitleStyle(XSSFWorkbook workbook) {
+        Font titleFont = workbook.createFont();
+        titleFont.setBold(true);
+        titleFont.setFontHeightInPoints((short) 16);
+        titleFont.setColor(IndexedColors.WHITE.getIndex());
+
+        CellStyle style = workbook.createCellStyle();
+        style.setFont(titleFont);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setFillForegroundColor(IndexedColors.BLUE_GREY.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        return style;
+    }
+
+    private CellStyle createGradeExcelHeaderStyle(XSSFWorkbook workbook) {
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+
+        CellStyle style = workbook.createCellStyle();
+        style.setFont(headerFont);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+        style.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+        setThinBorder(style);
+        return style;
+    }
+
+    private CellStyle createGradeExcelBodyStyle(XSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        setThinBorder(style);
+        return style;
+    }
+
+    private void setThinBorder(CellStyle style) {
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+    }
+
+    /** 시트 맨 위 1행에 "OO 도서목록" 제목을 컬럼 전체 병합해서 넣는다 */
+    /** 인쇄 시 페이지마다 제목/헤더(0~1행)가 반복되고, A4 한 페이지 너비에 맞춰 인쇄되도록 설정한다 */
+    private void applyGradeExcelPrintSetup(XSSFWorkbook workbook, Sheet sheet, int rowCount) {
+        int sheetIndex = workbook.getSheetIndex(sheet);
+        int lastRow = rowCount + 1; // 0=제목, 1=헤더, 2..=데이터
+
+        workbook.setPrintArea(sheetIndex, 0, 3, 0, lastRow);
+        sheet.setRepeatingRows(new CellRangeAddress(0, 1, -1, -1));
+
+        PrintSetup printSetup = sheet.getPrintSetup();
+        printSetup.setPaperSize(PrintSetup.A4_PAPERSIZE);
+        printSetup.setLandscape(false);
+        printSetup.setFitWidth((short) 1);
+        printSetup.setFitHeight((short) 0);
+        sheet.setFitToPage(true);
+        sheet.setHorizontallyCenter(true);
+    }
+
+    private void writeGradeExcelTitle(Sheet sheet, String gradeName, CellStyle titleStyle) {
+        Row titleRow = sheet.createRow(0);
+        titleRow.setHeightInPoints(28f);
+        for (int c = 0; c < 4; c++) {
+            Cell cell = titleRow.createCell(c);
+            cell.setCellStyle(titleStyle);
+        }
+        titleRow.getCell(0).setCellValue(gradeName + " 도서목록");
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 3));
+    }
+
+    private void writeGradeExcelHeader(Sheet sheet, CellStyle headerStyle) {
+        Row row = sheet.createRow(1);
+        String[] headers = { "NO", "도서명", "저자", "학년" };
+        for (int c = 0; c < headers.length; c++) {
+            Cell cell = row.createCell(c);
+            cell.setCellValue(headers[c]);
+            cell.setCellStyle(headerStyle);
+        }
+    }
+
+    private void writeGradeExcelRows(Sheet sheet, List<BookRespDTO.GradeListRespDTO> rows, CellStyle bodyStyle) {
+        int rowIdx = 2;
+        int no = 1;
+        for (BookRespDTO.GradeListRespDTO r : rows) {
+            Row row = sheet.createRow(rowIdx++);
+            Cell noCell = row.createCell(0);
+            noCell.setCellValue(no++);
+            noCell.setCellStyle(bodyStyle);
+            Cell titleCell = row.createCell(1);
+            titleCell.setCellValue(nvl(r.getOriginalTitle()));
+            titleCell.setCellStyle(bodyStyle);
+            Cell authorCell = row.createCell(2);
+            authorCell.setCellValue(nvl(r.getAuthor()));
+            authorCell.setCellStyle(bodyStyle);
+            Cell gradeCell = row.createCell(3);
+            gradeCell.setCellValue(nvl(r.getSchoolyearName()));
+            gradeCell.setCellStyle(bodyStyle);
+        }
+    }
+
+    private String nvl(String value) {
+        return value == null ? "" : value;
     }
 
     /** 바코드(ISBN)로 실물 도서 단건 조회 — 없으면 404 */

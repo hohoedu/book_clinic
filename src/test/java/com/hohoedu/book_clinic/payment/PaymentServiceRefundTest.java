@@ -22,6 +22,8 @@ import com.hohoedu.book_clinic.clinic.ClinicRepository;
 import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 import com.hohoedu.book_clinic.payment._dto.PaymentRespDTO;
+import com.hohoedu.book_clinic.payment.inicis.InicisClient;
+import com.hohoedu.book_clinic.payment.inicis.InicisProperties;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 

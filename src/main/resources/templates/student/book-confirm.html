@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방 출석체크 — 오늘의 추천 도서</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+  <meta name="theme-color" content="#0988d8" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" th:href="@{/css/student/attendance-home.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/book-confirm.css}" />
+</head>
+
+<body>
+  <div class="confirm-viewport">
+
+    <!-- 학생을 못 찾은 경우(잘못된 QR 등) -->
+    <div class="confirm-card error-card" th:if="${error}">
+      <i class="fa-solid fa-circle-exclamation"></i>
+      <p th:text="${error}"></p>
+      <a class="confirm-close-btn" th:href="@{/attendance}">닫기</a>
+    </div>
+
+    <!-- 정상: 입실 처리 완료 + 오늘의 추천 도서만 보여준다(문제 풀기 버튼 없음 — 공용 기기라 여기서 학습으로 안 이어지게) -->
+    <div class="confirm-card" th:unless="${error}">
+      <p class="confirm-eyebrow"><i class="fa-solid fa-circle-check"></i> 입실 처리 완료</p>
+      <h1 class="confirm-student" th:text="|${studentName} 학생, 반가워요!|">학생 이름</h1>
+
+      <div class="confirm-book">
+        <img class="confirm-book-img" th:src="${book?.imageUrl ?: '/images/book-sample.png'}" alt="추천 도서 표지" />
+        <div class="confirm-book-info">
+          <p class="confirm-book-eyebrow">오늘의 추천 도서</p>
+          <h2 class="confirm-book-title" th:text="${book?.originalTitle ?: '-'}">책 제목</h2>
+          <p class="confirm-book-author"
+             th:text="${book != null ? (#strings.isEmpty(book.author) ? book.publisher : book.author + ' | ' + book.publisher) : '-'}">저자 | 출판사</p>
+        </div>
+      </div>
+
+      <p class="confirm-hint">문제 풀이는 학생 개인 앱(문제풀이)에서 진행해주세요.</p>
+      <a class="confirm-close-btn" th:href="@{/attendance}">닫기</a>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch((err) => console.error('SW 등록 실패:', err));
+      });
+    }
+  </script>
+</body>
+
+</html>

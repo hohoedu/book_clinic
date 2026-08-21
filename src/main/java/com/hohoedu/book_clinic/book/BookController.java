@@ -1,6 +1,11 @@
 package com.hohoedu.book_clinic.book;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -83,6 +88,20 @@ public class BookController {
     @GetMapping("/deleted")
     public ResponseEntity<?> findDeletedContents() {
         return ResponseEntity.ok(ApiUtils.success(bookService.findDeletedContents()));
+    }
+
+    /** 학년별 도서 목록 엑셀 다운로드 — 학년(초1~초6 등)별로 시트를 나누고 번호/도서명/저자/학년을 담는다 */
+    @GetMapping("/excel/grade")
+    public ResponseEntity<byte[]> downloadGradeExcel() {
+        byte[] bytes = bookService.buildGradeExcelWorkbook();
+
+        String filename = "학년별 도서 목록.xlsx";
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
+                .body(bytes);
     }
 
     // ===================== 실물 도서 관리 =====================

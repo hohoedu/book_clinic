@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.student;
 
+import com.hohoedu.book_clinic.student._dto.StudentRespDTO;
 import com.hohoedu.book_clinic.student.model.Student;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -22,4 +23,7 @@ public interface StudentRepository {
 
     /** 이 학생이 속한 형제 그룹 전체(본인 포함) — 결제창 형제 선택 화면용. 형제가 없으면 본인 1건만 돌아온다 */
     List<Student> findSiblingGroup(@Param("studentId") String studentId);
+
+    /** "학생 정보" 화면 목록 — 센터 내 학생 전체 (레벨은 조회 후 서비스에서 채운다) */
+    List<StudentRespDTO.StudentInfoRowDTO> findStudentByCenterCode(@Param("centerCode") String centerCode);
 }

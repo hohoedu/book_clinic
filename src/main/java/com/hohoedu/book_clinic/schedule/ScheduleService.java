@@ -19,6 +19,7 @@ import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.schedule._dto.MaterializeDTO;
 import com.hohoedu.book_clinic.schedule._dto.ScheduleReqDTO;
 import com.hohoedu.book_clinic.schedule._dto.ScheduleRespDTO;
+import com.hohoedu.book_clinic.schedule.materialize.ScheduleMaterializer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;

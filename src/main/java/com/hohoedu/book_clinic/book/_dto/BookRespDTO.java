@@ -30,6 +30,14 @@ public class BookRespDTO {
         private String extraDetailName;
     }
 
+    /** 학년별 도서 목록 엑셀 조회용 (번호는 시트 내 순번으로 매기므로 content_id는 담지 않는다) */
+    @Data
+    public static class GradeListRespDTO {
+        private String originalTitle;
+        private String author;
+        private String schoolyearName;
+    }
+
     /** 실물 도서(판본) 조회 응답 (2026-07-29 재설계: bcode+센터당 1행, qty 카운터로 보유수량 관리) */
     @Data
     public static class ItemRespDTO {

@@ -36,14 +36,8 @@ public class WebConfig implements WebMvcConfigurer {
                         "/css/**", "/js/**", "/images/**", "/uploads/**",
                         "/favicon.ico"
                 );
-
-        // 학생 앱 예약 API만 — /app/login, /app/session은 세션이 없는 상태로 들어오는 게 정상이라 제외된다
         registry.addInterceptor(studentSessionInterceptor)
                 .addPathPatterns("/app/reservation/**");
-
-        // 학생용 쓰기 요청은 등록된 센터 기기에서만 — 인터셉터가 GET은 스스로 통과시키므로
-        // 화면(로그인 페이지, 기기 등록 안내)은 등록 전에도 열린다.
-        // 학부모 앱(/app, /payment)은 개인 폰에서 비밀번호로 인증하므로 대상이 아니다.
         registry.addInterceptor(kioskTokenInterceptor)
                 .addPathPatterns("/student/**", "/attendance/**", "/clinic/**");
     }

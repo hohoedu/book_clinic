@@ -157,6 +157,16 @@
         SELECT TOP 1 content_id FROM erp_bookstore_content WHERE original_title = #{title}
     </select>
 
+    <!-- 학년별 도서 목록 엑셀 다운로드용 — 학년 코드명(codeNm) 기준 정렬, 번호는 시트 작성 시 순번으로 매긴다 -->
+    <select id="findContentsForGradeExcel" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$GradeListRespDTO">
+        SELECT bc.original_title AS originalTitle,
+               bc.author         AS author,
+               ebc.codeNm        AS schoolyearName
+        FROM erp_bookstore_content bc
+        JOIN erp_bookstore_code ebc ON bc.schoolyear = ebc.code AND ebc.gubun = 'S'
+        ORDER BY ebc.codeNm
+    </select>
+
     <!-- 6: 바코드로 대표 판본 1건 조회 -->
     <select id="findItemByBcode" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ItemRespDTO">
         SELECT TOP 1

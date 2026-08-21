@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>권장도서 순위</title>
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/data/book-priority.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+  <script th:src="@{/js/data/book-priority.js}"></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content">
+
+      <header class="page-header">
+        <h1>권장도서 순위</h1>
+        <button class="guide-btn">
+          <i class="fa-regular fa-circle-question"></i>
+          사용 가이드
+        </button>
+      </header>
+
+      <section class="ranking-toolbar">
+        <!-- 학년 탭은 book-priority.js에서 코드값 기준으로 렌더링 -->
+        <div class="grade-tabs" id="gradeTabs"></div>
+
+        <div class="ranking-stats">
+          <div class="stat-item">
+            <span class="stat-label">총 등록 도서</span>
+            <span class="stat-value" id="statTotal">0권</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">사용 가능 도서</span>
+            <span class="stat-value accent" id="statActive">0권</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">절판 도서</span>
+            <span class="stat-value" id="statInactive">0권</span>
+          </div>
+        </div>
+
+        <div class="ranking-actions">
+          <button type="button" id="btnExcelDownload" class="btn outline">엑셀 다운로드</button>
+          <button type="button" id="btnSaveRanking" class="btn primary">저장</button>
+        </div>
+      </section>
+
+      <section class="ranking-list-panel">
+        <div class="ranking-search-row">
+          <div class="search-box">
+            <input type="text" id="rankingSearch" placeholder="도서명 검색" />
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <div class="search-nav" id="searchNav" hidden>
+              <span class="search-nav-count" id="searchNavCount">0/0</span>
+              <button type="button" id="btnSearchPrev" class="search-nav-btn" title="이전 찾기">
+                <i class="fa-solid fa-chevron-up"></i>
+              </button>
+              <button type="button" id="btnSearchNext" class="search-nav-btn" title="다음 찾기">
+                <i class="fa-solid fa-chevron-down"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="reservation-notice-area">
+            <!-- 예약된 변경이 있을 때만 노출 (book-priority.js) -->
+            <span class="reservation-notice" id="reservationNotice" hidden></span>
+            <button type="button" id="btnReservationList" class="btn outline small">예약 목록 보기</button>
+          </div>
+        </div>
+
+        <div class="ranking-divider"></div>
+
+        <!-- 순위 목록은 book-priority.js에서 렌더링 -->
+        <ul class="ranking-list" id="rankingList"></ul>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!-- 순위 초안(예약) 목록 모달 -->
+  <div class="modal-overlay" id="draftModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <!-- 학년/연도는 book-priority.js에서 모달 열 때 채움 -->
+        <h3 id="draftModalTitle">저장된 순위 초안</h3>
+        <button type="button" id="btnCloseDraftModal" class="modal-close" aria-label="닫기">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- 초안 목록은 book-priority.js에서 렌더링 -->
+        <ul class="draft-list" id="draftList"></ul>
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>

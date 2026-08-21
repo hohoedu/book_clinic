@@ -2,7 +2,7 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.hohoedu.book_clinic.schedule.SlotInstanceRepository">
+<mapper namespace="com.hohoedu.book_clinic.schedule.materialize.SlotInstanceRepository">
 
     <!--
       "toDate 이하의 모든 버전"을 통째로 가져온다. 여기서 요일별 최신 버전 하나만 고르지 않는 이유는,

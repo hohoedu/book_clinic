@@ -30,7 +30,6 @@ public class StoredProcedureInitializer implements ApplicationRunner {
         createRestoreBookProcedure();
     }
 
-    /** 기존 저장 프로시저 삭제 */
     private void dropProcedures() {
         jdbcTemplate.execute("IF OBJECT_ID('sp_delete_book', 'P') IS NOT NULL DROP PROCEDURE sp_delete_book");
         jdbcTemplate.execute("IF OBJECT_ID('sp_restore_book', 'P') IS NOT NULL DROP PROCEDURE sp_restore_book");
@@ -38,11 +37,6 @@ public class StoredProcedureInitializer implements ApplicationRunner {
 
     /**
      * 마스터 도서 삭제 프로시저 생성
-     * FK 의존 순서: priority 삭제 → itempool 이관 → item(사본) 이관 → content 이관
-     * (erp_bookstore_priority가 content_id를 FK로 참조하므로 순위표에 올라간 도서는 먼저 정리해야 함 —
-     *  priority는 설계상 복구 기능이 없으므로 DELETE 로그만 남기고 지운다)
-     * 2026-07-13: item_center가 item에 통합되어 사본(item) 행 자체에 center_code/status가 있으므로
-     * item_center를 먼저 정리하는 단계가 사라졌다.
      */
     private void createDeleteBookProcedure() {
         jdbcTemplate.execute("""
@@ -88,8 +82,6 @@ public class StoredProcedureInitializer implements ApplicationRunner {
 
     /**
      * 마스터 도서 복구 프로시저 생성
-     * content_id 원본 유지를 위해 IDENTITY_INSERT ON/OFF 사용
-     * 로그는 지우지 않고 원본 테이블로 복사만 한다 — 로그가 누적되므로 자식 테이블은 키별 최신 DELETE 로그만 복원
      */
     private void createRestoreBookProcedure() {
         jdbcTemplate.execute("""

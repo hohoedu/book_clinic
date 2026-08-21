@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>결제 이상 건</title>
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+
+  <style>
+    .review-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    .review-table th, .review-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5eaef;
+      text-align: left;
+      font-size: 14px;
+      vertical-align: top;
+    }
+    .review-table th { color: #6b7c8c; font-weight: 600; background: #f7f9fb; }
+    .review-reason { color: #c0392b; }
+    .review-empty { padding: 40px 0; text-align: center; color: #8a97a3; }
+    .review-hint {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #6b7c8c;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content">
+
+      <header class="page-header">
+        <h1>결제 이상 건</h1>
+      </header>
+
+      <p class="review-hint">
+        코드가 스스로 못 끝내고 사람이 확인해야 하는 결제 건입니다 — 이니시스 상점관리자에서 실제 승인/취소 상태를
+        직접 확인한 뒤, 조치가 끝나면 "처리 완료"를 눌러 목록에서 지워주세요. 여기서 버튼을 누른다고 실제로
+        취소/승인이 되는 건 아닙니다.
+      </p>
+
+      <table class="review-table">
+        <thead>
+          <tr>
+            <th>발생일시</th>
+            <th>주문번호</th>
+            <th>학생</th>
+            <th>센터</th>
+            <th>상품</th>
+            <th>금액</th>
+            <th>상태</th>
+            <th>사유</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="reviewListBody"></tbody>
+      </table>
+
+      <div id="reviewEmpty" class="review-empty" hidden>확인이 필요한 결제 건이 없습니다.</div>
+
+    </main>
+
+  </div>
+
+  <script th:src="@{/js/operation/payment-review.js}"></script>
+</body>
+
+</html>

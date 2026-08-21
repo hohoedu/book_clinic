@@ -17,6 +17,7 @@ import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.schedule._dto.ScheduleReqDTO;
+import com.hohoedu.book_clinic.schedule.exception.ScheduleExceptionService;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;

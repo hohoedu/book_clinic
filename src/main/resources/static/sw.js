@@ -1,4 +1,4 @@
-const CACHE_NAME = 'book-clinic-student-v8';
+const CACHE_NAME = 'book-clinic-student-v9';
 
 // 앱은 하나(manifest.json, start_url=/launch)지만 그 안에 문제풀이(/student/**)/출석체크
 // (/attendance/**) 두 화면이 있다 — 오프라인 폴백은 지금 들어가려던 화면이 어느 쪽인지에 따라
@@ -14,16 +14,16 @@ const PRECACHE_URLS = [
   '/launch',
   '/student/login',
   '/attendance',
-  '/css/launcher.css',
+  '/css/student/launcher.css',
   '/css/student/student-common.css',
   '/css/student/student-main.css',
   '/css/student/qr-scan.css',
-  '/css/attendance/attendance-home.css',
-  '/css/attendance/book-confirm.css',
-  '/js/launcher.js',
+  '/css/student/attendance-home.css',
+  '/css/student/book-confirm.css',
+  '/js/student/launcher.js',
   '/js/student/student-main.js',
   '/js/student/qr-scan.js',
-  '/js/attendance/attendance-home.js',
+  '/js/student/attendance-home.js',
   '/js/vendor/jsqr/jsQR.js',
   '/manifest.json',
   '/images/logo_chaekbang.png',

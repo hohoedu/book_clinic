@@ -30,7 +30,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 @Component
 @Profile("dev")
-@Order // ApplicationRunner는 컨텍스트가 완전히 뜬 뒤 실행되므로 schema.sql 초기화 이후임이 보장된다
+@Order
 @RequiredArgsConstructor
 public class DevFirestoreResetRunner implements ApplicationRunner {
 

@@ -29,8 +29,6 @@ public class ImageStorageService {
 
     @Value("${file.upload-dir:uploads}")
     private String uploadDir;
-
-    // 가비아 이미지 호스팅 FTP 접속정보 (application-dev.yml → application-secrets.yml)
     @Value("${ftp.server:}")
     private String ftpServer;
     @Value("${ftp.port:21}")
@@ -74,12 +72,10 @@ public class ImageStorageService {
         } finally {
             disconnectQuietly(ftp);
         }
-        // speedgabia 공개 URL: http://{server}/{경로}/{파일}
         String path = normalizeDir(masterBookDir);
         return "http://" + ftpServer + (path.isEmpty() ? "" : "/" + path) + "/" + filename;
     }
 
-    /** 원격 디렉터리로 이동 (없으면 단계별로 생성) */
     private void changeToDir(FTPClient ftp, String dir) throws IOException {
         if (!isNotBlank(dir)) return;
         for (String segment : dir.split("/")) {
@@ -97,8 +93,8 @@ public class ImageStorageService {
     private String normalizeDir(String dir) {
         return isNotBlank(dir) ? dir.replaceAll("^/+", "").replaceAll("/+$", "") : "";
     }
-
-    /** 로컬 디스크 저장 (폴백) */
+    
+    /** 서버 로컬 디스크에 저장 */
     private String storeToLocal(MultipartFile file, String filename) throws IOException {
         Path dir = Paths.get(uploadDir, "book");
         Files.createDirectories(dir);

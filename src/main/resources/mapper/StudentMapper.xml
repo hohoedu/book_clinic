@@ -106,6 +106,32 @@
         ORDER BY student_name ASC
     </select>
 
+    <!--
+      "학생 정보" 화면 목록 조회. 현재 레벨은 학년별로 레벨업 기준 권수가 달라
+      학생 단위 SQL 한 방으로 못 뽑고 ClinicService.getMainLevelInfo()에서 Java로 계산하므로,
+      여기서는 그 계산에 필요한 totalDoneBooks(전체 학년 누적 완독 권수)까지만 내려준다.
+    -->
+    <select id="findStudentByCenterCode" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$StudentInfoRowDTO">
+        SELECT st.student_id                                  AS studentId,
+               st.student_name                                AS studentName,
+               st.grade_key                                   AS gradeKey,
+               cd.codeNm                                      AS gradeName,
+               st.billing_phone                                AS billingPhone,
+               CONVERT(VARCHAR(10), st.created_at, 23)         AS registeredAt,
+               (SELECT CONVERT(VARCHAR(10), MAX(cs.session_date), 23)
+                  FROM erp_bookstore_clinic_session cs
+                 WHERE cs.student_id = st.student_id)          AS lastVisitDate,
+               (SELECT COUNT(*)
+                  FROM erp_bookstore_recommend_log rl
+                 WHERE rl.student_id = st.student_id
+                   AND rl.status = 'DONE')                     AS totalDoneBooks,
+               st.status_key                                   AS statusKey
+        FROM erp_student st
+        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        WHERE st.center_code = #{centerCode}
+        ORDER BY st.student_name ASC
+    </select>
+
     <select id="findSiblingGroup" resultType="com.hohoedu.book_clinic.student.model.Student">
         SELECT id                     AS id,
                center_code            AS centerCode,

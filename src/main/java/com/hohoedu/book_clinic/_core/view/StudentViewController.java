@@ -2,13 +2,13 @@ package com.hohoedu.book_clinic._core.view;
 
 import java.util.Map;
 
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
@@ -18,10 +18,10 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
+import com.hohoedu.book_clinic.kiosk.KioskService;
 import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.reservation.ReservationService;
-import com.hohoedu.book_clinic.kiosk.KioskService;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -30,8 +30,11 @@ import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 
 /**
- * 학생 화면 라우팅 — 2026-07-09 클리닉 로직(책 추천/문제풀이/채점) 전체 재설계를 위해
- * ClinicService 연동 부분은 임시로 제거된 상태. 1) 책 추천부터 단계별로 다시 연결한다.
+ * 학생(PWA) 화면 라우팅 — 문제풀이 앱(/student/**), 출석체크 앱(/attendance/**), 두 화면을 고르는
+ * 런처(/launch)까지 전부 같은 manifest.json 하나로 설치되는 앱이라 한 컨트롤러에 모아둔다
+ * (2026-07-30 재설계로 앱을 2개에서 1개로 합침 — 별도 PWA로 나누면 설치 프롬프트가 브라우저별로
+ * 불안정했다). 학부모 앱(Flutter, /app/install) 설치 랜딩도 같은 성격(학생·학부모용 진입 화면)이라
+ * 여기 함께 둔다.
  *
  * 흐름은 로그인 모드로 분기하지 않는다: 로그인 → 책 추천(없으면 새로 추천, 있으면 그 책 그대로) →
  * 로그아웃 → (오프라인 독서) → 재로그인 → 문제풀기 → 결과 확인. 메인 화면은 항상 같은 화면이고,
@@ -45,7 +48,6 @@ import lombok.RequiredArgsConstructor;
  */
 @Controller
 @RequiredArgsConstructor
-@RequestMapping("/student")
 public class StudentViewController {
 
     private static final String SESSION_STUDENT_ID = "studentId";
@@ -56,6 +58,27 @@ public class StudentViewController {
     private final KioskService kioskService;
     private final PassService passService;
     private final ReservationService reservationService;
+    private final Environment environment;
+
+    // ── 런처 ─────────────────────────────────────────────────────────────
+
+    /**
+     * 앱 하나(manifest.json)로 설치된 PWA의 진짜 진입점(start_url)이다.
+     * 처음 켰을 때만 "문제풀이"/"출석체크"를 고르게 하고, 그 선택은 브라우저 localStorage에 저장해
+     * 이후로는 이 화면 없이 바로 골랐던 화면으로 넘어간다(launcher.js가 처리) — 실제 라우팅 분기는
+     * 서버가 아니라 클라이언트에서 한다(로그인 여부와 무관하게 그냥 "이 기기 용도"만 기억하면 되므로).
+     *
+     * dev 프로파일에서는 테스트 중 두 화면을 계속 오가며 확인해야 해서, 저장된 값이 있어도 매번
+     * 선택 화면을 다시 보여준다 — prod에서는 원래대로 한 번만 물어본다.
+     */
+    @GetMapping("/launch")
+    public String getLauncherPage(Model model) {
+        boolean isDev = environment.matchesProfiles("dev");
+        model.addAttribute("forceChoice", isDev);
+        return "/student/launcher";
+    }
+
+    // ── 문제풀이 앱 ──────────────────────────────────────────────────────
 
     /**
      * 세션에 로그인된 studentId가 없으면(로그인 안 함/세션 만료) null. 세션은 있는데 URL의
@@ -75,7 +98,7 @@ public class StudentViewController {
     }
 
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
-    @GetMapping({ "", "/", "/login" })
+    @GetMapping({ "/student", "/student/", "/student/login" })
     public String getLoginPage() {
         return "/student/student-login";
     }
@@ -89,7 +112,7 @@ public class StudentViewController {
      *   2) 출석체크 PWA의 "퇴실" — 로그인 컨텍스트 자체가 없어 studentId를 안 보낸다. 이 경우엔
      *      대조할 "본인"이 없으므로 스캔된 QR을 그대로 신뢰한다.
      */
-    @PostMapping("/exit")
+    @PostMapping("/student/exit")
     @ResponseBody
     public ResponseEntity<?> exitByQr(@RequestBody Map<String, String> body, HttpServletRequest request) {
         String studentId = body.get("studentId");
@@ -98,7 +121,6 @@ public class StudentViewController {
         if (student == null) {
             throw new Exception404("일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
         }
-        // 등록된 기기라도 남의 센터 학생까지 퇴실시킬 수 있으면 안 된다(2026-08-20)
         kioskService.assertSameCenter(request, student.getCenterCode());
         if (studentId != null && !studentId.isBlank() && !student.getStudentId().equals(studentId)) {
             throw new Exception400("본인 학생증 QR이 아니에요. 다시 확인해주세요.");
@@ -108,18 +130,15 @@ public class StudentViewController {
     }
 
     /**
-     * PWA 설치 전용 랜딩 페이지 — 직원에게 "이 주소 열고 설치 눌러"로 안내하기 위한 화면.
-     * 브라우저 정책상 URL 접속만으로 자동 설치는 불가(prompt는 사용자 클릭 제스처 필요)라,
-     * beforeinstallprompt를 잡아 큰 "설치하기" 버튼 한 번으로 설치되게 한다. iOS는 이벤트 자체가
-     * 없어 "공유 → 홈 화면에 추가" 안내로 분기, 이미 설치된 경우도 별도 안내.
+     * PWA 설치 전용 랜딩 페이지
      */
-    @GetMapping("/app/install")
+    @GetMapping("/student/app/install")
     public String getInstallPage() {
         return "/student/app-install";
     }
 
     /** appId로 로그인 → 성공 시 메인 화면으로 이동 */
-    @PostMapping("/login")
+    @PostMapping("/student/login")
     public String login(@RequestParam("appId") String appId, RedirectAttributes redirectAttributes,
             HttpServletRequest request) {
         Student student = studentRepository.findByAppId(appId);
@@ -127,28 +146,19 @@ public class StudentViewController {
             redirectAttributes.addFlashAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. 다시 확인해주세요.");
             return "redirect:/student/login";
         }
-        // appId는 학생증에 인쇄된 값이라 비밀이 아니다. "등록된 센터 기기에서 왔는가"는
-        // KioskTokenInterceptor가 보고, "그 기기의 센터 학생인가"는 여기서 본다(2026-08-20).
+
         kioskService.assertSameCenter(request, student.getCenterCode());
-        // 오늘 예약이 없으면 메인 화면까지 들여보내지 않고 로그인 단계에서 바로 막는다(2026-08-20,
-        // 예약 필수 정책). 어차피 안 막아도 홈 화면 진입(getHomeState → enterSession → markAttended)
-        // 에서 같은 이유로 막히지만, 그때는 이미 세션까지 만들고 나서 롤백하는 것보다 로그인
-        // 단계에서 끊는 편이 더 이르고 명확하다 — 이용권 소진 차단과 같은 이유·같은 패턴.
+        // 예약이 없을 경우 로그인 단계에서 막음.
         if (!reservationService.hasReservationToday(student.getStudentId())) {
             redirectAttributes.addFlashAttribute("noReservation", true);
             return "redirect:/student/login";
         }
-        // 이용권이 없으면 메인 화면까지 들여보내지 않고 로그인 단계에서 바로 막는다(2026-08-05).
-        // 세션을 만들기 전에 확인하므로 여기서 막힌 학생은 홈 화면 URL을 직접 열어도 재로그인부터
-        // 다시 해야 한다. MonitorService.enterSession()에도 같은 조건의 차단이 남아있는데, 그건
-        // 로그인 이후 세션 중간에 이용권이 회수되는 것 같은 드문 경우를 막는 이중 방어용이다.
+        // 이용권이 없을 경우 로그인 단계에서 막음. 
         if (passService.remain(student.getStudentId(), "BOOK") <= 0) {
             redirectAttributes.addFlashAttribute("passExhausted", true);
             return "redirect:/student/login";
         }
-        // QR(appId)로 신원을 확인한 이 시점에만 세션을 발급한다 — 이후 화면들은 URL의 studentId가
-        // 아니라 이 세션값을 신뢰한다. 기존 세션에 다른 학생이 남아있을 수 있으니(같은 브라우저를
-        // 여러 학생이 돌려쓰는 키오스크 환경) invalidate 후 새로 발급한다.
+        // appId로 신원을 확인한 이 시점에만 세션을 발급 
         HttpSession oldSession = request.getSession(false);
         if (oldSession != null) {
             oldSession.invalidate();
@@ -166,7 +176,7 @@ public class StudentViewController {
      * 추천 도서 카드는 페이지 진입 후 JS가 /clinic/recommend를 호출해 채운다 — 이미 추천받은 책이
      * 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정한다 (ClinicService.recommend가 멱등 처리).
      */
-    @GetMapping("/main")
+    @GetMapping("/student/main")
     public String getStudentMainPage(@RequestParam(value = "studentId", required = false) String studentId,
             Model model, HttpServletRequest request) {
         studentId = requireSessionStudentId(request, studentId);
@@ -206,7 +216,7 @@ public class StudentViewController {
      * 기존 /question/search, /clinic/recommend API를 호출해 채운다
      */
     /** qlevel: 01=기본(기본값), 02=심화(독서왕/독서친구가 기본 문제풀이 합격 후 추가로 도전) */
-    @GetMapping("/question")
+    @GetMapping("/student/question")
     public String getQuestionPage(@RequestParam(value = "studentId", required = false) String studentId,
             @RequestParam(value = "contentId", required = false) Integer contentId,
             @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
@@ -221,7 +231,6 @@ public class StudentViewController {
             return "redirect:/student/login";
         }
 
-        // 문제풀이 화면 진입 = 실시간 모니터링 기준 "문제 푸는 중" 시작 (제출하면 해제됨)
         monitorService.markQuizStarted(studentId);
 
         model.addAttribute("studentId", studentId);
@@ -236,7 +245,7 @@ public class StudentViewController {
      * sessionStorage에 담아 이 화면으로 넘긴다. 새로고침/직접 접근 등으로 결과가 없으면
      * student-result.js가 메인으로 되돌려보낸다.
      */
-    @GetMapping("/result")
+    @GetMapping("/student/result")
     public String getResultPage(@RequestParam(value = "studentId", required = false) String studentId,
             @RequestParam(value = "contentId", required = false) Integer contentId,
             @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
@@ -261,4 +270,65 @@ public class StudentViewController {
         return "/student/student-result";
     }
 
+    // ── 출석체크 앱 ──────────────────────────────────────────────────────
+
+    /**
+     * 출석체크 홈. 기기 키가 없으면 입실/퇴실 대신 등록 안내를 보여준다 — 쿠키가 HttpOnly라
+     * 화면 JS가 직접 못 읽으므로 서버가 판단해서 내려준다.
+     *
+     * 입실: QR 스캔 → /attendance/enter로 POST — 입실 처리 + 오늘 추천받은 책만 보여주는
+     *      확인 화면으로 간다("닫기"를 누르면 이 출석체크 홈으로 복귀, 문제풀이로는 못 넘어간다 —
+     *      출석체크 키오스크는 여러 학생이 돌려쓰는 공용 기기라 여기서 실제 학습까지 이어지면 안 된다).
+     *      실제 학습(문제 풀기)은 학생 개인 폰의 문제풀이 앱(/student/login)에서 별도로 한다.
+     * 퇴실: QR 스캔 → /student/exit 호출(로그인 컨텍스트 없이 studentId 생략) → 완료 메시지 후 이 화면으로 복귀
+     */
+    @GetMapping({ "/attendance", "/attendance/" })
+    public String getAttendanceHomePage(Model model, HttpServletRequest request) {
+        model.addAttribute("registered", kioskService.resolveFromRequest(request) != null);
+        return "/student/attendance-home";
+    }
+
+    /**
+     * QR 스캔으로 찾은 학생의 입실을 처리하고, 오늘 추천받은 책만 확인시켜주는 화면.
+     * ClinicService.getHomeState가 내부적으로 enterSession까지 처리한다(기존 로그인 흐름과 동일).
+     *
+     * [왜 POST인가] 이 요청은 화면을 보여주기만 하는 게 아니라 입실 세션을 만들고 이용권을
+     * 1회 소진시킨다(MonitorService.enterSession → PassService.consume). GET이었을 때는
+     * 주소창에 `/attendance/enter?appId=7001`을 치는 것만으로 남의 이용권이 깎였고, app_id가
+     * 4자리라 대입도 쉬웠다(2026-08-20 발견). POST로 바꾸면 CSRF 필터가 걸려(/attendance/**는
+     * CSRF 예외 목록에 없다) 우리 화면에서 온 요청만 통과한다.
+     *
+     * 새로고침으로 다시 POST돼도 안전하다 — enterSession은 열린 세션이 있으면 재사용하고
+     * markAttended/consume 모두 같은 세션에 대해 멱등이다.
+     */
+    @PostMapping("/attendance/enter")
+    public String enterAttendance(@RequestParam("appId") String appId, Model model, HttpServletRequest request) {
+        Student student = studentRepository.findByAppId(appId);
+        if (student == null) {
+            model.addAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
+            return "/student/book-confirm";
+        }
+        // 이 기기의 센터 학생만 — 등록된 기기라는 것만으로 남의 센터 학생을 입실시킬 수는 없다
+        kioskService.assertSameCenter(request, student.getCenterCode());
+
+        ClinicRespDTO.BookStatusRespDTO homeState = clinicService.getHomeState(student.getStudentId());
+        model.addAttribute("studentName", student.getStudentName());
+        model.addAttribute("book", homeState.getBook());
+        return "/student/book-confirm";
+    }
+
+    // ── 학부모 앱 설치 랜딩 ──────────────────────────────────────────────
+
+    /**
+     * 학부모 앱(Flutter, 결제·이용권 조회용) 설치 랜딩 페이지.
+     *
+     * 위 학생 PWA 설치(/student/app/install)와 다르다 — 이건 브라우저에 설치되는 웹앱이 아니라
+     * 진짜 안드로이드 네이티브 앱이라, beforeinstallprompt를 못 쓰고 .apk 파일을 그냥 내려받아
+     * 안드로이드가 직접 설치하게 하는 것 말고는 방법이 없다(스토어 미게시,
+     * static/apk/books_pay.apk를 이 서버가 직접 서빙).
+     */
+    @GetMapping("/app/install")
+    public String getParentAppInstallPage() {
+        return "/payment/app-install";
+    }
 }

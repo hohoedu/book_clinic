@@ -60,6 +60,9 @@ public interface BookRepository {
     /** 도서 제목으로 content_id 단건 조회 (엑셀 업로드 시 도서 선택 매핑용) */
     Integer findContentIdByTitle(@Param("title") String title);
 
+    /** 학년별 도서 목록 엑셀 다운로드용 — 학년 코드명(codeNm) 순 정렬 */
+    List<BookRespDTO.GradeListRespDTO> findContentsForGradeExcel();
+
     /** 바코드(ISBN)로 실물 도서 판본 대표 1건 조회 (동일 bcode 다른 센터로 복제 등록 시 원본 정보로도 사용) */
     BookRespDTO.ItemRespDTO findItemByBcode(@Param("bcode") String bcode);
 
