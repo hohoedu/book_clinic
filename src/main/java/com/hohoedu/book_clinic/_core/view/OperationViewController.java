@@ -44,4 +44,10 @@ public class OperationViewController {
     public String kioskLicense() {
         return "operation/kiosk-license";
     }
+
+    /** 학생 정보 — 화면 스캐폴딩 단계, 하드코딩 목업 데이터로 레이아웃만 구현 (2026-08-24) */
+    @GetMapping("/admin/operation/student-view")
+    public String studentInfo() {
+        return "operation/student-info";
+    }
 }

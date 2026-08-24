@@ -1,0 +1,841 @@
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  flex: 0 0 56px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* 필터 */
+.filter-bar {
+  flex: 0 0 auto;
+  margin: 16px 28px;
+  padding: 18px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-field.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.filter-field label {
+  font-size: 13px;
+  color: #666;
+}
+
+.filter-field select {
+  width: 160px;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-box input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.search-box i {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9aa5ab;
+}
+
+.filter-actions {
+  display: flex;
+  flex: 2;
+  align-items: center;
+  gap: 10px;
+}
+
+.filter-actions .btn {
+  width: 132px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-actions .btn i {
+  margin-right: 6px;
+}
+
+/* 목록 */
+.student-panel {
+  flex: 1;
+  min-height: 0;
+  margin: 0 28px 16px;
+  padding: 8px 20px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.student-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.student-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.student-table th,
+.student-table td {
+  padding: 16px 12px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.student-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 18px 12px;
+  background: #fff;
+  border-bottom: 1px solid #e6eaee;
+  color: #555;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.student-table tbody tr:hover {
+  background: #fafcfc;
+}
+
+.student-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.col-no {
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.col-name {
+  font-weight: 800;
+  font-size: 15px;
+  color: #222;
+}
+
+.col-date,
+.col-books {
+  color: #444;
+}
+
+.student-empty td {
+  padding: 40px 0;
+  color: #9aa5ab;
+}
+
+/* 현재 레벨 — 학년(단계)별 팔레트를 재사용해 어느 단계인지 색으로 구분 */
+.level-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 12px 3px 3px;
+  border-radius: 20px;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.level-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.level-pill.grade-01 { color: #DD8200; background: #FFF9D0; }
+.level-pill.grade-01 .level-icon { background: #FEC336; }
+
+.level-pill.grade-02 { color: #DB6D01; background: #FFE9D9; }
+.level-pill.grade-02 .level-icon { background: #E69153; }
+
+.level-pill.grade-03 { color: #90A727; background: #E5F1AE; }
+.level-pill.grade-03 .level-icon { background: #A7BE3C; }
+
+.level-pill.grade-04 { color: #37AF9F; background: #CAF0EB; }
+.level-pill.grade-04 .level-icon { background: #90D9CF; }
+
+.level-pill.grade-05 { color: #338FCA; background: #C3E7FE; }
+.level-pill.grade-05 .level-icon { background: #6ABAEC; }
+
+.level-pill.grade-06 { color: #6A6DD9; background: #CDCEFF; }
+.level-pill.grade-06 .level-icon { background: #9091E2; }
+
+/* 상태 */
+.status {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.status-active {
+  color: #008b7a;
+  background: #e3f4f1;
+}
+
+.status-withdrawn {
+  color: #9aa5ab;
+  background: #f1f3f4;
+}
+
+.student-row {
+  cursor: pointer;
+}
+
+/* =====================================================================
+ * 학생 상세정보 모달
+ * all_pass(호호책방의 자매 서비스, /Users/hohoedu/Desktop/all_pass)의
+ * student-main-modal 클래스 체계(.stu-m-con/.info-tab-btn/.base-info-t/
+ * .status-buttons/.choose-group/.card-common 등)를 그대로 가져오되,
+ * 브랜드 포인트 컬러만 all_pass의 보라(#4c3fbc) 대신 book_clinic의
+ * 틸(#008b7a)로 바꿔서 톤을 맞췄다. 상태버튼(재원중/휴원 등) 같은
+ * 의미색은 all_pass 값 그대로 유지.
+ * ===================================================================== */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-overlay[hidden] {
+  display: none;
+}
+
+.stu-m-con {
+  background: #fff;
+  width: 1300px;
+  max-width: 94vw;
+  max-height: 94vh;
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.stu-m-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 22px 40px 16px;
+}
+
+.stu-m-head h3 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.modal-close {
+  position: absolute;
+  right: 40px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 18px;
+  color: #666;
+}
+
+/* 탭 바 — 밑줄(border-bottom)은 모달 폭 끝에서 끝까지, 탭 버튼 묶음만 가운데 정렬 */
+.student-tab-bar {
+  border-bottom: .5px solid #dcdcdc;
+  padding: 0 40px;
+}
+
+.info-tab-btn {
+  display: flex;
+  gap: 15px;
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.info-tab-btn button {
+  flex: 1;
+  padding: 10px 15px;
+  color: #a1a1a1;
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-sizing: border-box;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.info-tab-btn button.active {
+  border-bottom: 2px solid #008b7a;
+  color: #008b7a;
+  font-weight: bold;
+}
+
+.modal-scroll {
+  overflow-y: auto;
+  height: 76vh;
+  padding: 24px 40px 30px;
+}
+
+/* 공용 소제목 */
+.small-title {
+  font-weight: 600;
+  margin-bottom: 14px;
+  font-size: 17px;
+  color: #333;
+}
+
+/* 기본정보 표 (기본정보 탭 / 회비 탭 공용) */
+.base-info-t {
+  width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+  margin-bottom: 36px;
+}
+
+.base-info-t tbody {
+  border-top: 1px solid #3e3e3e;
+  border-bottom: 1px solid #3e3e3e;
+}
+
+.base-info-t tbody th {
+  text-align: center;
+  color: #878787;
+  background: #f9f9f9;
+  font-weight: 400;
+  width: 130px;
+}
+
+.base-info-t tbody td {
+  color: #222;
+}
+
+.base-info-t th,
+.base-info-t td {
+  padding: 14px 12px;
+  border-bottom: 1px dashed #dcdcdc;
+  vertical-align: middle;
+  font-size: 14px;
+}
+
+.base-info-t input[type="text"],
+.base-info-t input[type="tel"] {
+  border: 1px solid #e9eaec;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+  color: #333;
+  background: #fff;
+}
+
+.base-info-t select {
+  border: 1px solid #e9eaec;
+  border-radius: 5px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: #333;
+}
+
+.icon-field {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  color: #9aa5ab;
+  background: #fbfcfc;
+}
+
+/* 상태 변경 버튼(재원중/입학취소/휴원/탈퇴 — all_pass 의미색 그대로) */
+.status-buttons {
+  display: inline-flex;
+}
+
+.btn-status {
+  width: 76px;
+  height: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  border: none;
+  border-radius: 6px;
+  padding: 4px 10px;
+  margin-left: 4px;
+  pointer-events: none;
+}
+
+.btn-status.active { background: #b8e8ff; color: #1e8ec4; }
+.btn-status.cancel { background: #b9f0ca; color: #219645; }
+.btn-status.closed { background: #fdcdd6; color: #bd2f4a; }
+.btn-status.danger { background: #fff; color: #d34040; border: 1px solid #d34040; }
+
+/*
+ * 전체 탭 헤더의 단일 상태 뱃지 — .btn-status는 폭이 76px로 고정이라 "이용중" 하나만 놓으면
+ * 너무 길어 보여서, 내용 길이에 맞는(auto width) 칩을 따로 둔다. 색/모양은 예약 현황
+ * (monitor/reservation.css의 .round-status-badge/.status-pill)에서 이미 쓰던 톤 그대로 맞췄다 —
+ * 옅은 배경 + 진한 텍스트 + 같은 계열의 얇은 테두리, radius도 5~6px로 통일.
+ */
+.status-chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status-chip.active { background: #C3E7FE; color: #61A7D8; }
+.status-chip.danger { background: #F7DCDF; color: #C45C67; }
+
+.btn-status.s_status.selected {
+  outline: 2px solid currentColor;
+  outline-offset: 1px;
+}
+
+/* 남자/여자, 부/모/기타 같은 단일 선택 토글 */
+.choose-group {
+  display: flex;
+  gap: 5px;
+}
+
+.btn-choose {
+  width: 64px;
+  height: 30px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 5px;
+  background: #fff;
+  border: 1px solid #eee;
+  color: #c6c6c6;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.btn-choose.active {
+  background: #008b7a;
+  color: #fff;
+  border-color: #008b7a;
+}
+
+.save-btn-frame {
+  text-align: center;
+}
+
+.save-btn {
+  padding: 12px 46px;
+  background: #008b7a;
+  border: 1px solid #008b7a;
+  border-radius: 30px;
+  color: #fff;
+  line-height: 1;
+  font-size: 16px;
+}
+
+.save-btn:disabled {
+  background: #cfd6da;
+  border-color: #cfd6da;
+  cursor: not-allowed;
+}
+
+/* ---- 전체 탭 ----
+ * 두 컬럼의 세로 길이를 .all-info 높이(=모달 스크롤 영역 전체)에 맞춰 고정하고, 각 컬럼의
+ * 마지막 카드(예약 현황 / 최근 읽은 책)만 flex:1로 남는 공간을 채운다 — 그래야 두 카드의
+ * 아래쪽 끝이 정확히 같은 선상에 맞고, 넘치는 내용은 각 카드 안에서만 스크롤된다.
+ */
+.all-info {
+  display: flex;
+  gap: 20px;
+  height: 100%;
+}
+
+.card-left {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.card-right {
+  flex: 3;
+    display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.card-common {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #dcdcdc;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+/* 기본 정보 카드 — 예약 현황에도 공간을 내주되 너무 눌리지 않게 살짝만 압축 */
+.card-compact {
+  padding: 20px;
+}
+
+.card-compact .card-body {
+  margin-bottom: 16px;
+}
+
+.card-compact .profile-img {
+  width: 52px;
+  height: 52px;
+  font-size: 18px;
+  flex: 0 0 52px;
+}
+
+.card-compact .student-details {
+  padding-top: 12px;
+}
+
+.card-compact .detail-row {
+  padding: 6px 0;
+}
+
+/* 각 컬럼의 마지막 카드 — 남는 세로 공간을 채우고, 넘치는 내용만 내부 스크롤 */
+.card-grow {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.card-grow .table-frame,
+.card-grow .recent-book-scroll {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+}
+
+.card-grow .recent-book-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.recent-book-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recent-book-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 2px;
+  border-top: 1px dashed #eef1f3;
+}
+
+.recent-book-list li:first-child {
+  border-top: none;
+}
+
+.recent-book-thumb {
+  width: 34px;
+  height: 44px;
+  flex: 0 0 34px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #ffb85c, #ff8a3d);
+}
+
+.recent-book-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+}
+
+.recent-book-meta {
+  margin-top: 3px;
+  color: #9aa5ab;
+  font-size: 12px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.sub-themes {
+  font-size: 16px;
+  font-weight: bold;
+  margin: 0 0 6px;
+  color: #464646;
+}
+
+.card-body {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.profile-img {
+  margin: 0;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex: 0 0 56px;
+}
+
+.profile-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.student-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.student-subjects,
+.student-tel {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: #9aa5ab;
+}
+
+.student-details {
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+  margin: 0;
+}
+
+.detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 6px 0;
+}
+
+.detail-row dt {
+  font-weight: 500;
+  color: #9aa5ab;
+}
+
+.detail-row dd {
+  margin: 0;
+  color: #333;
+  font-weight: 600;
+}
+
+.table-frame {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.basic-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+}
+
+.basic-table th {
+  padding: 9px 6px;
+  color: #9aa5ab;
+  font-weight: 700;
+  background: #fff;
+  border-bottom: 1px solid #eee;
+}
+
+.basic-table td {
+  padding: 10px 6px;
+  text-align: center;
+  border-bottom: 1px solid #f5f6f7;
+  color: #333;
+}
+
+/*
+ * Safari/macOS는 border-collapse 테이블 안의 sticky th를 스크롤 중 제자리에 붙잡아두지 못하는
+ * 버그가 있어서, 헤더 전용 표(.table-head-fixed)를 스크롤 영역(.table-frame) 바깥에 따로 두고
+ * 몸통 표만 그 안에서 스크롤되게 분리했다. 두 표는 같은 colgroup 폭을 써서 열이 맞는다.
+ */
+.table-head-fixed {
+  margin-bottom: 0;
+}
+
+/* 독서현황 스탯 타일(all_pass엔 없는 book_clinic 고유 항목) */
+.stat-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.stat-tile {
+  background: #fbfcfc;
+  border: 1px solid #eef1f3;
+  border-radius: 10px;
+  padding: 14px 6px;
+  text-align: center;
+}
+
+.stat-icon {
+  font-size: 22px;
+}
+
+.stat-label {
+  margin-top: 6px;
+  color: #9aa5ab;
+  font-size: 12px;
+}
+
+.stat-value {
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: #222;
+}
+
+/* 예약 현황(monitor/reservation.css)에서 쓰던 뱃지 톤 그대로 재사용 — 옅은 배경 + 얇은 테두리 */
+/* 최근 읽은 책 — 뱃지가 아니라 색상만 다른 일반 텍스트 */
+.result-text {
+  font-weight: 700;
+}
+
+.result-text.result-pass { color: #8CB55F; }
+.result-text.result-king { color: #61A7D8; }
+.result-text.result-retry { color: #C45C67; }
+
+/* 예약 현황 뱃지 — 원래 크기(테두리 없음)로 복귀 */
+.resv-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid;
+}
+
+.resv-pill.resv-scheduled { color: #8CB55F; background: #F1F7E4; }
+.resv-pill.resv-done { color: #61A7D8; background: #C3E7FE; }
+
+/* 독서이력 결과 뱃지 — 통과/재도전/독서왕 세 가지가 폭은 동일하게, 높이는 예약 현황 뱃지와 동일하게 */
+.result-badge {
+  display: inline-block;
+  width: 60px;
+  padding: 3px 0;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  border: 1px solid;
+}
+
+.result-badge.result-pass { color: #8CB55F; background: #E5F1AE; }
+.result-badge.result-king { color: #61A7D8; background: #C3E7FE; }
+.result-badge.result-retry { color: #C45C67; background: #F7DCDF; }
+
+/* ---- 회비 탭 (all_pass 수강과목/회비 표 그대로) ---- */
+.dues-sum {
+  font-size: 18px;
+  font-weight: bold;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.dues-sum span {
+  font-size: 22px;
+  color: #df3a3a;
+}
+
+/* ---- 독서이력 / 예약 탭 (all_pass에 대응 탭이 없어 book_clinic 자체 표) ---- */
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  background: #fff;
+}
+
+.history-table th,
+.history-table td {
+  padding: 14px 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.history-table thead th {
+  color: #9aa5ab;
+  font-weight: 700;
+}
+
+.history-table .col-title {
+  text-align: left;
+  font-weight: 700;
+  color: #222;
+}
+
+.history-table .col-note {
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.tab-empty {
+  padding: 60px 0;
+  text-align: center;
+  color: #9aa5ab;
+  font-size: 14px;
+}

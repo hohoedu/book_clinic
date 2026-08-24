@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>학생 정보</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/operation/student-info.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+  <script th:src="@{/js/operation/student-info.js}"></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content">
+
+      <header class="page-header">
+        <h1>학생 정보</h1>
+        <div class="page-header-actions">
+          <button type="button" id="btnGuide" class="guide-btn">
+            <i class="fa-regular fa-circle-question"></i>
+            사용 가이드
+          </button>
+        </div>
+      </header>
+
+      <!-- 필터 -->
+      <section class="filter-bar">
+
+        <div class="filter-field">
+          <label for="filterGrade">학년</label>
+          <select id="filterGrade">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="filterStatus">등록 상태</label>
+          <select id="filterStatus">
+            <option value="">전체</option>
+            <option value="ACTIVE" selected>이용중</option>
+            <option value="WITHDRAWN">탈퇴</option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="filterContact">연락처</label>
+          <select id="filterContact">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-field">
+          <label for="filterTeacher">담당 선생님</label>
+          <select id="filterTeacher">
+            <option value="">전체</option>
+          </select>
+        </div>
+
+        <div class="filter-field grow">
+          <label class="sr-only" for="filterKeyword">학생명/연락처 검색</label>
+          <div class="search-box">
+            <input type="text" id="filterKeyword" placeholder="학생명 또는 연락처를 입력하세요." />
+            <i class="fa-solid fa-magnifying-glass"></i>
+          </div>
+        </div>
+
+        <div class="filter-actions">
+          <button type="button" id="btnSearch" class="btn primary">조회</button>
+          <button type="button" id="btnFilterReset" class="btn outline">
+            <i class="fa-solid fa-rotate-left"></i>
+            필터 초기화
+          </button>
+        </div>
+
+      </section>
+
+      <!-- 학생 목록 -->
+      <section class="student-panel">
+        <div class="student-table-wrap">
+          <table class="student-table">
+            <colgroup>
+              <col style="width:5%">
+              <col style="width:11%">
+              <col style="width:11%">
+              <col style="width:14%">
+              <col style="width:13%">
+              <col style="width:13%">
+              <col style="width:11%">
+              <col style="width:11%">
+              <col style="width:11%">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>No</th>
+                <th>학생명</th>
+                <th>학년</th>
+                <th>연락처</th>
+                <th>등록일</th>
+                <th>최근 이용일</th>
+                <th>누적 도서(권)</th>
+                <th>현재 레벨</th>
+                <th>상태</th>
+              </tr>
+            </thead>
+
+            <!-- 목업 데이터 (하드코딩) — 행 클릭 시 student-info.js가 data-* 값을 읽어 상세정보 모달을 연다 -->
+            <tbody id="studentListBody">
+              <tr class="student-row" data-name="김호호" data-grade="초1" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="27" data-level="4" data-level-class="grade-01" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">1</td>
+                <td class="col-name">김호호</td>
+                <td>초1</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">27</td>
+                <td><span class="level-pill grade-01"><span class="level-icon">🐱</span>Lv. 4</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="이하니" data-grade="초1" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="19" data-level="3" data-level-class="grade-01" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">2</td>
+                <td class="col-name">이하니</td>
+                <td>초1</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">19</td>
+                <td><span class="level-pill grade-01"><span class="level-icon">🐱</span>Lv. 3</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="신하리" data-grade="초2" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="9" data-level="2" data-level-class="grade-02" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">3</td>
+                <td class="col-name">신하리</td>
+                <td>초2</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">9</td>
+                <td><span class="level-pill grade-02"><span class="level-icon">🐱</span>Lv. 2</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="강독서" data-grade="초3" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="21" data-level="2" data-level-class="grade-03" data-status="탈퇴" data-status-class="status-withdrawn">
+                <td class="col-no">4</td>
+                <td class="col-name">강독서</td>
+                <td>초3</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">21</td>
+                <td><span class="level-pill grade-03"><span class="level-icon">🐱</span>Lv. 2</span></td>
+                <td><span class="status status-withdrawn">탈퇴</span></td>
+              </tr>
+              <tr class="student-row" data-name="최책방" data-grade="초1" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="14" data-level="3" data-level-class="grade-01" data-status="탈퇴" data-status-class="status-withdrawn">
+                <td class="col-no">5</td>
+                <td class="col-name">최책방</td>
+                <td>초1</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">14</td>
+                <td><span class="level-pill grade-01"><span class="level-icon">🐱</span>Lv. 3</span></td>
+                <td><span class="status status-withdrawn">탈퇴</span></td>
+              </tr>
+              <tr class="student-row" data-name="오하연" data-grade="초4" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="11" data-level="2" data-level-class="grade-04" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">6</td>
+                <td class="col-name">오하연</td>
+                <td>초4</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">11</td>
+                <td><span class="level-pill grade-04"><span class="level-icon">🐱</span>Lv. 2</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="이하율" data-grade="초5" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="54" data-level="10" data-level-class="grade-05" data-status="탈퇴" data-status-class="status-withdrawn">
+                <td class="col-no">7</td>
+                <td class="col-name">이하율</td>
+                <td>초5</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">54</td>
+                <td><span class="level-pill grade-05"><span class="level-icon">🐱</span>Lv. 10</span></td>
+                <td><span class="status status-withdrawn">탈퇴</span></td>
+              </tr>
+              <tr class="student-row" data-name="김호일" data-grade="초6" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="45" data-level="9" data-level-class="grade-06" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">8</td>
+                <td class="col-name">김호일</td>
+                <td>초6</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">45</td>
+                <td><span class="level-pill grade-06"><span class="level-icon">🐱</span>Lv. 9</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="김호이" data-grade="초2" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="2" data-level="2" data-level-class="grade-02" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">9</td>
+                <td class="col-name">김호이</td>
+                <td>초2</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">2</td>
+                <td><span class="level-pill grade-02"><span class="level-icon">🐱</span>Lv. 2</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="김호삼" data-grade="초3" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="56" data-level="6" data-level-class="grade-03" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">10</td>
+                <td class="col-name">김호삼</td>
+                <td>초3</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">56</td>
+                <td><span class="level-pill grade-03"><span class="level-icon">🐱</span>Lv. 6</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+              <tr class="student-row" data-name="김호사" data-grade="초1" data-phone="010-0000-0000" data-reg-date="2026-08-18" data-visit-date="2026-08-20" data-books="5" data-level="3" data-level-class="grade-01" data-status="이용중" data-status-class="status-active">
+                <td class="col-no">11</td>
+                <td class="col-name">김호사</td>
+                <td>초1</td>
+                <td>010-0000-0000</td>
+                <td class="col-date">2026-08-18</td>
+                <td class="col-date">2026-08-20</td>
+                <td class="col-books">5</td>
+                <td><span class="level-pill grade-01"><span class="level-icon">🐱</span>Lv. 3</span></td>
+                <td><span class="status status-active">이용중</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+
+  </div>
+
+  <!--
+    학생 상세정보 모달 — all_pass(자매 서비스)의 student-main-modal 구조를 그대로 가져왔다
+    (탭바 .info-tab-btn, 본문 .modal-scroll, 표 .base-info-t 등 클래스 체계 동일, 색만 틸로 변경).
+    다만 all_pass에는 없는 "독서이력/예약" 탭은 book_clinic 자체로 새로 만든 것.
+    전체/기본 정보/회비/독서이력/예약 5개 탭. 내용은 student-info.js가 채운다.
+  -->
+  <div class="modal-overlay" id="studentModal" hidden>
+    <div class="stu-m-con">
+      <div class="stu-m-head">
+        <h3 id="studentModalTitle">학생 상세정보</h3>
+        <button type="button" id="btnCloseStudentModal" class="modal-close" aria-label="닫기">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <div class="student-tab-bar">
+        <div class="info-tab-btn" id="studentTabs">
+          <button type="button" class="active" data-tab="all">전체</button>
+          <button type="button" data-tab="basic">기본 정보</button>
+          <button type="button" data-tab="fee">회비</button>
+          <button type="button" data-tab="reading">독서이력</button>
+          <button type="button" data-tab="reservation">예약</button>
+        </div>
+      </div>
+
+      <div class="modal-scroll" id="studentModalBody">
+        <!-- 탭 패널은 student-info.js가 렌더링 -->
+      </div>
+    </div>
+  </div>
+
+</body>
+
+</html>
