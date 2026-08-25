@@ -11,6 +11,13 @@
         ORDER BY session_id DESC
     </select>
 
+    <select id="findTodaySessionStatus" resultType="java.lang.String">
+        SELECT TOP 1 status
+        FROM erp_bookstore_clinic_session
+        WHERE student_id = #{studentId} AND session_date = #{date}
+        ORDER BY session_id DESC
+    </select>
+
     <insert id="insertSession">
         INSERT INTO erp_bookstore_clinic_session (student_id, session_date)
         VALUES (#{studentId}, #{date})

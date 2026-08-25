@@ -19,87 +19,84 @@
   const rewardLevelName = document.getElementById('rewardLevelName');
   const rewardExpDesc = document.getElementById('rewardExpDesc');
   const cardReward = document.getElementById('cardReward');
+  const rareFlag = document.getElementById('rareFlag');
   const rewardCardImg = document.getElementById('rewardCardImg');
   const rewardCardName = document.getElementById('rewardCardName');
   const rewardCardDesc = document.getElementById('rewardCardDesc');
   const rewardProgressBar = document.getElementById('rewardProgressBar');
+  const rewardStepNow = document.getElementById('rewardStepNow');
+  const rewardStepTotal = document.getElementById('rewardStepTotal');
   const retryBtn = document.getElementById('retryBtn');
   const wrongRetryBtn = document.getElementById('wrongRetryBtn');
   const advancedBtn = document.getElementById('advancedBtn');
 
-  const nextBookModal = document.getElementById('nextBookModal');
-  const nextBookYesBtn = document.getElementById('nextBookYesBtn');
-  const nextBookNoBtn = document.getElementById('nextBookNoBtn');
   const homeBtn = document.querySelector('.btn-home');
+  const contentId = page ? page.getAttribute('data-content-id') : null;
+  const qlevel = (page ? page.getAttribute('data-qlevel') : null) || '01';
 
   // 이 책이 끝난 상태인지(=책은 이미 반납됨) — 독서왕/독서친구/심화완료면 true, 재도전(불합격)이면
-  // false. true일 때만 "홈으로"를 눌렀을 때 다음 책 질문 팝업을 가로채서 띄운다.
+  // false. true일 때 "홈으로"를 누르면 일반 홈이 아니라 완료 화면(mode=retryDone)으로 보낸다 —
+  // 문제 풀기 버튼 자리에 남은 액션(틀린 문제 다시 풀기/심화 문제 풀기)과 "책 추천받기" 버튼을
+  // 보여주기 위함이다(2026-08-25, 예전의 "다음 책 받을까요?" 팝업을 대체)
   let bookFinished = false;
 
-  // "홈으로"를 누른 순간 물어본다(2026-07-29) — 결과 화면에 도착하자마자 묻지 않는다. 책은 이미
-  // ClinicService.submitQuiz에서 반납 처리돼 있으므로 "아니요"를 골라도 반납 자체는 유지된다.
   if (homeBtn) {
     homeBtn.addEventListener('click', (e) => {
-      if (!bookFinished) return; // 재도전(불합격) 등은 그냥 홈으로 이동
+      if (!bookFinished || !contentId) return; // 재도전(불합격) 등은 그냥 일반 홈으로 이동
       e.preventDefault();
-      if (nextBookModal) nextBookModal.hidden = false;
+      window.location.href = `/student/main?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${encodeURIComponent(qlevel)}&mode=retryDone`;
     });
   }
 
-  if (nextBookYesBtn) {
-    nextBookYesBtn.addEventListener('click', async () => {
-      nextBookYesBtn.disabled = true;
-      try {
-        const res = await fetch('/clinic/recommend', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentId }),
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error?.message ?? '추천에 실패했어요.');
-        window.location.href = `/student/main?studentId=${encodeURIComponent(studentId)}`;
-      } catch (err) {
-        console.error(err);
-        alert(err.message || '추천에 실패했어요.');
-        nextBookYesBtn.disabled = false;
-      }
+  // student-question.js가 채점 직후 세션 저장소에 담아둔 결과를 우선 쓴다. 없으면(재도전 중 제출 없이
+  // "나가기"로 온 경우 등) 새로 채점하지 않고 서버에 남은 직전 결과를 가져온다(2026-08-25). 그마저
+  // 없으면(새로고침/직접 접근 등 정말 보여줄 게 없는 경우) 메인으로 돌려보낸다.
+  async function loadResult() {
+    const raw = sessionStorage.getItem('quizResult');
+    if (raw) {
+      sessionStorage.removeItem('quizResult');
+      return JSON.parse(raw);
+    }
+    const contentId = page ? page.getAttribute('data-content-id') : null;
+    const qlevel = (page ? page.getAttribute('data-qlevel') : null) || '01';
+    if (!contentId) return null;
+    try {
+      const res = await fetch(`/clinic/last-result?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${encodeURIComponent(qlevel)}`);
+      const data = await res.json();
+      return data.success ? { advanced: false, ...data.response } : null;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }
+
+  (async function init() {
+    const result = await loadResult();
+    if (!result) {
+      window.location.replace(`/student/main?studentId=${encodeURIComponent(studentId)}`);
+      return;
+    }
+
+    renderScore(result);
+
+    if (result.advanced) {
+      renderAdvancedResult(result);
+    } else if (result.grade === 'KING') {
+      renderKingResult(result);
+    } else if (result.grade === 'FRIEND') {
+      renderFriendResult(result);
+    } else {
+      renderRetryResult(result);
+    }
+    renderExp(result);
+    renderCard(result);
+
+    // "틀린 문제 풀기" — 이번에 틀린 문항 번호만 세션 저장소에 담아두면 student-question.js가
+    // 문제 목록을 불러온 뒤 그 번호만 걸러서 다시 낸다
+    wrongRetryBtn.addEventListener('click', () => {
+      sessionStorage.setItem('retryQnums', JSON.stringify(result.wrongQnums ?? []));
     });
-  }
-  if (nextBookNoBtn) {
-    nextBookNoBtn.addEventListener('click', () => {
-      window.location.href = `/student/main?studentId=${encodeURIComponent(studentId)}`;
-    });
-  }
-
-  // student-question.js가 채점 직후 세션 저장소에 담아둔 결과 — 새로고침/직접 접근 등으로
-  // 결과가 없으면 이 화면에서 보여줄 게 없으므로 메인으로 돌려보낸다
-  const raw = sessionStorage.getItem('quizResult');
-  if (!raw) {
-    window.location.replace(`/student/main?studentId=${encodeURIComponent(studentId)}`);
-    return;
-  }
-  sessionStorage.removeItem('quizResult');
-  const result = JSON.parse(raw);
-
-  renderScore(result);
-
-  if (result.advanced) {
-    renderAdvancedResult(result);
-  } else if (result.grade === 'KING') {
-    renderKingResult(result);
-  } else if (result.grade === 'FRIEND') {
-    renderFriendResult(result);
-  } else {
-    renderRetryResult(result);
-  }
-  renderExp(result);
-  renderCard(result);
-
-  // "틀린 문제 풀기" — 이번에 틀린 문항 번호만 세션 저장소에 담아두면 student-question.js가
-  // 문제 목록을 불러온 뒤 그 번호만 걸러서 다시 낸다
-  wrongRetryBtn.addEventListener('click', () => {
-    sessionStorage.setItem('retryQnums', JSON.stringify(result.wrongQnums ?? []));
-  });
+  })();
 
   function renderScore(result) {
     const correct = result.correctCount ?? 0;
@@ -114,8 +111,10 @@
       star.classList.toggle('is-on', i < onCount);
     });
 
-    // 재도전 여부 — 지금은 이번 제출이 재도전이었는지(retry 플래그)만 표시한다
-    resultRetryText.textContent = result.retried ? '있음' : '없음';
+    // 재도전 여부 — 서버가 내려주는 attemptNo(이번 제출이 몇 번째 시도인지)로 몇 번째 재도전인지 표시한다
+    // (1=첫 시도라 재도전 없음, 2 이상이면 그 값-1이 이번까지의 재도전 횟수)
+    const attemptNo = result.attemptNo ?? 1;
+    resultRetryText.textContent = attemptNo > 1 ? `${attemptNo - 1}번째` : '없음';
   }
 
   function renderAdvancedResult(result) {
@@ -138,7 +137,9 @@
     // 만점이면 다시 풀 문제가 없으므로 "틀린 문제 다시 풀기"는 감춘다
     wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
     advancedBtn.hidden = false;
-    bookFinished = !result.alreadyCompleted;
+    // "홈으로"를 누르면 완료 화면(남은 액션 + 책 추천받기)으로 간다 — 다시풀기(alreadyCompleted)
+    // 재제출이어도 마찬가지다(2026-08-25, 예전엔 이때만 예외로 그냥 홈으로 보냈다)
+    bookFinished = true;
   }
 
   function renderFriendResult(result) {
@@ -147,9 +148,11 @@
     resultTitle.textContent = `${bookTitle(result)}을(를) 읽고 문제를 풀었어요!`;
 
     retryBtn.hidden = true;
-    wrongRetryBtn.hidden = false;
+    // 등급(FRIEND)은 첫 시도로 고정되지만, "틀린 문제 다시 풀기"로 남은 오답을 다 없앴으면
+    // (result.wrongQnums가 비었으면) 더 풀 게 없으므로 버튼은 감춘다(2026-08-25)
+    wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
     advancedBtn.hidden = false;
-    bookFinished = !result.alreadyCompleted;
+    bookFinished = true;
   }
 
   function renderRetryResult(result) {
@@ -198,6 +201,8 @@
     if (result.progressPercent != null) {
       rewardProgressBar.style.width = `${result.progressPercent}%`;
     }
+    if (result.stepNow != null) rewardStepNow.textContent = result.stepNow;
+    if (result.stepTotal != null) rewardStepTotal.textContent = result.stepTotal;
 
     if (result.advanced) {
       rewardExpDesc.textContent = '심화문제는 레벨과 무관해요.';
@@ -222,6 +227,8 @@
       return;
     }
     cardReward.hidden = false;
+    // RARE 플래그는 10장 세트를 채운 그 순간(cardRewardReached)에만 보여준다 — 매번 뜨면 안 된다
+    rareFlag.hidden = !result.cardRewardReached;
     rewardCardName.textContent = '???';
     const collected = result.totalCards != null ? ((result.totalCards - 1) % 10) + 1 : null;
     if (result.cardRewardReached) {

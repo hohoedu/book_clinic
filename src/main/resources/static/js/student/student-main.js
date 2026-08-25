@@ -49,41 +49,28 @@
     initRecommend();
 
     const logoutButton = document.querySelector('.logout-btn');
+    const logoutConfirmModal = document.getElementById('logoutConfirmModal');
+    const logoutConfirmBtn = document.getElementById('logoutConfirmBtn');
+    const logoutCancelBtn = document.getElementById('logoutCancelBtn');
 
-    if (logoutButton) {
-      logoutButton.addEventListener('click', () => {
-        localStorage.clear();
-        sessionStorage.clear();
-        // replace()로 이동해 뒤로가기로 메인 화면에 다시 들어올 수 없게 한다
-        window.location.replace('/student');
-      });
+    function doLogout() {
+      localStorage.clear();
+      sessionStorage.clear();
+      // replace()로 이동해 뒤로가기로 메인 화면에 다시 들어올 수 없게 한다
+      window.location.replace('/student');
     }
 
-    // QR 자가 퇴실 — 학생증 QR을 다시 스캔해 본인 확인 겸 퇴실 처리(2026-07-30).
-    // 지금 로그인된 studentId를 같이 보내 서버가 "스캔된 QR = 본인 것"인지 검증하게 한다 —
-    // 검증 없이 스캔된 appId만 믿으면, 다른 학생 QR을 잘못 스캔했을 때 그 학생은 세션이 없어
-    // 조용히 무시되고 정작 로그인된 학생은 화면만 로그아웃되고 실제 퇴실은 안 찍히는 문제가 있었다
-    // (실사용 중 발견된 버그).
-    const exitButton = document.querySelector('.exit-qr-btn');
-    if (exitButton) {
-      exitButton.addEventListener('click', async () => {
-        try {
-          const studentId = document.getElementById('mainPage').getAttribute('data-student-id');
-          const appId = await window.openQrScanner('QR로 퇴실하기');
-          const res = await fetch('/student/exit', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ studentId, appId }),
-          });
-          const data = await res.json();
-          if (!data.success) throw new Error(data.error?.message ?? '퇴실 처리에 실패했어요.');
-          localStorage.clear();
-          sessionStorage.clear();
-          window.location.replace('/student');
-        } catch (err) {
-          if (err.message !== 'cancelled') alert(err.message || 'QR 스캔에 실패했어요.');
-        }
+    // 실수로 로그아웃을 누르는 경우가 있어 확인 모달을 한 번 거친다(2026-08-25)
+    if (logoutButton && logoutConfirmModal) {
+      logoutButton.addEventListener('click', () => {
+        logoutConfirmModal.hidden = false;
       });
+      logoutCancelBtn.addEventListener('click', () => {
+        logoutConfirmModal.hidden = true;
+      });
+      logoutConfirmBtn.addEventListener('click', doLogout);
+    } else if (logoutButton) {
+      logoutButton.addEventListener('click', doLogout);
     }
   });
 
@@ -114,6 +101,35 @@
     const metaAwardEl = document.getElementById('bookMetaAward');
     const metaCurriculumEl = document.getElementById('bookMetaCurriculum');
     const metaTagsEl = document.getElementById('bookMetaTags');
+    const recommendNextBtn = document.getElementById('recommendNextBtn');
+    const completionActions = document.getElementById('completionActions');
+    const completionWrongRetryBtn = document.getElementById('completionWrongRetryBtn');
+    const completionAdvancedBtn = document.getElementById('completionAdvancedBtn');
+    const recommendErrorModal = document.getElementById('recommendErrorModal');
+    const recommendErrorMsg = document.getElementById('recommendErrorMsg');
+    const recommendErrorOkBtn = document.getElementById('recommendErrorOkBtn');
+
+    // "책 추천받기" 실패 안내(하루 추천 한도 2권 초과 등) — 브라우저 기본 alert() 대신 앱 스타일
+    // 모달로 보여준다(2026-08-25)
+    function showRecommendError(message) {
+      if (!recommendErrorModal) {
+        alert(message);
+        return;
+      }
+      recommendErrorMsg.textContent = message;
+      recommendErrorModal.hidden = false;
+    }
+    if (recommendErrorOkBtn) {
+      recommendErrorOkBtn.addEventListener('click', () => {
+        recommendErrorModal.hidden = true;
+      });
+    }
+
+    // 완독(KING/FRIEND/심화완료) 후 결과 화면 "홈으로" 또는 "틀린 문제 다시 풀기" 중 "나가기"로
+    // 왔을 때 — 문제풀기 버튼 자리에 남은 액션만 보여주는 완료 화면 모드(2026-08-25)
+    const params = new URLSearchParams(window.location.search);
+    const isCompletionMode = params.get('mode') === 'retryDone';
+    const completionContentId = params.get('contentId');
 
     function showState(name) {
       loadingEl.hidden = name !== 'loading';
@@ -122,8 +138,7 @@
       cardEl.hidden = name !== 'card';
     }
 
-    // state: "READING"(읽던 중, 버튼="문제 풀기") / "AWAITING_NEXT"(방금 끝냄, 버튼="책 추천받기")
-    function renderBook(book, state) {
+    function fillBookInfo(book) {
       titleEl.textContent = book.originalTitle ?? '-';
       authorEl.textContent = [book.author, book.publisher].filter(Boolean).join(' | ') || '-';
       descEl.textContent = book.summary ?? '-';
@@ -138,16 +153,62 @@
       metaTagsEl.textContent = book.keywords
         ? book.keywords.split(',').map((kw) => `#${kw.trim()}`).join(' ')
         : '';
+    }
 
-      if (state === 'AWAITING_NEXT') {
-        actionLabel.textContent = '책 추천받기';
-        actionBtn.onclick = fetchNextBook;
-      } else {
-        actionLabel.textContent = '문제 풀기';
-        actionBtn.onclick = () => {
-          window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
-        };
-      }
+    // 문제풀이 화면 홈은 이미 확정된 PENDING 추천 책만 보여준다 — 입실/추천은 출석체크 기기에서만 일어난다
+    function renderBook(book) {
+      fillBookInfo(book);
+      actionBtn.hidden = false;
+      completionActions.hidden = true;
+      recommendNextBtn.hidden = true;
+
+      actionLabel.textContent = '문제 풀기';
+      actionBtn.onclick = () => {
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
+      };
+
+      showState('card');
+    }
+
+    // 완독(KING/FRIEND/심화완료) 후 결과 화면 "홈으로" 또는 문제풀이 화면 "나가기"(다시풀기 중)로
+    // 왔을 때 — 문제 풀기 버튼 대신 남은 액션(틀린 문제 다시 풀기/심화 문제 풀기)과 "책 추천받기"만
+    // 보여준다. 둘 다 없을 수도 있다(이미 다 끝낸 경우 — 책 추천받기만 노출)
+    function renderCompletion(state) {
+      const book = state.book;
+      fillBookInfo(book);
+      actionBtn.hidden = true;
+      completionActions.hidden = false;
+      recommendNextBtn.hidden = false;
+
+      const hasWrong = (state.wrongQnums ?? []).length > 0;
+      completionWrongRetryBtn.hidden = !hasWrong;
+      completionAdvancedBtn.hidden = !state.advancedAvailable;
+
+      completionWrongRetryBtn.onclick = () => {
+        sessionStorage.setItem('retryQnums', JSON.stringify(state.wrongQnums ?? []));
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;
+      };
+      completionAdvancedBtn.onclick = () => {
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
+      };
+      recommendNextBtn.onclick = async () => {
+        recommendNextBtn.disabled = true;
+        try {
+          const res = await fetch('/clinic/recommend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ studentId }),
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.error?.message ?? '추천에 실패했어요.');
+          // 다음 책을 새로 추천받았으니 완료 화면(mode=retryDone)이 아니라 일반 홈으로 다시 진입
+          window.location.href = `/student/main?studentId=${encodeURIComponent(studentId)}`;
+        } catch (err) {
+          console.error(err);
+          showRecommendError(err.message || '추천에 실패했어요.');
+          recommendNextBtn.disabled = false;
+        }
+      };
 
       showState('card');
     }
@@ -171,41 +232,62 @@
       showState('empty');
     }
 
-    // "책 추천받기" 버튼 클릭 시에만 호출 — 여기서만 새 책이 실제로 대여 확정된다
-    async function fetchNextBook() {
-      showState('loading');
-      try {
-        const res = await fetch('/clinic/recommend', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentId }),
-        });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error?.message ?? '추천에 실패했어요.');
-        renderBook(data.response, 'READING');
-      } catch (err) {
-        showError(err);
-      }
-    }
-
-    // 홈 진입 시 1회 — 입실 처리 + "지금 보여줄 책" 상태만 확인한다(다음 책 추천은 안 함)
+    // 홈 진입 시 1회 — 입실/추천 처리는 전혀 하지 않고, 이미 확정된 PENDING 추천 책만 확인한다.
+    // 입실(모니터링 "입실" 전환)과 다음 책 추천은 출석체크 기기(/attendance/enter)에서만 일어난다
+    // (2026-08-25) — 예전엔 이 화면 진입만으로도 입실 처리되고, 추천 이력이 아예 없는 학생은
+    // 곧바로 새 책이 추천/대여까지 확정돼버렸다.
     async function loadHomeState() {
       showState('loading');
       try {
-        const res = await fetch('/clinic/home-state', {
+        const res = await fetch('/clinic/quiz-home-state', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ studentId }),
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.error?.message ?? '조회에 실패했어요.');
-        renderBook(data.response.book, data.response.state);
+        if (data.response.state === 'EXITED') {
+          emptyMsgEl.textContent = '이미 퇴실했습니다.';
+          showState('empty');
+          return;
+        }
+        if (data.response.state === 'NOT_ENTERED') {
+          emptyMsgEl.textContent = '입실을 먼저 해주세요.';
+          showState('empty');
+          return;
+        }
+        if (data.response.state === 'COMPLETED') {
+          // 퇴실 전 로그아웃 후 재로그인 등으로 홈에 왔는데 PENDING 추천은 없고(=책을 이미 다 읽음),
+          // 최근에 끝낸 책이 있는 경우 — 완료 화면(틀린 문제 다시 풀기/심화 문제 풀기/책 추천받기)을
+          // 그대로 재사용한다(2026-08-25)
+          loadCompletionState(data.response.book.contentId);
+          return;
+        }
+        renderBook(data.response.book);
       } catch (err) {
         showError(err);
       }
     }
 
-    loadHomeState();
+    // 완료 화면 상태 조회 — 남은 액션(틀린 문제 다시 풀기/심화 문제 풀기)을 매번 최신 DB 상태로
+    // 다시 계산한다(2026-08-25)
+    async function loadCompletionState(forContentId) {
+      showState('loading');
+      try {
+        const res = await fetch(`/clinic/completion-state?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(forContentId)}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message ?? '조회에 실패했어요.');
+        renderCompletion(data.response);
+      } catch (err) {
+        showError(err);
+      }
+    }
+
+    if (isCompletionMode && completionContentId) {
+      loadCompletionState(completionContentId);
+    } else {
+      loadHomeState();
+    }
   }
 
   if ('serviceWorker' in navigator) {

@@ -221,6 +221,14 @@
           AND c.schoolyear = #{schoolyear}
     </select>
 
+    <select id="countDoneBooksThisYear" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId}
+          AND status = 'DONE'
+          AND YEAR(completed_at) = YEAR(DATEADD(HOUR, 9, GETUTCDATE()))
+    </select>
+
     <select id="findCardByContent" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CardDTO">
         SELECT content_id     AS contentId,
                original_title AS cardName,
@@ -335,5 +343,23 @@
         WHERE student_id = #{studentId} AND content_id = #{contentId} AND qlevel = #{qlevel}
     </select>
 
+    <!-- submitted_at이 같으면 같은 제출 회차라서(ddl-core.sql 주석 참고) DISTINCT로 회차 수를 센다 -->
+    <select id="countPriorAttemptRounds" resultType="int">
+        SELECT COUNT(DISTINCT submitted_at)
+        FROM erp_bookstore_quiz_answer_log
+        WHERE recommend_id = #{recommendId} AND qlevel = #{qlevel}
+    </select>
+
+    <!-- 문항(qnum)별 가장 최근 제출의 정답 여부 — answer_id가 클수록 최신 제출이다 -->
+    <select id="findLatestAnswersByRecommend" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LatestAnswerDTO">
+        SELECT q1.qnum AS qnum, q1.is_correct AS correct
+        FROM erp_bookstore_quiz_answer_log q1
+        WHERE q1.recommend_id = #{recommendId} AND q1.qlevel = #{qlevel}
+          AND q1.answer_id = (
+              SELECT MAX(q2.answer_id)
+              FROM erp_bookstore_quiz_answer_log q2
+              WHERE q2.recommend_id = q1.recommend_id AND q2.qlevel = q1.qlevel AND q2.qnum = q1.qnum
+          )
+    </select>
 
 </mapper>

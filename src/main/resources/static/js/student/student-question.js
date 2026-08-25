@@ -54,15 +54,13 @@
     quizActions.hidden = name !== 'quiz';
   }
 
-  // 사이드바 도서 표지/제목 — 이미 추천/대여 확정된 책이므로 멱등 API를 그대로 재사용해 정보만 조회
+  // 사이드바 도서 표지/제목 — 이 화면의 contentId 책 정보만 순수 조회한다(추천/대여 확정 부작용 없음).
+  // "틀린 문제 다시 풀기"로 이미 DONE 처리된 책을 다시 열 때, /clinic/recommend(추천 확정 API)를
+  // 재사용하면 PENDING 추천이 없어 엉뚱하게 다음 책을 새로 추천/대여해버렸다(2026-08-25 발견).
   async function loadBookInfo() {
-    if (!studentId) return;
+    if (!contentId) return;
     try {
-      const res = await fetch('/clinic/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId }),
-      });
+      const res = await fetch(`/clinic/book-info?contentId=${encodeURIComponent(contentId)}`);
       const data = await res.json();
       if (!data.success) return;
       const book = data.response;
@@ -119,7 +117,9 @@
   function renderQuestion() {
     const q = questions[current];
 
-    qBadge.textContent = `Q${current + 1}`;
+    // "틀린 문제 다시 풀기"처럼 일부 문항만 걸러서 낼 때도 원래 문제 번호(qnum)를 그대로 보여준다 —
+    // 배열 순번(current+1)을 쓰면 3/5/8번을 틀렸는데 화면엔 1/2/3번으로 보이는 문제가 있었다(2026-08-25)
+    qBadge.textContent = `Q${q.qnum}`;
     qIndexEl.textContent = current + 1;
     qTotalEl.textContent = questions.length;
     renderProgressDots();

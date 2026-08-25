@@ -375,10 +375,13 @@
   margin-bottom: 16px;
 }
 
+/* cardReward는 새 카드를 획득했을 때만 보인다 — 평소엔 3칸만 채워지는데, grid는 빈 4번째 칸을
+   그대로 두어 3개가 왼쪽으로 쏠려 보인다. flex + justify-content: center로 항목 개수와 무관하게
+   패널 안에서 가운데로 모이게 한다(2026-08-25). */
 .reward-list {
   height: 100%;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  justify-content: center;
   gap: 16px;
 }
 
@@ -391,6 +394,7 @@
   border: 1px solid #eceae2;
   border-radius: 14px;
   background: #fff;
+  flex: 0 1 calc(25% - 12px); /* 4칸 기준 폭(gap 16px*3 분배)을 유지해 4개 다 찼을 때는 기존 grid와 동일하게 보인다 */
 }
 
 /* 보상 아이콘 칸(76x84) — 아이콘 원본 크기가 제각각이라(medal 76x78 / passport 87x85 /

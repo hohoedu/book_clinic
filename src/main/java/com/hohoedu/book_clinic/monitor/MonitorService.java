@@ -77,6 +77,18 @@ public class MonitorService {
         syncSafely(sessionId);
     }
 
+    /** 오늘 이미 퇴실 처리됐는지 — 문제풀이 기기(앱 로그인) 홈 화면이 "이미 퇴실했습니다" 안내에 쓴다 */
+    public boolean hasExitedToday(String studentId) {
+        return "EXITED".equals(monitorRepository.findTodaySessionStatus(studentId, KstClock.today()));
+    }
+
+    /** 오늘 입실해서 아직 퇴실 전인지 — 문제풀이 기기(앱 로그인) 로그인 단계에서 "입실 먼저 해주세요"
+     *  안내를 띄울지 판단하는 데 쓴다(2026-08-25). 퇴실 전까지는 로그아웃 후 재로그인해도 그대로
+     *  입장할 수 있어야 하므로, PENDING 추천 유무가 아니라 오늘 열린(ENTERED) 세션 유무로 판단한다. */
+    public boolean hasEnteredToday(String studentId) {
+        return monitorRepository.findOpenSessionId(studentId, KstClock.today()) != null;
+    }
+
     /**
      * 퇴실 처리 — 직원이 모니터링 화면에서 호출. enterSession과 대칭 구조로 studentId만 받아서
      * 오늘 열린 세션을 스스로 찾는다. 열린 세션이 없으면(이미 퇴실 처리됨 등) 조용히 무시.

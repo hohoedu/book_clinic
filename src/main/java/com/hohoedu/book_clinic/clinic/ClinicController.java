@@ -1,9 +1,11 @@
 package com.hohoedu.book_clinic.clinic;
 
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
@@ -62,6 +64,54 @@ public class ClinicController {
             HttpServletRequest request) {
         requireOwnStudent(request, reqDTO.getStudentId());
         return ResponseEntity.ok(ApiUtils.success(clinicService.recommendBook(reqDTO.getStudentId())));
+    }
+
+    /**
+     * 문제풀이 기기(학생 개인 앱) 홈 화면 상태 조회 — 입실 처리/책 추천 없이, 이미 확정된 PENDING
+     * 추천이 있을 때만 그 책을 보여준다. 입실과 다음 책 추천은 출석체크 기기(/attendance/enter)에서만
+     * 일어난다.
+     */
+    @PostMapping("/quiz-home-state")
+    public ResponseEntity<?> quizHomeState(@RequestBody @Valid ClinicReqDTO.RecommendReqDTO reqDTO,
+            HttpServletRequest request) {
+        requireOwnStudent(request, reqDTO.getStudentId());
+        return ResponseEntity.ok(ApiUtils.success(clinicService.getQuizHomeState(reqDTO.getStudentId())));
+    }
+
+    /**
+     * 특정 책(contentId)의 정보만 읽어온다 — 추천/대여 확정 등 부작용이 전혀 없는 순수 조회.
+     * 문제풀이 화면(student-question)이 사이드바에 표시할 책 정보를 가져올 때 쓴다. 예전엔
+     * /clinic/recommend(추천/대여 확정 API)를 재사용했는데, "틀린 문제 다시 풀기"로 이미 DONE
+     * 처리된 책을 다시 열면 PENDING 추천이 없어 그 API가 엉뚱하게 다음 책을 새로 추천/대여해버리는
+     * 부작용이 있었다(2026-08-25 발견).
+     */
+    @GetMapping("/book-info")
+    public ResponseEntity<?> bookInfo(@RequestParam("contentId") Integer contentId) {
+        return ResponseEntity.ok(ApiUtils.success(clinicService.getBookInfo(contentId)));
+    }
+
+    /**
+     * 완독(KING/FRIEND/심화완료) 후 홈의 "완료 화면"에 보여줄 상태 — 남은 액션(틀린 문제 다시 풀기/
+     * 심화 문제 풀기) 유무와 책 정보.
+     */
+    @GetMapping("/completion-state")
+    public ResponseEntity<?> completionState(@RequestParam("studentId") String studentId,
+            @RequestParam("contentId") Integer contentId, HttpServletRequest request) {
+        requireOwnStudent(request, studentId);
+        return ResponseEntity.ok(ApiUtils.success(clinicService.getCompletionState(studentId, contentId)));
+    }
+
+    /**
+     * 재도전(불합격) 중 제출 없이 "나가기"로 결과 화면에 왔을 때 보여줄 직전 제출 결과 — 새로 채점하지
+     * 않고 recommend_log에 남은 마지막 기록을 그대로 조회한다.
+     */
+    @GetMapping("/last-result")
+    public ResponseEntity<?> lastResult(@RequestParam("studentId") String studentId,
+            @RequestParam("contentId") Integer contentId,
+            @RequestParam(value = "qlevel", required = false, defaultValue = "01") String qlevel,
+            HttpServletRequest request) {
+        requireOwnStudent(request, studentId);
+        return ResponseEntity.ok(ApiUtils.success(clinicService.getLastResult(studentId, contentId, qlevel)));
     }
 
     /**

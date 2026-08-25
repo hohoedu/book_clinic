@@ -15,6 +15,9 @@ public interface MonitorRepository {
     /** 오늘 그 학생의 열린(ENTERED) 세션 ID — 없으면 null */
     Integer findOpenSessionId(@Param("studentId") String studentId, @Param("date") LocalDate date);
 
+    /** 오늘 가장 최근 세션의 상태(ENTERED/EXITED) — 세션이 아예 없으면 null */
+    String findTodaySessionStatus(@Param("studentId") String studentId, @Param("date") LocalDate date);
+
     /** 신규 입실 세션 생성 */
     void insertSession(@Param("studentId") String studentId, @Param("date") LocalDate date);
 

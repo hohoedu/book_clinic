@@ -31,8 +31,6 @@
         <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
         <div class="top-actions">
           <div class="student-pill" th:text="|${studentName} 학생|">김호호 학생</div>
-          <button type="button" class="exit-qr-btn"><i class="fa-solid fa-qrcode"
-              aria-hidden="true"></i>퇴실하기</button>
           <button type="button" class="logout-btn"><i class="fa-solid fa-arrow-right-from-bracket"
               aria-hidden="true"></i>로그아웃</button>
         </div>
@@ -63,8 +61,12 @@
           <article class="card book-card" id="recommendCard" hidden>
             <div class="book-content">
               <div class="book-info">
-                <div class="eyebrow"><span class="star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>오늘의 추천
-                  도서</div>
+                <div class="eyebrow">
+                  <span class="star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>오늘의 추천 도서
+                  <!-- 완독(KING/FRIEND) 후 홈으로 왔을 때만 노출 — 다음 책을 새로 추천받는 버튼 -->
+                  <button type="button" class="recommend-next-btn" id="recommendNextBtn" hidden>
+                    <i class="fa-solid fa-rotate" aria-hidden="true"></i>책 추천받기</button>
+                </div>
                 <h1 class="book-title" id="bookTitle">-</h1>
                 <p class="book-author" id="bookAuthor">-</p>
                 <p class="book-desc" id="bookDesc"></p>
@@ -102,6 +104,15 @@
               <span class="book-icon"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
               <span id="mainActionLabel">문제 풀기</span>
             </button>
+
+            <!-- 완독(KING/FRIEND) 후 홈으로 왔을 때만 노출 — 문제 풀기 버튼 대신 남은 액션(틀린 문제
+                 다시 풀기 / 심화 문제 풀기)만 보여준다. 둘 다 없을 수도 있다(둘 다 이미 끝낸 경우) -->
+            <div class="completion-actions" id="completionActions" hidden>
+              <button type="button" class="solve-btn solve-btn--sub" id="completionWrongRetryBtn" hidden>
+                <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 다시 풀기</button>
+              <button type="button" class="solve-btn solve-btn--sub" id="completionAdvancedBtn" hidden>
+                <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 문제 풀기</button>
+            </div>
           </article>
         </div>
 
@@ -179,6 +190,27 @@
           </section>
         </aside>
       </section>
+
+      <!-- 로그아웃 확인 모달 -->
+      <div class="modal-overlay" id="logoutConfirmModal" hidden>
+        <div class="modal-box">
+          <p class="modal-msg">정말로 로그아웃 하시겠습니까?</p>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-no" id="logoutCancelBtn">아니요</button>
+            <button type="button" class="modal-btn modal-btn-yes" id="logoutConfirmBtn">로그아웃</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- "책 추천받기" 실패 안내 모달(하루 추천 한도 초과 등) -->
+      <div class="modal-overlay" id="recommendErrorModal" hidden>
+        <div class="modal-box">
+          <p class="modal-msg" id="recommendErrorMsg">추천에 실패했어요.</p>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-yes" id="recommendErrorOkBtn">확인</button>
+          </div>
+        </div>
+      </div>
     </main>
   </div>
   <script th:src="@{/js/vendor/jsqr/jsQR.js}"></script>

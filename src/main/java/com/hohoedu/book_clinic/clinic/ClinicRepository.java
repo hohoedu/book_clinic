@@ -82,6 +82,9 @@ public interface ClinicRepository {
     /** 특정 학년 도서의 완독(DONE) 권수 — 레벨 계산 기준 (단계 = 학생 학년) */
     int countDoneBooksByGrade(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
 
+    /** 올해(completed_at 기준, KST) 완독(DONE)한 도서 권수 — 학년 무관, "독서탐험" 진행도 계산에 쓴다 */
+    int countDoneBooksThisYear(@Param("studentId") String studentId);
+
     /** 단계(학년)+레벨의 칭호 (미시딩이면 null — 화면은 Lv.N만 표시) */
     String findLevelTitle(@Param("schoolyear") String schoolyear, @Param("levelNo") int levelNo);
 
@@ -130,5 +133,14 @@ public interface ClinicRepository {
     int countPriorAttempts(@Param("studentId") String studentId,
                            @Param("contentId") Integer contentId,
                            @Param("qlevel") String qlevel);
+
+    /** 해당 추천(도전)+난이도의 기존 제출 "회차" 수(submitted_at 단위) — 몇 번째 시도인지 화면에 보여줄 때 쓴다 */
+    int countPriorAttemptRounds(@Param("recommendId") Integer recommendId,
+                                @Param("qlevel") String qlevel);
+
+    /** recommend_id+qlevel의 문항(qnum)별 "가장 최근 제출"의 정답 여부 — 부분 재제출(틀린 문제만
+     *  다시 풀기) 시, 이번에 다시 제출하지 않은 문항의 정답 여부를 이어받는 데 쓴다(2026-08-25) */
+    List<ClinicRespDTO.LatestAnswerDTO> findLatestAnswersByRecommend(@Param("recommendId") Integer recommendId,
+                                                                      @Param("qlevel") String qlevel);
 
 }

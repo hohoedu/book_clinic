@@ -153,19 +153,32 @@ public class StudentViewController {
             redirectAttributes.addFlashAttribute("noReservation", true);
             return "redirect:/student/login";
         }
-        // 이용권이 없을 경우 로그인 단계에서 막음. 
-        if (passService.remain(student.getStudentId(), "BOOK") <= 0) {
+        // 이용권이 없을 경우 로그인 단계에서 막음.
+        if (passService.remain(student.getStudentId(),  "BOOK") <= 0) {
             redirectAttributes.addFlashAttribute("passExhausted", true);
             return "redirect:/student/login";
         }
-        // appId로 신원을 확인한 이 시점에만 세션을 발급 
+        // 오늘 이미 퇴실했으면 문제풀이 기기에서 다시 입실/추천을 타지 않고 안내만 하고 막는다(2026-08-25).
+        if (monitorService.hasExitedToday(student.getStudentId())) {
+            redirectAttributes.addFlashAttribute("alreadyExited", true);
+            return "redirect:/student/login";
+        }
+        // 오늘 입실(출석체크 기기) 기록이 없으면 입실부터 하라고 안내한다 — 문제풀이 기기(이 화면)는
+        // 더 이상 자체적으로 입실/추천을 타지 않는다. PENDING 추천 유무가 아니라 "오늘 입실했는지"로
+        // 판단한다(2026-08-25) — 책을 다 읽어 DONE 처리된 뒤라 PENDING이 없어도, 퇴실 전까지는
+        // 로그아웃 후 재로그인해서 방금 읽던 책을 계속 볼 수 있어야 한다.
+        if (!monitorService.hasEnteredToday(student.getStudentId())) {
+            redirectAttributes.addFlashAttribute("notEntered", true);
+            return "redirect:/student/login";
+        }
+        // appId로 신원을 확인한 이 시점에만 세션을 발급
         HttpSession oldSession = request.getSession(false);
         if (oldSession != null) {
             oldSession.invalidate();
         }
         request.getSession(true).setAttribute(SESSION_STUDENT_ID, student.getStudentId());
-        // 실시간 모니터링 기준 "입실"은 로그인이 아니라 책 추천 시점(ClinicService.recommendBook)에
-        // 처리한다 — 예약 카드가 미입실 상태로 미리 떠 있다가 책을 추천받는 순간 입실로 전환된다.
+        // 실시간 모니터링 기준 "입실"은 로그인이 아니라 책 추천 시점(ClinicService.recommendBook)에 처리한다 
+        // 예약 카드가 미입실 상태로 미리 떠 있다가 책을 추천받는 순간 입실로 전환된다.
         return "redirect:/student/main?studentId=" + student.getStudentId();
     }
 
@@ -233,10 +246,15 @@ public class StudentViewController {
 
         monitorService.markQuizStarted(studentId);
 
+        // "나가기"를 눌렀을 때 어디로 보낼지 결정하는 모드 — 처음 풀기/재도전(불합격)/다시풀기(합격 후
+        // 틀린 문제만) 세 가지를 구분한다(2026-08-25)
+        String quizMode = contentId != null ? clinicService.getQuizMode(studentId, contentId, qlevel) : "FIRST";
+
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());
         model.addAttribute("contentId", contentId);
         model.addAttribute("qlevel", qlevel);
+        model.addAttribute("quizMode", quizMode);
         return "/student/student-question";
     }
 
@@ -290,15 +308,6 @@ public class StudentViewController {
     /**
      * QR 스캔으로 찾은 학생의 입실을 처리하고, 오늘 추천받은 책만 확인시켜주는 화면.
      * ClinicService.getHomeState가 내부적으로 enterSession까지 처리한다(기존 로그인 흐름과 동일).
-     *
-     * [왜 POST인가] 이 요청은 화면을 보여주기만 하는 게 아니라 입실 세션을 만들고 이용권을
-     * 1회 소진시킨다(MonitorService.enterSession → PassService.consume). GET이었을 때는
-     * 주소창에 `/attendance/enter?appId=7001`을 치는 것만으로 남의 이용권이 깎였고, app_id가
-     * 4자리라 대입도 쉬웠다(2026-08-20 발견). POST로 바꾸면 CSRF 필터가 걸려(/attendance/**는
-     * CSRF 예외 목록에 없다) 우리 화면에서 온 요청만 통과한다.
-     *
-     * 새로고침으로 다시 POST돼도 안전하다 — enterSession은 열린 세션이 있으면 재사용하고
-     * markAttended/consume 모두 같은 세션에 대해 멱등이다.
      */
     @PostMapping("/attendance/enter")
     public String enterAttendance(@RequestParam("appId") String appId, Model model, HttpServletRequest request) {

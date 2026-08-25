@@ -27,7 +27,7 @@ public class SecurityConfig {
                                                 .ignoringRequestMatchers("/h2-console/**", "/login", "/question/upload",
                                                                 "/api/notification/**", "/clinic/recommend",
                                                                 "/clinic/quiz/submit",
-                                                                "/clinic/home-state", "/student/exit",
+                                                                "/clinic/home-state", "/clinic/quiz-home-state", "/student/exit",
                                                                 "/payment/**",
                                                                 "/app/**", "/pass/**", "/test/**"))
                                 .headers(headers -> headers
@@ -45,9 +45,13 @@ public class SecurityConfig {
                                                                 "/question/upload/template",
                                                                 "/question/upload",
                                                                 "/question/search",
+                                                                "/clinic/book-info",
+                                                                "/clinic/completion-state",
+                                                                "/clinic/last-result",
                                                                 "/clinic/recommend",
                                                                 "/clinic/quiz/submit",
                                                                 "/clinic/home-state",
+                                                                "/clinic/quiz-home-state",
                                                                 "/student/**",
                                                                 "/attendance/**",
                                                                 "/payment/**",

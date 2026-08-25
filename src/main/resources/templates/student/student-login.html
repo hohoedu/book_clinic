@@ -21,6 +21,7 @@
       width: 100vw;
       height: 100vh;
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
     }
@@ -182,6 +183,24 @@
     </div>
   </div>
 
+  <div class="pass-exhausted-overlay" th:if="${alreadyExited}" id="alreadyExitedModal">
+    <div class="pass-exhausted-box">
+      <i class="fa-solid fa-door-open" aria-hidden="true"></i>
+      <h2>이미 퇴실했습니다</h2>
+      <p>선생님께 말씀드려요.</p>
+      <button type="button" id="alreadyExitedOk">확인</button>
+    </div>
+  </div>
+
+  <div class="pass-exhausted-overlay" th:if="${notEntered}" id="notEnteredModal">
+    <div class="pass-exhausted-box">
+      <i class="fa-solid fa-door-closed" aria-hidden="true"></i>
+      <h2>입실을 먼저 해주세요</h2>
+      <p>출석체크 기기에서 입실 후 다시 로그인해주세요.</p>
+      <button type="button" id="notEnteredOk">확인</button>
+    </div>
+  </div>
+
   <div class="login-viewport">
     <form class="login-card" id="loginForm" th:action="@{/student/login}" method="post">
       <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
@@ -217,6 +236,16 @@
     const noReservationModal = document.getElementById('noReservationModal');
     if (noReservationModal) {
       document.getElementById('noReservationOk').addEventListener('click', () => noReservationModal.remove());
+    }
+
+    const alreadyExitedModal = document.getElementById('alreadyExitedModal');
+    if (alreadyExitedModal) {
+      document.getElementById('alreadyExitedOk').addEventListener('click', () => alreadyExitedModal.remove());
+    }
+
+    const notEnteredModal = document.getElementById('notEnteredModal');
+    if (notEnteredModal) {
+      document.getElementById('notEnteredOk').addEventListener('click', () => notEnteredModal.remove());
     }
 
     // 이 기기 용도(문제풀이/출석체크)를 다시 고르고 싶을 때 — launcher.js가 쓰는 키와 같아야 한다

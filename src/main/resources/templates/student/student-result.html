@@ -98,7 +98,8 @@
         </div>
       </section>
 
-      <!-- 획득한 보상 4종 — 카드/도장/탐험 데이터는 아직 미구현이라 자리와 문구만 잡아둔다 -->
+      <!-- 획득한 보상 4종 — 도장은 아직 미구현이라 자리와 문구만 잡아둔다.
+           탐험(rewardStepNow/Total)은 올해 완독 권수/학년별 목표 권수로 2026-08-25 연동됨 -->
       <section class="card reward-panel">
         <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/yellow.png}" alt="획득한 보상" />
         <div class="reward-list">
@@ -119,7 +120,7 @@
 
           <div class="reward-item" id="cardReward" hidden>
             <div class="reward-icon">
-              <img class="rare-flag" th:src="@{/images/student_result/rare.png}" alt="RARE" />
+              <img class="rare-flag" id="rareFlag" th:src="@{/images/student_result/rare.png}" alt="RARE" hidden />
               <img class="reward-card-img" id="rewardCardImg" th:src="@{/images/student_result/treasure.png}" alt="획득한 카드" />
             </div>
             <div class="reward-body">
@@ -169,18 +170,6 @@
         </div>
       </div>
     </main>
-
-    <!-- 기본문제 합격(독서왕/독서친구) 결과에만 student-result.js가 띄운다. 이 시점엔 이미 책이
-         반납 처리돼 있다(ClinicService.submitQuiz) — "아니요"를 골라도 반납은 그대로 유지된다. -->
-    <div class="modal-overlay" id="nextBookModal" hidden>
-      <div class="modal-box">
-        <p class="modal-msg">새로운 책을 추천받으시겠어요?</p>
-        <div class="modal-actions">
-          <button type="button" class="modal-btn modal-btn-no" id="nextBookNoBtn">아니요</button>
-          <button type="button" class="modal-btn modal-btn-yes" id="nextBookYesBtn">예</button>
-        </div>
-      </div>
-    </div>
   </div>
   <script th:src="@{/js/student/student-main.js}"></script>
   <script th:src="@{/js/student/student-result.js}"></script>

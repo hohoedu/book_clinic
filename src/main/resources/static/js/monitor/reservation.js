@@ -379,13 +379,16 @@
       el.roundPickList.innerHTML = `<li class="round-pick disabled"><label><span class="round-pick-left"><span class="round-pick-time">이 날짜엔 예약 가능한 회차가 없습니다.</span></span></label></li>`;
       return;
     }
+    const firstOpenIdx = state.changeRoundPickSlots.findIndex(
+      (s) => s.status === "OPEN" && s.reservedCount < s.capacity
+    );
     state.changeRoundPickSlots.forEach((slot, idx) => {
       const full = slot.status !== "OPEN" || slot.reservedCount >= slot.capacity;
       const li = document.createElement("li");
       li.className = "round-pick" + (full ? " disabled" : "");
       li.innerHTML = `
         <label>
-          <input type="radio" name="changeRound" value="${slot.slotInstanceId}" ${full ? "disabled" : ""} ${!full && idx === 0 ? "checked" : ""} />
+          <input type="radio" name="changeRound" value="${slot.slotInstanceId}" ${full ? "disabled" : ""} ${idx === firstOpenIdx ? "checked" : ""} />
           <span class="round-pick-left">
             <span class="round-pick-checkbox"></span>
             <span class="round-pick-time">${slot.seq}회차 ${timeRange(slot.startsAt, slot.endsAt)}</span>

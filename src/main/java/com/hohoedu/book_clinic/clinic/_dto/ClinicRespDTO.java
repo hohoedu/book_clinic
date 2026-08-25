@@ -113,6 +113,7 @@ public class ClinicRespDTO {
     public static class QuizSubmitRespDTO {
         private boolean passed;        // 합격선(2/3) 이상 여부
         private String grade;          // KING(독서왕) / FRIEND(독서친구) / null(재도전)
+        private int attemptNo;         // 이번 제출이 몇 번째 시도인지(1=첫 시도, 2=재도전 1회차...)
         private int correctCount;
         private int totalCount;
         private int passLine;          // 합격에 필요한 최소 정답 수
@@ -131,6 +132,25 @@ public class ClinicRespDTO {
         private String cardImageUrl;       // 획득 카드 이미지(=책 표지)
         private Integer totalCards;         // 획득 후 보유 카드 총 수
         private boolean cardRewardReached;  // 이번 획득으로 10장 세트를 채웠는지(실물 1장 교환 시점)
+        private Integer stepNow;            // 독서탐험 진행 칸 수 = 올해 완독 권수 (합격 시에만)
+        private Integer stepTotal;          // 독서탐험 전체 칸 수 = 학년별 목표 권수 (합격 시에만)
+    }
+
+    /** 특정 recommend_id+qlevel의 문항별 "가장 최근 제출" 정답 여부 — 부분 재제출(틀린 문제만 다시 풀기) 시
+     *  이번에 다시 제출하지 않은 문항의 정답 여부를 이어받기 위해 조회한다(2026-08-25) */
+    @Data
+    public static class LatestAnswerDTO {
+        private String qnum;
+        private Boolean correct;
+    }
+
+    /** 완독(KING/FRIEND) 후 홈 화면 "완료 화면"에 내려줄 상태 — 남은 액션(틀린 문제 다시 풀기/심화
+     *  문제 풀기) 유무와 그 책 정보(2026-08-25) */
+    @Data
+    public static class CompletionStateDTO {
+        private RecommendBookDTO book;
+        private List<String> wrongQnums;
+        private boolean advancedAvailable;
     }
 
     /** 뱃지 마스터 1건 — 달성 조건은 category+threshold+param으로 데이터화 (erp_bookstore_badge) */
