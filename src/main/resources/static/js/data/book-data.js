@@ -22,6 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initCategoryTagInput();
   initQuestionTabs();
   initGradeSelectChange();
+  initQuestionAutosave();
   initGuideLogout();
   initUnsavedChangesGuard();
 
@@ -91,21 +92,35 @@ const QTYPE_CODES = [
   { code: "05", name: "감정" },
   { code: "06", name: "어휘" },
   { code: "07", name: "지식" },
-  { code: "08", name: "문법" },
+  { code: "08", name: "심화 어휘" },
+  { code: "09", name: "심화 문법" },
 ];
 
 /*
  * 레벨/학년별 문제 영역
- * - 심화(02): 어휘, 문법 고정
+ * - 심화(02): 심화 어휘, 심화 문법 (둘 다 선택 가능, 기본값은 번호로 자동 지정)
  * - 기본(01), 초1·초2(schoolyear 01·02): 이해, 논리, 사고, 표현, 어휘, 감정
  * - 기본(01), 초3~초6(schoolyear 03~06): 이해, 논리, 사고, 표현, 어휘, 지식
  */
 function qtypeCodesForActiveLevel() {
-  if (activeLevel === "02") return QTYPE_CODES.filter((t) => ["06", "08"].includes(t.code));
+  if (activeLevel === "02") return QTYPE_CODES.filter((t) => ["08", "09"].includes(t.code));
 
   const schoolyear = getCurrentSchoolyear();
   const excluded = schoolyear === "01" || schoolyear === "02" ? "07" : "05";
   return QTYPE_CODES.filter((t) => t.code !== excluded && t.code !== "08");
+}
+
+/* 심화(02) 문제 영역은 고정: 앞 절반은 무조건 심화 어휘(08), 뒤 절반은 무조건 심화 문법(09) */
+function advancedQtypeForSlot(qnum) {
+  const count = requiredQuestionCount(getCurrentSchoolyear(), "02");
+  return Number(qnum) <= count / 2 ? "08" : "09";
+}
+
+/* 문제 영역 뱃지 마크업 (심화 카드 전용, 드롭다운 없이 고정 표시) */
+function renderQtypeBadge(code) {
+  const label = QTYPE_CODES.find((t) => t.code === code)?.name ?? "";
+  const variant = code === "08" ? "vocab" : "grammar";
+  return `<span class="qtype-badge ${variant}">${label}</span>`;
 }
 
 /* 도서 정보 폼에서 현재 선택된 권장학년 (신규 도서도 저장 전에 폼 값을 그대로 기준으로 삼는다) */
@@ -113,19 +128,19 @@ function getCurrentSchoolyear() {
   return document.getElementById("bookInfoGradeSelect")?.value ?? "";
 }
 
-/* 이 학년에 심화문제 탭이 있는지 (초1·초2는 없음) */
+/* 이 학년에 심화문제 탭이 있는지 (초1~초6 전 학년 심화문제 운영) */
 function hasAdvancedLevel(schoolyear) {
-  return schoolyear !== "01" && schoolyear !== "02";
+  return true;
 }
 
 /*
  * 학년+레벨별 고정 문제 수
  * - 기본(01): 초1~초4는 12문제, 초5·초6은 15문제
- * - 심화(02): 초1·초2는 없음(0), 초3·초4는 10문제, 초5·초6은 12문제
+ * - 심화(02): 초1·초2는 6문제(어휘3+문법3), 초3·초4는 10문제(어휘5+문법5), 초5·초6은 12문제(어휘6+문법6)
  */
 function requiredQuestionCount(schoolyear, level) {
   if (level === "02") {
-    if (!hasAdvancedLevel(schoolyear)) return 0;
+    if (schoolyear === "01" || schoolyear === "02") return 6;
     return schoolyear === "03" || schoolyear === "04" ? 10 : 12;
   }
   return schoolyear === "05" || schoolyear === "06" ? 15 : 12;
@@ -1239,11 +1254,12 @@ function initSaveBookButton() {
   button.addEventListener("click", async () => {
     const snapshot = getFormSnapshot();
 
-    const missingFields = getMissingBookFields(snapshot);
-    if (missingFields.length) {
-      alert(`다음 항목을 입력해주세요.\n${missingFields.join(", ")}`);
-      return;
-    }
+    // 문제 등록에만 집중할 수 있도록 도서 정보 필수 항목 검증을 임시 비활성화 (재활성화 시 아래 주석 해제)
+    // const missingFields = getMissingBookFields(snapshot);
+    // if (missingFields.length) {
+    //   alert(`다음 항목을 입력해주세요.\n${missingFields.join(", ")}`);
+    //   return;
+    // }
 
     const incompleteQuestions = getIncompleteQuestionCards();
     if (incompleteQuestions.length) {
@@ -1433,7 +1449,7 @@ function initQuestionTabs() {
   });
 }
 
-/* 권장학년(초1·초2)엔 심화문제 탭 자체가 없으므로, 학년이 바뀔 때마다 탭 노출 여부를 갱신 */
+/* 전 학년 심화문제 탭을 노출하되, 학년이 바뀔 때마다 갱신 */
 function updateQuestionTabsVisibility() {
   const advancedTab = document.querySelector('.question-tabs button[data-level="02"]');
   if (!advancedTab) return;
@@ -1483,6 +1499,12 @@ function initSummernoteFor(qexEl) {
       ["para", ["ul", "ol", "paragraph"]],
       ["insert", ["picture", "link"]],
     ],
+    callbacks: {
+      onBlur: () => {
+        const card = qexEl.closest(".question-card");
+        if (card) queueAutosave(card);
+      },
+    },
   });
 }
 
@@ -1582,9 +1604,11 @@ function buildQuestionCard(q, qnum) {
     </div>
     <div class="form-row">
       <label>문제 영역</label>
-      <select class="q-qtype">
-        ${qtypeCodesForActiveLevel().map((t) => `<option value="${t.code}">${t.name}</option>`).join("")}
-      </select>
+      ${
+        activeLevel === "02"
+          ? `${renderQtypeBadge(advancedQtypeForSlot(qnum))}<input type="hidden" class="q-qtype" value="${advancedQtypeForSlot(qnum)}">`
+          : `<select class="q-qtype">${qtypeCodesForActiveLevel().map((t) => `<option value="${t.code}">${t.name}</option>`).join("")}</select>`
+      }
     </div>
     <div class="form-row">
       <label>문제 유형</label>
@@ -1630,7 +1654,8 @@ function buildQuestionCard(q, qnum) {
   `;
 
   if (q) {
-    card.querySelector(".q-qtype").value = q.qtype ?? "";
+    // 심화(02)는 영역이 번호로 고정이라(위 뱃지/hidden input에서 이미 세팅됨) 저장된 qtype으로 덮어쓰지 않는다
+    if (activeLevel !== "02") card.querySelector(".q-qtype").value = q.qtype ?? "";
     card.querySelector(".q-q").value = q.q ?? "";
     card.querySelector(".q-qex").value = q.qex ?? "";
     card.querySelector(".q-e1").value = q.e1 ?? "";
@@ -1807,4 +1832,69 @@ async function saveQuestions(contentId) {
       await postJson("/question/register", payload);
     }
   }
+}
+
+/*
+ * 문제 카드 자동저장(blur) — 입력칸에서 포커스가 빠져나가는 순간 그 카드 하나만 즉시 upsert 한다.
+ * 저장 버튼과 동일하게 서버에 이미 있던 슬롯이면 update, 없던 슬롯이면 register로 분기한다.
+ * 신규 도서(아직 저장 전이라 contentId가 없음)나 필수값이 다 안 채워진 카드는 건너뛴다.
+ */
+const autosaveQueues = new WeakMap();
+
+function queueAutosave(card) {
+  const prev = autosaveQueues.get(card) ?? Promise.resolve();
+  const next = prev.then(() => autosaveCard(card)).catch((error) => console.error(error));
+  autosaveQueues.set(card, next);
+}
+
+async function autosaveCard(card) {
+  if (!isHq || !currentContentId) return;
+
+  const payload = collectCard(card);
+  if (!payload.q || !payload.e1 || !payload.e2 || !payload.e3 || !payload.e4 || !payload.ans) return;
+
+  payload.qnum = card.dataset.qnum;
+
+  if (card.dataset.existing === "1") {
+    await postJson("/question/update", payload);
+  } else {
+    await postJson("/question/register", payload);
+    card.dataset.existing = "1";
+  }
+
+  const idx = questionCache.findIndex((q) => q.qlevel === payload.qlevel && String(q.qnum) === payload.qnum);
+  if (idx >= 0) questionCache[idx] = { ...questionCache[idx], ...payload };
+  else questionCache.push({ ...payload });
+
+  questionsOriginalSnapshot = getQuestionsSnapshot();
+  showQuestionAutosaveStatus();
+}
+
+let questionAutosaveStatusTimer = null;
+
+/* "문제 출제" 제목 옆에 "- 저장되었습니다" 표시 후 잠시 뒤 사라짐 */
+function showQuestionAutosaveStatus() {
+  const status = document.getElementById("questionAutosaveStatus");
+  if (!status) return;
+
+  status.textContent = "- 저장되었습니다";
+
+  clearTimeout(questionAutosaveStatusTimer);
+  questionAutosaveStatusTimer = setTimeout(() => {
+    status.textContent = "";
+  }, 2000);
+}
+
+/* 문제 입력칸(질문/보기/정답/영역) 포커스아웃 시 자동저장을 위임 방식으로 감지 */
+function initQuestionAutosave() {
+  const editor = document.querySelector(".question-editor");
+  if (!editor) return;
+
+  editor.addEventListener("focusout", (e) => {
+    const field = e.target.closest(".q-q, .q-e1, .q-e2, .q-e3, .q-e4, .q-ans, .q-qtype");
+    if (!field) return;
+
+    const card = field.closest(".question-card");
+    if (card) queueAutosave(card);
+  });
 }

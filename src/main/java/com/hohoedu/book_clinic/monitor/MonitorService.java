@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception403;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
@@ -41,6 +42,7 @@ public class MonitorService {
     private final BookService bookService;
     private final PassService passService;
     private final ReservationService reservationService;
+    private final StudentSessionRegistry studentSessionRegistry;
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
@@ -95,6 +97,9 @@ public class MonitorService {
      */
     @Transactional
     public void exitSession(String studentId) {
+        // 퇴실 처리된 학생이 문제풀이 기기에 로그인한 채로 남아있으면 안 되므로, 다음 요청(또는
+        // 폴링)부터 강제 로그아웃되도록 이 학생의 유효 세션 등록을 지운다(2026-08-26).
+        studentSessionRegistry.clear(studentId);
         Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) {
             log.info("퇴실 처리 요청 무시 — 열린 세션 없음: studentId={}", studentId);
@@ -184,6 +189,21 @@ public class MonitorService {
         Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
         monitorRepository.markQuizStarted(sessionId);
+        syncSafely(sessionId);
+    }
+
+    /**
+     * 문제풀이 화면에서 제출 없이 "나가기"를 누르거나 로그아웃했을 때 "문제 푸는 중" 표시를
+     * 해제한다 — 독서 중 상태로 되돌아간다(2026-08-26). StudentViewController의 홈/결과 화면
+     * 진입, 로그아웃 처리, ClinicService.recommendBook(새 추천 시점, 경과시간 기준점이 앞으로
+     * 당겨지므로 이전 quiz_started_at이 남아있으면 안 됨)에서 호출한다. 이미 제출로 해제됐으면
+     * 조용히 넘어간다(멱등).
+     */
+    @Transactional
+    public void exitQuiz(String studentId) {
+        Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
+        if (sessionId == null) return;
+        monitorRepository.clearQuizStarted(sessionId);
         syncSafely(sessionId);
     }
 
@@ -412,12 +432,12 @@ public class MonitorService {
                 return;
             }
             fillDerivedFields(card);
+            // monitorSyncService.syncCard는 @Async — 전용 스레드 풀로 넘기고 바로 리턴한다(2026-08-26).
+            // 여기서 DB 커넥션을 붙잡은 채 Firestore 응답을 기다리지 않으므로, 성공/실패 로그는
+            // syncCard 안에서 남긴다.
             monitorSyncService.syncCard(card);
-            // 성공 여부를 서버 로그에서 바로 확인할 수 있게 info로 남긴다(실시간 반영 디버깅용)
-            log.info("Firestore 동기화 성공 — sessionId={}, studentId={}, cardStatus={}, sessionDate={}",
-                    sessionId, card.getStudentId(), card.getCardStatus(), card.getSessionDate());
         } catch (Exception e) {
-            log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: sessionId={}", sessionId, e);
+            log.warn("Firestore 동기화 요청 실패 — SQL은 정상 반영됨: sessionId={}", sessionId, e);
         }
     }
 

@@ -112,6 +112,12 @@
   color: #008b7a;
 }
 
+.question-autosave-status {
+  flex: 0 0 auto;
+  font-size: 13px;
+  color: #008b7a;
+}
+
 .status-toggle {
   display: inline-flex;
   flex-shrink: 0;
@@ -744,6 +750,30 @@
 
 .question-editor .form-row {
   grid-template-columns: 70px 1fr;
+}
+
+/* 심화문제 카드의 문제 영역 뱃지 (심화 어휘 / 심화 문법) — 드롭다운 대신 고정 표시, "초기화" small 버튼과 같은 크기 */
+.qtype-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  width: fit-content;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.qtype-badge.vocab {
+  background: #e7e1ff;
+  color: #5b46c4;
+}
+
+.qtype-badge.grammar {
+  background: #ffe8d9;
+  color: #b35a2e;
 }
 
 .question-editor .form-row.full {

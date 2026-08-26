@@ -52,8 +52,22 @@
     const logoutConfirmModal = document.getElementById('logoutConfirmModal');
     const logoutConfirmBtn = document.getElementById('logoutConfirmBtn');
     const logoutCancelBtn = document.getElementById('logoutCancelBtn');
+    const mainPageEl = document.getElementById('mainPage');
+    const logoutStudentId = mainPageEl ? mainPageEl.getAttribute('data-student-id') : null;
 
-    function doLogout() {
+    // 예전엔 로컬 저장소만 지우고 이동해서 서버 세션(HttpSession)이 그대로 살아있었다 — 모니터링에
+    // "문제 푸는 중"이 계속 남는 등 서버가 로그아웃 사실을 전혀 몰랐다(2026-08-26). /student/logout을
+    // 먼저 호출해 세션을 무효화하고 "문제 푸는 중"/"결과 확인중" 표시를 해제한 뒤 이동한다.
+    async function doLogout() {
+      try {
+        await fetch('/student/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId: logoutStudentId }),
+        });
+      } catch (err) {
+        console.error(err);
+      }
       localStorage.clear();
       sessionStorage.clear();
       // replace()로 이동해 뒤로가기로 메인 화면에 다시 들어올 수 없게 한다

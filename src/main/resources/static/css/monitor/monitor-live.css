@@ -284,11 +284,14 @@
 .book-info {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .book-title {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 15px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -298,26 +301,6 @@
   font-size: 11px;
   color: #8a9297;
   margin-top: 2px;
-}
-
-.archive-chip {
-  display: inline-block;
-  margin-top: 4px;
-  padding: 2px 7px;
-  border: 1px solid #e0e4e7;
-  border-radius: 999px;
-  font-size: 10px;
-  color: #8a9297;
-  background: #f7f8f9;
-  /* 아카이브 카드 발급 여부가 아직 미확정이라 우선 숨겨둔다 — visibility만 꺼서
-     레이아웃 자리는 그대로 유지(display:none 쓰면 옆 요소들이 밀려 레이아웃이 깨짐) */
-  visibility: hidden;
-}
-
-.archive-chip.archive-done {
-  color: #b7bec3;
-  border-color: #eceff1;
-  background: #f2f4f5;
 }
 
 .log-open-btn {
@@ -333,7 +316,7 @@
   color: #3b82f6;
 }
 
-/* 독서일지 버튼 + 문제풀이 기록 삭제 버튼을 표지 오른쪽에 세로로 쌓는다 */
+/* 독서일지 버튼을 표지 오른쪽에 둔다 */
 .book-actions {
   display: flex;
   flex-direction: column;
@@ -342,17 +325,12 @@
   flex-shrink: 0;
 }
 
-/* 삭제는 되돌릴 수 없어서 평소엔 눈에 띄지 않게 두고, 호버해야 경고색이 된다 */
-.quiz-reset-btn {
-  background: transparent;
-  border: none;
-  color: #cfd5d9;
-  font-size: 15px;
-  cursor: pointer;
-}
-
-.quiz-reset-btn:hover {
-  color: #e05a5a;
+/* 표지/책 정보/독서일지 버튼(book-row)과 무관하게 카드 하단에 고정되는 페이지네이션 자리(2026-08-26).
+   페이지가 1장뿐이면 renderBookRow가 내용을 안 채워 자리만 비어(높이 0) 있는다. */
+.book-dots-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 6px;
 }
 
 .book-dots {

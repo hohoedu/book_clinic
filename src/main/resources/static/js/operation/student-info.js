@@ -1,82 +1,138 @@
 /*
- * 학생 정보 — 목록은 아직 하드코딩 목업이라(student-info.html), 행을 클릭했을 때 뜨는 상세정보
- * 모달도 같은 단계의 목업이다. 모달 자체는 자매 서비스 all_pass(/Users/hohoedu/Desktop/all_pass)의
- * student-main-modal을 그대로 가져와 구조/클래스명을 재사용했다(student-info.css 참고) — 다만
- * all_pass는 "출결/상담내역" 탭인데 book_clinic은 "독서이력/예약" 탭이라 그 두 개만 새로 만들었다.
- *
- * 이름/학년/연락처/최근이용일/누적도서/레벨/상태는 클릭한 행의 data-* 값을 그대로 쓰고, 나머지
- * (생년월일·학교·주소·독서이력·예약현황·회비 등)는 API가 아직 없어서 모든 학생에게 같은 샘플
- * 값을 보여준다. 실제 상세 조회 API가 생기면 openStudentModal 안의 buildMockDetail 자리를
- * fetch(`/api/students/${studentId}`) 결과로 바꾸면 된다.
+ * 학생 정보 — 목록/필터/학년옵션/상세정보(전체·기본정보 탭)·독서이력·예약현황은 /admin/students/* API로
+ * 실데이터를 쓴다(2026-08-26). DB에 대응 컬럼이 없는 값(담당선생님·회비·학생과의 관계)만 그대로
+ * 목업으로 남아있다 — StudentAdminController/StudentRepository 참고.
  */
 
 document.addEventListener("DOMContentLoaded", () => {
+  initFilterBar();
   initStudentModal();
+  loadGradeOptions();
+  loadStudentList();
 });
 
-/* ===================== 목업 상세 데이터 ===================== */
+const RESULT_LABEL = { DONE_KING: "독서왕", DONE_FRIEND: "통과", PENDING: "재도전" };
 
-const READING_HISTORY = [
-  { no: 10, title: "책 먹는 여우", basic: "10/12", advanced: "6/6", result: "pass", note: "정독시간이 많이 짧아짐" },
-  { no: 9, title: "미운아기오리", basic: "9/12", advanced: "5/6", result: "king", note: "" },
-  { no: 8, title: "치과의사 드소토 선생님", basic: "10/12", advanced: "4/6", result: "retry", note: "독서여권을 쓰는데 어려움이 있음" },
-  { no: 7, title: "이상한 나라의 앨리스", basic: "12/12", advanced: "6/6", result: "retry", note: "" },
-  { no: 6, title: "프린들 주세요", basic: "10/12", advanced: "6/6", result: "pass", note: "" },
-  { no: 5, title: "아주 이상한 물고기", basic: "9/12", advanced: "1/6", result: "pass", note: "" },
-  { no: 4, title: "차례를 기다릴래요", basic: "10/12", advanced: "4/6", result: "king", note: "" },
-  { no: 3, title: "뻥뻥! 꼬미야 조심해", basic: "12/12", advanced: "3/6", result: "retry", note: "" },
-  { no: 2, title: "슈퍼 모험! 공룡 해적선", basic: "10/12", advanced: "6/6", result: "retry", note: "" },
-  { no: 1, title: "벌거벗은 임금님", basic: "9/12", advanced: "2/6", result: "pass", note: "독서여권을 쓰는데 어려움이 있음" },
-];
+/* 목업으로 남아있는 필드(회비 탭 전체)만 계속 쓰는 공용 샘플값 — API 연동 전 안내는 renderFeeTab 참고 */
+const FEE_MOCK = {
+  bookLevelName: "독서 3단계",
+  bookTeacher: "-",
+  bookFee: "-",
+  bookMaterialFee: "-",
+};
 
-const RESULT_LABEL = { pass: "통과", king: "독서왕", retry: "재도전" };
+/* ===================== 목록 조회 ===================== */
 
-const RECENT_BOOKS = [
-  { title: "책 먹는 여우", date: "2026-08-12", basic: "10/12", advanced: "5/6", result: "pass" },
-  { title: "백설공주", date: "2026-08-12", basic: "12/12", advanced: "5/6", result: "king" },
-  { title: "치과의사 드소토 선생님", date: "2026-08-12", basic: "10/12", advanced: "5/6", result: "pass" },
-  { title: "책 먹는 여우", date: "2026-08-12", basic: "12/12", advanced: "-", result: "king" },
-];
+async function fetchJson(url) {
+  const res = await fetch(url);
+  const body = await res.json();
+  if (!res.ok || body.success === false) {
+    throw new Error(body?.error?.message || "요청 처리 중 오류가 발생했습니다.");
+  }
+  return body.response;
+}
 
-const RESERVATIONS = [
-  { date: "2026-08-19", status: "예약완료", statusClass: "resv-scheduled" },
-  { date: "2026-08-12", status: "이용완료", statusClass: "resv-done" },
-  { date: "2026-08-05", status: "이용완료", statusClass: "resv-done" },
-  { date: "2026-07-29", status: "이용완료", statusClass: "resv-done" },
-];
+async function loadGradeOptions() {
+  try {
+    const options = await fetchJson("/admin/students/grade-options");
+    const select = document.getElementById("filterGrade");
+    options.forEach((opt) => {
+      const el = document.createElement("option");
+      el.value = opt.code;
+      el.textContent = opt.codeNm;
+      select.appendChild(el);
+    });
+  } catch (e) {
+    console.error("학년 옵션 조회 실패", e);
+  }
+}
 
-const GRADE_TO_SCHOOLYEAR = { "초1": "1학년", "초2": "2학년", "초3": "3학년", "초4": "4학년", "초5": "5학년", "초6": "6학년" };
-
-/* 행의 data-* 값 + 나머지는 공용 샘플값으로 채운 상세 목업 1건 */
-function buildMockDetail(row) {
+function currentFilters() {
   return {
-    name: row.dataset.name,
-    grade: row.dataset.grade,
-    schoolyearLabel: GRADE_TO_SCHOOLYEAR[row.dataset.grade] ?? row.dataset.grade,
-    phone: row.dataset.phone,
-    regDate: row.dataset.regDate,
-    visitDate: row.dataset.visitDate,
-    books: row.dataset.books,
-    level: row.dataset.level,
-    levelClass: row.dataset.levelClass,
-    status: row.dataset.status,
-    statusClass: row.dataset.statusClass,
-    // 아래는 API 연동 전까지 모든 학생 공통 샘플값 (all_pass 목업 값 참고)
-    birthDate: "2016년 03월 15일",
-    school: "호랑초등학교",
-    address: "부산 해운대구 센텀중앙로97",
-    detailAddress: "센텀스카이비즈 A동 2810호",
-    parentPhone: "010-1234-5678",
-    gender: "남자",
-    relation: "모",
-    joinDate: "2025년 2월 20일",
-    bookLevelName: "독서 3단계",
-    bookTeacher: "김서연 선생님",
-    bookFee: "90,000",
-    bookMaterialFee: "12,000",
-    kingCount: 4,
-    badgeCount: 35,
+    grade: document.getElementById("filterGrade").value,
+    status: document.getElementById("filterStatus").value,
+    keyword: document.getElementById("filterKeyword").value.trim(),
   };
+}
+
+async function loadStudentList() {
+  const listBody = document.getElementById("studentListBody");
+  const { grade, status, keyword } = currentFilters();
+  const params = new URLSearchParams();
+  if (grade) params.set("grade", grade);
+  if (status) params.set("status", status);
+  if (keyword) params.set("keyword", keyword);
+
+  try {
+    const students = await fetchJson(`/admin/students/list?${params.toString()}`);
+    renderStudentList(students);
+  } catch (e) {
+    console.error("학생 목록 조회 실패", e);
+    listBody.innerHTML = `<tr><td colspan="9" class="empty-row">목록을 불러오지 못했습니다: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderStudentList(students) {
+  const listBody = document.getElementById("studentListBody");
+  if (!students.length) {
+    listBody.innerHTML = `<tr><td colspan="9" class="empty-row">조회된 학생이 없습니다.</td></tr>`;
+    return;
+  }
+
+  listBody.innerHTML = students.map((s, idx) => {
+    const gradeClass = gradeNameToLevelClass(s.gradeName);
+    const statusLabel = s.statusKey === "WITHDRAWN" ? "탈퇴" : "이용중";
+    const statusClass = s.statusKey === "WITHDRAWN" ? "status-withdrawn" : "status-active";
+    return `
+      <tr class="student-row"
+          data-student-id="${escapeHtml(s.studentId)}"
+          data-name="${escapeHtml(s.studentName)}"
+          data-grade="${escapeHtml(s.gradeName ?? "")}"
+          data-phone="${escapeHtml(s.billingPhone ?? "")}"
+          data-reg-date="${escapeHtml(s.registeredAt ?? "")}"
+          data-visit-date="${escapeHtml(s.lastVisitDate ?? "-")}"
+          data-books="${s.totalDoneBooks ?? 0}"
+          data-level="${s.levelNo ?? 1}"
+          data-level-class="${gradeClass}"
+          data-status="${statusLabel}"
+          data-status-class="${statusClass}">
+        <td class="col-no">${idx + 1}</td>
+        <td class="col-name">${escapeHtml(s.studentName)}</td>
+        <td>${escapeHtml(s.gradeName ?? "-")}</td>
+        <td>${escapeHtml(s.billingPhone ?? "-")}</td>
+        <td class="col-date">${escapeHtml(s.registeredAt ?? "-")}</td>
+        <td class="col-date">${escapeHtml(s.lastVisitDate ?? "-")}</td>
+        <td class="col-books">${s.totalDoneBooks ?? 0}</td>
+        <td><span class="level-pill ${gradeClass}"><span class="level-icon">🐱</span>Lv. ${s.levelNo ?? 1}</span></td>
+        <td><span class="status ${statusClass}">${statusLabel}</span></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+/* 학년명("초1"~"초6") → 레벨필 색상 클래스. 그 외 학년(유치원/중등 등)은 색 클래스 없이 기본값만 적용 */
+function gradeNameToLevelClass(gradeName) {
+  const map = { "초1": "grade-01", "초2": "grade-02", "초3": "grade-03", "초4": "grade-04", "초5": "grade-05", "초6": "grade-06" };
+  return map[gradeName] ?? "grade-01";
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* ===================== 필터바 ===================== */
+
+function initFilterBar() {
+  document.getElementById("btnSearch").addEventListener("click", loadStudentList);
+  document.getElementById("filterKeyword").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") loadStudentList();
+  });
+  document.getElementById("btnFilterReset").addEventListener("click", () => {
+    document.getElementById("filterGrade").value = "";
+    document.getElementById("filterStatus").value = "";
+    document.getElementById("filterKeyword").value = "";
+    loadStudentList();
+  });
 }
 
 /* ===================== 모달 열기/닫기/탭 ===================== */
@@ -89,8 +145,8 @@ function initStudentModal() {
 
   listBody.addEventListener("click", (event) => {
     const row = event.target.closest(".student-row");
-    if (!row) return;
-    openStudentModal(row);
+    if (!row || !row.dataset.studentId) return;
+    openStudentModal(row.dataset.studentId, row.dataset.name);
   });
 
   document.getElementById("btnCloseStudentModal").addEventListener("click", closeStudentModal);
@@ -108,12 +164,23 @@ function initStudentModal() {
   });
 }
 
-function openStudentModal(row) {
-  currentDetail = buildMockDetail(row);
-
-  document.getElementById("studentModalTitle").textContent = `${currentDetail.name} 학생 상세정보`;
-  switchTab("all");
+async function openStudentModal(studentId, studentName) {
+  document.getElementById("studentModalTitle").textContent = `${studentName} 학생 상세정보`;
+  document.getElementById("studentModalBody").innerHTML = `<p class="modal-loading">불러오는 중...</p>`;
   document.getElementById("studentModal").hidden = false;
+
+  try {
+    const [detail, readingHistory, reservations] = await Promise.all([
+      fetchJson(`/admin/students/${encodeURIComponent(studentId)}`),
+      fetchJson(`/admin/students/${encodeURIComponent(studentId)}/reading-history`),
+      fetchJson(`/admin/students/${encodeURIComponent(studentId)}/reservations`),
+    ]);
+    currentDetail = { ...detail, readingHistory, reservations };
+    switchTab("all");
+  } catch (e) {
+    console.error("학생 상세 조회 실패", e);
+    document.getElementById("studentModalBody").innerHTML = `<p class="modal-loading">상세정보를 불러오지 못했습니다: ${escapeHtml(e.message)}</p>`;
+  }
 }
 
 function closeStudentModal() {
@@ -122,6 +189,8 @@ function closeStudentModal() {
 }
 
 function switchTab(tab) {
+  if (!currentDetail) return;
+
   document.querySelectorAll("#studentTabs button[data-tab]").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.tab === tab);
   });
@@ -159,33 +228,56 @@ function singleStatusPill(status) {
   return `<span class="status-chip ${cls}">${status}</span>`;
 }
 
+function statusLabel(statusKey) {
+  return statusKey === "WITHDRAWN" ? "탈퇴" : "이용중";
+}
+
+function reservationStatusPill(status) {
+  const map = {
+    RESERVED: { label: "예약완료", cls: "resv-scheduled" },
+    ATTENDED: { label: "이용완료", cls: "resv-done" },
+    CANCELED: { label: "취소", cls: "resv-scheduled" },
+    NOSHOW: { label: "노쇼", cls: "resv-scheduled" },
+  };
+  const m = map[status] ?? { label: status ?? "-", cls: "resv-scheduled" };
+  return `<span class="resv-pill ${m.cls}">${m.label}</span>`;
+}
+
+function readingResultBadge(row) {
+  if (row.status === "DONE" && row.grade === "KING") return { key: "king", label: "독서왕" };
+  if (row.status === "DONE") return { key: "pass", label: "통과" };
+  return { key: "retry", label: "재도전" };
+}
+
 /* ===================== 탭별 렌더링 ===================== */
 
 function renderAllTab(d) {
+  const reservations = d.reservations ?? [];
+  const readingHistory = d.readingHistory ?? [];
   return `
     <div class="all-info">
       <div class="card-left">
         <article class="card-common card-compact">
           <header class="card-header">
             <h4 class="sub-themes">기본 정보</h4>
-            ${singleStatusPill(d.status)}
+            ${singleStatusPill(statusLabel(d.statusKey))}
           </header>
           <section class="card-body">
             <figure class="profile-img">
               <img src="/images/stu-img.png" alt="학생 프로필 이미지">
             </figure>
             <div>
-              <h5 class="student-name">${d.name}</h5>
-              <p class="student-tel">${d.phone}</p>
+              <h5 class="student-name">${escapeHtml(d.studentName)}</h5>
+              <p class="student-tel">${escapeHtml(d.billingPhone ?? "-")}</p>
             </div>
           </section>
           <dl class="student-details">
-            <div class="detail-row"><dt>입회일</dt><dd>${d.joinDate}</dd></div>
-            <div class="detail-row"><dt>학교</dt><dd>${d.school}</dd></div>
-            <div class="detail-row"><dt>학년</dt><dd>${d.schoolyearLabel}</dd></div>
-            <div class="detail-row"><dt>생년월일</dt><dd>${d.birthDate}</dd></div>
-            <div class="detail-row"><dt>주소</dt><dd>${d.address}</dd></div>
-            <div class="detail-row"><dt>상세주소</dt><dd>${d.detailAddress}</dd></div>
+            <div class="detail-row"><dt>입회일</dt><dd>${escapeHtml(d.registeredAt ?? "-")}</dd></div>
+            <div class="detail-row"><dt>학교</dt><dd>${escapeHtml(d.school ?? "-")}</dd></div>
+            <div class="detail-row"><dt>학년</dt><dd>${escapeHtml(d.gradeName ?? "-")}</dd></div>
+            <div class="detail-row"><dt>생년월일</dt><dd>${escapeHtml(d.birth ?? "-")}</dd></div>
+            <div class="detail-row"><dt>주소</dt><dd>${escapeHtml(d.address ?? "-")}</dd></div>
+            <div class="detail-row"><dt>상세주소</dt><dd>${escapeHtml(d.addressDetail ?? "-")}</dd></div>
           </dl>
         </article>
 
@@ -199,9 +291,9 @@ function renderAllTab(d) {
             <table class="basic-table">
               <colgroup><col style="width:50%"><col style="width:50%"></colgroup>
               <tbody>
-                ${RESERVATIONS.map((r) => `
-                  <tr><td>${r.date}</td><td><span class="resv-pill ${r.statusClass}">${r.status}</span></td></tr>
-                `).join("")}
+                ${reservations.length ? reservations.map((r) => `
+                  <tr><td>${escapeHtml(r.serviceDate)}</td><td>${reservationStatusPill(r.status)}</td></tr>
+                `).join("") : `<tr><td colspan="2" class="empty-row">예약 이력이 없습니다.</td></tr>`}
               </tbody>
             </table>
           </div>
@@ -215,22 +307,22 @@ function renderAllTab(d) {
             <div class="stat-tile">
               <div class="stat-icon">📖</div>
               <div class="stat-label">누적 독서</div>
-              <div class="stat-value">${d.books}권</div>
+              <div class="stat-value">${d.totalDoneBooks ?? 0}권</div>
             </div>
             <div class="stat-tile">
               <div class="stat-icon">🏅</div>
               <div class="stat-label">현재 레벨</div>
-              <div class="stat-value">Lv. ${d.level}</div>
+              <div class="stat-value">Lv. ${d.levelNo ?? 1}</div>
             </div>
             <div class="stat-tile">
               <div class="stat-icon">🏆</div>
               <div class="stat-label">독서왕 횟수</div>
-              <div class="stat-value">${d.kingCount}회</div>
+              <div class="stat-value">${d.kingCount ?? 0}회</div>
             </div>
             <div class="stat-tile">
               <div class="stat-icon">🛡️</div>
               <div class="stat-label">획득 뱃지</div>
-              <div class="stat-value">${d.badgeCount}개</div>
+              <div class="stat-value">${d.badgeCount ?? 0}개</div>
             </div>
           </div>
         </div>
@@ -239,18 +331,21 @@ function renderAllTab(d) {
           <h4 class="sub-themes">최근 읽은 책</h4>
           <div class="recent-book-scroll">
             <ul class="recent-book-list">
-              ${RECENT_BOOKS.map((b) => `
+              ${readingHistory.length ? readingHistory.slice(0, 4).map((b) => {
+                const result = readingResultBadge(b);
+                return `
                 <li>
                   <div class="recent-book-thumb"></div>
                   <div class="recent-book-info">
-                    <div class="recent-book-title">${b.title}</div>
+                    <div class="recent-book-title">${escapeHtml(b.bookName)}</div>
                     <div class="recent-book-meta">
-                      ${b.date} &nbsp;|&nbsp; 기본문제 ${b.basic} &nbsp;|&nbsp; 심화문제 ${b.advanced} &nbsp;|&nbsp;
-                      <span class="result-text result-${b.result}">${RESULT_LABEL[b.result]}</span>
+                      ${escapeHtml(b.recordDate)} &nbsp;|&nbsp; 기본문제 ${b.basicCorrectCnt ?? 0}/${b.basicTotalCnt ?? 0} &nbsp;|&nbsp; 심화문제 ${b.advancedTotalCnt ? `${b.advancedCorrectCnt ?? 0}/${b.advancedTotalCnt}` : "-"} &nbsp;|&nbsp;
+                      <span class="result-text result-${result.key}">${result.label}</span>
                     </div>
                   </div>
                 </li>
-              `).join("")}
+              `;
+              }).join("") : `<li class="empty-row">독서 이력이 없습니다.</li>`}
             </ul>
           </div>
         </div>
@@ -260,50 +355,51 @@ function renderAllTab(d) {
 }
 
 function renderBasicTab(d) {
+  const genderLabel = d.gender === true ? "남자" : d.gender === false ? "여자" : "-";
   return `
     <table class="base-info-t">
       <tbody>
         <tr>
           <th>이름</th>
-          <td><input type="text" value="${d.name}" readonly></td>
+          <td><input type="text" value="${escapeHtml(d.studentName)}" readonly></td>
           <th>상태</th>
-          <td>${statusButtons(d.status)}</td>
+          <td>${statusButtons(statusLabel(d.statusKey))}</td>
         </tr>
         <tr>
           <th>생년월일</th>
-          <td class="icon-field">${d.birthDate} <i class="fa-regular fa-calendar icon-btn"></i></td>
+          <td class="icon-field">${escapeHtml(d.birth ?? "-")} <i class="fa-regular fa-calendar icon-btn"></i></td>
           <th>성별</th>
           <td class="choose-group">
-            <span class="btn-choose ${d.gender === "남자" ? "active" : ""}">남자</span>
-            <span class="btn-choose ${d.gender === "여자" ? "active" : ""}">여자</span>
+            <span class="btn-choose ${genderLabel === "남자" ? "active" : ""}">남자</span>
+            <span class="btn-choose ${genderLabel === "여자" ? "active" : ""}">여자</span>
           </td>
         </tr>
         <tr>
           <th>학교</th>
-          <td class="icon-field"><input type="text" value="${d.school}" readonly> <i class="fa-solid fa-magnifying-glass icon-btn"></i></td>
+          <td class="icon-field"><input type="text" value="${escapeHtml(d.school ?? "-")}" readonly> <i class="fa-solid fa-magnifying-glass icon-btn"></i></td>
           <th>주소</th>
-          <td class="icon-field"><input type="text" value="${d.address}" readonly> <i class="fa-solid fa-magnifying-glass icon-btn"></i></td>
+          <td class="icon-field"><input type="text" value="${escapeHtml(d.address ?? "-")}" readonly> <i class="fa-solid fa-magnifying-glass icon-btn"></i></td>
         </tr>
         <tr>
           <th>학년</th>
-          <td>${d.schoolyearLabel}</td>
+          <td>${escapeHtml(d.gradeName ?? "-")}</td>
           <th>상세주소</th>
-          <td><input type="text" value="${d.detailAddress}" readonly></td>
+          <td><input type="text" value="${escapeHtml(d.addressDetail ?? "-")}" readonly></td>
         </tr>
         <tr>
           <th>부모님HP</th>
-          <td><input type="tel" value="${d.parentPhone}" readonly></td>
+          <td><input type="tel" value="${escapeHtml(d.billingPhone ?? "-")}" readonly></td>
           <th>학생과의 관계</th>
-          <td class="choose-group">
-            <span class="btn-choose ${d.relation === "부" ? "active" : ""}">부</span>
-            <span class="btn-choose ${d.relation === "모" ? "active" : ""}">모</span>
-            <span class="btn-choose ${d.relation === "기타" ? "active" : ""}">기타</span>
+          <td class="choose-group" title="DB에 저장하는 값이 없어 선택 표시를 하지 않습니다">
+            <span class="btn-choose">부</span>
+            <span class="btn-choose">모</span>
+            <span class="btn-choose">기타</span>
           </td>
         </tr>
       </tbody>
     </table>
     <div class="save-btn-frame">
-      <button type="submit" class="save-btn" disabled title="상세정보 API 연동 전이라 저장은 아직 동작하지 않습니다">저장</button>
+      <button type="submit" class="save-btn" disabled title="저장 API 연동 전이라 저장은 아직 동작하지 않습니다">저장</button>
     </div>
   `;
 }
@@ -316,64 +412,75 @@ function renderFeeTab(d) {
       <tbody>
         <tr>
           <th>독서 단계</th>
-          <td>${d.bookLevelName}</td>
+          <td>${escapeHtml(FEE_MOCK.bookLevelName)}</td>
           <th>수강 상태</th>
           <td class="choose-group"><span class="btn-choose active">수강</span><span class="btn-choose">미수강</span></td>
         </tr>
         <tr>
           <th>담당 선생님</th>
-          <td>${d.bookTeacher}</td>
+          <td>${escapeHtml(FEE_MOCK.bookTeacher)}</td>
           <th>시작일자</th>
-          <td>${d.joinDate}</td>
+          <td>${escapeHtml(d.registeredAt ?? "-")}</td>
         </tr>
         <tr>
           <th>교육비</th>
-          <td><input type="text" value="${d.bookFee}" readonly></td>
+          <td><input type="text" value="${escapeHtml(FEE_MOCK.bookFee)}" readonly></td>
           <th>교재비</th>
-          <td><input type="text" value="${d.bookMaterialFee}" readonly></td>
+          <td><input type="text" value="${escapeHtml(FEE_MOCK.bookMaterialFee)}" readonly></td>
         </tr>
       </tbody>
     </table>
-    <div class="dues-sum"><p>회비 합계 <span>${d.bookFee}</span>원</p></div>
+    <p class="mock-note" title="담당선생님/회비는 DB에 대응 데이터가 없어 목업입니다">※ 이 탭은 아직 API 연동 전(담당선생님/회비 데이터 없음)입니다.</p>
     <div class="save-btn-frame">
       <button type="submit" class="save-btn" disabled title="회비 API 연동 전이라 저장은 아직 동작하지 않습니다">교재비 저장</button>
     </div>
   `;
 }
 
-/* all_pass엔 없는 book_clinic 자체 탭 — 독서이력/예약 */
-
-function renderReadingTab() {
+function renderReadingTab(d) {
+  const history = d.readingHistory ?? [];
+  if (!history.length) {
+    return `<p class="empty-row">독서 이력이 없습니다.</p>`;
+  }
   return `
     <table class="history-table">
       <thead>
-        <tr><th>No</th><th>도서명</th><th>기본 문제</th><th>심화 문제</th><th>결과</th><th>기타 전달사항</th></tr>
+        <tr><th>No</th><th>날짜</th><th>도서명</th><th>기본 문제</th><th>심화 문제</th><th>결과</th><th>기타 전달사항</th></tr>
       </thead>
       <tbody>
-        ${READING_HISTORY.map((h) => `
+        ${history.map((h, idx) => {
+          const result = readingResultBadge(h);
+          return `
           <tr>
-            <td class="col-no">${h.no}</td>
-            <td class="col-title">${h.title}</td>
-            <td>${h.basic}</td>
-            <td>${h.advanced}</td>
-            <td><span class="result-badge result-${h.result}">${RESULT_LABEL[h.result]}</span></td>
-            <td class="col-note">${h.note}</td>
+            <td class="col-no">${history.length - idx}</td>
+            <td>${escapeHtml(h.recordDate)}</td>
+            <td class="col-title">${escapeHtml(h.bookName)}</td>
+            <td>${h.basicCorrectCnt ?? 0}/${h.basicTotalCnt ?? 0}</td>
+            <td>${h.advancedTotalCnt ? `${h.advancedCorrectCnt ?? 0}/${h.advancedTotalCnt}` : "-"}</td>
+            <td><span class="result-badge result-${result.key}">${result.label}</span></td>
+            <td class="col-note">${escapeHtml(h.note ?? "")}</td>
           </tr>
-        `).join("")}
+        `;
+        }).join("")}
       </tbody>
     </table>
   `;
 }
 
-function renderReservationTab() {
+function renderReservationTab(d) {
+  const reservations = d.reservations ?? [];
+  if (!reservations.length) {
+    return `<p class="empty-row">예약 이력이 없습니다.</p>`;
+  }
   return `
     <table class="history-table">
-      <thead><tr><th>날짜</th><th>상태</th></tr></thead>
+      <thead><tr><th>날짜</th><th>회차</th><th>상태</th></tr></thead>
       <tbody>
-        ${RESERVATIONS.map((r) => `
+        ${reservations.map((r) => `
           <tr>
-            <td>${r.date}</td>
-            <td><span class="resv-pill ${r.statusClass}">${r.status}</span></td>
+            <td>${escapeHtml(r.serviceDate)}</td>
+            <td>${r.seq ?? "-"}</td>
+            <td>${reservationStatusPill(r.status)}</td>
           </tr>
         `).join("")}
       </tbody>

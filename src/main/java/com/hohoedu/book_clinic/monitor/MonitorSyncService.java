@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.google.cloud.firestore.Firestore;
@@ -17,8 +18,14 @@ import lombok.extern.slf4j.Slf4j;
 /**
  * SQL이 원본인 모니터링 카드 상태를 Firestore `clinic_monitor/{reservationId}` 문서로 미러링한다.
  * 관리자 브라우저는 이 컬렉션을 onSnapshot으로 구독해 실시간 갱신을 받는다 (2026-07-15).
- * Firestore 쓰기 실패는 원본 SQL 트랜잭션에 영향을 주면 안 되므로 호출부(MonitorService)에서
- * 항상 try/catch로 감싸 호출한다 — 이 서비스 자체는 실패를 그대로 던진다.
+ *
+ * [왜 @Async인가(2026-08-26)] 원래는 호출부(MonitorService)의 @Transactional 메서드 끝에서 이
+ * 메서드를 동기(.get())로 기다렸다. 그동안 DB 커넥션을 계속 붙잡고 있어서, Firestore 왕복이
+ * 조금만 느려져도 커넥션 풀이 고갈되어 이 화면과 무관한 다른 요청까지 전부 느려지는 문제가 있었다
+ * (학생 페이지 진입마다 호출 빈도가 늘면서 체감될 정도로 커짐). 전용 스레드 풀(AsyncConfig)에서
+ * 돌려 트랜잭션 커밋 직후 커넥션을 바로 반납하고, 사용자 응답도 Firestore를 기다리지 않게 한다.
+ * 대신 실패를 호출부가 더 이상 동기로 catch할 수 없으므로, 이 메서드 안에서 직접 로그로 남긴다
+ * — Firestore 쓰기 실패가 SQL 트랜잭션에 영향을 주면 안 된다는 원칙은 그대로 유지된다.
  *
  * [문서 키가 sessionId가 아니라 reservationId인 이유(2026-08-20)] 예약 생성 시점엔 아직 세션이
  * 없어(sessionId=null) 그때는 동기화가 아예 안 됐었다 — 예약 완료 직후 모니터링에 안 뜨는
@@ -34,6 +41,7 @@ public class MonitorSyncService {
 
     private final Firestore firestore;
 
+    @Async("firestoreSyncExecutor")
     public void syncCard(MonitorRespDTO.CardDTO card) {
         if (card.getReservationId() == null) {
             log.warn("Firestore 동기화 건너뜀 — reservationId 없는 카드: studentId={}", card.getStudentId());
@@ -79,13 +87,14 @@ public class MonitorSyncService {
         doc.put("books", toBookMaps(card.getBooks()));
 
         try {
-            // 동기 대기로 처리 — 실패 시 예외가 그대로 던져지도록 해서 호출부(MonitorService)의
-            // try/catch가 실제로 실패를 잡을 수 있게 한다 (fire-and-forget이면 실패가 조용히 묻힘)
             firestore.collection(COLLECTION).document(String.valueOf(card.getReservationId())).set(doc).get();
-            log.debug("Firestore 카드 동기화: reservationId={}, cardStatus={}", card.getReservationId(), card.getCardStatus());
-        } catch (InterruptedException | ExecutionException e) {
+            log.info("Firestore 동기화 성공 — reservationId={}, studentId={}, cardStatus={}",
+                    card.getReservationId(), card.getStudentId(), card.getCardStatus());
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new RuntimeException("Firestore 동기화 실패: reservationId=" + card.getReservationId(), e);
+            log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: reservationId={}", card.getReservationId(), e);
+        } catch (ExecutionException e) {
+            log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: reservationId={}", card.getReservationId(), e);
         }
     }
 

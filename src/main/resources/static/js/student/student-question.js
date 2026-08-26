@@ -126,13 +126,13 @@
     renderQtype(q.qtype);
 
     if (q.qex) {
-      qexText.textContent = q.qex;
+      qexText.innerHTML = q.qex;
       qexBox.hidden = false;
     } else {
       qexBox.hidden = true;
     }
 
-    qText.textContent = q.q;
+    qText.innerHTML = q.q;
 
     // 보기는 섞지 않고 등록된 순서(1~4) 그대로 보여준다
     const choices = [
@@ -148,7 +148,7 @@
       btn.type = 'button';
       btn.className = 'choice-item';
       btn.dataset.num = c.num;
-      btn.innerHTML = `<span class="choice-num">${c.num}</span><span>${escapeHtml(c.text)}</span>`;
+      btn.innerHTML = `<span class="choice-num">${c.num}</span><span>${c.text}</span>`;
       btn.addEventListener('click', () => selectChoice(c.num));
       choiceList.appendChild(btn);
     });
@@ -174,12 +174,6 @@
     qtypeIcon.innerHTML = `<i class="fa-solid ${info.icon}" aria-hidden="true"></i>`;
     qtypeName.textContent = info.name;
     qtypeDesc.textContent = info.desc;
-  }
-
-  function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
   }
 
   // 문항별 정답 확인 없이 선택만 기록하고 다음으로 넘어간다 — 정답 여부는 마지막 결과에서만 보여준다
@@ -270,6 +264,23 @@
 
   nextBtn.addEventListener('click', goNext);
   prevBtn.addEventListener('click', goPrev);
+
+  // 문제 푸는 중에 다른 기기에서 재로그인하거나 직원이 퇴실 처리하면, 예전엔 이 화면을 벗어나
+  // (다음 페이지 이동) 전까지는 계속 문제를 풀 수 있었다(2026-08-26 발견). 주기적으로 세션이
+  // 아직 유효한지 확인해서, 무효화됐으면 바로 로그인 화면으로 돌려보낸다.
+  const SESSION_CHECK_INTERVAL_MS = 15000;
+  const sessionCheckTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`/student/session-check?studentId=${encodeURIComponent(studentId)}`);
+      const data = await res.json();
+      if (data.success && data.response && data.response.valid === false) {
+        clearInterval(sessionCheckTimer);
+        window.location.replace('/student/login');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  }, SESSION_CHECK_INTERVAL_MS);
 
   loadQuestions();
 })();

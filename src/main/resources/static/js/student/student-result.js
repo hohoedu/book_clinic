@@ -31,8 +31,29 @@
   const advancedBtn = document.getElementById('advancedBtn');
 
   const homeBtn = document.querySelector('.btn-home');
+  const logoutBtn = document.querySelector('.logout-btn');
   const contentId = page ? page.getAttribute('data-content-id') : null;
   const qlevel = (page ? page.getAttribute('data-qlevel') : null) || '01';
+
+  // 결과 화면의 "로그아웃" 버튼 — 예전엔 아예 연결돼있지 않아 눌러도 아무 반응이 없었다(2026-08-26).
+  // student-main.js와 같은 방식으로 서버 세션을 먼저 무효화하고("문제 푸는 중"/"결과 확인중" 표시도
+  // 함께 해제) 로그인 화면으로 이동한다.
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+      try {
+        await fetch('/student/logout', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId }),
+        });
+      } catch (err) {
+        console.error(err);
+      }
+      localStorage.clear();
+      sessionStorage.clear();
+      window.location.replace('/student');
+    });
+  }
 
   // 이 책이 끝난 상태인지(=책은 이미 반납됨) — 독서왕/독서친구/심화완료면 true, 재도전(불합격)이면
   // false. true일 때 "홈으로"를 누르면 일반 홈이 아니라 완료 화면(mode=retryDone)으로 보낸다 —
@@ -227,8 +248,7 @@
       return;
     }
     cardReward.hidden = false;
-    // RARE 플래그는 10장 세트를 채운 그 순간(cardRewardReached)에만 보여준다 — 매번 뜨면 안 된다
-    rareFlag.hidden = !result.cardRewardReached;
+    rareFlag.hidden = false;
     rewardCardName.textContent = '???';
     const collected = result.totalCards != null ? ((result.totalCards - 1) % 10) + 1 : null;
     if (result.cardRewardReached) {

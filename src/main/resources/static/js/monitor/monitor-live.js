@@ -468,6 +468,7 @@ function buildCardEl(card) {
       <span class="status-badge"><i class="fa-solid ${badge.icon}"></i> ${badge.text}</span>
     </div>
     <div class="book-row"></div>
+    <div class="book-dots-row"></div>
     <div class="stat-row"></div>
     <div class="card-bottom">
       <span class="entered-at">${notEntered ? "미입실" : `${formatTime(card.enteredAt)} 입실`}</span>
@@ -498,14 +499,11 @@ function buildCardEl(card) {
   return el;
 }
 
-/* book-row(표지/제목/아카이브 배지/독서일지 버튼) + 페이지가 여러 장이면 하단에 점 페이지네이션 */
+/* book-row(표지/책 정보/독서일지 버튼) + 여러 장 추천 시 그 아래(book-dots-row)에 점 페이지네이션.
+   표지·정보는 세로 가운데 정렬, 페이지네이션은 그와 무관하게 카드 하단에 고정한다(2026-08-26). */
 function renderBookRow(el, card, pages, pageIndex) {
   const page = pages[pageIndex];
   const notEntered = card.cardStatus === "NOT_ENTERED";
-  const archiveIssued = page.basicStatus === "DONE";
-  const archiveBadge = archiveIssued
-    ? `<span class="archive-chip archive-done">아카이브 카드 발급 완료</span>`
-    : `<span class="archive-chip">아카이브 카드 발급</span>`;
 
   const bookRow = el.querySelector(".book-row");
   bookRow.innerHTML = `
@@ -513,26 +511,21 @@ function renderBookRow(el, card, pages, pageIndex) {
     <div class="book-info">
       <div class="book-title">${page.bookTitle ?? "추천 도서 없음"}</div>
       <div class="book-sub">${[page.publisher, page.author].filter(Boolean).join(" | ")}</div>
-      <div class="book-info-bottom">
-        ${archiveBadge}
-        ${pages.length > 1 ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>` : ""}
-      </div>
     </div>
     <div class="book-actions">
       ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
-      ${hasQuizRecord(page) ? `<button type="button" class="quiz-reset-btn" title="문제풀이 기록 삭제"><i class="fa-regular fa-trash-can"></i></button>` : ""}
     </div>
   `;
 
   if (!notEntered) {
     bookRow.querySelector(".log-open-btn").addEventListener("click", () => toggleReadingLogPanel(card));
   }
-  const resetBtn = bookRow.querySelector(".quiz-reset-btn");
-  if (resetBtn) {
-    // 뒤 페이지 = 이 책 다음에 추천받은 책들. 삭제하면 함께 취소되므로 확인 문구에 개수를 적는다
-    resetBtn.addEventListener("click", () => resetQuiz(card, page, pages.length - 1 - pageIndex));
-  }
-  bookRow.querySelectorAll(".dot").forEach((dot) => {
+
+  const dotsRow = el.querySelector(".book-dots-row");
+  dotsRow.innerHTML = pages.length > 1
+    ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>`
+    : "";
+  dotsRow.querySelectorAll(".dot").forEach((dot) => {
     dot.addEventListener("click", () => {
       selectedBookPage[card.studentId] = Number(dot.dataset.idx);
       render();

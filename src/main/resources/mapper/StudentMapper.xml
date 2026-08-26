@@ -129,7 +129,82 @@
         FROM erp_student st
         LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
         WHERE st.center_code = #{centerCode}
+        <if test="gradeKey != null">AND st.grade_key = #{gradeKey}</if>
+        <if test="statusKey != null">AND st.status_key = #{statusKey}</if>
+        <if test="keyword != null">
+            AND (st.student_name LIKE '%' + #{keyword} + '%'
+             OR st.billing_phone LIKE '%' + #{keyword} + '%')
+        </if>
         ORDER BY st.student_name ASC
+    </select>
+
+    <select id="findGradeOptions" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$GradeOptionDTO">
+        SELECT code AS code, codeNm AS codeNm
+        FROM erp_bookstore_code
+        WHERE gubun = 'S'
+        ORDER BY code ASC
+    </select>
+
+    <!-- "학생 정보" 상세모달 기본 정보 — kingCount/badgeCount는 전체 학년 누적(리워드 카드/뱃지 기획과 같은 기준) -->
+    <select id="findStudentDetail" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$StudentDetailDTO">
+        SELECT st.student_id                                   AS studentId,
+               st.student_name                                 AS studentName,
+               st.grade_key                                    AS gradeKey,
+               cd.codeNm                                        AS gradeName,
+               st.status_key                                    AS statusKey,
+               st.billing_phone                                 AS billingPhone,
+               st.school                                        AS school,
+               st.address                                       AS address,
+               st.address_detail                                AS addressDetail,
+               st.birth                                         AS birth,
+               st.gender                                        AS gender,
+               CONVERT(VARCHAR(10), st.created_at, 23)          AS registeredAt,
+               (SELECT CONVERT(VARCHAR(10), MAX(cs.session_date), 23)
+                  FROM erp_bookstore_clinic_session cs
+                 WHERE cs.student_id = st.student_id)           AS lastVisitDate,
+               (SELECT COUNT(*)
+                  FROM erp_bookstore_recommend_log rl
+                 WHERE rl.student_id = st.student_id
+                   AND rl.status = 'DONE')                      AS totalDoneBooks,
+               (SELECT COUNT(*)
+                  FROM erp_bookstore_recommend_log rl
+                 WHERE rl.student_id = st.student_id
+                   AND rl.grade = 'KING')                       AS kingCount,
+               (SELECT COUNT(*)
+                  FROM erp_bookstore_student_badge sb
+                 WHERE sb.student_id = st.student_id)           AS badgeCount
+        FROM erp_student st
+        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        WHERE st.student_id = #{studentId}
+    </select>
+
+    <!-- "학생 정보" 상세모달 독서이력 탭 — 하루 1권(diary_detail) 기준, grade/status는 recommend_log 스냅샷 -->
+    <select id="findReadingHistory" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$ReadingHistoryRowDTO">
+        SELECT CONVERT(VARCHAR(10), d.record_date, 23) AS recordDate,
+               dd.book_name                            AS bookName,
+               dd.basic_correct_cnt                    AS basicCorrectCnt,
+               dd.basic_total_cnt                      AS basicTotalCnt,
+               dd.advanced_correct_cnt                 AS advancedCorrectCnt,
+               dd.advanced_total_cnt                   AS advancedTotalCnt,
+               rl.status                               AS status,
+               rl.grade                                AS grade,
+               d.memo                                  AS note
+        FROM erp_bookstore_diary_detail dd
+        JOIN erp_bookstore_diary d ON d.diary_key = dd.diary_key
+        LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
+        WHERE d.student_id = #{studentId}
+        ORDER BY d.record_date DESC, dd.id DESC
+    </select>
+
+    <!-- "학생 정보" 상세모달 예약현황 탭 -->
+    <select id="findReservationHistory" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$ReservationHistoryRowDTO">
+        SELECT CONVERT(VARCHAR(10), si.service_date, 23) AS serviceDate,
+               si.seq                                    AS seq,
+               r.status                                  AS status
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.student_id = #{studentId}
+        ORDER BY si.service_date DESC, si.seq DESC
     </select>
 
     <select id="findSiblingGroup" resultType="com.hohoedu.book_clinic.student.model.Student">

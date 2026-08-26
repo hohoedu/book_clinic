@@ -334,6 +334,11 @@ public class ClinicService {
         clinicRepository.insertRecommendLog(studentId, picked.getContentId(), itemId);
         // 실시간 모니터링 기준 "입실" 시점 — 미입실 예약 카드가 여기서 입실로 전환된다
         monitorService.enterSession(studentId);
+        // 이 책의 recommended_at(경과 시간 계산 기준점)이 새로 생겼다 — 이전 책을 풀다가 제출 없이
+        // 나가서 남아있던 quiz_started_at(그보다 이전 시각)이 그대로면, 경과시간(DATEDIFF)이
+        // "새 recommended_at − 옛 quiz_started_at"이 되어 음수로 나온다(2026-08-26 발견). 새 추천
+        // 시점에 확실히 지워서 이 기준점 역전을 막는다.
+        monitorService.exitQuiz(studentId);
         ClinicRespDTO.RecommendBookDTO card = clinicRepository.findBookCard(picked.getContentId(), itemId);
         log.info("학생 {}에게 추천된 도서 정보: {}", studentId, card);
         return card;
@@ -555,25 +560,28 @@ public class ClinicService {
             if (rule != null) {
                 resp.setLeveledUp(resp.getLevelNo() > levelFor(doneNow - 1, rule.booksPerLevel()));
             }
+        }
 
-            // 온라인 카드 — 새 완독(DONE)이므로 그 책의 NORMAL 카드를 1장 지급한다(책당 1장, 중복 지급 방지).
-            // NORMAL 카드가 CARD_SET_SIZE(10)의 배수를 채운 순간 온라인 레어카드도 함께 지급하고,
-            // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다(실물 지급은 오프라인 수동).
-            if (!clinicRepository.existsNormalCard(studentId, contentId)) {
-                clinicRepository.insertNormalCard(studentId, contentId);
-                ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
-                int totalCards = clinicRepository.countNormalCards(studentId); // 이번 완독 포함
-                if (card != null) {
-                    resp.setCardName(card.getCardName());
-                    resp.setCardImageUrl(card.getImageUrl());
-                }
-                resp.setTotalCards(totalCards);
+        // 온라인 카드 — 이 책에 대한 첫 제출이면 합격/불합격과 무관하게 NORMAL 카드를 1장 지급한다
+        // (책당 1장, 중복 지급 방지). 재도전(불합격) 결과 화면에서도 카드 획득 로직이 보여야 한다는
+        // 요청으로 if(passed) 밖으로 옮김(2026-08-26) — existsNormalCard 체크가 그대로 있어 이후
+        // 같은 책을 다시 제출해도(합격이든 재도전이든) 카드가 중복 지급되진 않는다.
+        // NORMAL 카드가 CARD_SET_SIZE(10)의 배수를 채운 순간 온라인 레어카드도 함께 지급하고,
+        // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다(실물 지급은 오프라인 수동).
+        if (!clinicRepository.existsNormalCard(studentId, contentId)) {
+            clinicRepository.insertNormalCard(studentId, contentId);
+            ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
+            int totalCards = clinicRepository.countNormalCards(studentId); // 이번 지급 포함
+            if (card != null) {
+                resp.setCardName(card.getCardName());
+                resp.setCardImageUrl(card.getImageUrl());
+            }
+            resp.setTotalCards(totalCards);
 
-                boolean rewardReached = totalCards > 0 && totalCards % CARD_SET_SIZE == 0;
-                resp.setCardRewardReached(rewardReached);
-                if (rewardReached && !clinicRepository.existsRareCard(studentId, totalCards)) {
-                    clinicRepository.insertRareCard(studentId, totalCards);
-                }
+            boolean rewardReached = totalCards > 0 && totalCards % CARD_SET_SIZE == 0;
+            resp.setCardRewardReached(rewardReached);
+            if (rewardReached && !clinicRepository.existsRareCard(studentId, totalCards)) {
+                clinicRepository.insertRareCard(studentId, totalCards);
             }
         }
 

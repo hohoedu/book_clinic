@@ -15,6 +15,7 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
@@ -59,6 +60,7 @@ public class StudentViewController {
     private final PassService passService;
     private final ReservationService reservationService;
     private final Environment environment;
+    private final StudentSessionRegistry studentSessionRegistry;
 
     // ── 런처 ─────────────────────────────────────────────────────────────
 
@@ -87,14 +89,25 @@ public class StudentViewController {
      */
     private String requireSessionStudentId(HttpServletRequest request, String requestedStudentId) {
         HttpSession session = request.getSession(false);
-        Object sessionStudentId = session == null ? null : session.getAttribute(SESSION_STUDENT_ID);
+        if (session == null) {
+            return null;
+        }
+        Object sessionStudentId = session.getAttribute(SESSION_STUDENT_ID);
         if (sessionStudentId == null) {
             return null;
         }
         if (requestedStudentId != null && !requestedStudentId.isBlank() && !sessionStudentId.equals(requestedStudentId)) {
             return null;
         }
-        return (String) sessionStudentId;
+        String studentId = (String) sessionStudentId;
+        // 다른 기기에서 새로 로그인했거나(중복 로그인) 직원이 퇴실 처리했으면 이 세션은 더 이상
+        // 유효하지 않다 — 강제 로그아웃시킨다(2026-08-26). 문제풀이 도중이라도 다음 요청(페이지 이동
+        // 또는 student-question.js의 주기적 세션 확인)에서 바로 걸린다.
+        if (!studentSessionRegistry.isActive(studentId, session.getId()) || monitorService.hasExitedToday(studentId)) {
+            session.invalidate();
+            return null;
+        }
+        return studentId;
     }
 
     /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
@@ -127,6 +140,41 @@ public class StudentViewController {
         }
         monitorService.exitSession(student.getStudentId());
         return ResponseEntity.ok(ApiUtils.success(null));
+    }
+
+    /**
+     * 문제풀이 앱 로그아웃 — student-main.js/student-result.js의 "로그아웃" 버튼이 호출한다(2026-08-26).
+     * 예전엔 클라이언트가 로컬 저장소만 지우고 서버 세션은 그대로 둬서(HttpSession 살아있음),
+     * 모니터링에 "문제 푸는 중"이 계속 남는 등 서버가 로그아웃 사실을 전혀 몰랐다. 퇴실(QR)과는
+     * 다른 개념이라(로그아웃해도 오늘 입실 상태는 유지되어야 재로그인 후 이어 읽을 수 있다)
+     * monitorService.exitSession은 호출하지 않는다 — 세션 무효화 + "문제 푸는 중"/"결과 확인중"
+     * 표시만 해제한다.
+     */
+    @PostMapping("/student/logout")
+    @ResponseBody
+    public ResponseEntity<?> logout(@RequestBody Map<String, String> body, HttpServletRequest request) {
+        String studentId = requireSessionStudentId(request, body.get("studentId"));
+        if (studentId != null) {
+            monitorService.exitQuiz(studentId);
+            monitorService.clearResultViewing(studentId);
+            HttpSession session = request.getSession(false);
+            if (session != null) {
+                session.invalidate();
+            }
+        }
+        return ResponseEntity.ok(ApiUtils.success(null));
+    }
+
+    /**
+     * 문제풀이 화면이 주기적으로 호출해 이 세션이 아직 유효한지 확인한다(2026-08-26) — 다른 기기
+     * 재로그인이나 직원 퇴실 처리로 세션이 무효화됐는데도 페이지 이동 전까지 계속 문제를 풀 수
+     * 있던 문제를 막는다. requireSessionStudentId가 무효 판정 시 세션을 바로 invalidate한다.
+     */
+    @GetMapping("/student/session-check")
+    @ResponseBody
+    public ResponseEntity<?> sessionCheck(@RequestParam("studentId") String studentId, HttpServletRequest request) {
+        boolean valid = requireSessionStudentId(request, studentId) != null;
+        return ResponseEntity.ok(ApiUtils.success(Map.of("valid", valid)));
     }
 
     /**
@@ -176,7 +224,11 @@ public class StudentViewController {
         if (oldSession != null) {
             oldSession.invalidate();
         }
-        request.getSession(true).setAttribute(SESSION_STUDENT_ID, student.getStudentId());
+        HttpSession newSession = request.getSession(true);
+        newSession.setAttribute(SESSION_STUDENT_ID, student.getStudentId());
+        // 이 학생의 "유효한" 세션을 이 기기 하나로 교체한다 — 다른 기기에 남아있던 이전 로그인은
+        // 다음 요청부터 강제 로그아웃된다(2026-08-26, 중복 로그인 방지).
+        studentSessionRegistry.register(student.getStudentId(), newSession.getId());
         // 실시간 모니터링 기준 "입실"은 로그인이 아니라 책 추천 시점(ClinicService.recommendBook)에 처리한다 
         // 예약 카드가 미입실 상태로 미리 떠 있다가 책을 추천받는 순간 입실로 전환된다.
         return "redirect:/student/main?studentId=" + student.getStudentId();
@@ -205,6 +257,9 @@ public class StudentViewController {
         // 결과 화면에서 "홈으로" 돌아온 시점 = 실시간 모니터링 기준 "결과 확인중" 종료
         // (재도전으로 문제풀이를 다시 시작하는 경우는 markQuizStarted가 함께 해제하므로 여기선 홈 복귀만 처리)
         monitorService.clearResultViewing(studentId);
+        // 문제풀이 화면에서 제출 없이 "나가기"를 눌러 홈으로 온 경우 — "문제 푸는 중" 표시가 남아있지
+        // 않도록 함께 해제한다(2026-08-26). 이미 제출을 거쳐 온 경우엔 어차피 지워져 있어 멱등이다.
+        monitorService.exitQuiz(studentId);
 
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());
@@ -280,6 +335,9 @@ public class StudentViewController {
 
         // 결과 화면 진입 = 실시간 모니터링 기준 "결과 확인중" 시작 (홈으로/재도전 시 해제됨)
         monitorService.markResultViewing(studentId);
+        // 재도전(불합격) 중 "나가기"로 직전 결과 화면에 온 경우도 "문제 푸는 중" 표시를 해제해야
+        // 결과 확인중 상태가 제대로 보인다(2026-08-26). 제출을 거쳐 온 경우엔 이미 지워져 있어 멱등이다.
+        monitorService.exitQuiz(studentId);
 
         model.addAttribute("studentId", studentId);
         model.addAttribute("studentName", student.getStudentName());
@@ -319,9 +377,19 @@ public class StudentViewController {
         // 이 기기의 센터 학생만 — 등록된 기기라는 것만으로 남의 센터 학생을 입실시킬 수는 없다
         kioskService.assertSameCenter(request, student.getCenterCode());
 
-        ClinicRespDTO.BookStatusRespDTO homeState = clinicService.getHomeState(student.getStudentId());
-        model.addAttribute("studentName", student.getStudentName());
-        model.addAttribute("book", homeState.getBook());
+        // 예약 회차 시간대가 아니거나(ReservationService.markAttended), 예약이 아예 없거나, 이용권이
+        // 소진된 경우 등은 입실 자체가 막혀야 하는 정상적인 업무 상황이지 시스템 오류가 아니다.
+        // 예전엔 이 예외가 그대로 던져져 @RestControllerAdvice(GlobalExceptionHandler)가 가로채
+        // 화면 전체에 순수 JSON({"success":false,...})이 그대로 보이는 문제가 있었다(2026-08-26,
+        // 이 화면은 폼 제출로 들어오는 페이지 이동이라 fetch 에러 처리로 잡히지 않는다) — 여기서
+        // 잡아서 학생을 못 찾은 경우와 같은 안내 카드(book-confirm.html의 error-card)로 보여준다.
+        try {
+            ClinicRespDTO.BookStatusRespDTO homeState = clinicService.getHomeState(student.getStudentId());
+            model.addAttribute("studentName", student.getStudentName());
+            model.addAttribute("book", homeState.getBook());
+        } catch (Exception400 e) {
+            model.addAttribute("error", e.getMessage());
+        }
         return "/student/book-confirm";
     }
 

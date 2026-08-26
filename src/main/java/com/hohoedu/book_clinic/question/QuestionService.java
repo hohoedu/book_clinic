@@ -211,7 +211,7 @@ public class QuestionService {
 
         addDropdown(dvHelper, main, bookTitles,                                                      0,  "목록에서 도서를 선택해주세요.");
         addDropdown(dvHelper, main, new String[]{"기본", "심화"},                                     2,  "목록에서 레벨을 선택해주세요.");
-        addDropdown(dvHelper, main, new String[]{"이해", "표현", "논리", "사고", "감정", "어휘", "지식"}, 10, "목록에서 유형을 선택해주세요.");
+        addDropdown(dvHelper, main, new String[]{"이해", "표현", "논리", "사고", "감정", "어휘", "지식", "심화 어휘", "심화 문법"}, 10, "목록에서 유형을 선택해주세요.");
         addDropdown(dvHelper, main, new String[]{"Y", "N"},                                          11, "Y 또는 N을 선택해주세요.");
         addDropdown(dvHelper, main, new String[]{"활성", "비활성"},                                   12, "목록에서 상태를 선택해주세요.");
 
@@ -234,7 +234,7 @@ public class QuestionService {
 
     private static final java.util.Map<String, String> QTYPE_MAP = java.util.Map.of(
             "이해", "01", "표현", "02", "논리", "03", "사고", "04",
-            "감정", "05", "어휘", "06", "지식", "07"
+            "감정", "05", "어휘", "06", "지식", "07", "심화 어휘", "08", "심화 문법", "09"
     );
 
     private String formatQnum(String raw) {

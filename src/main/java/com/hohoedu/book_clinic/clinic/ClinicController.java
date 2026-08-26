@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
+import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic._dto.ClinicReqDTO;
 
@@ -35,11 +36,19 @@ public class ClinicController {
     private static final String SESSION_STUDENT_ID = "studentId";
 
     private final ClinicService clinicService;
+    private final StudentSessionRegistry studentSessionRegistry;
 
+    /**
+     * 다른 기기에서 재로그인했거나 직원이 퇴실 처리한 경우(2026-08-26)에도, 요청 자체를 여기서
+     * 막아야 이미 열어둔 문제풀이 화면에서 채점 제출/추천 확정이 실제로 처리되는 것을 막을 수
+     * 있다 — 페이지 이동 시점의 세션 무효화(StudentViewController)만으로는 그 전에 날아온
+     * API 호출까지 막지 못한다.
+     */
     private void requireOwnStudent(HttpServletRequest request, String requestedStudentId) {
         HttpSession session = request.getSession(false);
         Object sessionStudentId = session == null ? null : session.getAttribute(SESSION_STUDENT_ID);
-        if (sessionStudentId == null || !sessionStudentId.equals(requestedStudentId)) {
+        if (sessionStudentId == null || !sessionStudentId.equals(requestedStudentId)
+                || !studentSessionRegistry.isActive((String) sessionStudentId, session.getId())) {
             throw new Exception401("로그인이 필요합니다.");
         }
     }
