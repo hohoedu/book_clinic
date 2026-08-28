@@ -40,7 +40,8 @@ public interface ClinicRepository {
     ClinicRespDTO.PickedItemDTO pickNextItem(@Param("studentId") String studentId, @Param("centerCode") String centerCode,
                                @Param("year") String year, @Param("schoolyear") String schoolyear,
                                @Param("lastType") String lastType, @Param("lastGenre") String lastGenre,
-                               @Param("applyDedup") boolean applyDedup);
+                               @Param("applyDedup") boolean applyDedup,
+                               @Param("excludeItemIds") java.util.Collection<Integer> excludeItemIds);
 
     /**
      * 추천 도서 카드 상세 조회 — 학생이 실제로 서가에서 찾아올 책은 item(실물 판본)이므로
@@ -72,12 +73,28 @@ public interface ClinicRepository {
                                @Param("qlevel") String qlevel,
                                @Param("answerLogs") List<ClinicReqDTO.AnswerLogDTO> answerLogs);
 
-    /** 기본 문제풀이 채점 결과 반영 (합격 시 status=DONE, 미달이면 PENDING 유지) */
+    /**
+     * 기본 문제풀이 "첫 제출" 결과 반영 (2026-08-28) — 합격/불합격 무관하게 status=DONE.
+     * correct_count(처음 점수)와 final_correct_count(최종 점수)를 같은 값으로 세운다.
+     */
     void updateRecommendResult(@Param("recommendId") Integer recommendId,
                                 @Param("correctCount") Integer correctCount,
                                 @Param("totalCount") Integer totalCount,
                                 @Param("grade") String grade,
                                 @Param("status") String status);
+
+    /**
+     * "재도전"(mode=RETRY) 결과 반영 (2026-08-28) — final_correct_count(최종 점수)와 grade를 갱신한다.
+     * 두 값 모두 "올라가기만" 한다 — finalCorrectCount는 max(이번 점수, 기존 최종), grade는 higherGrade(기존, 이번)
+     * 를 호출부에서 계산해서 넘긴다. correct_count(처음 점수)·status는 첫 시도 결과로 고정.
+     * "틀린 문제 다시 풀기"는 아예 호출하지 않는다.
+     */
+    void updateRetryResult(@Param("recommendId") Integer recommendId,
+                            @Param("finalCorrectCount") Integer finalCorrectCount,
+                            @Param("grade") String grade);
+
+    /** 그 책의 기본 문제 뱃지(badge_id 1~3)를 모두 제거 — 재도전으로 등급이 올라 상위 뱃지로 교체할 때 쓴다 */
+    void deleteBasicBadge(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
 
     /** 특정 학년 도서의 완독(DONE) 권수 — 레벨 계산 기준 (단계 = 학생 학년) */
     int countDoneBooksByGrade(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);

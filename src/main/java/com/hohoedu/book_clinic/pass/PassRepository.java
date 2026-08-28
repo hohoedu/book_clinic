@@ -49,11 +49,21 @@ public interface PassRepository {
     void insertUse(@Param("passId") int passId, @Param("studentId") String studentId,
                    @Param("sessionId") Integer sessionId, @Param("usedDate") LocalDate usedDate);
 
-    /** 오늘 이미 차감했는지 — 재입실 시 UNIQUE 위반으로 가기 전에 걸러낸다 */
-    boolean existsTodayUse(@Param("studentId") String studentId, @Param("usedDate") LocalDate usedDate);
+    /**
+     * 오늘 이미 차감한 횟수(pass_use 행 수) — "그날 회차 수만큼 차감"(2026-08-28) 정책에서
+     * 목표 차감수와 비교해 부족분만 채우는 데 쓴다. 재입실 시 이 값이 목표와 같거나 크면 추가 차감 없음.
+     */
+    int countTodayUse(@Param("studentId") String studentId, @Param("usedDate") LocalDate usedDate);
 
     /** 이 학생이 이 서비스에 쓸 수 있는 총 잔여 횟수 */
     int sumRemain(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode);
+
+    /**
+     * 유효기간이 [monthStart, monthEnd]와 겹치는 살아있는 이용권의 total_count 합 —
+     * 그 달 예약 상한 검사용(2026-08-28). 그 달 이용권이 없으면 0.
+     */
+    int sumMonthlyTotalCount(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode,
+                             @Param("monthStart") LocalDate monthStart, @Param("monthEnd") LocalDate monthEnd);
 
     /** 결제/청구 건으로 발급된 이용권 찾기 (환불 시 회수 대상) */
     PassRespDTO.PassDTO findByRef(@Param("source") String source, @Param("refNo") String refNo);

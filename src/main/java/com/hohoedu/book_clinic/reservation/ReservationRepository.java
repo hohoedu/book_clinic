@@ -46,6 +46,25 @@ public interface ReservationRepository {
                                  @Param("slotInstanceId") Long slotInstanceId);
 
     /**
+     * 예약 트랜잭션 시작 시 이 학생의 erp_student 행을 UPDLOCK으로 잡아 같은 학생의 동시 예약
+     * 요청을 직렬화한다(2026-08-28, 하루 2회차 상한의 동시성 방어). 반환값은 쓰지 않는다.
+     */
+    String lockStudentForReservation(@Param("studentId") String studentId);
+
+    /** service_date가 [monthStart, monthEnd]에 드는 이 학생의 비취소(RESERVED/ATTENDED/NOSHOW) 예약 건수 — 그 달 예약 상한 판정용 */
+    int countReservationsInMonth(@Param("studentId") String studentId,
+                                 @Param("monthStart") LocalDate monthStart,
+                                 @Param("monthEnd") LocalDate monthEnd);
+
+    /** 그 학생의 그날 진행 중(RESERVED/ATTENDED) 예약 전체 — 첫 입실 시 일괄 ATTENDED 전환용. 회차 시작 시각 오름차순 */
+    List<ReservationRespDTO.ReservationItemDTO> findActiveReservationsByStudentAndDate(@Param("studentId") String studentId,
+                                                                                       @Param("serviceDate") LocalDate serviceDate);
+
+    /** 그 학생의 그날 출석 확정(ATTENDED) 회차 수 — 책 추천 총량(회차 수 × 2권) 계산용 */
+    int countAttendedSlotsByStudentAndDate(@Param("studentId") String studentId,
+                                           @Param("serviceDate") LocalDate serviceDate);
+
+    /**
      * 조건부 증가 — "OPEN이고 정원 여유가 있으면"만 1 늘린다. 확인과 갱신을 한 문장으로 묶어
      * DB 행 락으로 동시 요청을 한 명씩 처리하게 만드는 것이 동시성 제어의 핵심이다.
      * 영향행수 0이면 마감(혹은 존재하지 않음)이라는 뜻이다.

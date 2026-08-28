@@ -417,11 +417,12 @@ CREATE TABLE erp_bookstore_recommend_log (
                                               -- item이 다르면 다른 학생에게 각각 추천될 수 있고(재고만큼), 이 학생
                                               -- 기준 중복배제(dedup)도 content가 아니라 item_id로 판단한다.
     recommended_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 추천일시(KST)
-    status          VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(문제풀이 전/재도전 대기) / DONE(합격)
-    correct_count   INT,      -- 기본 문제풀이(qlevel=01) 최근 제출 정답 수
-    total_count     INT,      -- 기본 문제풀이 총 문항 수
-    grade           VARCHAR(20),   -- KING(독서왕) / FRIEND(독서친구) — 합격 시에만 값 존재
-    completed_at    DATETIME2,     -- 합격(DONE) 처리 시각
+    status              VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(추천됨, 첫 제출 전) / DONE(첫 제출 완료 — 합격/불합격 무관, 2026-08-28)
+    correct_count       INT,      -- "처음 점수" — 기본(qlevel=01) 최초 제출 정답 수에서 고정
+    total_count         INT,      -- 기본 문제풀이 총 문항 수
+    final_correct_count INT,      -- "최종 점수" — 재도전(mode=RETRY)에서 더 잘한 경우에만 올라간다(max). 첫 제출 시 correct_count와 동일 (2026-08-28)
+    grade               VARCHAR(20),   -- KING / FRIEND / NULL(불합격) — 재도전으로 "올라가기만"(null→FRIEND→KING). 오르면 기본 뱃지도 상위로 교체돼 항상 일치 (2026-08-28)
+    completed_at        DATETIME2,     -- 첫 제출(DONE) 처리 시각
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id),
     FOREIGN KEY (item_id)    REFERENCES erp_bookstore_item(item_id)
 );
@@ -545,7 +546,8 @@ CREATE TABLE erp_bookstore_clinic_session (
     exited_at       DATETIME2,    -- 퇴실 처리일시(KST)
     status          VARCHAR(20)   NOT NULL DEFAULT 'ENTERED',  -- ENTERED(입실중) / EXITED(퇴실완료)
     quiz_started_at DATETIME2,    -- 문제풀이 화면 진입 시각(KST) — 채점 제출 시 다시 NULL로 초기화
-    result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — 홈으로/재도전 등 화면 이탈 시 NULL로 초기화. "결과 확인중" 카드 상태의 기준
+    quiz_qlevel     VARCHAR(2),   -- 지금 진입한 문제풀이 난이도(01 기본 / 02 심화) — 모니터링 "문제 푸는 중" 회차/심화 표시용 (2026-08-28)
+    result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — (2026-08-28 모니터링 상태 6종 확정으로 "결과 확인중" 상태는 폐지, 컬럼만 유지)
 );
 
 -- 클리닉 예약 — DEPRECATED (2026-08-18). erp_bookstore_reservation(+ slot_instance, ddl-core.sql)로
@@ -812,22 +814,32 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_billing' AND obje
 -- 돈에 영향을 주는 카운트는 리셋되지 않는 곳에 따로 남겨야 한다. session_id는 추적용으로만
 -- 값으로 들고, 리셋되면 사라지는 값이라 FK는 걸지 않는다.
 --
--- [하루 1회] 같은 날 재입실해도 차감은 1회다. 재로그인·되돌아온 학생에게 두 번 까이면 안 되므로
--- UNIQUE로 막는다. 서비스가 둘 이상으로 늘면 이 키에 service_code를 넣어야 한다.
+-- [하루 N회] 2026-08-28 정책 변경 — 입실 시 그날 예약한 회차(타임) 수만큼 차감한다(하루 최대 4회차).
+-- 그래서 하루 여러 행이 생길 수 있어 (student_id, used_date) UNIQUE는 걸지 않는다. 재입실 이중차감은
+-- PassService.consume이 "그날 목표 차감수 − 이미 차감한 수"만큼만 채우는 방식으로 막는다(행 수 = 차감
+-- 횟수 불변식은 그대로 — 1행 = remain_count 1 감소).
 IF OBJECT_ID('erp_bookstore_pass_use', 'U') IS NULL
 CREATE TABLE erp_bookstore_pass_use (
     use_id      INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     pass_id     INT           NOT NULL,       -- erp_bookstore_pass.pass_id (어느 이용권을 깠는지)
     student_id  VARCHAR(100)  NOT NULL,       -- erp_student.student_id (조회 편의용 중복 저장)
     session_id  INT,                          -- erp_bookstore_clinic_session.session_id (값으로만 연결, 추적용)
-    used_date   DATE          NOT NULL,       -- 차감일 (하루 1회 판정 기준)
+    used_date   DATE          NOT NULL,       -- 차감일 (그날 차감 횟수 집계 기준)
     created_at  DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
-    CONSTRAINT UQ_pass_use_daily UNIQUE (student_id, used_date),
     FOREIGN KEY (pass_id) REFERENCES erp_bookstore_pass(pass_id)
 );
 
+-- 이미 만들어진 DB에서 옛 UNIQUE 제약 제거 (2026-08-28, 하루 N회 차감 정책). 이름을 못 찾으면
+-- 자동 생성명일 수 있어 컬럼 기준으로 찾아 지운다.
+IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'UQ_pass_use_daily' AND parent_object_id = OBJECT_ID('erp_bookstore_pass_use'))
+    ALTER TABLE erp_bookstore_pass_use DROP CONSTRAINT UQ_pass_use_daily;
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_use_pass' AND object_id = OBJECT_ID('erp_bookstore_pass_use'))
     CREATE INDEX IX_pass_use_pass ON erp_bookstore_pass_use (pass_id);
+
+-- countTodayUse(그날 차감 횟수) 조회 경로 (UNIQUE를 없앤 자리 — 유일성 강제는 아니고 조회용)
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_use_student_date' AND object_id = OBJECT_ID('erp_bookstore_pass_use'))
+    CREATE INDEX IX_pass_use_student_date ON erp_bookstore_pass_use (student_id, used_date);
 
 -- PG 결제 — 책방만 이용하는 학생의 앱 카드결제. 서당 학생은 여기 행이 생기지 않는다.
 -- 행은 결제 "시작" 시점에 status=READY로 먼저 생긴다(승인 실패/이탈 건도 남아야 정산 대조가 된다).
@@ -1316,14 +1328,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_slot_stude
         ON erp_bookstore_reservation (slot_instance_id, student_id)
         WHERE status = 'RESERVED';  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스)
 
--- "하루 한 회차" 제약의 실제 집행자(2026-08-20). 응용 계층의 countOtherReservedOnDate는 평문
--- SELECT라 확인과 INSERT 사이에 다른 요청이 끼어들 수 있고(TOCTOU), 서로 다른 슬롯으로 동시에
--- 요청하면 위 UX_reservation_slot_student(슬롯 기준)에도 걸리지 않아 하루에 여러 회차가 잡혔다.
--- 상태 집합은 countOtherReservedOnDate와 같게 맞춘다(취소된 예약만 제외).
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_student_date' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
-    CREATE UNIQUE INDEX UX_reservation_student_date
-        ON erp_bookstore_reservation (student_id, service_date)
-        WHERE status IN ('RESERVED', 'ATTENDED', 'NOSHOW');
+-- 2026-08-28: "하루 한 회차" → "하루 두 회차"로 정책 변경. (student_id, service_date) 유니크로는
+-- "2건까지"를 표현할 수 없어 이 인덱스를 제거한다. 하루 2회차 상한은 이제 응용 계층에서 강제한다
+-- (ReservationService.reserveOne: 학생 행 UPDLOCK으로 동시 요청 직렬화 + countOtherReservedOnDate >= 2 차단).
+-- 같은 회차 중복 예약은 위 UX_reservation_slot_student가 계속 막는다.
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_student_date' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
+    DROP INDEX UX_reservation_student_date ON erp_bookstore_reservation;
 
 -- ── 이력: 예약 상태 변경 전체 로그 (★ 신규 — 취소 주체 분쟁 방지) ─────
 IF OBJECT_ID('erp_bookstore_reservation_log', 'U') IS NULL
@@ -1342,84 +1352,3 @@ CREATE TABLE erp_bookstore_reservation_log (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_reservation_log_reservation' AND object_id = OBJECT_ID('erp_bookstore_reservation_log'))
     CREATE INDEX IX_reservation_log_reservation
         ON erp_bookstore_reservation_log (reservation_id, changed_at);  -- 예약 1건의 전체 이력 조회 경로
-
--- ════════════════════════════════════════════════════════
--- 센터 기기 라이선스 (2026-08-20)
---
--- [왜 필요한가] 학생용 화면(/student/**, /attendance/**)은 appId 하나로 들어간다. QR 스캔이든
--- 직접 입력이든 서버가 받는 값은 같고, appId는 학생증에 인쇄된 값이라 비밀이 아니다. 그래서
--- appId로는 "본인"을 증명할 수 없다. 대신 문제풀이·출석이 센터 기기에서만 일어난다는 운영
--- 전제를 근거로, "등록된 기기에서 온 요청인가"를 이 키로 증명한다. 기기 안에서는 appId만으로
--- 충분하고(카드를 두고 온 학생이 직접 입력해 들어갈 수 있어야 한다), 기기 밖에서는 못 들어온다.
---
--- [본사 발급] 키는 본사(PUS001)가 센터별로 발급해 전달하고, 센터는 설치 시 입력만 한다.
--- 센터가 스스로 기기를 늘릴 수 없어야 기기 대장이 본사에 남는다.
---
--- [왜 JWT가 아닌가] 이 키의 핵심 요구는 "분실·교체 시 즉시 끊기"다. JWT는 만료 전 취소가
--- 안 되므로 블랙리스트를 따로 둬야 하고, 그러면 매 요청 DB를 보게 되어 무상태 이점이 사라진다.
--- 어차피 last_used_at도 남겨야 해서, 불투명 난수 + DB 조회가 단순하고 정확하다.
---
--- [저장 형태] 원문은 저장하지 않는다. 발급 시 1회만 보여주고 DB에는 SHA-256 해시만 남긴다 —
--- DB가 통째로 유출돼도 남의 센터 기기를 흉내 낼 수 없어야 한다.
---
--- [DROP 제외] 기기 등록은 현장에서 사람이 한 번 하는 작업이라 매 기동 리셋하면 안 된다.
--- erp_center와 같은 취급으로 IF OBJECT_ID(...) IS NULL로만 생성한다.
--- ════════════════════════════════════════════════════════
-IF OBJECT_ID('erp_bookstore_kiosk_license', 'U') IS NULL
-CREATE TABLE erp_bookstore_kiosk_license (
-    license_id     INT IDENTITY(1,1) PRIMARY KEY,
-    -- 이 키가 귀속된 센터. 요청 대상 학생의 센터와 대조하는 기준이다.
-    -- NULL이면 "전 센터" 키 — 본사 테스트 태블릿 한 대로 어느 센터 학생이든 처리해야 해서 둔다.
-    -- 강력한 키이므로 본사만 발급할 수 있고, 목록에서 눈에 띄게 표시한다.
-    center_code    VARCHAR(20)   NULL,
-    key_hash       VARCHAR(64)   NOT NULL,  -- SHA-256(정규화된 키). 원문은 발급 응답에만 실린다
-    label          VARCHAR(50)   NOT NULL,  -- 기기 이름 (예: "1층 출석 태블릿") — 폐기할 기기를 사람이 고르는 단서
-    issued_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
-    issued_by      VARCHAR(100),            -- 발급한 본사 직원 (erp_user.user_id)
-    -- 이 키로 등록할 수 있는 기기 수. 센터 기기는 1대가 기본이고, 본사 테스트용은 0(무제한)으로 낸다.
-    -- 한도를 두는 이유는 키가 새어나갔을 때 조용히 여러 대가 붙는 걸 막고, 기기 대장을 맞추기 위해서다.
-    device_limit   INT           NOT NULL DEFAULT 1,
-    revoked_at     DATETIME2,               -- 폐기 시각. 값이 있으면 이 키로 등록된 기기가 전부 무효
-    revoked_by     VARCHAR(100),
-    CONSTRAINT UQ_kiosk_license_hash UNIQUE (key_hash),
-    FOREIGN KEY (center_code) REFERENCES erp_center(center_code)
-);
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_kiosk_license_center' AND object_id = OBJECT_ID('erp_bookstore_kiosk_license'))
-    CREATE INDEX IX_kiosk_license_center
-        ON erp_bookstore_kiosk_license (center_code)
-        WHERE revoked_at IS NULL;  -- 본사 화면의 센터별 기기 목록 조회 경로
-
--- 이미 만들어진 dev DB에도 컬럼을 맞춘다(이 테이블은 DROP 대상이 아니라 CREATE만으로는 안 붙는다)
-IF COL_LENGTH('erp_bookstore_kiosk_license', 'device_limit') IS NULL
-    ALTER TABLE erp_bookstore_kiosk_license ADD device_limit INT NOT NULL DEFAULT 1;
-
--- ── 실체: 키로 등록된 기기 1대 ──────────────────────────────
---
--- 라이선스 키는 "등록할 자격"이고, 실제로 요청을 통과시키는 것은 이 행이다. 등록 시 서버가
--- 기기마다 다른 난수 토큰을 만들어 쿠키로 심으므로, 같은 키로 등록된 기기라도 서로 구분되고
--- 기기 단위로 폐기할 수 있다. 키 원문은 등록할 때 한 번만 쓰이고 기기에는 남지 않는다.
-IF OBJECT_ID('erp_bookstore_kiosk_device', 'U') IS NULL
-CREATE TABLE erp_bookstore_kiosk_device (
-    device_id      INT IDENTITY(1,1) PRIMARY KEY,
-    license_id     INT           NOT NULL,   -- erp_bookstore_kiosk_license.license_id
-    token_hash     VARCHAR(64)   NOT NULL,   -- SHA-256(기기 토큰). 원문은 쿠키에만 있다
-    user_agent     VARCHAR(255),             -- 등록 당시 브라우저 정보 — 목록에서 기기를 알아보는 유일한 단서
-    registered_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
-    last_used_at   DATETIME2,                -- 이 기기가 마지막으로 요청을 보낸 시각
-    revoked_at     DATETIME2,                -- 기기 단위 폐기(분실·교체·등록 해제)
-    revoked_by     VARCHAR(100),
-    CONSTRAINT UQ_kiosk_device_hash UNIQUE (token_hash),
-    FOREIGN KEY (license_id) REFERENCES erp_bookstore_kiosk_license (license_id)
-);
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_kiosk_device_license' AND object_id = OBJECT_ID('erp_bookstore_kiosk_device'))
-    CREATE INDEX IX_kiosk_device_license
-        ON erp_bookstore_kiosk_device (license_id)
-        WHERE revoked_at IS NULL;  -- 한도 검사와 목록 조회 경로
-
--- 전 센터 키(center_code NULL)를 허용하려면 기존 dev DB의 NOT NULL도 풀어야 한다
-IF EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
-           WHERE TABLE_NAME = 'erp_bookstore_kiosk_license'
-             AND COLUMN_NAME = 'center_code' AND IS_NULLABLE = 'NO')
-    ALTER TABLE erp_bookstore_kiosk_license ALTER COLUMN center_code VARCHAR(20) NULL;

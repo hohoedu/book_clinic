@@ -19,7 +19,6 @@ import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
-import com.hohoedu.book_clinic.kiosk.KioskService;
 import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.reservation.ReservationService;
@@ -56,7 +55,6 @@ public class StudentViewController {
     private final StudentRepository studentRepository;
     private final ClinicService clinicService;
     private final MonitorService monitorService;
-    private final KioskService kioskService;
     private final PassService passService;
     private final ReservationService reservationService;
     private final Environment environment;
@@ -127,14 +125,13 @@ public class StudentViewController {
      */
     @PostMapping("/student/exit")
     @ResponseBody
-    public ResponseEntity<?> exitByQr(@RequestBody Map<String, String> body, HttpServletRequest request) {
+    public ResponseEntity<?> exitByQr(@RequestBody Map<String, String> body) {
         String studentId = body.get("studentId");
         String appId = body.get("appId");
         Student student = studentRepository.findByAppId(appId);
         if (student == null) {
             throw new Exception404("일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
         }
-        kioskService.assertSameCenter(request, student.getCenterCode());
         if (studentId != null && !studentId.isBlank() && !student.getStudentId().equals(studentId)) {
             throw new Exception400("본인 학생증 QR이 아니에요. 다시 확인해주세요.");
         }
@@ -195,7 +192,6 @@ public class StudentViewController {
             return "redirect:/student/login";
         }
 
-        kioskService.assertSameCenter(request, student.getCenterCode());
         // 예약이 없을 경우 로그인 단계에서 막음.
         if (!reservationService.hasReservationToday(student.getStudentId())) {
             redirectAttributes.addFlashAttribute("noReservation", true);
@@ -299,7 +295,7 @@ public class StudentViewController {
             return "redirect:/student/login";
         }
 
-        monitorService.markQuizStarted(studentId);
+        monitorService.markQuizStarted(studentId, qlevel);
 
         // "나가기"를 눌렀을 때 어디로 보낼지 결정하는 모드 — 처음 풀기/재도전(불합격)/다시풀기(합격 후
         // 틀린 문제만) 세 가지를 구분한다(2026-08-25)
@@ -364,18 +360,22 @@ public class StudentViewController {
     }
 
     /**
-     * QR 스캔으로 찾은 학생의 입실을 처리하고, 오늘 추천받은 책만 확인시켜주는 화면.
-     * ClinicService.getHomeState가 내부적으로 enterSession까지 처리한다(기존 로그인 흐름과 동일).
+     * QR 스캔으로 찾은 학생의 입실을 처리하고, 오늘 읽을 책을 확인시켜주는 화면.
+     *
+     * recommendBook을 부른다(getHomeState 아님, 2026-08-28) — 출석체크 키오스크에는 "책 추천받기"
+     * 버튼 플로우가 없어서, 입실 = 책이 무조건 나와야 한다. PENDING(읽던 책)이 있으면 그 책 그대로,
+     * 없으면(직전 책이 DONE 등) 다음 책을 그 자리에서 추천·대여 확정한다. enterSession은
+     * recommendBook 양쪽 분기에서 처리된다. getHomeState가 DONE 상태에서 새 추천을 안 하는 건
+     * 개인 폰 앱 홈(다 읽고 홈으로만 나가도 다음 책이 자동 대여되던 문제, 2026-07-29 분리) 사정이라
+     * 키오스크에는 해당하지 않는다.
      */
     @PostMapping("/attendance/enter")
-    public String enterAttendance(@RequestParam("appId") String appId, Model model, HttpServletRequest request) {
+    public String enterAttendance(@RequestParam("appId") String appId, Model model) {
         Student student = studentRepository.findByAppId(appId);
         if (student == null) {
             model.addAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
             return "/student/book-confirm";
         }
-        // 이 기기의 센터 학생만 — 등록된 기기라는 것만으로 남의 센터 학생을 입실시킬 수는 없다
-        kioskService.assertSameCenter(request, student.getCenterCode());
 
         // 예약 회차 시간대가 아니거나(ReservationService.markAttended), 예약이 아예 없거나, 이용권이
         // 소진된 경우 등은 입실 자체가 막혀야 하는 정상적인 업무 상황이지 시스템 오류가 아니다.
@@ -384,9 +384,9 @@ public class StudentViewController {
         // 이 화면은 폼 제출로 들어오는 페이지 이동이라 fetch 에러 처리로 잡히지 않는다) — 여기서
         // 잡아서 학생을 못 찾은 경우와 같은 안내 카드(book-confirm.html의 error-card)로 보여준다.
         try {
-            ClinicRespDTO.BookStatusRespDTO homeState = clinicService.getHomeState(student.getStudentId());
+            ClinicRespDTO.RecommendBookDTO book = clinicService.recommendBook(student.getStudentId());
             model.addAttribute("studentName", student.getStudentName());
-            model.addAttribute("book", homeState.getBook());
+            model.addAttribute("book", book);
         } catch (Exception400 e) {
             model.addAttribute("error", e.getMessage());
         }

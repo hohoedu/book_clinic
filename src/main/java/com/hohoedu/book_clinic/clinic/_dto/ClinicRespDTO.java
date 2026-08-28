@@ -58,11 +58,12 @@ public class ClinicRespDTO {
     @Data
     public static class RecommendLogStatusDTO {
         private Integer recommendId;
-        private String status;  // PENDING / DONE
-        private String grade;   // KING / FRIEND / null
+        private String status;  // PENDING(추천됨, 첫 제출 전) / DONE(첫 제출 완료)
+        private String grade;   // KING / FRIEND / null — 재도전 최종 결과로 갱신됨
         // 이미 완독(DONE)한 책을 재제출했을 때 "그때 받은 점수"를 그대로 다시 보여주기 위해 함께 읽는다
         // (2026-08-20 — 이 값이 없어서 재제출분의 즉석 채점 결과가 grade와 어긋나 표시됐다)
-        private Integer correctCount;
+        private Integer correctCount;       // "처음 점수" (최초 제출값 고정)
+        private Integer finalCorrectCount;  // "최종 점수" (재도전 최신값, 2026-08-28)
         private Integer totalCount;
     }
 
@@ -111,10 +112,12 @@ public class ClinicRespDTO {
     /** 기본 문제풀이(qlevel=01) 채점 결과 */
     @Data
     public static class QuizSubmitRespDTO {
-        private boolean passed;        // 합격선(2/3) 이상 여부
-        private String grade;          // KING(독서왕) / FRIEND(독서친구) / null(재도전)
+        private boolean passed;        // 이번 제출이 합격선(2/3) 이상인지 (재도전이면 이번 재도전 기준)
+        private String grade;          // 이번 제출 기준 KING / FRIEND / null — recommend_log.grade도 이 값으로 갱신됨(재도전)
         private int attemptNo;         // 이번 제출이 몇 번째 시도인지(1=첫 시도, 2=재도전 1회차...)
-        private int correctCount;
+        private int correctCount;      // 이번 제출 정답 수 (화면 표시용)
+        private Integer firstCorrectCount;  // "처음 점수" — 최초 제출값 (2026-08-28, 재도전 화면에서 처음/최종 비교용)
+        private Integer finalCorrectCount;  // "최종 점수" — 재도전 반영 최신값 (2026-08-28)
         private int totalCount;
         private int passLine;          // 합격에 필요한 최소 정답 수
         // 이번 제출에서 틀린 문항 번호 — "틀린 문제 풀기"가 쓴다. 화면이 정답(itempool.ans)을
@@ -151,6 +154,12 @@ public class ClinicRespDTO {
         private RecommendBookDTO book;
         private List<String> wrongQnums;
         private boolean advancedAvailable;
+        // 결과화면/완료화면 버튼 분기용 (2026-08-28) — KING=심화만, FRIEND=재도전/틀린문제/심화,
+        // null(불합격)=재도전만. 재도전으로 합격하면 이 값이 갱신되어 버튼도 바뀐다.
+        private String grade;
+        // 지금 "책 추천받기"를 눌러 다음 책을 받을 수 있는 상태인지 (2026-08-28) — 오늘 추천 한도를
+        // 다 썼으면 false → 프론트에서 버튼 자체를 숨긴다.
+        private boolean canRecommendNext;
     }
 
     /** 뱃지 마스터 1건 — 달성 조건은 category+threshold+param으로 데이터화 (erp_bookstore_badge) */

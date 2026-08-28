@@ -28,7 +28,9 @@ public class ReservationRespDTO {
      * 4주 일괄 신청 미리보기 1건.
      * targetStatus: OPEN(신청 가능) / ALREADY_RESERVED(이미 내 예약 있음) /
      *               FULL(마감) / CLOSED(휴무·마감된 회차) / NOT_OPEN(아직 슬롯이 생성되지 않음) /
-     *               DAY_CONFLICT(이 날짜에 이미 다른 회차를 예약함 — 하루 1회차만 정책)
+     *               DAY_CONFLICT(이 날짜에 이미 하루 상한(4회차)만큼 예약함) /
+     *               MONTH_FULL(그 달 예약 가능 횟수를 이미 채움 — 이용권 total_count 기준) /
+     *               NO_PASS(그 달 이용권이 아직 없음 — 결제 후 예약 가능)
      */
     @Data
     public static class BatchPreviewItemDTO {

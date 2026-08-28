@@ -244,9 +244,19 @@ function reservationStatusPill(status) {
 }
 
 function readingResultBadge(row) {
-  if (row.status === "DONE" && row.grade === "KING") return { key: "king", label: "독서왕" };
-  if (row.status === "DONE") return { key: "pass", label: "통과" };
+  // 2026-08-28 — 첫 제출 뒤 status는 항상 DONE이므로 grade로 가른다(재도전 최종 결과로 갱신됨).
+  if (row.grade === "KING") return { key: "king", label: "독서왕" };
+  if (row.grade === "FRIEND") return { key: "pass", label: "통과" };
   return { key: "retry", label: "재도전" };
+}
+
+/* 기본문제 점수 — 재도전으로 최종 점수가 처음 점수와 달라졌으면 "처음→최종"으로 함께 보여준다(2026-08-28) */
+function basicScoreText(row) {
+  const first = row.basicCorrectCnt ?? 0;
+  const total = row.basicTotalCnt ?? 0;
+  const last = row.basicFinalCorrectCnt;
+  if (last != null && last !== row.basicCorrectCnt) return `${first}→${last}/${total}`;
+  return `${first}/${total}`;
 }
 
 /* ===================== 탭별 렌더링 ===================== */
@@ -339,7 +349,7 @@ function renderAllTab(d) {
                   <div class="recent-book-info">
                     <div class="recent-book-title">${escapeHtml(b.bookName)}</div>
                     <div class="recent-book-meta">
-                      ${escapeHtml(b.recordDate)} &nbsp;|&nbsp; 기본문제 ${b.basicCorrectCnt ?? 0}/${b.basicTotalCnt ?? 0} &nbsp;|&nbsp; 심화문제 ${b.advancedTotalCnt ? `${b.advancedCorrectCnt ?? 0}/${b.advancedTotalCnt}` : "-"} &nbsp;|&nbsp;
+                      ${escapeHtml(b.recordDate)} &nbsp;|&nbsp; 기본문제 ${basicScoreText(b)} &nbsp;|&nbsp; 심화문제 ${b.advancedTotalCnt ? `${b.advancedCorrectCnt ?? 0}/${b.advancedTotalCnt}` : "-"} &nbsp;|&nbsp;
                       <span class="result-text result-${result.key}">${result.label}</span>
                     </div>
                   </div>
@@ -455,7 +465,7 @@ function renderReadingTab(d) {
             <td class="col-no">${history.length - idx}</td>
             <td>${escapeHtml(h.recordDate)}</td>
             <td class="col-title">${escapeHtml(h.bookName)}</td>
-            <td>${h.basicCorrectCnt ?? 0}/${h.basicTotalCnt ?? 0}</td>
+            <td>${basicScoreText(h)}</td>
             <td>${h.advancedTotalCnt ? `${h.advancedCorrectCnt ?? 0}/${h.advancedTotalCnt}` : "-"}</td>
             <td><span class="result-badge result-${result.key}">${result.label}</span></td>
             <td class="col-note">${escapeHtml(h.note ?? "")}</td>

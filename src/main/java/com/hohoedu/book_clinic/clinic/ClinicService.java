@@ -18,6 +18,7 @@ import com.hohoedu.book_clinic.clinic._dto.ClinicReqDTO;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.question.QuestionRepository;
+import com.hohoedu.book_clinic.reservation.ReservationService;
 import com.hohoedu.book_clinic.question._dto.QuestionRespDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -82,8 +83,10 @@ public class ClinicService {
     // 단계(학년)별 최고 레벨(만렙) — 각 학년이 레벨 1~12를 가진다
     private static final int MAX_LEVEL = 12;
 
-    // 하루에 새로 추천받을 수 있는 책 수 상한 — 초과 시 "책 추천받기"를 막는다(2026-07-30)
-    private static final int MAX_DAILY_RECOMMENDATIONS = 2;
+    // 회차(타임)당 새로 추천받을 수 있는 책 수 상한(2026-08-28, 기존 "하루 2권" → "회차당 2권").
+    // 실제 상한 = 이 값 × 오늘 출석(ATTENDED) 회차 수. 하루 최대 4회차까지 예약 가능하므로 최대 8권.
+    // recommend_log가 회차와 연결돼 있지 않아 "회차별로 정확히 2권씩"이 아니라 그날 총량으로만 제한한다.
+    private static final int MAX_RECOMMENDATIONS_PER_SLOT = 2;
 
     /** 학년(단계)별 레벨 규칙 1건 — 단계명/특징 문구/레벨업 1회당 필요 완독 권수 */
     private record LevelRule(String stageName, String feature, int booksPerLevel) {}
@@ -131,6 +134,7 @@ public class ClinicService {
     private final BookRepository bookRepository;
     private final QuestionRepository questionRepository;
     private final MonitorService monitorService;
+    private final ReservationService reservationService;
 
     /**
      * 홈 화면(student-main) 진입 시 상태 조회 — 2026-07-29. 예전엔 홈 진입=자동추천이라 책을 다
@@ -210,8 +214,10 @@ public class ClinicService {
         }
         boolean firstAttempt = clinicRepository.countPriorAttempts(studentId, contentId, "01") == 0;
         if (firstAttempt) return "FIRST";
+        // 첫 제출 뒤엔 status가 항상 DONE이므로 grade로 가른다(2026-08-28) — 합격(KING/FRIEND)이면
+        // 완료 화면, 불합격(grade null)이면 재도전 화면. 재도전으로 합격하면 grade가 채워져 완료 화면으로 바뀐다.
         ClinicRespDTO.RecommendLogStatusDTO logStatus = clinicRepository.findRecommendLogStatus(studentId, contentId);
-        return (logStatus != null && "DONE".equals(logStatus.getStatus())) ? "COMPLETION" : "RETRY";
+        return (logStatus != null && logStatus.getGrade() != null) ? "COMPLETION" : "RETRY";
     }
 
     /**
@@ -232,21 +238,25 @@ public class ClinicService {
 
         ClinicRespDTO.QuizSubmitRespDTO resp = new ClinicRespDTO.QuizSubmitRespDTO();
         resp.setAttemptNo(clinicRepository.countPriorAttemptRounds(logStatus.getRecommendId(), resolvedQlevel));
-        resp.setCorrectCount(logStatus.getCorrectCount());
+        // 처음/최종 점수를 함께 내려준다(2026-08-28). 화면 표시용 correctCount는 최종 점수 우선.
+        Integer first = logStatus.getCorrectCount();
+        Integer last = logStatus.getFinalCorrectCount() != null ? logStatus.getFinalCorrectCount() : first;
+        resp.setCorrectCount(last != null ? last : 0);
+        resp.setFirstCorrectCount(first);
+        resp.setFinalCorrectCount(last);
         resp.setTotalCount(totalCount);
         resp.setPassLine((int) Math.ceil(totalCount * QUIZ_PASS_RATIO));
-        boolean done = "DONE".equals(logStatus.getStatus());
-        resp.setPassed(done);
+        // 첫 제출 뒤 status는 항상 DONE이므로 "합격 여부"는 grade로 판정한다(불합격이면 grade null → 재도전 화면).
+        boolean passed = logStatus.getGrade() != null;
+        resp.setPassed(passed);
         resp.setGrade(logStatus.getGrade());
         resp.setWrongQnums(wrongQnums);
-        resp.setAlreadyCompleted(done);
+        resp.setAlreadyCompleted(passed);  // grade 있음 = 합격한 적 있는 책
         resp.setNewBadges(List.of());
-        if (done) {
-            // 여기도 안 채우면 결과 화면 HTML의 placeholder("Lv. 2", "35 / 96")가 그대로 노출된다
-            String schoolyear = resolveSchoolyear(studentId);
-            applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
-            applyStepStatus(resp, studentId, schoolyear);
-        }
+        // 재도전 화면에서도 레벨 카드 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다.
+        String schoolyear = resolveSchoolyear(studentId);
+        applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
+        applyStepStatus(resp, studentId, schoolyear);
         return resp;
     }
 
@@ -270,6 +280,15 @@ public class ClinicService {
         resp.setBook(book);
         resp.setWrongQnums(wrongQnums);
         resp.setAdvancedAvailable(advancedAvailable);
+        // 버튼 분기용(2026-08-28): KING=심화만 / FRIEND=재도전·틀린문제·심화 / null(불합격)=재도전만.
+        resp.setGrade(logStatus != null ? logStatus.getGrade() : null);
+
+        // "책 추천받기" 노출 여부 — recommendBook과 같은 규칙(회차당 2권 × 오늘 출석 회차 수)으로,
+        // 오늘 한도를 다 썼으면 버튼을 아예 숨긴다(2026-08-28).
+        int attendedSlots = Math.max(reservationService.countAttendedSlotsToday(studentId), 1);
+        int maxAllowed = MAX_RECOMMENDATIONS_PER_SLOT * attendedSlots;
+        int todayCount = clinicRepository.countTodayRecommends(studentId, KstClock.today());
+        resp.setCanRecommendNext(todayCount < maxAllowed);
         return resp;
     }
 
@@ -297,9 +316,13 @@ public class ClinicService {
             return existing;
         }
 
+        // 추천 상한 = 회차당 2권 × 오늘 출석(ATTENDED) 회차 수. 정상 흐름에선 이 지점에 오기 전
+        // enterSession→markAttended가 이미 실행돼 출석 회차가 최소 1개는 있다 — 방어적으로 하한 1을 둔다.
+        int attendedSlots = Math.max(reservationService.countAttendedSlotsToday(studentId), 1);
+        int maxAllowed = MAX_RECOMMENDATIONS_PER_SLOT * attendedSlots;
         int todayCount = clinicRepository.countTodayRecommends(studentId, KstClock.today());
-        if (todayCount >= MAX_DAILY_RECOMMENDATIONS) {
-            throw new Exception400("하루에 추천받을 수 있는 책은 " + MAX_DAILY_RECOMMENDATIONS + "권을 초과할 수 없습니다.");
+        if (todayCount >= maxAllowed) {
+            throw new Exception400("오늘 추천받을 수 있는 책 " + maxAllowed + "권을 모두 받으셨습니다.");
         }
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
 
@@ -321,13 +344,23 @@ public class ClinicService {
         String year = String.valueOf(Year.now().getValue());
         log.info("현재 연도: {}", year);
 
-        ClinicRespDTO.PickedItemDTO picked = pickWithFallback(studentId, centerCode, year, schoolyear);
-        if (picked == null) throw new Exception404("추천할 수 있는 도서가 더 이상 없습니다.");
-        log.info("학생 {}에게 추천할 도서 content_id={}, item_id={}", studentId, picked.getContentId(), picked.getItemId());
+        // 후보를 고르고(pickWithFallback) → 원자적으로 재고를 확보한다(reserveItemById). 고른 시점과
+        // 확보 시점 사이에 다른 학생이 그 item의 마지막 한 권을 채가면 확보가 실패하는데(null), 그때는
+        // 에러를 내지 않고 그 item을 제외 목록에 넣어 다음 후보로 넘어간다(2026-08-28) — 후보가 완전히
+        // 소진되면 pickWithFallback이 null을 돌려주고, 그때 비로소 "추천할 도서 없음"으로 끝낸다.
+        java.util.Set<Integer> triedItemIds = new java.util.HashSet<>();
+        ClinicRespDTO.PickedItemDTO picked;
+        Integer itemId;
+        while (true) {
+            picked = pickWithFallback(studentId, centerCode, year, schoolyear, triedItemIds);
+            if (picked == null) throw new Exception404("추천할 수 있는 도서가 더 이상 없습니다.");
+            log.info("학생 {}에게 추천할 도서 content_id={}, item_id={}", studentId, picked.getContentId(), picked.getItemId());
 
-        // 후보를 고른 시점과 이 시점 사이 다른 학생이 같은 item을 먼저 채갔을 수 있어 원자적으로 재확인한다
-        Integer itemId = bookRepository.reserveItemById(picked.getItemId());
-        if (itemId == null) throw new Exception400("대여 가능한 재고가 없습니다.");
+            itemId = bookRepository.reserveItemById(picked.getItemId());
+            if (itemId != null) break;
+            log.info("학생 {} — item_id={} 재고 확보 실패(그 사이 소진), 다음 후보로", studentId, picked.getItemId());
+            triedItemIds.add(picked.getItemId());
+        }
         log.info("학생 {}에게 대여할 도서 item_id: {}", studentId, itemId);
 
         bookRepository.insertItemLoan(itemId, studentId);
@@ -344,10 +377,14 @@ public class ClinicService {
         return card;
     }
 
-    /** 규칙 3(dedup) → 규칙 4(dedup 해제) → 규칙 5(윗학년 순차) 순서로 후보를 찾는다 — item(실물 판본) 단위 선택 */
-    private ClinicRespDTO.PickedItemDTO pickWithFallback(String studentId, String centerCode, String year, String schoolyear) {
-        log.info("학생 {}에게 추천할 도서를 찾습니다: centerCode={}, year={}, schoolyear={}",
-                studentId, centerCode, year, schoolyear);
+    /**
+     * 규칙 3(dedup) → 규칙 4(dedup 해제) → 규칙 5(윗학년 순차) 순서로 후보를 찾는다 — item(실물 판본) 단위 선택.
+     * excludeItemIds: 고른 뒤 원자적 재고 확보에 실패한(그 사이 마지막 한 권이 나간) item들 — 이번 추천에서 건너뛴다.
+     */
+    private ClinicRespDTO.PickedItemDTO pickWithFallback(String studentId, String centerCode, String year, String schoolyear,
+                                                         java.util.Collection<Integer> excludeItemIds) {
+        log.info("학생 {}에게 추천할 도서를 찾습니다: centerCode={}, year={}, schoolyear={}, 제외 item={}",
+                studentId, centerCode, year, schoolyear, excludeItemIds);
         ClinicRespDTO.LastRecommendDTO last = clinicRepository.findLastRecommend(studentId);
         log.info("학생 {}의 직전 추천 도서: {}", studentId, last);
         String lastType = last == null ? null : last.getContentType();
@@ -356,13 +393,13 @@ public class ClinicService {
         log.info("학생 {}의 직전 추천 도서 genre: {}", studentId, lastGenre);
 
         ClinicRespDTO.PickedItemDTO picked = clinicRepository.pickNextItem(
-                studentId, centerCode, year, schoolyear, lastType, lastGenre, true);
+                studentId, centerCode, year, schoolyear, lastType, lastGenre, true, excludeItemIds);
         if (picked != null) return picked;
         log.info("학생 {}에게 추천할 도서 후보가 없습니다 — dedup 조건 해제 후 다시 시도합니다", studentId);
 
         // 규칙 4: 처음으로 돌아가 dedup 조건 없이 다시 추천
         picked = clinicRepository.pickNextItem(
-                studentId, centerCode, year, schoolyear, null, null, false);
+                studentId, centerCode, year, schoolyear, null, null, false, excludeItemIds);
         if (picked != null) return picked;
         log.info("학생 {}에게 추천할 도서 후보가 여전히 없습니다 — 한 단계 위 학년부터 순차적으로 시도합니다", studentId);
 
@@ -371,7 +408,7 @@ public class ClinicService {
         for (int sy = current + 1; sy <= MAX_SCHOOLYEAR; sy++) {
             String candidate = String.format("%02d", sy);
             picked = clinicRepository.pickNextItem(
-                    studentId, centerCode, year, candidate, null, null, false);
+                    studentId, centerCode, year, candidate, null, null, false, excludeItemIds);
             if (picked != null) return picked;
             log.info("학생 {}에게 추천할 도서 후보가 없습니다 — 학년 {}까지 시도했으나 모두 실패", studentId, candidate);
         }
@@ -392,9 +429,10 @@ public class ClinicService {
      */
     @Transactional
     public ClinicRespDTO.QuizSubmitRespDTO submitQuiz(String studentId, Integer contentId, String qlevel,
-                                                        List<ClinicReqDTO.AnswerDTO> answers) {
+                                                        String mode, List<ClinicReqDTO.AnswerDTO> answers) {
         String resolvedQlevel = "02".equals(qlevel) ? "02" : "01";
         boolean advanced = "02".equals(resolvedQlevel);
+        boolean wrongOnly = "WRONG_ONLY".equalsIgnoreCase(mode);  // "틀린 문제 다시 풀기" — 점수/등급/뱃지 불변
 
         List<QuestionRespDTO.QuestionDTO> questions = questionRepository.searchQuestions(contentId, resolvedQlevel, null, "S");
         if (questions.isEmpty()) throw new Exception404("문제를 찾을 수 없습니다: contentId=" + contentId);
@@ -478,7 +516,10 @@ public class ClinicService {
             resp.setPassed(false);
             resp.setGrade(null);
             resp.setNewBadges(awardAdvancedBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
-            recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
+            // 심화 점수는 최초 1회만 독서일지에 저장한다 — 재도전/틀린 문제 다시 풀기는 갱신하지 않는다(2026-08-28).
+            if (firstAttempt) {
+                recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
+            }
             // 심화는 레벨이 바뀌진 않지만, 레벨 카드에 현재 레벨은 그대로 보여줘야 한다
             // (안 채우면 결과 화면 HTML의 placeholder "Lv. 2"가 그대로 노출된다)
             String schoolyear = resolveSchoolyear(studentId);
@@ -488,87 +529,77 @@ public class ClinicService {
             return resp;
         }
 
-        if ("DONE".equals(logStatus.getStatus())) {
-            // 이미 완독한 책의 재제출 — 뱃지와 마찬가지로 등급(FRIEND/KING)과 기록(recommend_log,
-            // 독서일지)은 "첫 시도 결과"로 고정한다. "틀린 문제만 다시 풀기"로 다 맞혀도 FRIEND가
-            // KING으로 바뀌지 않고, 독서일지에 남는 점수도 원래 점수 그대로다(2026-08-25) — 오직
-            // 이번 제출 직후 화면에 보여줄 correctCount/totalCount(위에서 이미 병합 계산됨)만
-            // 방금 다시 푼 결과를 반영해서 "지금 다 맞혔다"는 걸 보여준다.
-            resp.setPassed(true);
-            resp.setGrade(logStatus.getGrade());
-            resp.setAlreadyCompleted(true);
-            resp.setLeveledUp(false);
-            resp.setNewBadges(List.of());
-            // 독서일지는 기록이므로 화면 표시와 달리 첫 시도 점수를 그대로 남긴다(옛 기록이 비어있으면
-            // 이번 값 유지 — 과거 데이터 호환)
-            int recordedCorrect = logStatus.getCorrectCount() != null ? logStatus.getCorrectCount() : correctCount;
-            int recordedTotal = logStatus.getTotalCount() != null ? logStatus.getTotalCount() : totalCount;
-            recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, recordedCorrect, recordedTotal);
-            // 이미 완독한 책을 다시 풀어도 결과 화면 레벨 카드는 현재 레벨을 그대로 보여줘야 한다
-            // (안 채우면 화면 HTML에 박힌 placeholder 값이 그대로 노출된다)
-            String schoolyear = resolveSchoolyear(studentId);
-            applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
-            applyStepStatus(resp, studentId, schoolyear);
-            syncMonitorSafely(studentId);
-            return resp;
-        }
-
+        // ── 기본(qlevel=01) — 2026-08-28 결과 프로세스 재확정 ──
+        // 첫 제출이면 합격/불합격 무관하게 status=DONE. 불합격이어도 다음 입실 시 다음 책을 받고,
+        // 재도전은 결과화면/완료화면 버튼에서만 이어서 한다. 점수는 처음/최종으로 분리 보관한다.
+        //   correct_count(처음 점수)  — 최초 제출값에서 고정
+        //   final_correct_count(최종) — 재도전(mode=RETRY)에서 "더 잘한 경우에만" 갱신(max).
+        //   grade + 뱃지               — 재도전으로 "올라가기만" 한다(null→FRIEND→KING). 독서친구→재도전 불합격
+        //                                처럼 내려가는 방향은 반영 안 함. 등급이 오르면 기본 뱃지(1~3)도 상위로 교체 —
+        //                                그래야 grade·뱃지·"독서왕 횟수"가 항상 일치한다(2026-08-28).
+        //   "틀린 문제 다시 풀기"(WRONG_ONLY) — 점수/등급/뱃지 어떤 것도 바꾸지 않는다.
         boolean passed = correctCount >= passLine;
         String freshGrade = !passed ? null : (correctCount == totalCount ? "KING" : "FRIEND");
-        String status = passed ? "DONE" : "PENDING";
+        boolean retry = !firstAttempt && !wrongOnly;   // "재도전" — 최종 점수 + (오를 때만) 등급/뱃지 갱신
 
-        // 뱃지 등급/기록(recommend_log)·독서일지는 "첫 시도 결과"로 고정한다(2026-08-25) — 뱃지가
-        // 첫 시도 결과로 등급이 확정되는 것과 같은 원칙이라, 재도전으로 나중에 통과해도 기록에 남는
-        // 점수/등급은 처음 제출했을 때 값 그대로 유지한다. 단, 화면에 "방금 이 제출로 몇 개 맞혔는지"는
-        // 항상 이번 제출의 실제 결과(correctCount/totalCount/freshGrade, 위에서 이미 계산됨)를 보여줘야
-        // 한다 — 여기서 기록용 프로즌 값으로 덮어쓰면 재도전으로 다 맞혀도 화면엔 예전 오답 점수가
-        // 그대로 남고, 등급이 null로 얼어붙어 "다시풀기" 화면이 떠버린다(2026-08-25 발견, DONE 재제출
-        // 분기는 애초에 안 덮어써서 이 버그가 없었다).
-        int recordCorrect = correctCount;
-        int recordTotal = totalCount;
-        String recordGrade = freshGrade;
-        if (!firstAttempt) {
-            recordCorrect = logStatus.getCorrectCount() != null ? logStatus.getCorrectCount() : correctCount;
-            recordTotal = logStatus.getTotalCount() != null ? logStatus.getTotalCount() : totalCount;
-            recordGrade = logStatus.getGrade();
+        Integer frozenFirst = logStatus.getCorrectCount();
+        Integer frozenFinal = logStatus.getFinalCorrectCount() != null ? logStatus.getFinalCorrectCount() : frozenFirst;
+        String oldGrade = logStatus.getGrade();
+        // 재도전은 등급을 올리기만 한다. 첫 제출은 이번 결과 그대로.
+        String effectiveGrade = firstAttempt ? freshGrade
+                : (retry ? higherGrade(oldGrade, freshGrade) : oldGrade);
+        boolean gradeUpgraded = retry && gradeRank(effectiveGrade) > gradeRank(oldGrade);
+
+        if (firstAttempt) {
+            // 처음 점수 = 최종 점수 = 이번 값, grade = 이번 결과, status = DONE(불합격이어도)
+            clinicRepository.updateRecommendResult(logStatus.getRecommendId(), correctCount, totalCount, effectiveGrade, "DONE");
+            resp.setPassed(passed);
+            resp.setGrade(effectiveGrade);
+            resp.setFirstCorrectCount(correctCount);
+            resp.setFinalCorrectCount(correctCount);
+        } else if (retry) {
+            // 재도전 — 최종 점수는 기존보다 높을 때만 올리고(못 풀었으면 그대로), 등급도 오를 때만 갱신.
+            int prevFinal = frozenFinal != null ? frozenFinal : (frozenFirst != null ? frozenFirst : correctCount);
+            int bestFinal = Math.max(correctCount, prevFinal);
+            clinicRepository.updateRetryResult(logStatus.getRecommendId(), bestFinal, effectiveGrade);
+            resp.setPassed(effectiveGrade != null);
+            resp.setGrade(effectiveGrade);
+            resp.setFirstCorrectCount(frozenFirst);
+            resp.setFinalCorrectCount(bestFinal);
+        } else {
+            // 틀린 문제 다시 풀기 — 점수/등급 어떤 것도 바꾸지 않는다. 화면은 원래(고정) 등급으로 보여주되,
+            // "이번에 몇 개 맞혔는지"(correctCount, 위에서 병합 계산)와 남은 오답(wrongQnums)만 갱신해
+            // "틀린 문제" 진행 상황을 보여준다.
+            resp.setPassed(oldGrade != null);
+            resp.setGrade(oldGrade);
+            resp.setFirstCorrectCount(frozenFirst);
+            resp.setFinalCorrectCount(frozenFinal);
         }
-        clinicRepository.updateRecommendResult(logStatus.getRecommendId(), recordCorrect, recordTotal, recordGrade, status);
+        // "이미 완독한 책" 안내는 이번 제출 전에 이미 합격(grade 있음) 상태였을 때만.
+        resp.setAlreadyCompleted(!firstAttempt && oldGrade != null);
 
-        resp.setPassed(passed);
-        resp.setGrade(freshGrade);
-
-        // 레벨 카드/독서탐험 칸은 이번 제출이 불합격(PENDING)이라 완독 못 했어도 "현재 상태"는 보여줘야
-        // 한다 — if(passed) 안에서만 채우면 재도전 결과 화면에서 placeholder("Lv. 2", "35 / 96")가
-        // 그대로 노출된다(2026-08-25, 위의 다른 두 경로 수정과 같은 이유로 재발해서 여기서도 끌어올림).
+        // 레벨/독서탐험 — 첫 제출이면 status=DONE이라 재도전/통과/만점 구분 없이 완독 1권으로 카운트된다.
+        // 재도전 결과 화면에서도 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다(2026-08-25).
         String schoolyear = resolveSchoolyear(studentId);
         int doneNow = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
         applyLevelStatus(resp, schoolyear, doneNow);
         applyStepStatus(resp, studentId, schoolyear);
 
-        if (passed) {
-            // 완독해도 여기서 반납하지 않는다(2026-07-31) — 현장에서는 다 읽은 책을 반납대에 놓기만
-            // 하고 반납 처리는 미룬다. 학생이 "다시 풀고 싶다"고 오는 경우가 있어서, 그때 반납대에서
-            // 그 책을 도로 집어올 수 있어야 하기 때문이다. 여기서 재고를 풀어버리면 그 사이 다른
-            // 학생이 추천받아 가져가서, 실물은 반납대에 있는데 시스템상으론 남의 책이 된다.
-            // (2026-07-29엔 여기서 즉시 반납했었다. "다음 책을 안 받고 나가면 재고가 묶인다"는 이유였는데,
-            //  그 뒤 퇴실 처리(MonitorService.exitSession)와 다음 책 추천(recommendBook) 양쪽에 반납이
-            //  들어가면서 이 호출은 중복이 됐고, 위의 부작용만 남았다.)
-
-            // 레벨은 EXP가 아니라 "그 학년 도서 완독 권수 ÷ 학년별 필요권수"로 정해진다(단계 = 학생 학년).
-            // updateRecommendResult로 이 책이 이미 DONE 처리됐으므로 doneNow에 이번 완독이 포함된다.
+        if (firstAttempt) {
+            // 완독(또는 첫 제출)해도 여기서 책을 반납하지 않는다(2026-07-31, 재도전 대비) — 반납은
+            // 퇴실(MonitorService.exitSession) / 다음 책 추천(recommendBook) 때만 일어난다.
             LevelRule rule = LEVEL_RULES.get(schoolyear);
             if (rule != null) {
                 resp.setLeveledUp(resp.getLevelNo() > levelFor(doneNow - 1, rule.booksPerLevel()));
             }
+        } else {
+            resp.setLeveledUp(false);
         }
 
-        // 온라인 카드 — 이 책에 대한 첫 제출이면 합격/불합격과 무관하게 NORMAL 카드를 1장 지급한다
-        // (책당 1장, 중복 지급 방지). 재도전(불합격) 결과 화면에서도 카드 획득 로직이 보여야 한다는
-        // 요청으로 if(passed) 밖으로 옮김(2026-08-26) — existsNormalCard 체크가 그대로 있어 이후
-        // 같은 책을 다시 제출해도(합격이든 재도전이든) 카드가 중복 지급되진 않는다.
+        // 온라인 카드 — 이 책 첫 제출에서만 지급(책당 1장, 합격/불합격 무관). 재도전/틀린문제 재제출은 지급 없음.
         // NORMAL 카드가 CARD_SET_SIZE(10)의 배수를 채운 순간 온라인 레어카드도 함께 지급하고,
-        // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다(실물 지급은 오프라인 수동).
-        if (!clinicRepository.existsNormalCard(studentId, contentId)) {
+        // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다.
+        if (firstAttempt && !clinicRepository.existsNormalCard(studentId, contentId)) {
             clinicRepository.insertNormalCard(studentId, contentId);
             ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
             int totalCards = clinicRepository.countNormalCards(studentId); // 이번 지급 포함
@@ -585,10 +616,21 @@ public class ClinicService {
             }
         }
 
-        // 기본 문제 뱃지 — 첫 시도 결과로 등급 확정(불합격→참잘했어요 / 합격→독서친구 / 만점→독서왕).
-        // 재도전(첫 시도 아님)이면 등급이 고정되어 새 뱃지가 나가지 않는다.
-        resp.setNewBadges(awardBasicBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
-        recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, recordCorrect, recordTotal);
+        // 기본 문제 뱃지 — 첫 제출은 이번 결과로 지급. 재도전으로 등급이 올라간 경우엔 기존 기본 뱃지(1~3)를
+        // 지우고 상위 뱃지로 교체한다(내려가는 방향은 gradeUpgraded=false라 손대지 않는다).
+        if (firstAttempt) {
+            resp.setNewBadges(awardBasicBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
+        } else if (gradeUpgraded) {
+            clinicRepository.deleteBasicBadge(studentId, contentId);
+            resp.setNewBadges(awardBookBadge(studentId, contentId, "KING".equals(effectiveGrade) ? BADGE_KING : BADGE_FRIEND));
+        } else {
+            resp.setNewBadges(List.of());
+        }
+
+        // 독서일지 — "처음 점수"만 스냅샷으로 남긴다(그날 기록). 재도전/틀린문제 재제출은 basic_correct_cnt를
+        // 바꾸지 않는다 — "최종 점수"는 recommend_log.final_correct_count에서 조회해 함께 보여준다.
+        int diaryCorrect = firstAttempt ? correctCount : (frozenFirst != null ? frozenFirst : correctCount);
+        recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, diaryCorrect, totalCount);
         syncMonitorSafely(studentId);
 
         return resp;
@@ -764,6 +806,17 @@ public class ClinicService {
         log.info("학생 {} 뱃지 획득: 책 {} [{}] {}", studentId, contentId, badgeId,
                  badge == null ? "" : badge.getBadgeName());
         return badge == null ? List.of() : List.of(badge);
+    }
+
+    /** 두 등급 중 더 높은 쪽 (null &lt; FRIEND &lt; KING) — 재도전은 등급을 올리기만 한다(2026-08-28) */
+    private String higherGrade(String a, String b) {
+        return gradeRank(a) >= gradeRank(b) ? a : b;
+    }
+
+    private int gradeRank(String grade) {
+        if ("KING".equals(grade)) return 2;
+        if ("FRIEND".equals(grade)) return 1;
+        return 0;   // null(불합격)
     }
 
     /** 완독 권수 → 레벨 (필요권수마다 1레벨, 1레벨부터 시작, 만렙 MAX_LEVEL로 상한) */

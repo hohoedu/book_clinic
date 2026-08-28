@@ -68,8 +68,12 @@ public class MonitorSyncService {
         doc.put("readingTimeMinutes", card.getReadingTimeMinutes());
         doc.put("recommendedAt", toIso(card.getRecommendedAt()));
         doc.put("basicCorrectCount", card.getBasicCorrectCount());
+        doc.put("basicFinalCorrectCount", card.getBasicFinalCorrectCount());
         doc.put("basicTotalCount", card.getBasicTotalCount());
         doc.put("basicStatus", card.getBasicStatus());
+        doc.put("basicGrade", card.getBasicGrade());
+        doc.put("quizQlevel", card.getQuizQlevel());
+        doc.put("basicAttemptRounds", card.getBasicAttemptRounds());
         doc.put("advancedCorrectCount", card.getAdvancedCorrectCount());
         doc.put("advancedTotalCount", card.getAdvancedTotalCount());
         doc.put("badgeCount", card.getBadgeCount());
@@ -124,8 +128,10 @@ public class MonitorSyncService {
             m.put("readingTimeText", book.getReadingTimeText());
             m.put("recommendedAt", toIso(book.getRecommendedAt()));
             m.put("basicCorrectCount", book.getBasicCorrectCount());
+            m.put("basicFinalCorrectCount", book.getBasicFinalCorrectCount());
             m.put("basicTotalCount", book.getBasicTotalCount());
             m.put("basicStatus", book.getBasicStatus());
+            m.put("basicGrade", book.getBasicGrade());
             m.put("advancedCorrectCount", book.getAdvancedCorrectCount());
             m.put("advancedTotalCount", book.getAdvancedTotalCount());
             m.put("readingTimeMinutes", book.getReadingTimeMinutes());

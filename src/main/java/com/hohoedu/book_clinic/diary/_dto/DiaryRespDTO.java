@@ -58,7 +58,8 @@ public class DiaryRespDTO {
         private String bookTitle;
         private String imageUrl;
         private Integer readMinutes;
-        private Integer basicCorrectCount;
+        private Integer basicCorrectCount;       // "처음 점수" — 최초 제출값
+        private Integer basicFinalCorrectCount;  // "최종 점수" — 재도전 반영 최신값 (2026-08-28)
         private Integer basicTotalCount;
         private Integer advancedCorrectCount;
         private Integer advancedTotalCount;

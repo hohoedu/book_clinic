@@ -9,7 +9,6 @@ import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import com.hohoedu.book_clinic._core.interceptor.CommonInterceptor;
-import com.hohoedu.book_clinic._core.interceptor.KioskTokenInterceptor;
 import com.hohoedu.book_clinic._core.interceptor.StudentSessionInterceptor;
 
 import lombok.RequiredArgsConstructor;
@@ -20,7 +19,6 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final CommonInterceptor commonInterceptor;
     private final StudentSessionInterceptor studentSessionInterceptor;
-    private final KioskTokenInterceptor kioskTokenInterceptor;
 
     /** 업로드 파일 저장 디렉터리 (기본: 실행 위치 기준 uploads) */
     @Value("${file.upload-dir:uploads}")
@@ -38,8 +36,6 @@ public class WebConfig implements WebMvcConfigurer {
                 );
         registry.addInterceptor(studentSessionInterceptor)
                 .addPathPatterns("/app/reservation/**");
-        registry.addInterceptor(kioskTokenInterceptor)
-                .addPathPatterns("/student/**", "/attendance/**", "/clinic/**");
     }
 
     /** 업로드된 도서 이미지를 /uploads/** URL로 정적 제공 */

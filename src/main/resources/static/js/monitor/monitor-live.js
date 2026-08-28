@@ -54,22 +54,36 @@ const FILTERS = [
   { key: "NOT_ENTERED", label: "미입실", countKey: "notEntered", cls: "chip-not-entered" },
   { key: "READING", label: "독서 중", countKey: "reading", cls: "chip-reading" },
   { key: "QUIZ_IN_PROGRESS", label: "문제 푸는 중", countKey: "quizInProgress", cls: "chip-quiz" },
-  { key: "RESULT_VIEWING", label: "결과 확인중", countKey: "resultViewing", cls: "chip-result" },
   { key: "TIME_OVER", label: "시간 초과", countKey: "timeOver", cls: "chip-timeover" },
   { key: "RETRY_NEEDED", label: "재도전 필요", countKey: "retryNeeded", cls: "chip-retry" },
+  { key: "COMPLETED", label: "완료", countKey: "completed", cls: "chip-completed" },
   { key: "LOG_MISSING", label: "독서일지 미등록", countKey: "readingLogMissing", cls: "chip-logmissing" },
 ];
 
+// 2026-08-28 확정 6종. 결과류(문제풀이 후)는 grade/심화 결과에 따라 라벨이 갈린다.
+const RESULT_STATUSES = ["KING", "FRIEND", "RETRY_NEEDED", "ADV_DONE", "ADV_KING"];
 const STATUS_BADGE = {
   NOT_ENTERED: { text: "미입실", icon: "fa-clock", cls: "status-not-entered" },
   READING: { text: "독서 중", icon: "fa-book-open", cls: "status-reading" },
   QUIZ_IN_PROGRESS: { text: "문제 푸는 중", icon: "fa-pen", cls: "status-quiz" },
-  RESULT_VIEWING: { text: "결과 확인중", icon: "fa-clipboard-check", cls: "status-result" },
+  TIME_OVER: { text: "시간초과", icon: "fa-hourglass-end", cls: "status-timeover" },
+  KING: { text: "독서왕", icon: "fa-crown", cls: "status-completed" },
+  FRIEND: { text: "독서친구", icon: "fa-circle-check", cls: "status-completed" },
   RETRY_NEEDED: { text: "재도전 필요", icon: "fa-triangle-exclamation", cls: "status-retry" },
-  COMPLETED: { text: "완료", icon: "fa-circle-check", cls: "status-completed" },
-  TIME_OVER: { text: "권장시간 초과", icon: "fa-hourglass-end", cls: "status-timeover" },
+  ADV_DONE: { text: "심화완료", icon: "fa-book-open-reader", cls: "status-completed" },
+  ADV_KING: { text: "심화왕", icon: "fa-crown", cls: "status-completed" },
   EXITED: { text: "퇴실", icon: "fa-right-from-bracket", cls: "status-exited" },
 };
+
+/* "문제 푸는 중" 배지에 회차/심화를 덧붙인다 — 기본 회차는 (지금까지 제출한 회차 + 1), 심화면 "심화" (2026-08-28) */
+function statusBadgeFor(card) {
+  const badge = STATUS_BADGE[card.cardStatus] ?? STATUS_BADGE.READING;
+  if (card.cardStatus !== "QUIZ_IN_PROGRESS") return badge;
+  const suffix = card.quizQlevel === "02"
+    ? "심화"
+    : `${(card.basicAttemptRounds ?? 0) + 1}회차`;
+  return { ...badge, text: `${badge.text} (${suffix})` };
+}
 
 let cards = [];
 let activeFilter = "ALL";
@@ -328,14 +342,14 @@ function render() {
 
 function computeCounts() {
   const slotCards = cards.filter(matchesSlot);
-  const counts = { total: slotCards.length, notEntered: 0, reading: 0, quizInProgress: 0, resultViewing: 0, timeOver: 0, retryNeeded: 0, readingLogMissing: 0 };
+  const counts = { total: slotCards.length, notEntered: 0, reading: 0, quizInProgress: 0, timeOver: 0, retryNeeded: 0, completed: 0, readingLogMissing: 0 };
   slotCards.forEach((c) => {
     if (c.cardStatus === "NOT_ENTERED") counts.notEntered++;
     if (c.cardStatus === "READING") counts.reading++;
     if (c.cardStatus === "QUIZ_IN_PROGRESS") counts.quizInProgress++;
-    if (c.cardStatus === "RESULT_VIEWING") counts.resultViewing++;
     if (c.cardStatus === "TIME_OVER") counts.timeOver++;
     if (c.cardStatus === "RETRY_NEEDED") counts.retryNeeded++;
+    if (["KING", "FRIEND", "ADV_DONE", "ADV_KING"].includes(c.cardStatus)) counts.completed++;
     if (!hasAttitude(c) && c.cardStatus !== "NOT_ENTERED") counts.readingLogMissing++;
   });
   return counts;
@@ -362,6 +376,7 @@ function filteredCards() {
   let result;
   if (activeFilter === "ALL") result = slotCards;
   else if (activeFilter === "LOG_MISSING") result = slotCards.filter((c) => !hasAttitude(c));
+  else if (activeFilter === "COMPLETED") result = slotCards.filter((c) => ["KING", "FRIEND", "ADV_DONE", "ADV_KING"].includes(c.cardStatus));
   else result = slotCards.filter((c) => c.cardStatus === activeFilter);
   return sortedCards(result);
 }
@@ -430,8 +445,10 @@ function bookPages(card) {
     readingTimeMinutes: card.readingTimeMinutes,
     elapsedMinutes: card.elapsedMinutes,
     basicCorrectCount: card.basicCorrectCount,
+    basicFinalCorrectCount: card.basicFinalCorrectCount,
     basicTotalCount: card.basicTotalCount,
     basicStatus: card.basicStatus,
+    basicGrade: card.basicGrade,
     advancedCorrectCount: card.advancedCorrectCount,
     advancedTotalCount: card.advancedTotalCount,
     badgeCount: card.badgeCount,
@@ -452,7 +469,7 @@ function currentPageIndex(card, pages) {
 
 function buildCardEl(card) {
   const el = document.createElement("div");
-  const badge = STATUS_BADGE[card.cardStatus] ?? STATUS_BADGE.READING;
+  const badge = statusBadgeFor(card);
   el.className = "monitor-card " + badge.cls;
 
   const notEntered = card.cardStatus === "NOT_ENTERED";
@@ -585,7 +602,14 @@ function resetResultMessage(bookTitle, result) {
 /* stat-row — 독서시간/기본문제/심화문제/획득뱃지 전부 선택된 책 페이지(content_id) 기준이다.
    뱃지도 예전엔 학생 전체 합산이라 A책 카드에 B책 뱃지가 같이 보이는 문제가 있었다(2026-07-29 수정) */
 function renderStatRow(el, card, page) {
-  const basicText = page.basicTotalCount ? `${page.basicCorrectCount ?? 0}/${page.basicTotalCount}` : "-";
+  // 처음 점수 → 최종 점수(재도전으로 갱신됐을 때만 화살표로 함께 표시), 2026-08-28
+  let basicText = "-";
+  if (page.basicTotalCount) {
+    basicText = `${page.basicCorrectCount ?? 0}/${page.basicTotalCount}`;
+    if (page.basicFinalCorrectCount != null && page.basicFinalCorrectCount !== page.basicCorrectCount) {
+      basicText += ` → ${page.basicFinalCorrectCount}/${page.basicTotalCount}`;
+    }
+  }
   const advancedText = page.advancedTotalCount ? `${page.advancedCorrectCount ?? 0}/${page.advancedTotalCount}` : "-";
   // 문제풀이를 시작한 뒤로는 독서 시간이 더 흐르면 안 된다(서버가 이미 그 시점 값으로 얼려서 내려줌) —
   // READING/TIME_OVER(아직 순수 독서 중)일 때만 로컬로 초를 더 올려서 보여준다.
@@ -595,9 +619,15 @@ function renderStatRow(el, card, page) {
   const recommendedText = page.readingTimeMinutes != null ? `권장 ${page.readingTimeMinutes}분` : "";
   const isOverTime = page.readingTimeMinutes != null && elapsed != null && elapsed > page.readingTimeMinutes;
 
+  // 첫 제출 뒤 basicStatus는 항상 DONE — 합격 여부는 grade로 가른다(2026-08-28).
+  //   KING=만점 / FRIEND=통과 / grade 없음=재도전 필요
   const basicPill = page.basicStatus === "DONE"
-    ? `<span class="stat-pill pill-pass">통과</span>`
-    : page.basicCorrectCount != null ? `<span class="stat-pill pill-retry">재도전</span>` : "";
+    ? (page.basicGrade === "KING"
+        ? `<span class="stat-pill pill-pass">만점</span>`
+        : page.basicGrade === "FRIEND"
+          ? `<span class="stat-pill pill-pass">통과</span>`
+          : `<span class="stat-pill pill-retry">재도전</span>`)
+    : "";
   const advancedPill = page.advancedCorrectCount != null ? `<span class="stat-pill pill-pass">완료</span>` : "";
 
   el.querySelector(".stat-row").innerHTML = `

@@ -117,6 +117,7 @@
     const metaTagsEl = document.getElementById('bookMetaTags');
     const recommendNextBtn = document.getElementById('recommendNextBtn');
     const completionActions = document.getElementById('completionActions');
+    const completionRetryBtn = document.getElementById('completionRetryBtn');
     const completionWrongRetryBtn = document.getElementById('completionWrongRetryBtn');
     const completionAdvancedBtn = document.getElementById('completionAdvancedBtn');
     const recommendErrorModal = document.getElementById('recommendErrorModal');
@@ -192,12 +193,21 @@
       fillBookInfo(book);
       actionBtn.hidden = true;
       completionActions.hidden = false;
-      recommendNextBtn.hidden = false;
+      // 오늘 추천 한도를 다 썼으면(canRecommendNext=false) "책 추천받기" 버튼을 아예 숨긴다(2026-08-28)
+      recommendNextBtn.hidden = state.canRecommendNext === false;
 
+      // 버튼 분기(2026-08-28): KING=심화만 / FRIEND=재도전·틀린문제·심화 / null(불합격)=재도전만.
       const hasWrong = (state.wrongQnums ?? []).length > 0;
-      completionWrongRetryBtn.hidden = !hasWrong;
-      completionAdvancedBtn.hidden = !state.advancedAvailable;
+      const failed = !state.grade;               // 불합격(재도전만)
+      const isKing = state.grade === 'KING';     // 만점(심화만 — 재도전·틀린문제 없음)
+      completionRetryBtn.hidden = isKing;
+      completionWrongRetryBtn.hidden = failed || isKing || !hasWrong;
+      completionAdvancedBtn.hidden = failed || !state.advancedAvailable;
 
+      completionRetryBtn.onclick = () => {
+        // 전체 다시 풀기 — retryQnums를 심지 않으므로 student-question.js가 mode=RETRY로 제출한다
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;
+      };
       completionWrongRetryBtn.onclick = () => {
         sessionStorage.setItem('retryQnums', JSON.stringify(state.wrongQnums ?? []));
         window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;

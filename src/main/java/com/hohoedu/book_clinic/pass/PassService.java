@@ -71,41 +71,71 @@ public class PassService {
     }
 
     /**
-     * 출석 1회 차감.
+     * 출석 차감 — 2026-08-28 정책 변경으로 "입실일당 1회"가 아니라 "그날 예약한 회차(타임) 수만큼"
+     * 깐다(하루 최대 4회차). {@code targetUnits}는 그날 출석 확정된 회차 수다.
      *
-     * 같은 날 재입실은 차감하지 않는다. 학생이 로그아웃했다 다시 들어오거나 화면을 새로고침하는
-     * 일이 흔한데 그때마다 횟수가 깎이면 안 되기 때문이다. UNIQUE 제약이 최종 방어선이지만,
-     * 예외로 흐름이 끊기지 않도록 여기서 먼저 확인한다.
+     * 같은 날 재입실은 이미 깐 만큼은 다시 깎지 않는다 — 로그아웃 후 재로그인·새로고침이 흔하기
+     * 때문이다. "그날 목표 차감수 − 이미 차감한 수"만큼만 채우는 방식이라, 입실 후 같은 날 회차를
+     * 더 예약하고 재입실하는 경우엔 늘어난 부족분만 추가로 깎는다.
      *
-     * @return 차감 후 남은 횟수. 쓸 수 있는 이용권이 없으면 차감하지 않고 -1
+     * 이용권이 회차 수보다 모자라면 있는 만큼만 깎고 나머지는 포기한다(입실 자체는 허용). 다만
+     * 오늘 한 번도 못 깠는데 이번에도 하나도 못 깎았다면(=쓸 이용권이 아예 없음) -1을 돌려
+     * 호출부가 입실을 막게 한다.
+     *
+     * 행 수 = remain_count 감소량 불변식은 그대로다(1행 = 1차감) — 환불 로직이 pass_use 행 수에
+     * 의존하므로 이 불변식을 깨면 안 된다.
+     *
+     * @return 차감 후 남은 횟수. 오늘 아무 것도 못 깎았고 쓸 이용권도 없으면 -1
      */
     @Transactional
-    public int consume(String studentId, String serviceCode, Integer sessionId) {
+    public int consume(String studentId, String serviceCode, Integer sessionId, int targetUnits) {
         LocalDate today = KstClock.today();
+        int units = Math.max(targetUnits, 1);
 
-        if (passRepository.existsTodayUse(studentId, today)) {
+        int alreadyCharged = passRepository.countTodayUse(studentId, today);
+        int toCharge = units - alreadyCharged;
+        if (toCharge <= 0) {
             return passRepository.sumRemain(studentId, serviceCode);
         }
 
-        PassRespDTO.PassDTO pass = passRepository.findUsablePass(studentId, serviceCode);
-        if (pass == null) {
+        int charged = 0;
+        for (int i = 0; i < toCharge; i++) {
+            PassRespDTO.PassDTO pass = passRepository.findUsablePass(studentId, serviceCode);
+            if (pass == null) {
+                log.info("[이용권] 잔여 부족 — studentId={}, service={}, 목표 {}회 중 {}회만 차감",
+                        studentId, serviceCode, toCharge, charged);
+                break;
+            }
+            // 조회와 갱신 사이에 다른 요청이 먼저 깎았으면 0행이 된다 — 경합으로 보고 중단한다
+            // (재입실 시 alreadyCharged가 늘어 있어 남은 부족분만 다시 시도된다).
+            if (passRepository.decrementRemain(pass.getPassId()) == 0) {
+                log.warn("[이용권] 차감 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
+                break;
+            }
+            passRepository.insertUse(pass.getPassId(), studentId, sessionId, today);
+            charged++;
+        }
+
+        if (charged == 0 && alreadyCharged == 0) {
             log.info("[이용권] 잔여 없음 — studentId={}, service={}", studentId, serviceCode);
             return -1;
         }
-
-        // 조회와 갱신 사이에 다른 요청이 먼저 깎았으면 0행이 된다. 그 경우 이번 요청은 차감하지 않는다.
-        if (passRepository.decrementRemain(pass.getPassId()) == 0) {
-            log.warn("[이용권] 차감 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
-            return passRepository.sumRemain(studentId, serviceCode);
-        }
-
-        passRepository.insertUse(pass.getPassId(), studentId, sessionId, today);
         return passRepository.sumRemain(studentId, serviceCode);
     }
 
     /** 이 학생이 이 서비스에 쓸 수 있는 총 잔여 횟수 */
     public int remain(String studentId, String serviceCode) {
         return passRepository.sumRemain(studentId, serviceCode);
+    }
+
+    /**
+     * {@code dateInMonth}가 속한 달에 이 학생이 살 수 있었던 이용권 총량(=그 달 예약 상한, 2026-08-28).
+     * 그 달 이용권이 아직 없으면 0 — 그 달 예약을 막는 근거가 된다.
+     */
+    public int monthlyCapacity(String studentId, String serviceCode, LocalDate dateInMonth) {
+        LocalDate monthStart = dateInMonth.withDayOfMonth(1);
+        LocalDate monthEnd = monthStart.plusMonths(1).minusDays(1);
+        return passRepository.sumMonthlyTotalCount(studentId, serviceCode, monthStart, monthEnd);
     }
 
     /** 결제/청구 건으로 발급된 이용권 (없으면 null) */

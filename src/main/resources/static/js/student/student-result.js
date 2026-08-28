@@ -154,9 +154,9 @@
     setHero('KING', '독서왕 달성!');
     resultTitle.textContent = `${bookTitle(result)}을(를) 완독하고 멋지게 문제를 풀었어요!`;
 
+    // 만점(독서왕)은 재도전·틀린 문제 다시 풀기 둘 다 없고, 심화만 남는다(2026-08-28)
     retryBtn.hidden = true;
-    // 만점이면 다시 풀 문제가 없으므로 "틀린 문제 다시 풀기"는 감춘다
-    wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
+    wrongRetryBtn.hidden = true;
     advancedBtn.hidden = false;
     // "홈으로"를 누르면 완료 화면(남은 액션 + 책 추천받기)으로 간다 — 다시풀기(alreadyCompleted)
     // 재제출이어도 마찬가지다(2026-08-25, 예전엔 이때만 예외로 그냥 홈으로 보냈다)
@@ -168,9 +168,11 @@
     setHero('FRIEND', '독서친구 달성!');
     resultTitle.textContent = `${bookTitle(result)}을(를) 읽고 문제를 풀었어요!`;
 
-    retryBtn.hidden = true;
-    // 등급(FRIEND)은 첫 시도로 고정되지만, "틀린 문제 다시 풀기"로 남은 오답을 다 없앴으면
-    // (result.wrongQnums가 비었으면) 더 풀 게 없으므로 버튼은 감춘다(2026-08-25)
+    // 독서친구는 재도전(점수 올리기) / 틀린 문제 다시 풀기 / 심화 셋 다 열어준다(2026-08-28).
+    // 재도전으로 만점 치면 grade·뱃지가 독서왕으로 올라가 다음엔 renderKingResult로 그려진다.
+    // 재도전 점수가 더 낮으면 처음 점수·등급·뱃지는 그대로고 최종 점수도 안 내려간다(max).
+    retryBtn.hidden = false;
+    // "틀린 문제 다시 풀기"로 남은 오답을 다 없앴으면(result.wrongQnums가 비었으면) 버튼을 감춘다
     wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
     advancedBtn.hidden = false;
     bookFinished = true;

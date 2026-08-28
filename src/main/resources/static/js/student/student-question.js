@@ -28,21 +28,53 @@
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
 
-  // 문제 유형(erp_bookstore_code gubun='T') 코드별 아이콘/설명 — 서버 데이터에 없는 화면용 고정 문구
+  // 문제 유형(erp_bookstore_code gubun='T') 코드별 아이콘 이미지/설명 — 서버 데이터에 없는 화면용 고정 문구
+  // img는 /images/icons/ 아래 PNG 파일명. 06 어휘는 심화(qlevel=02) 진입 시 advance_voca로 바꾼다.
+  // color는 유형 이름(하단 h3)에 쓸 색 — 사용자 지정값. 배열이면 그라데이션(글자에 background-clip)
   const QTYPE_INFO = {
-    '01': { name: '이해', icon: 'fa-book-open', desc: '이야기의 내용을 정확히 파악하고 기억하는 능력이에요. 등장인물과 사건을 잘 떠올려보세요!' },
-    '02': { name: '표현', icon: 'fa-comment-dots', desc: '자신의 생각을 글이나 말로 표현하는 능력이에요. 이야기 속 표현을 참고해보세요!' },
-    '03': { name: '논리', icon: 'fa-link', desc: '이야기를 앞뒤 관계를 바탕으로 이유와 관계를 생각하는 능력이에요. 문제의 단서를 잘 살펴보세요!' },
-    '04': { name: '사고', icon: 'fa-lightbulb', desc: '이야기를 깊이 생각하고 스스로 판단하는 능력이에요. 다양한 가능성을 떠올려보세요!' },
-    '05': { name: '감정', icon: 'fa-heart', desc: '등장인물의 마음과 감정을 이해하는 능력이에요. 내가 그 상황이라면 어땠을지 생각해보세요!' },
-    '06': { name: '어휘', icon: 'fa-spell-check', desc: '낱말의 뜻을 정확히 알고 활용하는 능력이에요. 문맥 속에서 낱말의 의미를 찾아보세요!' },
-    '07': { name: '지식', icon: 'fa-graduation-cap', desc: '이야기와 관련된 배경지식을 아는 능력이에요. 알고 있는 내용을 잘 떠올려보세요!' },
-    '08': { name: '문법', icon: 'fa-pen', desc: '문장을 바르게 이해하고 사용하는 능력이에요. 문장의 짜임을 잘 살펴보세요!' },
+    '01': { name: '이해', img: 'comp.png', color: '#89EED3', desc: '이야기의 내용을 정확히 파악하고 기억하는 능력이에요. 등장인물과 사건을 잘 떠올려보세요!' },
+    '02': { name: '표현', img: 'expr.png', color: '#FDBB59', desc: '자신의 생각을 글이나 말로 표현하는 능력이에요. 이야기 속 표현을 참고해보세요!' },
+    '03': { name: '논리', img: 'logic.png', color: '#8FC7FD', desc: '이야기의 앞뒤 관계를 바탕으로 이유와 결과를 생각하는 능력이에요. 문제의 단서를 잘 살펴보세요!' },
+    '04': { name: '사고', img: 'think.png', color: '#FEE660', desc: '이야기를 깊이 생각하고 스스로 판단하는 능력이에요. 다양한 가능성을 떠올려보세요!' },
+    '05': { name: '감정', img: 'emo.png', color: '#FD9EC2', desc: '등장인물의 마음과 감정을 이해하는 능력이에요. 내가 그 상황이라면 어땠을지 생각해보세요!' },
+    '06': { name: '어휘', img: 'voca.png', color: '#C2AEFC', desc: '낱말의 뜻을 정확히 알고 활용하는 능력이에요. 문맥 속에서 낱말의 의미를 찾아보세요!' },
+    '07': { name: '지식', img: 'know.png', color: '#89E3FA', desc: '이야기와 관련된 배경지식을 아는 능력이에요. 알고 있는 내용을 잘 떠올려보세요!' },
+    '08': { name: '문법', img: 'advance_gram.png', color: ['#FFABE5', '#B797F9', '#8BCCFD'], desc: '문장을 바르게 이해하고 사용하는 능력이에요. 문장의 짜임을 잘 살펴보세요!' },
   };
+  const ADVANCED_VOCA_COLOR = ['#FDA9A1', '#FECE83', '#A4F3CD'];
+
+  // 유형 이름 h3에 단색 또는 그라데이션 색을 입힌다
+  function applyNameColor(el, color) {
+    if (Array.isArray(color)) {
+      el.style.color = 'transparent';
+      el.style.backgroundImage = `linear-gradient(90deg, ${color.join(', ')})`;
+      el.style.webkitBackgroundClip = 'text';
+      el.style.backgroundClip = 'text';
+    } else {
+      el.style.backgroundImage = 'none';
+      el.style.webkitBackgroundClip = 'border-box';
+      el.style.backgroundClip = 'border-box';
+      el.style.color = color;
+    }
+  }
+
+  // 유형 아이콘 PNG(100~300KB)를 미리 받아둔다 — 안 하면 유형이 바뀌는 문제로 넘어갈 때마다
+  // 이미지가 뒤늦게 뜨는 팝인이 생긴다
+  function preloadQtypeIcons() {
+    const files = Object.values(QTYPE_INFO).map((v) => v.img);
+    files.push('advance_voca.png');
+    files.forEach((f) => {
+      const img = new Image();
+      img.src = `/images/icons/${f}`;
+    });
+  }
 
   let questions = [];
   let current = 0;
   let answered = [];
+  // "틀린 문제 다시 풀기"로 진입했는지 — 채점 제출 시 mode=WRONG_ONLY로 보내 점수/등급을 고정한다.
+  // (일반 재도전은 mode=RETRY로 보내 최종 점수/등급이 갱신된다. 첫 시도 여부는 서버가 판단한다.)
+  let wrongOnlyMode = false;
   // 결과 화면 문구("OO을(를) 완독하고...")에 쓸 책 제목 — loadBookInfo에서 채운다
   let currentBookTitle = null;
 
@@ -79,6 +111,7 @@
     }
 
     showState('loading');
+    preloadQtypeIcons();
     loadBookInfo();
 
     try {
@@ -94,7 +127,10 @@
         sessionStorage.removeItem('retryQnums');
         const retryQnums = JSON.parse(retryQnumsRaw);
         const filtered = questions.filter((q) => retryQnums.includes(q.qnum));
-        if (filtered.length > 0) questions = filtered;
+        if (filtered.length > 0) {
+          questions = filtered;
+          wrongOnlyMode = true;
+        }
       }
 
       if (questions.length === 0) {
@@ -171,8 +207,12 @@
 
   function renderQtype(qtype) {
     const info = QTYPE_INFO[qtype] ?? QTYPE_INFO['03'];
-    qtypeIcon.innerHTML = `<i class="fa-solid ${info.icon}" aria-hidden="true"></i>`;
+    // 심화(qlevel=02)에서 어휘 유형은 심화 어휘 아이콘으로 교체
+    const advVoca = isAdvanced && qtype === '06';
+    const imgFile = advVoca ? 'advance_voca.png' : info.img;
+    qtypeIcon.innerHTML = `<img src="/images/icons/${imgFile}" alt="${info.name} 유형" />`;
     qtypeName.textContent = info.name;
+    applyNameColor(qtypeName, advVoca ? ADVANCED_VOCA_COLOR : info.color);
     qtypeDesc.textContent = info.desc;
   }
 
@@ -232,7 +272,7 @@
       const res = await fetch('/clinic/quiz/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId, contentId: Number(contentId), qlevel, answers: answersPayload }),
+        body: JSON.stringify({ studentId, contentId: Number(contentId), qlevel, mode: wrongOnlyMode ? 'WRONG_ONLY' : 'RETRY', answers: answersPayload }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');

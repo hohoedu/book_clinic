@@ -183,6 +183,7 @@
         SELECT CONVERT(VARCHAR(10), d.record_date, 23) AS recordDate,
                dd.book_name                            AS bookName,
                dd.basic_correct_cnt                    AS basicCorrectCnt,
+               rl.final_correct_count                  AS basicFinalCorrectCnt,
                dd.basic_total_cnt                      AS basicTotalCnt,
                dd.advanced_correct_cnt                 AS advancedCorrectCnt,
                dd.advanced_total_cnt                   AS advancedTotalCnt,

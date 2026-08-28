@@ -31,6 +31,12 @@ public class ClinicReqDTO {
         @NotNull(message = "도서 ID는 필수입니다.")
         private Integer contentId;
         private String qlevel; // 01=기본(완독/레벨 처리), 02=심화(이력 기록만) — 생략 시 01
+        /**
+         * 재제출 종류 (2026-08-28) — 생략/그 외 값이면 서버가 제출 회차로 FIRST/RETRY를 스스로 판단한다.
+         *   WRONG_ONLY = "틀린 문제 다시 풀기" — 점수/등급/뱃지 어떤 것도 바꾸지 않는다(화면 표시만)
+         *   RETRY      = "재도전" — 최종 점수·grade·뱃지를 "올라갈 때만" 갱신(null→FRIEND→KING). 처음 점수는 고정
+         */
+        private String mode;
         @NotEmpty(message = "제출한 답안이 없습니다.")
         @Valid
         private List<AnswerDTO> answers;

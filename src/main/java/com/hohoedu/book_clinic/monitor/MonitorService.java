@@ -68,8 +68,11 @@ public class MonitorService {
         // 자체가 없거나 예약 회차 시간이 아니면 markAttended가 예외를 던져 입실을 막는다
         // (2026-08-20 예약 필수 정책) — 그러면 @Transactional이 방금 만든 세션 insert까지
         // 함께 롤백해서 "입실은 막혔는데 세션만 남는" 상태가 생기지 않는다.
+        // markAttended가 그날 예약한 회차를 전부 ATTENDED로 올린 뒤라, 그 회차 수를 세어
+        // 이용권을 회차 수만큼 깐다(2026-08-28, 하루 최대 4회차 정책).
         reservationService.markAttended(studentId, today);
-        if (passService.consume(studentId, "BOOK", sessionId) == -1) {
+        int attendedSlots = reservationService.countAttendedSlotsToday(studentId);
+        if (passService.consume(studentId, "BOOK", sessionId, attendedSlots) == -1) {
             throw new Exception400("이용권이 모두 소진되었습니다. 재결제 후 이용해주세요.");
         }
         // 독서일지가 "메인 데이터"가 되도록, 직원이 뭔가 저장하기 전이라도 입실 시점에 바로 헤더를
@@ -185,10 +188,10 @@ public class MonitorService {
      * 이후 카드 상태가 "문제 푸는 중"으로 바뀐다(제출하면 clearQuizStarted로 해제).
      */
     @Transactional
-    public void markQuizStarted(String studentId) {
+    public void markQuizStarted(String studentId, String qlevel) {
         Integer sessionId = monitorRepository.findOpenSessionId(studentId, KstClock.today());
         if (sessionId == null) return;
-        monitorRepository.markQuizStarted(sessionId);
+        monitorRepository.markQuizStarted(sessionId, "02".equals(qlevel) ? "02" : "01");
         syncSafely(sessionId);
     }
 
@@ -467,7 +470,15 @@ public class MonitorService {
         return books;
     }
 
-    /** 우선순위: 미입실 > 퇴실 > 문제 푸는 중 > 결과 확인중 > 재도전 필요 > 완료 > 권장시간 초과 > 독서 중(추천 직후 기본값) */
+    /**
+     * 모니터링 카드 상태 6종 (2026-08-28 확정). 우선순위:
+     *   미입실 > 퇴실 > 문제 푸는 중 > (제출 후) 결과 상태 > 시간초과 > 독서 중
+     * 결과 상태는 recommend_log.grade / 심화 제출 여부로 세분한다:
+     *   ADV_KING(심화왕, 심화 만점) / ADV_DONE(심화완료, 심화는 풀면 완료 — 커트라인 없음)
+     *   > KING(독서왕) / FRIEND(독서친구) / RETRY_NEEDED(재도전 필요, 첫 제출 불합격)
+     * "결과 확인중"(result_viewed_at 기반)은 폐지 — 제출 즉시 결과 상태로 넘어간다.
+     * 시간초과는 아직 제출 전(독서 중)일 때만 의미 있다 — 제출했으면 독서를 이미 끝낸 것.
+     */
     private String resolveCardStatus(MonitorRespDTO.CardDTO card, Integer readingTimeMinutes, Integer elapsedMinutes) {
         if (card.getSessionId() == null) {
             return "NOT_ENTERED";
@@ -478,21 +489,20 @@ public class MonitorService {
         if (card.getQuizStartedAt() != null) {
             return "QUIZ_IN_PROGRESS";
         }
-        // 채점 제출 후 결과 화면을 보고 있는 상태 — 불합격(RETRY_NEEDED 조건)이어도 결과 화면을 보는 동안은
-        // 이 상태가 우선한다(홈으로 나가면 clearResultViewing으로 해제되어 재도전 필요/완료로 넘어간다)
-        if (card.getResultViewedAt() != null) {
-            return "RESULT_VIEWING";
-        }
-        // 기본 문제풀이를 이미 한 번 제출했는데 불합격(PENDING)인 경우만 재도전 필요로 본다
-        // (아직 한 번도 안 푼 경우는 correctCount가 null이라 여기 안 걸리고 READING 유지)
-        if ("PENDING".equals(card.getBasicStatus()) && card.getBasicCorrectCount() != null) {
-            return "RETRY_NEEDED";
-        }
-        // 기본 문제 합격(DONE) — 홈 화면이 "책 추천받기" 버튼을 띄우는 것과 같은 시점이다. 이 책은
-        // 이미 반납 처리됐고 다음 책을 아직 안 받은 상태라, 계속 READING으로 보이면 안 된다(2026-07-29).
         if ("DONE".equals(card.getBasicStatus())) {
-            return "COMPLETED";
+            // 심화를 풀었으면(제출 이력 존재) 심화 결과를 우선 표시
+            if (card.getAdvancedCorrectCount() != null) {
+                Integer at = card.getAdvancedTotalCount();
+                if (at != null && at > 0 && card.getAdvancedCorrectCount() >= at) {
+                    return "ADV_KING";
+                }
+                return "ADV_DONE";
+            }
+            if ("KING".equals(card.getBasicGrade())) return "KING";
+            if ("FRIEND".equals(card.getBasicGrade())) return "FRIEND";
+            return "RETRY_NEEDED";  // 첫 제출했으나 불합격
         }
+        // 여기부터는 아직 제출 전(독서 중) — PENDING은 "추천됐지만 첫 제출 전"을 뜻한다
         if (readingTimeMinutes != null && elapsedMinutes != null && elapsedMinutes > readingTimeMinutes) {
             return "TIME_OVER";
         }
@@ -513,10 +523,10 @@ public class MonitorService {
                 case "NOT_ENTERED" -> counts.setNotEntered(counts.getNotEntered() + 1);
                 case "READING" -> counts.setReading(counts.getReading() + 1);
                 case "QUIZ_IN_PROGRESS" -> counts.setQuizInProgress(counts.getQuizInProgress() + 1);
-                case "RESULT_VIEWING" -> counts.setResultViewing(counts.getResultViewing() + 1);
                 case "TIME_OVER" -> counts.setTimeOver(counts.getTimeOver() + 1);
                 case "RETRY_NEEDED" -> counts.setRetryNeeded(counts.getRetryNeeded() + 1);
-                default -> { /* EXITED/COMPLETED는 별도 chip 없음 */ }
+                case "KING", "FRIEND", "ADV_DONE", "ADV_KING" -> counts.setCompleted(counts.getCompleted() + 1);
+                default -> { /* EXITED는 별도 chip 없음 */ }
             }
             // 미입실 카드는 아직 독서일지 대상이 아니므로 미등록 카운트에서 제외
             if (card.getDiaryKey() == null && !"NOT_ENTERED".equals(card.getCardStatus())) {

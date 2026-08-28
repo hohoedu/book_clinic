@@ -294,19 +294,24 @@ function booksHtml(row) {
         <p class="diary-book-title">${escapeHtml(book.bookTitle ?? "")}</p>
         <p class="diary-book-minutes">${book.readMinutes == null ? "-" : `${book.readMinutes}분`}</p>
       </div>
-      ${quizHtml("기본문제", book.basicCorrectCount, book.basicTotalCount, false)}
+      ${quizHtml("기본문제", book.basicCorrectCount, book.basicTotalCount, false, book.basicFinalCorrectCount)}
       ${quizHtml("심화문제", book.advancedCorrectCount, book.advancedTotalCount, true)}
     </div>
   `).join("");
 }
 
 /* 아직 안 푼 난이도는 점수 자리에 "-"만 두고 뱃지를 붙이지 않는다(모니터링 카드와 같은 표시 규칙) */
-function quizHtml(label, correct, total, advanced) {
+function quizHtml(label, correct, total, advanced, finalCorrect) {
   const solved = correct != null && total != null && total > 0;
+  // 재도전으로 최종 점수가 달라졌으면 "처음 → 최종"으로 함께 보여준다(2026-08-28). 뱃지는 처음 점수 기준.
+  const hasFinal = solved && finalCorrect != null && finalCorrect !== correct;
+  const scoreText = !solved ? "-"
+    : hasFinal ? `${correct} → ${finalCorrect} / ${total}`
+    : `${correct} / ${total}`;
   return `
     <div class="diary-book-quiz">
       <span class="diary-quiz-label">${label}</span>
-      <strong class="diary-quiz-score">${solved ? `${correct} / ${total}` : "-"}</strong>
+      <strong class="diary-quiz-score">${scoreText}</strong>
       ${solved ? quizBadgeHtml(correct, total, advanced) : ""}
     </div>
   `;

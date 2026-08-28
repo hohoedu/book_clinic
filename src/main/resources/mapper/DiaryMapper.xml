@@ -91,6 +91,7 @@
             COALESCE(dd.book_img, c.image_url)       AS imageUrl,
             dd.read_minutes         AS readMinutes,
             dd.basic_correct_cnt    AS basicCorrectCount,
+            rld.final_correct_count AS basicFinalCorrectCount,
             dd.basic_total_cnt      AS basicTotalCount,
             dd.advanced_correct_cnt AS advancedCorrectCount,
             dd.advanced_total_cnt   AS advancedTotalCount,
@@ -100,6 +101,7 @@
         JOIN erp_bookstore_diary_detail dd ON dd.diary_key = dia.diary_key
         JOIN erp_student st ON st.student_id = dia.student_id
         LEFT JOIN erp_bookstore_content c ON c.content_id = dd.content_id
+        LEFT JOIN erp_bookstore_recommend_log rld ON rld.recommend_id = dd.recommend_id
         WHERE dia.record_date = #{date}
           AND st.center_code = #{centerCode}
 
@@ -112,6 +114,7 @@
             c.image_url      AS imageUrl,
             DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP)) AS readMinutes,
             rl.correct_count AS basicCorrectCount,
+            rl.final_correct_count AS basicFinalCorrectCount,
             rl.total_count   AS basicTotalCount,
             adv.correctCount AS advancedCorrectCount,
             adv.totalCount   AS advancedTotalCount,

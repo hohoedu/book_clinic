@@ -274,14 +274,12 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_slot_stude
         ON erp_bookstore_reservation (slot_instance_id, student_id)
         WHERE status = 'RESERVED';  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스)
 
--- "하루 한 회차" 제약의 실제 집행자(2026-08-20). 응용 계층의 countOtherReservedOnDate는 평문
--- SELECT라 확인과 INSERT 사이에 다른 요청이 끼어들 수 있고(TOCTOU), 서로 다른 슬롯으로 동시에
--- 요청하면 위 UX_reservation_slot_student(슬롯 기준)에도 걸리지 않아 하루에 여러 회차가 잡혔다.
--- 상태 집합은 countOtherReservedOnDate와 같게 맞춘다(취소된 예약만 제외).
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_student_date' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
-    CREATE UNIQUE INDEX UX_reservation_student_date
-        ON erp_bookstore_reservation (student_id, service_date)
-        WHERE status IN ('RESERVED', 'ATTENDED', 'NOSHOW');
+-- 2026-08-28: "하루 한 회차" → "하루 두 회차"로 정책 변경. (student_id, service_date) 유니크로는
+-- "2건까지"를 표현할 수 없어 UX_reservation_student_date는 만들지 않는다. 하루 2회차 상한은
+-- 응용 계층에서 강제한다(ReservationService.reserveOne: 학생 행 UPDLOCK으로 동시 요청 직렬화 +
+-- countOtherReservedOnDate >= 2 차단). 같은 회차 중복 예약은 위 UX_reservation_slot_student가 계속 막는다.
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_student_date' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
+    DROP INDEX UX_reservation_student_date ON erp_bookstore_reservation;
 
 -- ── 이력: 예약 상태 변경 전체 로그 (★ 신규 — 취소 주체 분쟁 방지) ─────
 IF OBJECT_ID('erp_bookstore_reservation_log', 'U') IS NULL

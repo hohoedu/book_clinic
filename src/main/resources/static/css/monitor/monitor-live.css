@@ -90,6 +90,7 @@
 .filter-chip.chip-not-entered { color: #4a5568; border-color: #dbe1e6; }
 .filter-chip.chip-timeover { color: #b8620a; border-color: #f6ddb4; }
 .filter-chip.chip-retry { color: #c8353a; border-color: #f4c6c8; }
+.filter-chip.chip-completed { color: #00845f; border-color: #b8e5d5; }
 .filter-chip.chip-logmissing { color: #4a5568; border-color: #dbe1e6; }
 
 .filter-chip.active { color: #fff; border-color: transparent; }
@@ -100,6 +101,7 @@
 .filter-chip.chip-not-entered.active { background: #64748b; }
 .filter-chip.chip-timeover.active { background: #f5a524; }
 .filter-chip.chip-retry.active { background: #e5484d; }
+.filter-chip.chip-completed.active { background: #00a984; }
 .filter-chip.chip-logmissing.active { background: #64748b; }
 
 .filter-count {

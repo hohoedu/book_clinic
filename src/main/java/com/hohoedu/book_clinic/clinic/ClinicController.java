@@ -38,12 +38,7 @@ public class ClinicController {
     private final ClinicService clinicService;
     private final StudentSessionRegistry studentSessionRegistry;
 
-    /**
-     * 다른 기기에서 재로그인했거나 직원이 퇴실 처리한 경우(2026-08-26)에도, 요청 자체를 여기서
-     * 막아야 이미 열어둔 문제풀이 화면에서 채점 제출/추천 확정이 실제로 처리되는 것을 막을 수
-     * 있다 — 페이지 이동 시점의 세션 무효화(StudentViewController)만으로는 그 전에 날아온
-     * API 호출까지 막지 못한다.
-     */
+    /* 요청한 학생 ID가 현재 세션의 학생 ID와 일치하는지 확인 */
     private void requireOwnStudent(HttpServletRequest request, String requestedStudentId) {
         HttpSession session = request.getSession(false);
         Object sessionStudentId = session == null ? null : session.getAttribute(SESSION_STUDENT_ID);
@@ -133,7 +128,7 @@ public class ClinicController {
             HttpServletRequest request) {
         requireOwnStudent(request, reqDTO.getStudentId());
         return ResponseEntity.ok(ApiUtils.success(clinicService.submitQuiz(
-                reqDTO.getStudentId(), reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getAnswers())));
+                reqDTO.getStudentId(), reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getMode(), reqDTO.getAnswers())));
     }
 
 }

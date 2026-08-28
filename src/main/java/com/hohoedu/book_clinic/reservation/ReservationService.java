@@ -2,8 +2,10 @@ package com.hohoedu.book_clinic.reservation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -120,37 +122,53 @@ public class ReservationService {
      * 입실 시점에 그날 예약을 ATTENDED로 전환한다. {@code MonitorService.enterSession}이 부른다.
      *
      * [예약 필수 정책(2026-08-20)] 오늘 예약(RESERVED/ATTENDED) 자체가 없으면 입실을 막는다 —
-     * 예약 없이 온 도보 방문을 허용하던 이전 정책이 뒤집혔다. 다만 이미 ATTENDED인 경우(같은
-     * 학생이 하루에 두 번 로그인)는 "예약 없음"이 아니라 재로그인이므로 조용히 통과시킨다 —
-     * findReservedSlotByStudentAndDate가 RESERVED/ATTENDED를 함께 조회해서 이 둘을 구분한다.
+     * 예약 없이 온 도보 방문을 허용하던 이전 정책이 뒤집혔다. 다만 이미 ATTENDED가 하나라도
+     * 있으면(같은 학생이 하루에 두 번 로그인) "예약 없음"이 아니라 재로그인이므로 조용히 통과시킨다.
      *
-     * 예약은 있지만(RESERVED) 그 회차 시간이 아직 아니거나 이미 지났으면 역시 입실을 막는다
-     * (2026-08-20) — "예약해두면 시간 상관없이 아무 때나 입실된다"는 문제를 차단한다. 허용
-     * 구간은 [회차 시작 - EARLY_ENTRY_MINUTES, 회차 종료]. 두 차단 모두 Exception400을 던져
-     * enterSession 트랜잭션 전체(세션 insert 포함)를 롤백시킨다 — 이용권 소진 차단과 같은 패턴.
+     * [입실 1회 = 그날 예약 전부 출석(2026-08-28)] 입실/퇴실은 1일 1회뿐인데 하루에 2회차까지
+     * 예약할 수 있어서, 두 번째 회차는 시간대가 돼도 따로 입실할 방법이 없다. 그래서 첫 입실 한 번으로
+     * 그날 RESERVED인 회차를 모두 ATTENDED로 올린다 — 두 번째 회차 시간대가 아직 아니어도 출석으로 친다.
+     *
+     * 다만 "아무 때나 입실"은 여전히 막는다(2026-08-20) — 그날 예약한 회차 중 지금이 이용 가능
+     * 시간대([회차 시작 - EARLY_ENTRY_MINUTES, 회차 종료])인 회차가 하나도 없으면 Exception400을
+     * 던져 enterSession 트랜잭션 전체(세션 insert 포함)를 롤백시킨다 — 이용권 소진 차단과 같은 패턴.
      */
     @Transactional
     public void markAttended(String studentId, LocalDate serviceDate) {
-        ReservationRespDTO.ReservationItemDTO reserved = repository.findReservedSlotByStudentAndDate(studentId, serviceDate);
-        if (reserved == null) {
+        List<ReservationRespDTO.ReservationItemDTO> reservations =
+                repository.findActiveReservationsByStudentAndDate(studentId, serviceDate);
+        if (reservations.isEmpty()) {
             throw new Exception400("오늘 예약 내역이 없습니다. 예약 후 이용해주세요.");
         }
-        if ("ATTENDED".equals(reserved.getStatus())) {
+        boolean alreadyAttended = reservations.stream()
+                .anyMatch(r -> "ATTENDED".equals(r.getStatus()));
+        if (alreadyAttended) {
             return;
         }
 
         LocalDateTime now = KstClock.now();
-        LocalDateTime entryOpensAt = reserved.getStartsAt().minusMinutes(EARLY_ENTRY_MINUTES);
-        if (now.isBefore(entryOpensAt) || now.isAfter(reserved.getEndsAt())) {
-            throw new Exception400(reserved.getSeq() + "회차는 "
-                    + reserved.getStartsAt().toLocalTime() + "~" + reserved.getEndsAt().toLocalTime()
+        boolean withinAnyWindow = reservations.stream().anyMatch(r -> {
+            LocalDateTime entryOpensAt = r.getStartsAt().minusMinutes(EARLY_ENTRY_MINUTES);
+            return !now.isBefore(entryOpensAt) && !now.isAfter(r.getEndsAt());
+        });
+        if (!withinAnyWindow) {
+            ReservationRespDTO.ReservationItemDTO first = reservations.get(0);
+            throw new Exception400(first.getSeq() + "회차는 "
+                    + first.getStartsAt().toLocalTime() + "~" + first.getEndsAt().toLocalTime()
                     + "에 이용 가능합니다. 이용 시간에 맞춰 다시 입실해주세요.");
         }
 
-        int updated = repository.transitionStatus(reserved.getReservationId(), "RESERVED", "ATTENDED");
-        if (updated > 0) {
-            repository.insertLog(reserved.getReservationId(), "RESERVED", "ATTENDED", studentId, "STUDENT", null);
+        for (ReservationRespDTO.ReservationItemDTO r : reservations) {
+            int updated = repository.transitionStatus(r.getReservationId(), "RESERVED", "ATTENDED");
+            if (updated > 0) {
+                repository.insertLog(r.getReservationId(), "RESERVED", "ATTENDED", studentId, "STUDENT", null);
+            }
         }
+    }
+
+    /** 그 학생이 오늘 출석 확정(ATTENDED)한 회차 수 — 책 추천 총량(회차 수 × 2권) 계산에 쓴다(2026-08-28) */
+    public int countAttendedSlotsToday(String studentId) {
+        return repository.countAttendedSlotsByStudentAndDate(studentId, KstClock.today());
     }
 
     /**
@@ -253,12 +271,24 @@ public class ReservationService {
         Map<LocalDate, ReservationRespDTO.SlotOptionDTO> byDate = slots.stream()
                 .collect(Collectors.toMap(ReservationRespDTO.SlotOptionDTO::getServiceDate, s -> s));
 
+        // 그 달 예약 상한(2026-08-28)을 미리보기에도 반영한다. 이 배치의 여러 주차가 같은 달에
+        // 몰릴 수 있어, 달마다 상한과 (DB상 기존 예약 + 이 배치에서 앞서 OPEN으로 잡힌 주차)를
+        // 누적 추적한다 — 상한을 넘기는 순간부터 남은 주차는 MONTH_FULL/NO_PASS로 표시한다.
+        Map<YearMonth, Integer> capByMonth = new HashMap<>();
+        Map<YearMonth, Integer> usedByMonth = new HashMap<>();
+
         List<ReservationRespDTO.BatchPreviewItemDTO> result = new ArrayList<>();
         for (LocalDate date : targetDates) {
             ReservationRespDTO.SlotOptionDTO slot = byDate.get(date);
             ReservationRespDTO.BatchPreviewItemDTO item = new ReservationRespDTO.BatchPreviewItemDTO();
             item.setServiceDate(date);
             item.setSeq(seq);
+
+            YearMonth ym = YearMonth.from(date);
+            int cap = capByMonth.computeIfAbsent(ym,
+                    m -> passService.monthlyCapacity(studentId, "BOOK", m.atDay(1)));
+            int used = usedByMonth.computeIfAbsent(ym,
+                    m -> repository.countReservationsInMonth(studentId, m.atDay(1), m.atEndOfMonth()));
 
             if (slot == null) {
                 item.setTargetStatus("NOT_OPEN");
@@ -273,12 +303,15 @@ public class ReservationService {
                 } else if (slot.getReservedCount() != null && slot.getCapacity() != null
                         && slot.getReservedCount() >= slot.getCapacity()) {
                     item.setTargetStatus("FULL");
-                } else if (repository.countOtherReservedOnDate(studentId, date, slot.getSlotInstanceId()) > 0) {
-                    // 하루 1회차만 정책 — 이 날짜에 이미 다른 회차를 예약해뒀으면 이 요일·회차
+                } else if (repository.countOtherReservedOnDate(studentId, date, slot.getSlotInstanceId()) >= MAX_SLOTS_PER_DAY) {
+                    // 하루 4회차 상한(2026-08-28) — 이 날짜에 이미 4회차를 예약해뒀으면 이 요일·회차
                     // 조합으로는 이 주차를 신청할 수 없다(reserveOne이 실제 확정 시점에도 다시 막는다)
                     item.setTargetStatus("DAY_CONFLICT");
+                } else if (used >= cap) {
+                    item.setTargetStatus(cap == 0 ? "NO_PASS" : "MONTH_FULL");
                 } else {
                     item.setTargetStatus("OPEN");
+                    usedByMonth.put(ym, used + 1);
                 }
             }
             result.add(item);
@@ -321,7 +354,19 @@ public class ReservationService {
 
     // ── 내부 ─────────────────────────────────────────────────────────────
 
+    /**
+     * 하루에 예약할 수 있는 최대 회차 수(2026-08-28, 기존 1 → 4). 월 이용권이 4회라 하루에 4회차까지
+     * 몰아서 예약할 수 있다. 입실은 1일 1회지만 첫 입실로 그날 예약한 회차가 모두 출석 처리되고,
+     * 이용권도 그날 회차 수만큼 차감된다.
+     */
+    private static final int MAX_SLOTS_PER_DAY = 4;
+
     private ReservationRespDTO.ReservationItemDTO reserveOne(Student student, Long slotInstanceId, String changedBy, String changedByRole) {
+        // 하루 2회차 상한의 동시성 방어(2026-08-28) — (student_id, service_date) 유니크 인덱스를 없앤
+        // 대신 이 학생 행을 UPDLOCK으로 잡아, 서로 다른 슬롯으로 거의 동시에 들어오는 같은 학생의
+        // 요청을 DB가 한 건씩 직렬 처리하게 만든다(아래 countOtherReservedOnDate 체크가 유효해진다).
+        repository.lockStudentForReservation(student.getStudentId());
+
         ReservationRespDTO.SlotOptionDTO slot = repository.findSlotOptionById(slotInstanceId);
         if (slot == null) {
             throw new Exception404("존재하지 않는 회차입니다.");
@@ -334,22 +379,37 @@ public class ReservationService {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 이미 종료된 회차입니다.");
         }
 
-        // 이용권 잔여 체크(2026-08-20) — 차감은 여전히 입실 시점(MonitorService.enterSession)에만
-        // 일어난다. 여기서는 "예약 가능한지"만 보고 차감/홀드하지 않는다 — 예약 취소가 잦은 걸
-        // 감안하면, 예약 시점에 미리 깎았다가 취소 때마다 되돌려주는 홀드 방식보다 단순하다.
-        if (passService.remain(student.getStudentId(), "BOOK") <= 0) {
-            throw new Exception400("이용권이 모두 소진되었습니다. 재결제 후 예약해주세요.");
+        // 그 달 예약 상한 하드체크(2026-08-28) — "그 달에 이미 잡아둔 비취소 예약 건수 ≥ 그 달
+        // 이용권 total_count 합"이면 막는다. 슬롯의 service_date가 속한 달을 기준으로 본다(오늘이
+        // 아니라) — 4주 일괄(reserveOne을 날짜별로 반복)이 월 경계를 넘어도 각 슬롯이 자기 달의
+        // 상한을 탄다. 차감/홀드는 하지 않는다(예약 취소가 잦아 홀드 방식은 되돌림 비용이 큼) —
+        // 실제 이용권 차감은 입실 시점(MonitorService.enterSession)에 그날 회차 수만큼 일어난다.
+        // 그 달 이용권이 아직 없으면 상한 0 → 결제 전까지 그 달 예약 불가.
+        // 위 lockStudentForReservation이 같은 학생의 동시 예약 요청을 직렬화하므로, 이 SELECT 뒤
+        // INSERT까지 다른 요청이 끼어들어 상한을 넘기지 못한다.
+        int monthlyCap = passService.monthlyCapacity(student.getStudentId(), "BOOK", slot.getServiceDate());
+        int reservedInMonth = repository.countReservationsInMonth(student.getStudentId(),
+                slot.getServiceDate().withDayOfMonth(1),
+                slot.getServiceDate().withDayOfMonth(1).plusMonths(1).minusDays(1));
+        if (reservedInMonth >= monthlyCap) {
+            if (monthlyCap == 0) {
+                throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
+                        + " — 해당 월 이용권이 없습니다. 결제 후 예약해주세요.");
+            }
+            throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
+                    + " — 그 달 예약 가능 횟수(" + monthlyCap + "회)를 모두 채우셨습니다.");
         }
 
-        // 하루 1회차만 정책(2026-08-18) — 4주 일괄(reserveOne을 날짜별로 반복 호출)로 들어와도
-        // 그대로 적용된다. 같은 슬롯 재예약 시도도 이제 여기서 걸린다(2026-08-20 — 유니크 인덱스는
+        // 하루 2회차 상한 정책(2026-08-28, 기존 1 → 2) — 4주 일괄(reserveOne을 날짜별로 반복 호출)로
+        // 들어와도 그대로 적용된다. 같은 슬롯 재예약 시도도 여기서 걸린다(2026-08-20 — 유니크 인덱스는
         // status='RESERVED'만 보므로 ATTENDED인 슬롯 재예약까지는 못 막았었다).
-        // 이 SELECT는 "사용자에게 이유를 설명하는" 용도이고, 실제 강제는 아래 INSERT가 걸리는
-        // UX_reservation_student_date가 한다 — 평문 SELECT라 확인과 INSERT 사이에 다른 요청이
-        // 끼어들 수 있고, 서로 다른 슬롯으로 동시에 들어오면 여기서는 못 막는다(2026-08-20 발견).
-        if (repository.countOtherReservedOnDate(student.getStudentId(), slot.getServiceDate(), slotInstanceId) > 0) {
+        // 위 lockStudentForReservation이 같은 학생의 동시 요청을 직렬화하므로, 이 평문 SELECT 뒤에
+        // INSERT까지 다른 요청이 끼어들지 못한다 — (student_id, service_date) 유니크 인덱스를 없앤
+        // 자리를 이 학생 행 락이 대신 지킨다.
+        if (repository.countOtherReservedOnDate(student.getStudentId(), slot.getServiceDate(), slotInstanceId) >= MAX_SLOTS_PER_DAY) {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
-                    + " — 이 날짜엔 이미 다른 회차를 예약하셨습니다. 하루에 한 회차만 예약할 수 있습니다.");
+                    + " — 이 날짜엔 이미 " + MAX_SLOTS_PER_DAY + "회차를 예약하셨습니다. 하루에 "
+                    + MAX_SLOTS_PER_DAY + "회차까지만 예약할 수 있습니다.");
         }
 
         int updated = repository.incrementReservedCount(slotInstanceId);
@@ -367,11 +427,11 @@ public class ReservationService {
         try {
             repository.insertReservation(command);
         } catch (DuplicateKeyException e) {
-            // 위 SELECT를 통과한 뒤 INSERT 직전에 다른 요청이 끼어든 경우(TOCTOU). 슬롯 기준
-            // (UX_reservation_slot_student)이든 날짜 기준(UX_reservation_student_date)이든
-            // 결국 "그날 이미 예약이 있다"는 뜻이라 한 문장으로 안내한다.
+            // 남은 유니크 인덱스는 UX_reservation_slot_student(슬롯 기준, status='RESERVED')뿐이다 —
+            // 같은 회차를 두 번 예약하려 한 경우다. 하루 2회차 상한은 위 학생 행 락 + 카운트가 막으므로
+            // 여기로는 안 온다.
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
-                    + " — 이 날짜엔 이미 예약이 있습니다. 하루에 한 회차만 예약할 수 있습니다.");
+                    + " — 이미 예약한 회차입니다.");
         }
 
         repository.insertLog(command.getReservationId(), null, "RESERVED", changedBy, changedByRole, null);

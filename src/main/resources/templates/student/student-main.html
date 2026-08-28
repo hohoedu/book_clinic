@@ -108,6 +108,8 @@
             <!-- 완독(KING/FRIEND) 후 홈으로 왔을 때만 노출 — 문제 풀기 버튼 대신 남은 액션(틀린 문제
                  다시 풀기 / 심화 문제 풀기)만 보여준다. 둘 다 없을 수도 있다(둘 다 이미 끝낸 경우) -->
             <div class="completion-actions" id="completionActions" hidden>
+              <button type="button" class="solve-btn solve-btn--sub" id="completionRetryBtn" hidden>
+                <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>재도전</button>
               <button type="button" class="solve-btn solve-btn--sub" id="completionWrongRetryBtn" hidden>
                 <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 다시 풀기</button>
               <button type="button" class="solve-btn solve-btn--sub" id="completionAdvancedBtn" hidden>

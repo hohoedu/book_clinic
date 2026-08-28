@@ -32,6 +32,7 @@
     <update id="markQuizStarted">
         UPDATE erp_bookstore_clinic_session
         SET quiz_started_at = DATEADD(HOUR, 9, GETUTCDATE()),
+            quiz_qlevel      = #{qlevel},
             result_viewed_at = NULL
         WHERE session_id = #{sessionId}
     </update>
@@ -87,9 +88,15 @@
             c.image_url        AS imageUrl,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
-            rl.correct_count   AS basicCorrectCount,
-            rl.total_count     AS basicTotalCount,
-            rl.status          AS basicStatus,
+            rl.correct_count       AS basicCorrectCount,
+            rl.final_correct_count AS basicFinalCorrectCount,
+            rl.total_count         AS basicTotalCount,
+            rl.status              AS basicStatus,
+            rl.grade               AS basicGrade,
+            cs.quiz_qlevel         AS quizQlevel,
+            -- 기본(qlevel='01') 문제 제출 회차 수(distinct submitted_at) — "문제 푸는 중" 라벨의 회차 계산에 쓴다(2026-08-28)
+            (SELECT COUNT(DISTINCT qr.submitted_at) FROM erp_bookstore_quiz_answer_log qr
+             WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01') AS basicAttemptRounds,
             -- 독서 시간은 문제풀이 시작 전까지만 흐른다: 이미 제출해서 얼어붙은 값(frozen.read_minutes)이
             -- 있으면 그 값을 그대로 쓰고(재도전해도 최초 제출 시점 값으로 고정), 아직 한 번도 제출 안
             -- 했으면 문제풀이 화면에 들어간 순간(quiz_started_at)까지만 세고 그 이후로는 안 늘어난다.
@@ -124,9 +131,12 @@
             ORDER BY si.seq ASC
         ) r
         OUTER APPLY (
-            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, total_count, status
+            -- 어제 이전 추천 이력이 새어 들어오지 않도록 오늘 추천됐거나 아직 PENDING(이어읽기)인
+            -- 건만 본다 — findTodayBooksByStudentIds(380행)와 동일한 규칙(2026-08-27 버그 수정)
+            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, final_correct_count, total_count, status, grade
             FROM erp_bookstore_recommend_log
             WHERE student_id = cs.student_id
+              AND (CAST(recommended_at AS DATE) = cs.session_date OR status = 'PENDING')
             ORDER BY recommend_id DESC
         ) rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
@@ -209,9 +219,14 @@
             c.image_url        AS imageUrl,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
-            rl.correct_count   AS basicCorrectCount,
-            rl.total_count     AS basicTotalCount,
-            rl.status          AS basicStatus,
+            rl.correct_count       AS basicCorrectCount,
+            rl.final_correct_count AS basicFinalCorrectCount,
+            rl.total_count         AS basicTotalCount,
+            rl.status              AS basicStatus,
+            rl.grade               AS basicGrade,
+            cs.quiz_qlevel         AS quizQlevel,
+            (SELECT COUNT(DISTINCT qr.submitted_at) FROM erp_bookstore_quiz_answer_log qr
+             WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01') AS basicAttemptRounds,
             -- cardColumns와 같은 규칙(독서 시간은 문제풀이 시작 전까지만 흐름) — 상세 설명은 그쪽 주석 참고
             COALESCE(
                 frozen.read_minutes,
@@ -234,15 +249,18 @@
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         JOIN erp_student st ON st.student_id = r.student_id
         OUTER APPLY (
-            SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at, result_viewed_at
+            SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at, quiz_qlevel, result_viewed_at
             FROM erp_bookstore_clinic_session
             WHERE student_id = r.student_id AND session_date = si.service_date
             ORDER BY session_id DESC
         ) cs
         OUTER APPLY (
-            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, total_count, status
+            -- 어제 이전 추천 이력이 새어 들어오지 않도록 오늘 추천됐거나 아직 PENDING(이어읽기)인
+            -- 건만 본다 — findTodayBooksByStudentIds(380행)와 동일한 규칙(2026-08-27 버그 수정)
+            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, final_correct_count, total_count, status, grade
             FROM erp_bookstore_recommend_log
             WHERE student_id = r.student_id
+              AND (CAST(recommended_at AS DATE) = si.service_date OR status = 'PENDING')
             ORDER BY recommend_id DESC
         ) rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
@@ -327,9 +345,11 @@
             c.image_url        AS imageUrl,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
-            rl.correct_count   AS basicCorrectCount,
-            rl.total_count     AS basicTotalCount,
-            rl.status          AS basicStatus,
+            rl.correct_count       AS basicCorrectCount,
+            rl.final_correct_count AS basicFinalCorrectCount,
+            rl.total_count         AS basicTotalCount,
+            rl.status              AS basicStatus,
+            rl.grade               AS basicGrade,
             -- cardColumns/reservationCardColumns와 같은 규칙(독서 시간은 문제풀이 시작 전까지만 흐름)
             COALESCE(
                 frozen.read_minutes,
@@ -393,9 +413,11 @@
             c.image_url        AS imageUrl,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
-            rl.correct_count   AS basicCorrectCount,
-            rl.total_count     AS basicTotalCount,
-            rl.status          AS basicStatus,
+            rl.correct_count       AS basicCorrectCount,
+            rl.final_correct_count AS basicFinalCorrectCount,
+            rl.total_count         AS basicTotalCount,
+            rl.status              AS basicStatus,
+            rl.grade               AS basicGrade,
             COALESCE(
                 frozen.read_minutes,
                 DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
@@ -651,11 +673,12 @@
 
     <update id="resetRecommendResult">
         UPDATE erp_bookstore_recommend_log
-        SET status        = 'PENDING',
-            correct_count = NULL,
-            total_count   = NULL,
-            grade         = NULL,
-            completed_at  = NULL
+        SET status              = 'PENDING',
+            correct_count       = NULL,
+            final_correct_count = NULL,
+            total_count         = NULL,
+            grade               = NULL,
+            completed_at        = NULL
         WHERE recommend_id = #{recommendId}
     </update>
 

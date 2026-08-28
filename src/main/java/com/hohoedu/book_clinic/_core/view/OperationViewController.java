@@ -39,12 +39,6 @@ public class OperationViewController {
         return "operation/payment-review";
     }
 
-    /** 기기 라이선스 — 본사가 센터 기기용 키를 발급/폐기하는 화면 (2026-08-20). API가 assertHq로 다시 막는다 */
-    @GetMapping("/admin/operation/kiosk-view")
-    public String kioskLicense() {
-        return "operation/kiosk-license";
-    }
-
     /** 학생 정보 — 화면 스캐폴딩 단계, 하드코딩 목업 데이터로 레이아웃만 구현 (2026-08-24) */
     @GetMapping("/admin/operation/student-view")
     public String studentInfo() {

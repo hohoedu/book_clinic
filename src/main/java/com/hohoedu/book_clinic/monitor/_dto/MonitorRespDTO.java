@@ -26,7 +26,9 @@ public class MonitorRespDTO {
         private LocalDateTime enteredAt;
         private LocalDateTime exitedAt;
         private LocalDateTime quizStartedAt; // null이 아니면 지금 문제풀이 화면에 진입해 있는 상태
-        private LocalDateTime resultViewedAt; // null이 아니면 지금 결과 화면을 보고 있는 상태(채점 제출 후)
+        private String quizQlevel;           // 지금 진입한 문제풀이 난이도 01/02 — "문제 푸는 중" 라벨(회차/심화) 계산용 (2026-08-28)
+        private Integer basicAttemptRounds;  // 기본(01) 문제 제출 회차 수(distinct submitted_at) — 진행중이면 +1이 현재 회차
+        private LocalDateTime resultViewedAt; // (2026-08-28 "결과 확인중" 상태 폐지 — 값은 계속 기록되지만 카드 상태 판정엔 안 쓴다)
 
         private Integer recommendId;    // 이 학생의 최신 추천 도서 (없으면 아직 추천 전)
         private Integer contentId;
@@ -37,9 +39,11 @@ public class MonitorRespDTO {
         private String readingTimeText;      // content.reading_time 원문 (예: "20분")
         private LocalDateTime recommendedAt; // 이 책이 추천/대여 확정된 시각 = 독서 시작 기준
 
-        private Integer basicCorrectCount;
+        private Integer basicCorrectCount;      // "처음 점수" — 최초 제출값 고정
+        private Integer basicFinalCorrectCount; // "최종 점수" — 재도전 반영 최신값 (2026-08-28)
         private Integer basicTotalCount;
-        private String basicStatus;     // PENDING / DONE (raw, null이면 아직 안 풂)
+        private String basicStatus;     // PENDING(추천됨, 첫 제출 전) / DONE(첫 제출 완료) — null이면 아직 추천 전
+        private String basicGrade;      // KING / FRIEND / null(불합격) — 재도전 최종 결과. null+DONE이면 "재도전 필요"
 
         private Integer advancedCorrectCount;
         private Integer advancedTotalCount;
@@ -58,7 +62,9 @@ public class MonitorRespDTO {
         // MonitorService가 계산해서 채운다.
         private Integer readingTimeMinutes; // readingTimeText에서 파싱한 권장 분(파싱 실패 시 null)
         private Integer elapsedMinutes;     // DB에서 DATEDIFF로 계산된 경과 분 (recommendedAt 없으면 null)
-        private String cardStatus;          // NOT_ENTERED / READING / QUIZ_IN_PROGRESS / RESULT_VIEWING / RETRY_NEEDED / TIME_OVER / EXITED
+        // 2026-08-28 확정 6종: NOT_ENTERED(미입실) / READING(독서 중) / QUIZ_IN_PROGRESS(문제 푸는 중) /
+        // TIME_OVER(시간초과) / 결과류(KING·FRIEND·RETRY_NEEDED·ADV_DONE·ADV_KING) / EXITED(퇴실)
+        private String cardStatus;
 
         // 오늘 이 학생이 추천받은 책 전체(완료분 포함) — 카드 안 도서 캐러셀용 (2026-07-23).
         // 위쪽 root의 bookTitle 등은 그중 최신 1건과 항상 같은 값이며, 구버전 Firestore 문서 호환을
@@ -87,9 +93,11 @@ public class MonitorRespDTO {
         private String readingTimeText;
         private LocalDateTime recommendedAt;
 
-        private Integer basicCorrectCount;
+        private Integer basicCorrectCount;      // "처음 점수"
+        private Integer basicFinalCorrectCount; // "최종 점수" (재도전 반영, 2026-08-28)
         private Integer basicTotalCount;
         private String basicStatus;
+        private String basicGrade;
 
         private Integer advancedCorrectCount;
         private Integer advancedTotalCount;
@@ -143,9 +151,9 @@ public class MonitorRespDTO {
         private int notEntered;
         private int reading;
         private int quizInProgress;
-        private int resultViewing;
         private int timeOver;
         private int retryNeeded;
+        private int completed;   // 독서왕+독서친구+심화완료+심화왕 (2026-08-28, "결과 확인중" 폐지)
         private int readingLogMissing;
     }
 

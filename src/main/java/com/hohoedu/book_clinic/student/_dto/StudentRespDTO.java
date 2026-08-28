@@ -59,7 +59,8 @@ public class StudentRespDTO {
     public static class ReadingHistoryRowDTO {
         private String recordDate;
         private String bookName;
-        private Integer basicCorrectCnt;
+        private Integer basicCorrectCnt;       // "처음 점수"
+        private Integer basicFinalCorrectCnt;  // "최종 점수" — 재도전 반영 (2026-08-28)
         private Integer basicTotalCnt;
         private Integer advancedCorrectCnt;
         private Integer advancedTotalCnt;

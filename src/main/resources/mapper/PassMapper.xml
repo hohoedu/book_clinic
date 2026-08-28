@@ -62,11 +62,11 @@
             (#{passId}, #{studentId}, #{sessionId}, #{usedDate}, DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
-    <select id="existsTodayUse" resultType="boolean">
-        SELECT CASE WHEN EXISTS (
-            SELECT 1 FROM erp_bookstore_pass_use
-            WHERE student_id = #{studentId} AND used_date = #{usedDate}
-        ) THEN 1 ELSE 0 END
+    <!-- 그날 이미 차감한 횟수(행 수) — "그날 회차 수만큼 차감" 정책에서 목표치와 비교해 부족분만 채운다(2026-08-28) -->
+    <select id="countTodayUse" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_bookstore_pass_use
+        WHERE student_id = #{studentId} AND used_date = #{usedDate}
     </select>
 
     <!-- 아직 시작 안 했거나 이미 끝난 달의 잔여는 "지금 쓸 수 있는 횟수"에 넣지 않는다 -->
@@ -78,6 +78,22 @@
           AND revoked_at IS NULL
           AND valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
           AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+    </select>
+
+    <!--
+      특정 달에 쓸 수 있는 이용권 총량(=그 달 예약 상한, 2026-08-28). 유효기간이 그 달과 겹치는
+      살아있는 이용권들의 total_count 합이다. remain_count가 아니라 total_count인 이유: 예약 상한
+      검사는 "그 달에 몇 건 예약했나 vs 그 달에 몇 건 살 수 있나"의 비교라, 차감(입실) 시점과
+      무관하게 그 달에 원래 부여된 횟수와 견줘야 하기 때문이다. 그 달 이용권이 없으면 0 → 예약 불가.
+    -->
+    <select id="sumMonthlyTotalCount" resultType="int">
+        SELECT ISNULL(SUM(total_count), 0)
+        FROM erp_bookstore_pass
+        WHERE student_id   = #{studentId}
+          AND service_code = #{serviceCode}
+          AND revoked_at IS NULL
+          AND valid_from  &lt;= #{monthEnd}
+          AND valid_until &gt;= #{monthStart}
     </select>
 
     <select id="findByRef" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">

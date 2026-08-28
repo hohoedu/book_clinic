@@ -305,11 +305,12 @@ CREATE TABLE erp_bookstore_recommend_log (
     content_id      INT           NOT NULL,  -- 추천된 도서 (erp_bookstore_content.content_id) — 문제(itempool)는 이 기준
     item_id         INT           NOT NULL,  -- 실제로 대여 확정된 실물 판본 (erp_bookstore_item.item_id)
     recommended_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 추천일시(KST)
-    status          VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(문제풀이 전/재도전 대기) / DONE(합격)
-    correct_count   INT,      -- 기본 문제풀이(qlevel=01) 최근 제출 정답 수
-    total_count     INT,      -- 기본 문제풀이 총 문항 수
-    grade           VARCHAR(20),   -- KING(독서왕) / FRIEND(독서친구) — 합격 시에만 값 존재
-    completed_at    DATETIME2,     -- 합격(DONE) 처리 시각
+    status              VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(추천됨, 첫 제출 전) / DONE(첫 제출 완료 — 합격/불합격 무관, 2026-08-28)
+    correct_count       INT,      -- "처음 점수" — 기본(qlevel=01) 최초 제출 정답 수에서 고정
+    total_count         INT,      -- 기본 문제풀이 총 문항 수
+    final_correct_count INT,      -- "최종 점수" — 재도전(mode=RETRY)에서 더 잘한 경우에만 올라간다(max) (2026-08-28)
+    grade               VARCHAR(20),   -- KING / FRIEND / NULL(불합격) — 재도전으로 "올라가기만"(null→FRIEND→KING). 오르면 기본 뱃지도 상위 교체 (2026-08-28)
+    completed_at        DATETIME2,     -- 첫 제출(DONE) 처리 시각
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id),
     FOREIGN KEY (item_id)    REFERENCES erp_bookstore_item(item_id)
 );
@@ -418,7 +419,8 @@ CREATE TABLE erp_bookstore_clinic_session (
     exited_at       DATETIME2,    -- 퇴실 처리일시(KST)
     status          VARCHAR(20)   NOT NULL DEFAULT 'ENTERED',  -- ENTERED(입실중) / EXITED(퇴실완료)
     quiz_started_at DATETIME2,    -- 문제풀이 화면 진입 시각(KST) — 채점 제출 시 다시 NULL로 초기화
-    result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — 홈으로/재도전 등 화면 이탈 시 NULL로 초기화
+    quiz_qlevel     VARCHAR(2),   -- 지금 진입한 문제풀이 난이도(01/02) — 모니터링 "문제 푸는 중" 회차/심화 표시용 (2026-08-28)
+    result_viewed_at DATETIME2    -- 결과 화면 진입 시각(KST) — 2026-08-28 "결과 확인중" 상태 폐지, 컬럼만 유지
 );
 
 -- 클리닉 예약 — DEPRECATED (2026-08-18). erp_bookstore_reservation(+ slot_instance)로 이관 완료.

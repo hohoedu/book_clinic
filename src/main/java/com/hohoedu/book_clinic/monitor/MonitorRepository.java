@@ -24,8 +24,8 @@ public interface MonitorRepository {
     /** 퇴실 처리 (status=EXITED, exited_at=now) */
     void updateSessionExit(@Param("sessionId") Integer sessionId);
 
-    /** 문제풀이 화면 진입 시각 기록 — "문제 푸는 중" 카드 상태의 기준 */
-    void markQuizStarted(@Param("sessionId") Integer sessionId);
+    /** 문제풀이 화면 진입 시각 기록 — "문제 푸는 중" 카드 상태의 기준. qlevel=01 기본 / 02 심화 (회차/심화 라벨용) */
+    void markQuizStarted(@Param("sessionId") Integer sessionId, @Param("qlevel") String qlevel);
 
     /** 채점 제출 시 문제풀이 진행 상태 해제 */
     void clearQuizStarted(@Param("sessionId") Integer sessionId);

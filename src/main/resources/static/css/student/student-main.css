@@ -186,13 +186,18 @@
 }
 
 .eyebrow {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   color: var(--green);
   font-size: 17px;
   font-weight: 700;
   margin-top: 25px;
+}
+
+/* "오늘의 추천 도서" 라벨은 왼쪽, 책 추천받기 버튼은 오른쪽 끝으로 (space-between 효과) */
+.eyebrow .recommend-next-btn {
+  margin-left: auto;
 }
 
 .eyebrow .star {

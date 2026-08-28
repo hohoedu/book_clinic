@@ -21,23 +21,53 @@
         </foreach>
     </insert>
 
-    <!-- 현재 적용 중인 초안의 순위를 조인 - 순위가 없으면(초안 자체가 없거나, 초안에 없는 신간 도서) 목록 뒤로 -->
+    <!--
+      현재 적용 중인 초안의 순위를 조인 - 순위가 없으면(초안 자체가 없거나, 초안에 없는 신간 도서) 목록 뒤로.
+      순위가 없는 도서들끼리의 기본 정렬 (2026-08-28) — 순위를 아직 세팅하지 않은 학년에서도 화면이
+      "추천하기 좋은 순서"로 보이도록, data.sql의 초기 시딩 규칙과 같은 방식으로 정렬한다.
+        1) 난이도: 하 → 중 → 상. difficulty는 코드가 아니라 자유 입력 텍스트라 공백을 털어내고 비교하고,
+           비어 있으면 중간(중)으로 취급한다
+        2) 장르: 같은 난이도 구간 안에서 장르가 연달아 나오지 않게 라운드로빈으로 섞는다. 장르별로
+           제목 가나다순 번호를 매긴 뒤(genre_seq) 그 번호 순으로 뽑으면 "각 장르의 1번째들 →
+           2번째들 → ..."이 되어 장르가 번갈아 나온다. 어떤 장르의 책이 유독 많으면 뒤쪽엔 그 장르만
+           남는데, 남은 게 그것뿐이라 이건 피할 수 없다
+        3) 같은 번호끼리는 제목 가나다순
+    -->
     <select id="findRankedBooks" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$RankedBookDTO">
-        SELECT bc.content_id     AS contentId,
-               bc.original_title AS originalTitle,
-               ct.codeNm         AS contentTypeName,
-               bc.keywords       AS keywords,
-               bc.difficulty     AS difficulty,
-               bc.state          AS state,
-               bc.image_url      AS imageUrl,
-               p.sort_order      AS sortOrder
-        FROM erp_bookstore_content bc
-        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
-        LEFT JOIN erp_bookstore_priority_draft d
-               ON d.year = #{year} AND d.schoolyear = #{schoolYear} AND d.is_active = 'Y'
-        LEFT JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id AND p.content_id = bc.content_id
-        WHERE bc.schoolyear = #{schoolYear}
-        ORDER BY CASE WHEN p.sort_order IS NULL THEN 1 ELSE 0 END, p.sort_order ASC, bc.content_id ASC
+        WITH ranked AS (
+            SELECT bc.content_id     AS contentId,
+                   bc.original_title AS originalTitle,
+                   ct.codeNm         AS contentTypeName,
+                   bc.keywords       AS keywords,
+                   bc.difficulty     AS difficulty,
+                   bc.state          AS state,
+                   bc.image_url      AS imageUrl,
+                   p.sort_order      AS sortOrder,
+                   CASE LTRIM(RTRIM(bc.difficulty))
+                       WHEN N'하' THEN 1
+                       WHEN N'상' THEN 3
+                       ELSE 2                      <!-- '중' 그리고 미입력(NULL/공백) -->
+                   END AS diffRank,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY CASE LTRIM(RTRIM(bc.difficulty))
+                                        WHEN N'하' THEN 1
+                                        WHEN N'상' THEN 3
+                                        ELSE 2
+                                    END,
+                                    ISNULL(bc.genre, '')
+                       ORDER BY bc.original_title ASC, bc.content_id ASC
+                   ) AS genreSeq
+            FROM erp_bookstore_content bc
+            LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+            LEFT JOIN erp_bookstore_priority_draft d
+                   ON d.year = #{year} AND d.schoolyear = #{schoolYear} AND d.is_active = 'Y'
+            LEFT JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id AND p.content_id = bc.content_id
+            WHERE bc.schoolyear = #{schoolYear}
+        )
+        SELECT contentId, originalTitle, contentTypeName, keywords, difficulty, state, imageUrl, sortOrder
+        FROM ranked
+        ORDER BY CASE WHEN sortOrder IS NULL THEN 1 ELSE 0 END, sortOrder ASC,
+                 diffRank ASC, genreSeq ASC, originalTitle ASC, contentId ASC
     </select>
 
     <select id="findDrafts" resultType="com.hohoedu.book_clinic.priority._dto.PriorityRespDTO$DraftDTO">
