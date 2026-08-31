@@ -449,6 +449,11 @@ i.badge-icon {
   transform: translateX(16px);
   pointer-events: none;
   transition: width 0.25s ease, opacity 0.2s ease, transform 0.25s ease;
+  /* 학생 목록(.monitor-sections)을 스크롤해도 일지 패널은 .monitor-body 안에서
+     상단에 고정된 채 따라 내려온다. align-self로 세로 stretch를 막아야 sticky가 먹는다. */
+  position: sticky;
+  top: 20px;
+  align-self: flex-start;
 }
 
 .reading-log-panel.open {
@@ -465,6 +470,11 @@ i.badge-icon {
   border: 1px solid #e8ecef;
   padding: 20px;
   box-sizing: border-box;
+  /* sticky로 고정된 상태에서 일지 내용이 화면 세로보다 길어지면(작은 노트북 등)
+     저장 버튼이 잘리지 않도록 패널 안에서만 스크롤한다. 바깥 .reading-log-panel의
+     overflow:hidden은 가로 클립(슬라이드 인)용이라 그대로 둔다. */
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
 }
 
 .reading-log-panel-header {

@@ -31,6 +31,9 @@ public interface ClinicRepository {
     /** 직전 추천 도서의 분류/장르 (추천 이력이 없으면 null) */
     ClinicRespDTO.LastRecommendDTO findLastRecommend(@Param("studentId") String studentId);
 
+    /** 심화 게이트 판정용 — 가장 최근 완독(DONE) 추천의 content_id + 완독일(KST). 완독 이력이 없으면 null */
+    ClinicRespDTO.AdvancedGateDTO findLastDoneForGate(@Param("studentId") String studentId);
+
     /**
      * 우선순위 순으로 조건을 모두 만족하는 첫 item(실물 판본) 1건 선택 (없으면 null) — 2026-07-30, item 기준 추천
      *   - 이 학생에게 이 item이 아직 추천된 적 없을 것 (같은 content라도 item이 다르면 재추천 가능)
@@ -95,6 +98,12 @@ public interface ClinicRepository {
 
     /** 그 책의 기본 문제 뱃지(badge_id 1~3)를 모두 제거 — 재도전으로 등급이 올라 상위 뱃지로 교체할 때 쓴다 */
     void deleteBasicBadge(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** 그 책의 심화 문제 뱃지 중 현재 보유한 것(4=심화완료 / 5=심화왕, 없으면 null) */
+    Integer findAdvancedBadgeId(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
+    /** 그 책의 심화 문제 뱃지(badge_id 4~5)를 모두 제거 — 심화 재도전으로 상위 뱃지로 교체할 때 쓴다 */
+    void deleteAdvancedBadge(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
 
     /** 특정 학년 도서의 완독(DONE) 권수 — 레벨 계산 기준 (단계 = 학생 학년) */
     int countDoneBooksByGrade(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);

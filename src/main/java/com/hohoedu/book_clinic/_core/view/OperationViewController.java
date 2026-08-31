@@ -39,6 +39,17 @@ public class OperationViewController {
         return "operation/payment-review";
     }
 
+    /**
+     * 결제 내역 — 이용월 기준으로 센터 재원생 전원의 납부/이용권 현황을 보여준다 (2026-08-31).
+     * "결제 이상 건"(위)과 헷갈리기 쉬운데 저쪽은 운영자가 손대야 하는 예외 건만 모은 화면이다.
+     */
+    @GetMapping("/admin/payment/history-view")
+    public String paymentHistory(Model model) {
+        // 학년 필터 셀렉트 렌더링용 — 목록 API와 별개로 화면 진입 시 한 번만 필요해서 모델로 내린다
+        model.addAttribute("schoolYearCodes", codeService.findBookstoreCodes("S"));
+        return "operation/payment-history";
+    }
+
     /** 학생 정보 — 화면 스캐폴딩 단계, 하드코딩 목업 데이터로 레이아웃만 구현 (2026-08-24) */
     @GetMapping("/admin/operation/student-view")
     public String studentInfo() {

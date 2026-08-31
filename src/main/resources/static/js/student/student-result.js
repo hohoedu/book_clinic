@@ -139,14 +139,29 @@
   }
 
   function renderAdvancedResult(result) {
-    setHeroRibbon(true);
-    setHero('ADVANCED', '심화문제 완료!');
-    resultTitle.textContent = '심화문제까지 다 풀었어요!';
+    const total = result.totalCount ?? 0;
+    const correct = result.correctCount ?? 0;
+    const perfect = total > 0 && correct >= total;   // 만점 = 심화왕
 
-    retryBtn.hidden = true;
-    wrongRetryBtn.hidden = true;
-    advancedBtn.hidden = true;
+    setHeroRibbon(true);
+    setHero('ADVANCED', perfect ? '심화왕 달성!' : '심화문제 완료!');
+    resultTitle.textContent = perfect
+      ? '심화문제까지 만점으로 풀었어요!'
+      : '심화문제를 풀었어요! 더 도전해 볼까요?';
     bookFinished = true;
+
+    // "심화 문제 풀기"(첫 진입용)는 결과 화면에선 항상 숨긴다
+    advancedBtn.hidden = true;
+
+    // 만점이 아니면 심화 재도전 / 심화 틀린 문제 다시 풀기를 열어준다(2026-08-31).
+    // retryBtn·wrongRetryBtn은 HTML에서 qlevel='01'로 고정돼 있어 심화용으로 qlevel=02로 다시 연결한다.
+    const q2Href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=02`;
+    retryBtn.hidden = perfect;
+    wrongRetryBtn.hidden = perfect || (result.wrongQnums ?? []).length === 0;
+    if (!perfect) {
+      retryBtn.setAttribute('href', q2Href);
+      wrongRetryBtn.setAttribute('href', q2Href);
+    }
   }
 
   function renderKingResult(result) {

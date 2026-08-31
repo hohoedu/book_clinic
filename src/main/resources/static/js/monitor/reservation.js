@@ -440,10 +440,6 @@
     }
   }
 
-  function clearSavedStudentPickKeyword() {
-    saveStudentPickKeyword("");
-  }
-
   function initStudentPickSearch() {
     const apply = () => searchStudentsForPick();
     el.btnStudentPickSearch.addEventListener("click", apply);
@@ -537,18 +533,19 @@
           failures.push(`${student ? student.studentName : studentId}: ${err.message}`);
         }
       }
+      await loadDay();
+      await loadChangeDateData();
       if (failures.length > 0) {
         // 실패한 학생은 검색 결과·선택 상태를 그대로 남겨서 다시 눌러 재시도할 수 있게 한다.
         // 전부 지워버리면 "검색된 학생이 없습니다"만 남아 실패 사실도, 대상 학생도 알 수 없게 된다.
         alert(`일부 등록에 실패했습니다.\n${failures.join("\n")}`);
         renderStudentPickList();
       } else {
-        studentPickResults = [];
-        el.studentPickSearch.value = "";
-        clearSavedStudentPickKeyword();
+        // 등록에 성공한 학생은 방금 만든 예약 때문에 재검색 시 목록에서 자연히 빠진다.
+        // 검색 결과를 통째로 비우면 "검색된 학생이 없습니다"만 남아, 같은 반 다른 학생을
+        // 이어서 등록하려던 흐름이 끊긴다 — 검색어를 유지한 채 목록만 다시 불러온다.
+        await searchStudentsForPick();
       }
-      await loadDay();
-      await loadChangeDateData();
     } else {
       const row = state.selectedRow;
       if (!row) return;

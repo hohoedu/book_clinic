@@ -274,21 +274,40 @@ public class ClinicService {
                     .map(ClinicRespDTO.LatestAnswerDTO::getQnum)
                     .toList();
         }
-        boolean advancedAvailable = clinicRepository.countPriorAttempts(studentId, contentId, "02") == 0;
+        // 심화 문항이 등록돼 있고(2026-08-31 추가) 아직 한 번도 안 푼 경우에만 "심화 문제 풀기" 노출.
+        boolean hasAdvancedQuestions =
+                !questionRepository.searchQuestions(contentId, "02", null, "S").isEmpty();
+        int advancedAttempts = clinicRepository.countPriorAttempts(studentId, contentId, "02");
+        boolean advancedAvailable = hasAdvancedQuestions && advancedAttempts == 0;
+
+        // 심화 재도전/틀린문제 버튼(2026-08-31) — 심화를 한 번이라도 풀었고 아직 심화왕(만점)이 아니면 노출.
+        Integer advBadgeId = clinicRepository.findAdvancedBadgeId(studentId, contentId);
+        boolean advancedKing = advBadgeId != null && advBadgeId == BADGE_ADV_KING;
+        boolean advancedRetryAvailable = hasAdvancedQuestions && advancedAttempts > 0 && !advancedKing;
+        List<String> advancedWrongQnums = List.of();
+        if (advancedRetryAvailable && logStatus != null) {
+            advancedWrongQnums = clinicRepository.findLatestAnswersByRecommend(logStatus.getRecommendId(), "02").stream()
+                    .filter(a -> !Boolean.TRUE.equals(a.getCorrect()))
+                    .map(ClinicRespDTO.LatestAnswerDTO::getQnum)
+                    .toList();
+        }
 
         ClinicRespDTO.CompletionStateDTO resp = new ClinicRespDTO.CompletionStateDTO();
         resp.setBook(book);
         resp.setWrongQnums(wrongQnums);
         resp.setAdvancedAvailable(advancedAvailable);
+        resp.setAdvancedRetryAvailable(advancedRetryAvailable);
+        resp.setAdvancedWrongQnums(advancedWrongQnums);
         // 버튼 분기용(2026-08-28): KING=심화만 / FRIEND=재도전·틀린문제·심화 / null(불합격)=재도전만.
         resp.setGrade(logStatus != null ? logStatus.getGrade() : null);
 
         // "책 추천받기" 노출 여부 — recommendBook과 같은 규칙(회차당 2권 × 오늘 출석 회차 수)으로,
-        // 오늘 한도를 다 썼으면 버튼을 아예 숨긴다(2026-08-28).
+        // 오늘 한도를 다 썼으면 버튼을 아예 숨긴다(2026-08-28). 더해서 심화 게이트(2026-08-31)에
+        // 걸려 있으면(직전 완독 책 심화 미응시) 심화를 풀 때까지 버튼을 숨긴다.
         int attendedSlots = Math.max(reservationService.countAttendedSlotsToday(studentId), 1);
         int maxAllowed = MAX_RECOMMENDATIONS_PER_SLOT * attendedSlots;
         int todayCount = clinicRepository.countTodayRecommends(studentId, KstClock.today());
-        resp.setCanRecommendNext(todayCount < maxAllowed);
+        resp.setCanRecommendNext(todayCount < maxAllowed && !advancedGateBlocks(studentId));
         return resp;
     }
 
@@ -300,12 +319,46 @@ public class ClinicService {
     }
 
     /**
+     * 심화 게이트 판정 (2026-08-31) — 개인 폰 앱에서 "책 추천받기"로 다음 책을 받으려면 직전에
+     * 완독(DONE)한 책의 심화(qlevel=02) 문제를 최소 1회 제출했어야 한다. 아래 중 하나면 게이트를
+     * 통과시킨다(= false 반환):
+     *   - 완독 이력이 아예 없음 (생애 첫 책 등)
+     *   - 직전 완독일이 오늘이 아님 — 날이 바뀌면 심화 미응시여도 다음 책 허용(사용자 확정 2026-08-31)
+     *   - 그 책에 심화 문항이 아예 없음 (qlevel=02 미등록)
+     *   - 그 책 심화 제출 1회 이상
+     * 출석체크 기기(/attendance/enter)는 이 판정을 호출하지 않는다 — 항상 다음 책.
+     */
+    public boolean advancedGateBlocks(String studentId) {
+        ClinicRespDTO.AdvancedGateDTO lastDone = clinicRepository.findLastDoneForGate(studentId);
+        if (lastDone == null || lastDone.getCompletedDate() == null) return false;
+        if (!KstClock.today().equals(lastDone.getCompletedDate())) return false;
+        Integer contentId = lastDone.getContentId();
+        boolean hasAdvancedQuestions =
+                !questionRepository.searchQuestions(contentId, "02", null, "S").isEmpty();
+        if (!hasAdvancedQuestions) return false;
+        return clinicRepository.countPriorAttempts(studentId, contentId, "02") == 0;
+    }
+
+    /**
      * 책 확인 — 멱등 처리. 이미 추천받은 책이 있으면 그 책 그대로 반환(재추천/재대여 없음),
      * 없으면 규칙 1~5를 순서대로 적용해 새로 고르고 즉시 대여 + 추천 이력 기록까지 처리한다.
      * student-main 홈 화면에서는 더 이상 자동으로 호출하지 않고, "책 추천받기" 버튼 클릭 시에만 호출된다.
+     *
+     * 출석체크 기기(/attendance/enter)와 생애 첫 로그인은 심화 게이트를 적용하지 않는다 —
+     * 이 오버로드(enforceAdvancedGate=false)로 호출한다.
      */
     @Transactional
     public ClinicRespDTO.RecommendBookDTO recommendBook(String studentId) {
+        return recommendBook(studentId, false);
+    }
+
+    /**
+     * @param enforceAdvancedGate true면 심화 게이트를 적용한다 — 개인 폰 앱 "책 추천받기" 버튼
+     *        (POST /clinic/recommend)에서만 true. 직전 완독 책의 심화(qlevel=02)를 오늘 안에
+     *        1회 이상 풀지 않았으면 다음 책을 내주지 않는다(2026-08-31, advancedGateBlocks 참고).
+     */
+    @Transactional
+    public ClinicRespDTO.RecommendBookDTO recommendBook(String studentId, boolean enforceAdvancedGate) {
         ClinicRespDTO.RecommendBookDTO existing = clinicRepository.findPendingRecommendBookCard(studentId);
         if (existing != null) {
             // 실시간 모니터링 기준 "입실" 시점 — 이미 추천받은 책이 있는 재로그인도 여기서 입실 처리한다
@@ -314,6 +367,11 @@ public class ClinicService {
             // 퇴실로 대여만 반납되고 추천은 PENDING으로 남아있을 수 있다 — 재고가 있으면 다시 대여한다
             ensureActiveLoan(studentId, existing.getItemId());
             return existing;
+        }
+
+        // 심화 게이트(2026-08-31) — 개인 폰 앱 "책 추천받기"에서만. 직전 완독 책의 심화를 오늘 안 풀었으면 막는다.
+        if (enforceAdvancedGate && advancedGateBlocks(studentId)) {
+            throw new Exception400("심화 문제를 먼저 풀어야 다음 책을 받을 수 있어요.");
         }
 
         // 추천 상한 = 회차당 2권 × 오늘 출석(ATTENDED) 회차 수. 정상 흐름에선 이 지점에 오기 전
@@ -511,15 +569,26 @@ public class ClinicService {
         }
 
         // 심화문제는 완독/등급/레벨 개념이 없다 — 이력 기록/채점 결과에 더해 뱃지(심화완료/심화왕)만 판정.
-        // 심화 불합격이면 뱃지 없음, 첫 시도가 아니면(재도전) 등급 변화 없음.
+        // 기본 문제와 같은 방식으로(2026-08-31) 만점이 아니면 재도전(RETRY)과 틀린 문제 다시 풀기(WRONG_ONLY)를
+        // 열어준다. "처음 점수"(diary.advanced_correct_cnt)는 고정, "최종 점수"(advanced_final_correct_cnt)는
+        // 재도전에서 더 잘하면 올라간다. 뱃지도 재도전으로 "올라가기만" 한다(불합격→4/5, 4→5). 내려가지 않음.
         if (advanced) {
-            resp.setPassed(false);
+            boolean advRetry = !firstAttempt && !wrongOnly;   // "심화 재도전" — 최종 점수 + (오를 때만) 뱃지 갱신
+            resp.setPassed(correctCount >= passLine);
             resp.setGrade(null);
-            resp.setNewBadges(awardAdvancedBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
-            // 심화 점수는 최초 1회만 독서일지에 저장한다 — 재도전/틀린 문제 다시 풀기는 갱신하지 않는다(2026-08-28).
+
             if (firstAttempt) {
+                resp.setNewBadges(awardAdvancedBadge(studentId, contentId, correctCount, totalCount, passLine, true));
                 recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
+            } else if (advRetry) {
+                resp.setNewBadges(upgradeAdvancedBadge(studentId, contentId, correctCount, totalCount, passLine));
+                // 최종 점수만 max로 갱신한다(upsertDiaryDetail이 처음 점수는 COALESCE로 보존)
+                recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
+            } else {
+                // 틀린 문제만 다시 풀기 — 점수/뱃지 어떤 것도 바꾸지 않는다
+                resp.setNewBadges(List.of());
             }
+
             // 심화는 레벨이 바뀌진 않지만, 레벨 카드에 현재 레벨은 그대로 보여줘야 한다
             // (안 채우면 결과 화면 HTML의 placeholder "Lv. 2"가 그대로 노출된다)
             String schoolyear = resolveSchoolyear(studentId);
@@ -797,6 +866,29 @@ public class ClinicService {
         if (!firstAttempt || correct < passLine) return List.of();
         int badgeId = (correct >= total) ? BADGE_ADV_KING : BADGE_ADV_DONE;
         return awardBookBadge(studentId, contentId, badgeId);
+    }
+
+    /**
+     * 심화(02) 재도전 뱃지 — "올라가기만" 한다(2026-08-31). 이번 제출이 합격선 이상이고, 그 결과 뱃지가
+     * 지금 보유한 것보다 높으면(없음&lt;심화완료&lt;심화왕) 기존 심화 뱃지를 지우고 상위 뱃지로 교체한다.
+     * 그대로거나 내려가는 방향이면 빈 목록.
+     */
+    private List<ClinicRespDTO.BadgeDTO> upgradeAdvancedBadge(String studentId, Integer contentId,
+                                                              int correct, int total, int passLine) {
+        if (correct < passLine) return List.of();
+        int targetId = (correct >= total) ? BADGE_ADV_KING : BADGE_ADV_DONE;
+        Integer currentId = clinicRepository.findAdvancedBadgeId(studentId, contentId);
+        if (advancedBadgeRank(targetId) <= advancedBadgeRank(currentId)) return List.of();
+        clinicRepository.deleteAdvancedBadge(studentId, contentId);
+        return awardBookBadge(studentId, contentId, targetId);
+    }
+
+    /** 심화 뱃지 순위 — null(없음)=0 &lt; 심화완료(4)=1 &lt; 심화왕(5)=2 */
+    private int advancedBadgeRank(Integer badgeId) {
+        if (badgeId == null) return 0;
+        if (badgeId == BADGE_ADV_KING) return 2;
+        if (badgeId == BADGE_ADV_DONE) return 1;
+        return 0;
     }
 
     /** (student, content, badge) 1건 적재 후 결과화면 팝업용 뱃지 정보를 반환 */

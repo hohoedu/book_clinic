@@ -42,6 +42,17 @@ public class ClinicRespDTO {
     }
 
     /**
+     * 심화 게이트 판정용 (2026-08-31) — 가장 최근에 완독(DONE)한 추천의 도서와 완독 날짜(KST).
+     * "책 추천받기"로 다음 책을 받으려면 이 책의 심화(qlevel=02)를 1회 이상 풀었어야 한다.
+     * 단 완독일이 오늘이 아니면(날이 바뀌면) 심화 미응시여도 다음 책을 허용한다.
+     */
+    @Data
+    public static class AdvancedGateDTO {
+        private Integer contentId;
+        private java.time.LocalDate completedDate;
+    }
+
+    /**
      * 홈 화면(student-main) 진입 시 상태 — 2026-07-29 재설계로 "책 다 읽으면 홈 진입만으로 바로
      * 다음 책 자동 추천"을 없애고, 학생이 직접 "책 추천받기"를 눌러야 다음 책이 나가도록 바꿨다.
      *   READING       — 아직 안 끝낸(PENDING) 책이 있음. book=그 책, 버튼="문제 풀기"
@@ -154,6 +165,9 @@ public class ClinicRespDTO {
         private RecommendBookDTO book;
         private List<String> wrongQnums;
         private boolean advancedAvailable;
+        // 심화 재도전/틀린문제 다시풀기(2026-08-31) — 심화를 1회 이상 풀었고 아직 심화왕이 아니면 true.
+        private boolean advancedRetryAvailable;
+        private List<String> advancedWrongQnums;
         // 결과화면/완료화면 버튼 분기용 (2026-08-28) — KING=심화만, FRIEND=재도전/틀린문제/심화,
         // null(불합격)=재도전만. 재도전으로 합격하면 이 값이 갱신되어 버튼도 바뀐다.
         private String grade;

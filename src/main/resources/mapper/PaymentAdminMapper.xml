@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  관리자 "결제 내역" 화면 조회 (2026-08-31). 전부 읽기 전용이다.
+
+  시각은 이 프로젝트 관례대로 DATEADD(HOUR, 9, GETUTCDATE())로 KST를 만든다(GETDATE() 금지).
+  다만 여기 쿼리는 저장된 값을 읽기만 해서 현재시각을 쓰는 곳이 없다.
+-->
+<mapper namespace="com.hohoedu.book_clinic.payment.PaymentAdminRepository">
+
+    <!--
+      목록. FROM이 erp_student인 것이 이 화면의 핵심이다 — 결제 테이블에서 출발하면
+      "안 낸 사람"이 목록에 아예 안 나온다.
+
+      이용권과 결제를 각각 OUTER APPLY로 붙이는 이유:
+        · 같은 학생·서비스·청구월에 이용권이 여러 장 생길 수 있다(환불로 회수된 옛 장 + 재결제분).
+          살아있는 것을 우선하고 최근 것을 고른다.
+        · 결제도 마찬가지로 실패/이탈 건이 여러 개 쌓일 수 있어 PAID/CANCELED만 본다
+          (READY/CLOSED/FAILED는 "결제한 적 없음"과 화면상 구분할 의미가 없다).
+      LEFT JOIN + 집계로 하면 학생 행이 이용권 수만큼 불어나 "명수" 요약이 틀어진다.
+    -->
+    <select id="findHistoryRows" resultType="com.hohoedu.book_clinic.payment._dto.PaymentAdminRespDTO$HistoryRowDTO">
+        SELECT st.student_id            AS studentId,
+               st.student_name          AS studentName,
+               st.grade_key             AS gradeKey,
+               cd.codeNm                AS gradeName,
+               ps.pass_id               AS passId,
+               ps.source                AS passSource,
+               ps.total_count           AS totalCount,
+               ps.remain_count          AS remainCount,
+               ps.valid_until           AS validUntil,
+               pm.payment_id            AS paymentId,
+               pm.order_no              AS orderNo,
+               pm.paid_at               AS paidAt,
+               <!-- 결제 행이 없으면(미결제) 이용권에 붙은 상품 가격을 청구 예정액으로 대신 보여준다 -->
+               ISNULL(pm.amount, pr.price)      AS amount,
+               ISNULL(pm.refund_amount, 0)      AS refundAmount,
+               pm.status                        AS paymentStatus,
+               ISNULL(uc.used_count, 0)         AS usedCount
+        FROM erp_student st
+        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        OUTER APPLY (
+            SELECT TOP 1 p.pass_id, p.source, p.product_id, p.total_count, p.remain_count, p.valid_until
+            FROM erp_bookstore_pass p
+            WHERE p.student_id   = st.student_id
+              AND p.service_code = #{serviceCode}
+              AND p.billing_ym   = #{billingYm}
+            ORDER BY CASE WHEN p.revoked_at IS NULL THEN 0 ELSE 1 END, p.granted_at DESC
+        ) ps
+        LEFT JOIN erp_bookstore_product pr ON pr.product_id = ps.product_id
+        OUTER APPLY (
+            SELECT TOP 1 p2.payment_id, p2.order_no, p2.paid_at, p2.amount, p2.refund_amount, p2.status
+            FROM erp_bookstore_payment p2
+            WHERE p2.student_id   = st.student_id
+              AND p2.service_code = #{serviceCode}
+              AND p2.billing_ym   = #{billingYm}
+              AND p2.status IN ('PAID', 'CANCELED')
+            ORDER BY CASE p2.status WHEN 'PAID' THEN 0 ELSE 1 END, p2.requested_at DESC
+        ) pm
+        OUTER APPLY (
+            SELECT COUNT(*) AS used_count
+            FROM erp_bookstore_pass_use pu
+            WHERE pu.pass_id = ps.pass_id
+        ) uc
+        WHERE st.center_code = #{centerCode}
+          AND st.status_key  = 'ACTIVE'   <!-- 탈퇴생은 이번 달 청구 대상이 아니다 -->
+        <if test="gradeKey != null and gradeKey != ''">
+            AND st.grade_key = #{gradeKey}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND st.student_name LIKE '%' + #{keyword} + '%'
+        </if>
+        ORDER BY st.student_name ASC
+    </select>
+
+    <!--
+      차감 내역.
+
+      u: 이 이용권의 차감 행. seq_all은 이용권 전체 통산 순번(차감 후 잔여 = total_count - seq_all),
+         seq_in_day는 그날 안에서의 순번이다.
+      r: 그 학생의 예약 회차. 취소된 예약은 차감을 만들지 않으므로 제외한다.
+      둘을 (날짜, 그날 순번)으로 짝지어 회차 번호·시간을 붙인다. 못 찾으면 회차 칸만 NULL이고
+      이용일·잔여는 그대로 나온다 — 예약 데이터가 없던 시절의 옛 차감도 목록에서 사라지면 안 된다.
+    -->
+    <select id="findPassUses" resultType="com.hohoedu.book_clinic.payment._dto.PaymentAdminRespDTO$PassUseRowDTO">
+        WITH u AS (
+            SELECT pu.use_id,
+                   pu.used_date,
+                   ROW_NUMBER() OVER (ORDER BY pu.used_date, pu.created_at, pu.use_id) AS seq_all,
+                   ROW_NUMBER() OVER (PARTITION BY pu.used_date
+                                      ORDER BY pu.created_at, pu.use_id)               AS seq_in_day
+            FROM erp_bookstore_pass_use pu
+            WHERE pu.pass_id = #{passId}
+        ),
+        r AS (
+            SELECT rv.service_date,
+                   si.seq,
+                   si.starts_at,
+                   si.ends_at,
+                   rv.status,
+                   ROW_NUMBER() OVER (PARTITION BY rv.service_date ORDER BY si.seq) AS seq_in_day
+            FROM erp_bookstore_reservation rv
+            JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = rv.slot_instance_id
+            WHERE rv.student_id = #{studentId}
+              AND rv.status &lt;&gt; 'CANCELED'
+        )
+        SELECT u.used_date                    AS usedDate,
+               r.seq                          AS slotSeq,
+               r.starts_at                    AS startsAt,
+               r.ends_at                      AS endsAt,
+               ps.total_count - u.seq_all     AS remainAfter,
+               r.status                       AS reservationStatus
+        FROM u
+        JOIN erp_bookstore_pass ps ON ps.pass_id = #{passId}
+        LEFT JOIN r ON r.service_date = u.used_date AND r.seq_in_day = u.seq_in_day
+        ORDER BY u.used_date DESC, u.seq_in_day DESC
+    </select>
+
+    <!--
+      결제/환불 내역. 결제 1행과 그 건의 취소 이력을 합쳐 시간 역순으로 보여준다.
+      취소 금액을 음수로 내리는 것은 화면 표기를 위해서가 아니라, 합계가 곧 실수령액이 되게
+      해서 "결제 20,000 + 취소 -10,000 = 10,000"이 눈으로 검산되게 하려는 것이다.
+      아직 결과가 안 온 취소(status='REQ')는 canceled_at이 NULL이라 요청 시각으로 대신 세운다.
+    -->
+    <select id="findPaymentTrail" resultType="com.hohoedu.book_clinic.payment._dto.PaymentAdminRespDTO$PaymentTrailRowDTO">
+        SELECT trailType, occurredAt, amount, status, resultMsg
+        FROM (
+            SELECT 'PAY'                     AS trailType,
+                   ISNULL(p.paid_at, p.requested_at) AS occurredAt,
+                   p.amount                  AS amount,
+                   p.status                  AS status,
+                   CAST(NULL AS VARCHAR(200)) AS resultMsg
+            FROM erp_bookstore_payment p
+            WHERE p.payment_id = #{paymentId}
+
+            UNION ALL
+
+            SELECT 'CANCEL',
+                   ISNULL(c.canceled_at, c.requested_at),
+                   -c.cancel_amount,
+                   c.status,
+                   c.result_msg
+            FROM erp_bookstore_payment_cancel c
+            WHERE c.payment_id = #{paymentId}
+        ) t
+        ORDER BY occurredAt DESC
+    </select>
+
+    <select id="findPassOwner" resultType="string">
+        SELECT student_id FROM erp_bookstore_pass WHERE pass_id = #{passId}
+    </select>
+
+    <select id="findPaymentOwner" resultType="string">
+        SELECT student_id FROM erp_bookstore_payment WHERE payment_id = #{paymentId}
+    </select>
+
+</mapper>

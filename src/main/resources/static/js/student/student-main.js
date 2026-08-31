@@ -120,6 +120,8 @@
     const completionRetryBtn = document.getElementById('completionRetryBtn');
     const completionWrongRetryBtn = document.getElementById('completionWrongRetryBtn');
     const completionAdvancedBtn = document.getElementById('completionAdvancedBtn');
+    const completionAdvancedRetryBtn = document.getElementById('completionAdvancedRetryBtn');
+    const completionAdvancedWrongBtn = document.getElementById('completionAdvancedWrongBtn');
     const recommendErrorModal = document.getElementById('recommendErrorModal');
     const recommendErrorMsg = document.getElementById('recommendErrorMsg');
     const recommendErrorOkBtn = document.getElementById('recommendErrorOkBtn');
@@ -204,6 +206,11 @@
       completionWrongRetryBtn.hidden = failed || isKing || !hasWrong;
       completionAdvancedBtn.hidden = failed || !state.advancedAvailable;
 
+      // 심화 재도전 / 심화 틀린 문제 다시 풀기(2026-08-31) — 심화를 1회 이상 풀었고 아직 심화왕이 아닐 때.
+      const advWrong = state.advancedWrongQnums ?? [];
+      completionAdvancedRetryBtn.hidden = failed || !state.advancedRetryAvailable;
+      completionAdvancedWrongBtn.hidden = failed || !state.advancedRetryAvailable || advWrong.length === 0;
+
       completionRetryBtn.onclick = () => {
         // 전체 다시 풀기 — retryQnums를 심지 않으므로 student-question.js가 mode=RETRY로 제출한다
         window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;
@@ -213,6 +220,14 @@
         window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;
       };
       completionAdvancedBtn.onclick = () => {
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
+      };
+      completionAdvancedRetryBtn.onclick = () => {
+        // 심화 전체 다시 풀기 — retryQnums 없이 qlevel=02로 진입하면 서버가 mode=RETRY로 처리한다
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
+      };
+      completionAdvancedWrongBtn.onclick = () => {
+        sessionStorage.setItem('retryQnums', JSON.stringify(advWrong));
         window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
       };
       recommendNextBtn.onclick = async () => {

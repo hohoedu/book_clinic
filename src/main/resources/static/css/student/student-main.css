@@ -543,6 +543,12 @@
 .solve-btn--sub .fa-rotate-left,
 .solve-btn--sub .fa-book-open { font-size: 22px; }
 
+/* 심화 문제 풀기 — "문제 풀기"(.solve-btn)와 같은 빨강 톤으로. 재도전/틀린문제 다시풀기(파랑)와 구분 */
+.solve-btn--advanced {
+  background: var(--red);
+  box-shadow: inset 0 -5px 0 var(--red-dark);
+}
+
 .recommend-next-btn {
   display: inline-flex;
   align-items: center;

@@ -607,7 +607,8 @@ CREATE TABLE erp_bookstore_diary_detail (
     read_minutes         INT,            -- 실제 독서 시간(분) — content.reading_time(예상)과 다른 값
     basic_correct_cnt    INT,            -- 기본(qlevel='01') 정답 수 스냅샷
     basic_total_cnt      INT,            -- 기본 총 문항 수 스냅샷
-    advanced_correct_cnt INT,            -- 심화(qlevel='02') 정답 수 스냅샷
+    advanced_correct_cnt INT,            -- 심화(qlevel='02') "처음 점수" — 최초 제출값 고정
+    advanced_final_correct_cnt INT,      -- 심화 "최종 점수" — 재도전(mode=RETRY)에서 더 잘하면 갱신(max). 첫 제출 시 advanced_correct_cnt와 동일 (2026-08-31)
     advanced_total_cnt   INT,            -- 심화 총 문항 수 스냅샷
     CONSTRAINT UQ_erp_bookstore_diary_detail_book UNIQUE (diary_key, content_id),
     FOREIGN KEY (diary_key)    REFERENCES erp_bookstore_diary(diary_key),

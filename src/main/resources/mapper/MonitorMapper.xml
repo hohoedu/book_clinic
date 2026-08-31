@@ -712,15 +712,22 @@
             recommend_id         = #{recommendId},
             basic_correct_cnt    = CASE WHEN #{qlevel} = '01' THEN #{correctCount} ELSE target.basic_correct_cnt END,
             basic_total_cnt      = CASE WHEN #{qlevel} = '01' THEN #{totalCount}   ELSE target.basic_total_cnt END,
-            advanced_correct_cnt = CASE WHEN #{qlevel} = '02' THEN #{correctCount} ELSE target.advanced_correct_cnt END,
+            -- 심화 "처음 점수"는 최초 1회만 채우고 이후엔 그대로 둔다(재도전이 덮어쓰지 않음)
+            advanced_correct_cnt = CASE WHEN #{qlevel} = '02' THEN COALESCE(target.advanced_correct_cnt, #{correctCount}) ELSE target.advanced_correct_cnt END,
+            -- 심화 "최종 점수"는 재도전에서 더 잘한 경우에만 올린다(max)
+            advanced_final_correct_cnt = CASE WHEN #{qlevel} = '02'
+                THEN CASE WHEN target.advanced_final_correct_cnt IS NULL OR target.advanced_final_correct_cnt &lt; #{correctCount}
+                          THEN #{correctCount} ELSE target.advanced_final_correct_cnt END
+                ELSE target.advanced_final_correct_cnt END,
             advanced_total_cnt   = CASE WHEN #{qlevel} = '02' THEN #{totalCount}   ELSE target.advanced_total_cnt END
         WHEN NOT MATCHED THEN INSERT
             (diary_key, content_id, recommend_id, book_name, book_img, read_minutes,
-             basic_correct_cnt, basic_total_cnt, advanced_correct_cnt, advanced_total_cnt)
+             basic_correct_cnt, basic_total_cnt, advanced_correct_cnt, advanced_final_correct_cnt, advanced_total_cnt)
             VALUES (#{diaryKey}, source.content_id, #{recommendId}, source.original_title, source.image_url,
                     source.read_minutes,
                     CASE WHEN #{qlevel} = '01' THEN #{correctCount} END,
                     CASE WHEN #{qlevel} = '01' THEN #{totalCount}   END,
+                    CASE WHEN #{qlevel} = '02' THEN #{correctCount} END,
                     CASE WHEN #{qlevel} = '02' THEN #{correctCount} END,
                     CASE WHEN #{qlevel} = '02' THEN #{totalCount}   END);
     </update>

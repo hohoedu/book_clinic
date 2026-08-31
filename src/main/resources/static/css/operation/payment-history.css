@@ -1,0 +1,356 @@
+/*
+ * 결제 내역 (2026-08-31).
+ * 필터바/테이블 골격은 student-info.css와 같은 규격을 따른다 — 운영관리 하위 화면끼리
+ * 여백·모서리·그림자가 달라지면 같은 메뉴 안에서 화면이 튄다.
+ */
+
+.content {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header {
+  flex: 0 0 56px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ── 필터 ───────────────────────────────────────────── */
+
+.filter-bar {
+  flex: 0 0 auto;
+  margin: 16px 28px;
+  padding: 18px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.filter-field.grow {
+  flex: 1;
+  min-width: 160px;
+}
+
+.filter-field label,
+.filter-field .filter-label-text {
+  font-size: 13px;
+  color: #666;
+}
+
+.filter-field select,
+.filter-field input[type="month"] {
+  width: 168px;
+}
+
+/* 결제 종류 토글 — 셀렉트가 아니라 두 갈래 탭인 이유는 값이 둘로 고정이고,
+   화면 진입 시 어느 쪽을 보고 있는지가 한눈에 보여야 해서다 */
+.type-toggle {
+  display: flex;
+  height: 38px;
+  border: 1px solid #d8dde2;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.type-toggle button {
+  padding: 0 18px;
+  font-size: 14px;
+  color: #555;
+  background: #fff;
+  white-space: nowrap;
+}
+
+.type-toggle button + button {
+  border-left: 1px solid #d8dde2;
+}
+
+.type-toggle button.active {
+  background: #0f6b5c;
+  color: #fff;
+  font-weight: 700;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-box input {
+  width: 100%;
+  padding-right: 36px;
+}
+
+.search-box i {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #9aa5ab;
+}
+
+.filter-actions .btn {
+  width: 116px;
+}
+
+/* ── 목록 패널 ──────────────────────────────────────── */
+
+.payment-panel {
+  flex: 1;
+  min-height: 0;
+  margin: 0 28px 16px;
+  padding: 8px 20px 20px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .04);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-head {
+  flex: 0 0 auto;
+  padding: 14px 4px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.summary {
+  margin: 0;
+  font-size: 15px;
+  color: #444;
+}
+
+.summary .summary-month {
+  color: #c0392b;
+  font-weight: 800;
+}
+
+.summary .summary-sep {
+  margin: 0 10px;
+  color: #d5dade;
+}
+
+.summary .summary-count {
+  color: #666;
+  font-size: 14px;
+}
+
+.summary .summary-count b {
+  color: #222;
+}
+
+/* ── 표 ─────────────────────────────────────────────── */
+
+.payment-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.payment-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.payment-table th,
+.payment-table td {
+  padding: 15px 12px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.payment-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 16px 12px;
+  background: #f7f9fa;
+  border-bottom: 1px solid #e6eaee;
+  color: #555;
+  font-weight: 700;
+}
+
+.payment-table tbody tr.payment-row {
+  cursor: pointer;
+}
+
+.payment-table tbody tr.payment-row:hover {
+  background: #fafcfc;
+}
+
+.payment-table tbody tr.payment-row.open {
+  background: #f6faf9;
+}
+
+.col-no {
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.col-name {
+  font-weight: 700;
+  color: #222;
+}
+
+.col-amount,
+.col-refund {
+  color: #333;
+}
+
+.col-refund.has-refund {
+  color: #d35400;
+  font-weight: 600;
+}
+
+.col-muted {
+  color: #b0b8bd;
+}
+
+.empty-row td {
+  padding: 44px 0;
+  color: #9aa5ab;
+}
+
+/* ── 이용권 상태 뱃지 ───────────────────────────────── */
+
+.pass-badge {
+  display: inline-block;
+  min-width: 76px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.pass-badge.status-in_use {
+  background: #eaf6d8;
+  border-color: #cfe6a8;
+  color: #5b7a2a;
+}
+
+.pass-badge.status-used_up {
+  background: #f2f4f5;
+  border-color: #e0e4e7;
+  color: #8a949a;
+}
+
+.pass-badge.status-unpaid {
+  background: #fdeaef;
+  border-color: #f6c6d2;
+  color: #c0395c;
+}
+
+.pass-badge.status-partial_refund {
+  background: #fdeee0;
+  border-color: #f6cfa8;
+  color: #c2701c;
+}
+
+.pass-badge.status-refunded {
+  background: #fbe9e7;
+  border-color: #f3c2bb;
+  color: #b03a2e;
+}
+
+/* ── 펼침 상세 ──────────────────────────────────────── */
+
+.detail-row > td {
+  padding: 0;
+  background: #fafcfc;
+  border-bottom: 1px solid #eef2f4;
+}
+
+.detail-box {
+  margin: 4px 12px 18px;
+  padding: 20px 22px;
+  background: #f4f8f8;
+  border: 1px solid #e4ecec;
+  border-radius: 10px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+}
+
+.detail-section h4 {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+  text-align: left;
+}
+
+.detail-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border: 1px solid #e4ecec;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.detail-table th,
+.detail-table td {
+  padding: 11px 10px;
+  text-align: center;
+  border-bottom: 1px solid #eef2f4;
+}
+
+.detail-table thead th {
+  background: #fbfdfd;
+  color: #6b7c82;
+  font-weight: 600;
+}
+
+.detail-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.detail-table td.amount-minus {
+  color: #c0392b;
+}
+
+.detail-empty {
+  padding: 22px 0;
+  color: #9aa5ab;
+  font-size: 13px;
+  text-align: center;
+  background: #fff;
+  border: 1px solid #e4ecec;
+  border-radius: 8px;
+}
+
+.detail-loading {
+  padding: 22px 0;
+  color: #9aa5ab;
+  font-size: 13px;
+  text-align: center;
+}
+
+/* 좁은 화면에서는 두 표를 위아래로 쌓는다 */
+@media (max-width: 1180px) {
+  .detail-box {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}

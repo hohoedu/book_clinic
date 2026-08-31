@@ -277,7 +277,8 @@
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');
       result = isAdvanced
-        ? { advanced: true, correctCount: data.response.correctCount, totalCount: data.response.totalCount, newBadges: data.response.newBadges }
+        ? { advanced: true, correctCount: data.response.correctCount, totalCount: data.response.totalCount,
+            wrongQnums: data.response.wrongQnums ?? [], newBadges: data.response.newBadges }
         : { advanced: false, bookTitle: currentBookTitle, ...data.response };  // wrongQnums도 응답에 들어있다
     } catch (err) {
       console.error(err);

@@ -62,12 +62,13 @@ public class ClinicController {
     /**
      * 다음 책 추천 — "책 추천받기" 버튼 클릭 시에만 호출된다. 멱등 처리: 이미 추천받은(미해결) 책이
      * 있으면 그 책 그대로, 없으면 새로 추천해서 대여까지 확정한다.
+     * 개인 폰 앱 경로라 심화 게이트를 적용한다(enforceAdvancedGate=true, 2026-08-31).
      */
     @PostMapping("/recommend")
     public ResponseEntity<?> recommend(@RequestBody @Valid ClinicReqDTO.RecommendReqDTO reqDTO,
             HttpServletRequest request) {
         requireOwnStudent(request, reqDTO.getStudentId());
-        return ResponseEntity.ok(ApiUtils.success(clinicService.recommendBook(reqDTO.getStudentId())));
+        return ResponseEntity.ok(ApiUtils.success(clinicService.recommendBook(reqDTO.getStudentId(), true)));
     }
 
     /**
