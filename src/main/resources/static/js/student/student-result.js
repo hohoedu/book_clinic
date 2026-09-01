@@ -24,6 +24,11 @@
   const rewardCardName = document.getElementById('rewardCardName');
   const rewardCardDesc = document.getElementById('rewardCardDesc');
   const rewardProgressBar = document.getElementById('rewardProgressBar');
+  const badgeReward = document.getElementById('badgeReward');
+  const rewardBadgeImg = document.getElementById('rewardBadgeImg');
+  const rewardBadgeName = document.getElementById('rewardBadgeName');
+  const rewardBadgeDesc = document.getElementById('rewardBadgeDesc');
+  const stepReward = document.getElementById('stepReward');
   const rewardStepNow = document.getElementById('rewardStepNow');
   const rewardStepTotal = document.getElementById('rewardStepTotal');
   const retryBtn = document.getElementById('retryBtn');
@@ -111,6 +116,7 @@
     }
     renderExp(result);
     renderCard(result);
+    renderBadge(result);
 
     // "틀린 문제 풀기" — 이번에 틀린 문항 번호만 세션 저장소에 담아두면 student-question.js가
     // 문제 목록을 불러온 뒤 그 번호만 걸러서 다시 낸다
@@ -239,8 +245,15 @@
     if (result.progressPercent != null) {
       rewardProgressBar.style.width = `${result.progressPercent}%`;
     }
-    if (result.stepNow != null) rewardStepNow.textContent = result.stepNow;
-    if (result.stepTotal != null) rewardStepTotal.textContent = result.stepTotal;
+    // 독서탐험 칸 — 서버가 진행 칸 수를 안 내려주면(불합격/학년 목표 미설정) 하드코딩된 예시값이
+    // 그대로 노출되므로 칸 자체를 숨긴다(2026-09-01).
+    if (result.stepNow != null && result.stepTotal != null) {
+      stepReward.hidden = false;
+      rewardStepNow.textContent = result.stepNow;
+      rewardStepTotal.textContent = result.stepTotal;
+    } else {
+      stepReward.hidden = true;
+    }
 
     if (result.advanced) {
       rewardExpDesc.textContent = '심화문제는 레벨과 무관해요.';
@@ -257,23 +270,39 @@
     }
   }
 
-  // 온라인 카드 칸 — 이번 제출로 새 완독이 되어 카드를 획득한 경우에만 노출한다(책당 1장).
-  // 카드의 정체(책 제목/표지)는 가리고(???) 진행도만 보여준다. 10장을 채우면 실물 교환 안내.
+  // 독서여권 도장 칸 — 이번에 받은 뱃지를 이미지로 보여준다(2026-09-01). 미달(참 잘했어요)/독서친구/
+  // 독서왕 모두 뱃지가 있으므로 불합격이어도 칸이 뜬다. 재도전·틀린문제 재제출처럼 "새로 받은" 뱃지가
+  // 없을 때는 서버가 내려준 bookBadge(그 책에서 보유 중인 뱃지)로 대신 채운다.
+  // 뱃지 이미지는 badgeId로 찾는다(/images/icons/badge_<id>.png). 아직 이미지가 없는 뱃지는
+  // 여권 아이콘으로 대체해 깨진 이미지가 뜨지 않게 한다.
+  function renderBadge(result) {
+    const badge = (result.newBadges ?? [])[0] ?? result.bookBadge;
+    if (!badge) {
+      badgeReward.hidden = true;
+      return;
+    }
+    badgeReward.hidden = false;
+    rewardBadgeImg.onerror = () => {
+      rewardBadgeImg.onerror = null;
+      rewardBadgeImg.src = '/images/student_result/passport.png';
+    };
+    rewardBadgeImg.src = `/images/icons/badge_${badge.badgeId}.png`;
+    rewardBadgeImg.alt = badge.badgeName ?? '획득한 뱃지';
+    rewardBadgeName.textContent = badge.badgeName ?? '뱃지 획득!';
+    rewardBadgeDesc.textContent = badge.badgeDesc ?? '읽은 책을 여권에 기록해 주세요.';
+  }
+
+  // 스페셜 카드 칸 — 완독 카드 10장을 채운 순간(레어 카드 지급)에만 칸 전체를 노출한다(2026-09-01).
+  // 평범한 완독(1~9장째)은 카드 칸 자체를 띄우지 않는다 — 10장 달성이 곧 실물 교환 시점이라
+  // 그때만 보상으로 보여준다. 카드의 정체(책 제목/표지)는 가린다(???).
   function renderCard(result) {
-    if (!result.cardName) {
+    if (!result.cardName || !result.cardRewardReached) {
       cardReward.hidden = true;
       return;
     }
     cardReward.hidden = false;
     rareFlag.hidden = false;
     rewardCardName.textContent = '???';
-    const collected = result.totalCards != null ? ((result.totalCards - 1) % 10) + 1 : null;
-    if (result.cardRewardReached) {
-      rewardCardDesc.textContent = '카드 10장 완성! 선생님께 실물 카드를 받으세요 🎉';
-    } else if (collected != null) {
-      rewardCardDesc.textContent = `카드 ${collected}/10장을 모았어요!`;
-    } else {
-      rewardCardDesc.textContent = '카드를 모았어요!';
-    }
+    rewardCardDesc.textContent = '카드 10장 완성! 선생님께 실물 카드를 받으세요 🎉';
   }
 })();

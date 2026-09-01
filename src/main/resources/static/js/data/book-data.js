@@ -279,11 +279,19 @@ function initUnsavedChangesGuard() {
 // 하위 도서 캐시 (contentId → item[])
 let branchItemsByContent = {};
 
-/* 하위 도서 전체 로드 후 contentId별로 그룹핑 */
+/*
+ * 하위 도서 전체 로드 후 contentId별로 그룹핑.
+ * 전역 캐시를 미리 비우고 await 뒤에 채우면, 조회가 겹칠 때(예: 필터 change + 조회 버튼)
+ * 두 호출의 초기화가 모두 fetch 앞에서 끝나 push만 누적돼 하위 도서가 2배로 보인다.
+ * 지역 map에 모은 뒤 마지막에 통째로 교체해 어떤 순서로 겹쳐도 누적되지 않게 한다.
+ */
 async function loadBranchCenterItems() {
-  branchItemsByContent = {};
+  if (isHq || !currentUser?.centerCode) {
+    branchItemsByContent = {};
+    return;
+  }
 
-  if (isHq || !currentUser?.centerCode) return;
+  const grouped = {};
 
   try {
     const response = await fetch(`/book/item/center/${encodeURIComponent(currentUser.centerCode)}`);
@@ -291,11 +299,13 @@ async function loadBranchCenterItems() {
     if (!data.success) throw new Error(data.error?.message ?? "하위 도서 조회에 실패했습니다.");
 
     (data.response ?? []).forEach((it) => {
-      (branchItemsByContent[it.contentId] ??= []).push(it);
+      (grouped[it.contentId] ??= []).push(it);
     });
   } catch (error) {
     console.error(error);
   }
+
+  branchItemsByContent = grouped;
 }
 
 /* 선택된 마스터의 하위 도서 패널 렌더링 (캐시 기준) */
@@ -621,12 +631,30 @@ function initToolbarSearch() {
   const button = document.getElementById("btnSearch");
   const input = document.getElementById("toolbarSearch");
 
+  // 학년 / 분류 / 사용 여부는 선택 즉시 조회
+  ["filterGrade", "filterContentType", "filterState"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("change", () => loadBookList(currentFilters()));
+  });
+
   button?.addEventListener("click", () => loadBookList(currentFilters()));
   input?.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       loadBookList(currentFilters());
     }
+  });
+
+  /*
+   * 검색어를 다 지우면 조회 버튼을 다시 누르지 않아도 검색어 조건만 풀어준다.
+   * currentFilters()를 그대로 쓰므로 학년/분류/사용여부 등 나머지 필터는 유지된다.
+   * (지우는 도중 매 글자마다 조회하지 않도록, 비어 있지 않다가 비워진 순간에만 실행)
+   */
+  let hadKeyword = (input?.value ?? "").trim() !== "";
+
+  input?.addEventListener("input", () => {
+    const hasKeyword = input.value.trim() !== "";
+    if (hadKeyword && !hasKeyword) loadBookList(currentFilters());
+    hadKeyword = hasKeyword;
   });
 }
 
@@ -806,11 +834,19 @@ async function restoreBook(delId) {
 
 /* ===================== 도서 목록 ===================== */
 
+/*
+ * 목록 조회 요청 번호 — 조회가 겹칠 때(필터 change 즉시 조회 + 조회 버튼 등) 늦게 도착한
+ * 이전 응답이 최신 결과를 덮어쓰지 않도록, 마지막 요청의 결과만 캐시/렌더에 반영한다.
+ */
+let bookListRequestSeq = 0;
+
 /* 도서 목록 조회 (필터 파라미터 지원) */
 async function loadBookList(params = {}) {
   const listEl = document.querySelector(".book-list");
 
   if (!listEl) return;
+
+  const seq = ++bookListRequestSeq;
 
   try {
     const qs = new URLSearchParams();
@@ -824,10 +860,15 @@ async function loadBookList(params = {}) {
 
     if (!data.success) throw new Error(data.error?.message ?? "도서 목록 조회에 실패했습니다.");
 
+    // 더 최신 조회가 시작됐으면 이 응답은 버린다
+    if (seq !== bookListRequestSeq) return;
+
     bookListCache = data.response ?? [];
 
     // 비본사면 목록 들여쓰기용으로 우리 센터 하위 도서 캐시 로드
     await loadBranchCenterItems();
+
+    if (seq !== bookListRequestSeq) return;
 
     if (bookListCache.length) {
       renderBookInfo(bookListCache[0]);
@@ -838,7 +879,8 @@ async function loadBookList(params = {}) {
     }
   } catch (error) {
     console.error(error);
-    alert(error.message ?? "도서 목록 조회 중 오류가 발생했습니다.");
+    // 이미 지나간 조회의 실패로 최신 조회 중에 alert이 뜨는 것은 막는다
+    if (seq === bookListRequestSeq) alert(error.message ?? "도서 목록 조회 중 오류가 발생했습니다.");
   }
 }
 
@@ -1808,7 +1850,9 @@ function collectCard(card) {
     e3: card.querySelector(".q-e3").value.trim(),
     e4: card.querySelector(".q-e4").value.trim(),
     ans: card.querySelector(".q-ans").value,
-    state: "Y",
+    // 'S' = 출제 상태(학생 문제풀이가 state='S'만 조회한다). itempool의 state는 이 값만 읽힌다 —
+    // 예전에 하위도서 등록에서 복사돼 'Y'로 들어가던 버그를 고침(2026-09-01).
+    state: "S",
   };
 }
 

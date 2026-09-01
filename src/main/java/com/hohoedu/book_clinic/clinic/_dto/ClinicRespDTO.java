@@ -141,6 +141,10 @@ public class ClinicRespDTO {
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100, 합격 시에만)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0, 합격 시에만)
         private List<BadgeDTO> newBadges;  // 이번 제출로 새로 획득한 뱃지 (결과 화면 팝업용, 없으면 빈 목록)
+        // 이 책에서 현재 보유한 뱃지 — 기본(1~3) / 심화(4~5) 중 이번 제출의 난이도에 해당하는 것.
+        // 재도전·틀린문제 재제출처럼 "새로 받은 뱃지"가 없을 때도 결과화면 보상 칸에 뱃지를 보여주기
+        // 위해 내려준다(2026-09-01). 미달/독서친구/독서왕 모두 뱃지가 있으므로 첫 제출 뒤엔 항상 채워진다.
+        private BadgeDTO bookBadge;
         // 온라인 카드 — 이번 제출로 새 완독(DONE)이 되어 카드를 새로 획득한 경우에만 채워진다
         private String cardName;           // 획득 카드명(=책 제목), 신규 획득이 아니면 null
         private String cardImageUrl;       // 획득 카드 이미지(=책 표지)

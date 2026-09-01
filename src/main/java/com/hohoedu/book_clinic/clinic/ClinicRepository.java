@@ -105,6 +105,11 @@ public interface ClinicRepository {
     /** 그 책의 심화 문제 뱃지(badge_id 4~5)를 모두 제거 — 심화 재도전으로 상위 뱃지로 교체할 때 쓴다 */
     void deleteAdvancedBadge(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
 
+    /** 그 책에서 현재 보유한 뱃지 1건 — advanced=false면 기본(1~3), true면 심화(4~5). 없으면 null */
+    ClinicRespDTO.BadgeDTO findBookBadge(@Param("studentId") String studentId,
+                                         @Param("contentId") Integer contentId,
+                                         @Param("advanced") boolean advanced);
+
     /** 특정 학년 도서의 완독(DONE) 권수 — 레벨 계산 기준 (단계 = 학생 학년) */
     int countDoneBooksByGrade(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
 

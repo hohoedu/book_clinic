@@ -377,6 +377,27 @@
         ORDER BY sb.earned_at DESC
     </select>
 
+    <!-- 그 책에서 현재 보유한 뱃지 1건 (2026-09-01) — 결과화면 보상 칸은 "새로 받은 뱃지"가 없어도
+         (재도전/틀린문제 재제출) 이 값으로 뱃지를 계속 보여준다. 같은 구간에 여러 건이 있으면 상위 뱃지 우선. -->
+    <select id="findBookBadge" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BadgeDTO">
+        SELECT TOP 1
+               b.badge_id   AS badgeId,
+               b.badge_name AS badgeName,
+               b.badge_desc AS badgeDesc,
+               b.category   AS category,
+               b.threshold  AS threshold,
+               b.param      AS param
+        FROM erp_bookstore_student_badge sb
+        JOIN erp_bookstore_badge b ON b.badge_id = sb.badge_id
+        WHERE sb.student_id = #{studentId}
+          AND sb.content_id = #{contentId}
+        <choose>
+            <when test="advanced">AND sb.badge_id IN (4, 5)</when>
+            <otherwise>AND sb.badge_id IN (1, 2, 3)</otherwise>
+        </choose>
+        ORDER BY b.badge_id DESC
+    </select>
+
     <insert id="insertStudentBadge">
         INSERT INTO erp_bookstore_student_badge (student_id, content_id, badge_id)
         VALUES (#{studentId}, #{contentId}, #{badgeId})

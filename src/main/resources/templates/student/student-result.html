@@ -124,24 +124,26 @@
               <img class="reward-card-img" id="rewardCardImg" th:src="@{/images/student_result/treasure.png}" alt="획득한 카드" />
             </div>
             <div class="reward-body">
-              <p class="reward-title pink">카드 획득!</p>
+              <p class="reward-title pink">스페셜 카드 획득!</p>
               <p class="reward-value" id="rewardCardName">별빛 랜턴</p>
               <p class="reward-desc" id="rewardCardDesc">이 책의 카드를 모았어요.</p>
             </div>
           </div>
 
-          <div class="reward-item">
+          <!-- 독서여권 도장 칸 — 이번 제출로 새로 받은 뱃지를 이미지로 보여준다(2026-09-01).
+               뱃지가 없으면(재제출 등) 칸 자체를 숨긴다. -->
+          <div class="reward-item" id="badgeReward" hidden>
             <div class="reward-icon">
-              <img th:src="@{/images/student_result/passport.png}" alt="독서여권" />
+              <img id="rewardBadgeImg" th:src="@{/images/student_result/passport.png}" alt="획득한 뱃지" />
             </div>
             <div class="reward-body">
               <p class="reward-title blue">독서여권 도장!</p>
-              <p class="reward-value" id="rewardStampCount">1개 획득!</p>
-              <p class="reward-desc">읽은 책을 여권에 기록해 주세요.</p>
+              <p class="reward-value" id="rewardBadgeName">뱃지 획득!</p>
+              <p class="reward-desc" id="rewardBadgeDesc">읽은 책을 여권에 기록해 주세요.</p>
             </div>
           </div>
 
-          <div class="reward-item">
+          <div class="reward-item" id="stepReward" hidden>
             <div class="reward-icon">
               <img th:src="@{/images/student_result/map.png}" alt="독서탐험 지도" />
             </div>

@@ -253,6 +253,8 @@ public class ClinicService {
         resp.setWrongQnums(wrongQnums);
         resp.setAlreadyCompleted(passed);  // grade 있음 = 합격한 적 있는 책
         resp.setNewBadges(List.of());
+        // 새로 받은 뱃지는 없지만(직전 결과 재조회) 그 책에서 보유한 뱃지는 보상 칸에 보여준다
+        resp.setBookBadge(clinicRepository.findBookBadge(studentId, contentId, "02".equals(resolvedQlevel)));
         // 재도전 화면에서도 레벨 카드 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다.
         String schoolyear = resolveSchoolyear(studentId);
         applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
@@ -594,6 +596,8 @@ public class ClinicService {
             String schoolyear = resolveSchoolyear(studentId);
             applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
             applyStepStatus(resp, studentId, schoolyear);
+            // 새로 받은 뱃지가 없어도(틀린문제 재제출 등) 그 책의 심화 뱃지를 보상 칸에 계속 보여준다
+            resp.setBookBadge(clinicRepository.findBookBadge(studentId, contentId, true));
             syncMonitorSafely(studentId);
             return resp;
         }
@@ -695,6 +699,9 @@ public class ClinicService {
         } else {
             resp.setNewBadges(List.of());
         }
+        // 미달(참 잘했어요) / 독서친구 / 독서왕 — 세 등급 모두 뱃지가 있으므로 첫 제출 뒤에는 항상 값이 있다.
+        // 재도전·틀린문제 재제출이라 newBadges가 비어도 결과화면 보상 칸이 비지 않게 한다(2026-09-01).
+        resp.setBookBadge(clinicRepository.findBookBadge(studentId, contentId, false));
 
         // 독서일지 — "처음 점수"만 스냅샷으로 남긴다(그날 기록). 재도전/틀린문제 재제출은 basic_correct_cnt를
         // 바꾸지 않는다 — "최종 점수"는 recommend_log.final_correct_count에서 조회해 함께 보여준다.
