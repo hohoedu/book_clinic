@@ -42,6 +42,30 @@
         DELETE FROM erp_bookstore_content_detail WHERE content_id = #{contentId} AND gubun = #{gubun}
     </delete>
 
+    <!--
+      수집 카드 이미지 경로 (2026-09-02) — 책 1권당 1행(content_id가 PK)이라 MERGE로 upsert한다.
+      표지(content.image_url)와 다른 이미지이고, 도서 마스터를 건드리지 않으려고 테이블을 분리했다.
+      행이 없으면 카드 이미지가 없는 책 → 화면이 정적 리소스(/images/student_result/card.png)로 폴백한다.
+    -->
+    <update id="upsertCardPath">
+        MERGE erp_bookstore_card_path AS target
+        USING (SELECT #{contentId, jdbcType=INTEGER} AS content_id) AS source
+        ON target.content_id = source.content_id
+        WHEN MATCHED THEN UPDATE SET card_url = #{cardUrl, jdbcType=VARCHAR},
+                                     registered_by = #{registeredBy, jdbcType=VARCHAR},
+                                     registered_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT (content_id, card_url, registered_by)
+                              VALUES (source.content_id, #{cardUrl, jdbcType=VARCHAR}, #{registeredBy, jdbcType=VARCHAR});
+    </update>
+
+    <delete id="deleteCardPath">
+        DELETE FROM erp_bookstore_card_path WHERE content_id = #{contentId}
+    </delete>
+
+    <select id="findCardPath" resultType="java.lang.String">
+        SELECT card_url FROM erp_bookstore_card_path WHERE content_id = #{contentId}
+    </select>
+
     <select id="deleteBook" statementType="CALLABLE">
         {call sp_delete_book(#{contentId, jdbcType=INTEGER}, #{deletedBy, jdbcType=VARCHAR})}
     </select>
@@ -365,6 +389,58 @@
         SET loaned_qty = loaned_qty - 1
         WHERE item_id = #{itemId} AND loaned_qty > 0
     </update>
+
+    <!--
+      ── 추천 취소(책 없음/훼손) 시 재고에서 한 권 빼기 — BookService.loseCopy (2026-09-02) ──
+      "추천된 책이 실제로 없거나 못 읽을 정도로 훼손됨"은 결국 DB 재고가 실물과 다르다는 뜻이라,
+      반납(loaned_qty만 -1)이 아니라 분실로 종결한다: 그 한 권이 lost_qty로 옮겨가 가용 재고
+      (qty - loaned_qty - lost_qty)에서 빠지고, 추천 후보 쿼리(ClinicMapper.pickNextItem)에서도
+      자동으로 걸러진다. 사본이 2권 이상이면 남은 사본은 그대로 추천 대상으로 남는다(훼손된 건 한 권뿐).
+    -->
+
+    <!-- 대여 이력을 분실 처리 (LOANED 상태일 때만) — 반납이 아니므로 status를 LOST로 종결한다 -->
+    <update id="updateLoanLost">
+        UPDATE erp_bookstore_item_loan
+        SET status = 'LOST', returned_at = CURRENT_TIMESTAMP
+        WHERE loan_id = #{loanId} AND status = 'LOANED'
+    </update>
+
+    <!-- 대여 중이던 한 권을 분실로 옮긴다: loaned_qty -1, lost_qty +1 -->
+    <update id="markLoanedItemLost">
+        UPDATE erp_bookstore_item
+        SET loaned_qty = loaned_qty - 1,
+            lost_qty   = lost_qty + 1
+        WHERE item_id = #{itemId} AND loaned_qty > 0
+    </update>
+
+    <!-- 대여 이력 없이(이미 반납된 상태 등) 가용 재고 한 권을 분실로 옮긴다 -->
+    <update id="markAvailableItemLost">
+        UPDATE erp_bookstore_item
+        SET lost_qty = lost_qty + 1
+        WHERE item_id = #{itemId} AND qty - loaned_qty - lost_qty > 0
+    </update>
+
+    <!-- 분실/훼손 처리 되돌리기 — 못 찾던 책을 나중에 찾은 경우(도서관리 화면의 복구 버튼) -->
+    <update id="restoreLostCopy">
+        UPDATE erp_bookstore_item
+        SET lost_qty = lost_qty - 1
+        WHERE bcode = #{bcode} AND center_code = #{centerCode} AND lost_qty > 0
+    </update>
+
+    <!-- 재고를 손대기 전 스냅샷을 item_del에 UPDATE 로그로 남긴다 (item_id 1건 기준) -->
+    <insert id="archiveItemByIdForUpdate">
+        INSERT INTO erp_bookstore_item_del (log_type, logged_by, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty)
+        SELECT 'UPDATE', #{updatedBy}, item_id, bcode, content_id, book_title, author, publisher, image_url, center_code, qty, loaned_qty, lost_qty
+        FROM erp_bookstore_item
+        WHERE item_id = #{itemId}
+    </insert>
+
+    <!-- 복구 대상 판본(bcode+center)의 item_id — 스냅샷/로그용 -->
+    <select id="findItemIdByBcodeCenter" resultType="java.lang.Integer">
+        SELECT item_id
+        FROM erp_bookstore_item
+        WHERE bcode = #{bcode} AND center_code = #{centerCode}
+    </select>
 
     <!-- 대여 이력 등록 -->
     <insert id="insertItemLoan">

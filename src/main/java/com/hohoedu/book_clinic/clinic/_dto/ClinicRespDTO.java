@@ -108,7 +108,7 @@ public class ClinicRespDTO {
         private String cardType;    // NORMAL / RARE
         private String cardName;    // NORMAL=책 제목, RARE="레어 카드" (화면 strong)
         private String bookTitle;   // NORMAL=저자, RARE=null (화면 small)
-        private String imageUrl;    // NORMAL=책 표지, RARE=고정 레어카드 이미지
+        private String imageUrl;    // NORMAL=erp_bookstore_card_path.card_url(미등록이면 기본 카드), RARE=고정 레어카드 이미지
     }
 
     /** student-main "나의 카드 컬렉션" 패널 — 보유 카드 목록 + 10장당 실물 1장 진행도 */
@@ -118,6 +118,29 @@ public class ClinicRespDTO {
         private int totalCards;              // 보유 카드 총 수
         private int exchangeableCount;       // 실물 교환 가능 횟수 (totalCards / 10)
         private int cardsToNextReward;       // 다음 실물까지 남은 카드 수 (10 - totalCards % 10)
+    }
+
+    /**
+     * "나의 책장" / "나의 카드 컬렉션" 모달(student-bookcase.html) 항목 1건.
+     * 책/카드가 같은 레이아웃(선반 그리드)을 쓰므로 한 DTO로 처리하고 status 값 의미만 달라진다.
+     *   책  : status = king(독서왕) / complete(완독) / retry(재도전) / reading(읽는 중)
+     *   카드: status = rare(레어) / normal(일반)
+     */
+    @Data
+    public static class BookcaseItemDTO {
+        private Integer grade;     // content.schoolyear 를 숫자로 (1,2,3...). 레어 카드는 null
+        private String date;       // yyyy-MM-dd (책=완독일/추천일, 카드=지급일)
+        private String title;
+        private String imageUrl;
+        private String status;
+    }
+
+    /** student-bookcase.html 로 내려주는 목록 + 초기 선택 학년 */
+    @Data
+    public static class BookcaseRespDTO {
+        private String type;               // book / card
+        private Integer defaultGrade;      // 탭 초기 선택 (학생의 현재 클리닉 학년, 1~3 밖이면 null)
+        private List<BookcaseItemDTO> items;
     }
 
     /** 기본 문제풀이(qlevel=01) 채점 결과 */
@@ -141,17 +164,21 @@ public class ClinicRespDTO {
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100, 합격 시에만)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0, 합격 시에만)
         private List<BadgeDTO> newBadges;  // 이번 제출로 새로 획득한 뱃지 (결과 화면 팝업용, 없으면 빈 목록)
-        // 이 책에서 현재 보유한 뱃지 — 기본(1~3) / 심화(4~5) 중 이번 제출의 난이도에 해당하는 것.
+        // 이 책에서 현재 보유한 뱃지 — 기본(1~2) / 심화(3~4) 중 이번 제출의 난이도에 해당하는 것.
         // 재도전·틀린문제 재제출처럼 "새로 받은 뱃지"가 없을 때도 결과화면 보상 칸에 뱃지를 보여주기
-        // 위해 내려준다(2026-09-01). 미달/독서친구/독서왕 모두 뱃지가 있으므로 첫 제출 뒤엔 항상 채워진다.
+        // 위해 내려준다(2026-09-01). 독서완료(합격·불합격 공통)/독서왕 둘 다 뱃지가 있어 첫 제출 뒤엔 항상 채워진다.
         private BadgeDTO bookBadge;
         // 온라인 카드 — 이번 제출로 새 완독(DONE)이 되어 카드를 새로 획득한 경우에만 채워진다
         private String cardName;           // 획득 카드명(=책 제목), 신규 획득이 아니면 null
-        private String cardImageUrl;       // 획득 카드 이미지(=책 표지)
+        private String cardImageUrl;       // 획득 카드 이미지(card_path.card_url, 미등록 책은 기본 카드로 폴백)
         private Integer totalCards;         // 획득 후 보유 카드 총 수
         private boolean cardRewardReached;  // 이번 획득으로 10장 세트를 채웠는지(실물 1장 교환 시점)
         private Integer stepNow;            // 독서탐험 진행 칸 수 = 올해 완독 권수 (합격 시에만)
         private Integer stepTotal;          // 독서탐험 전체 칸 수 = 학년별 목표 권수 (합격 시에만)
+        // 심화(qlevel=02) 결과에만 채운다(2026-09-02) — 심화왕(만점)이면 심화 쪽 버튼은 모두 사라지지만
+        // 기본이 독서왕이 아니면 기본 "틀린 문제 다시 풀기"는 남겨야 해서, 기본 쪽 상태를 함께 내려준다.
+        private String basicGrade;              // 기본(01) 등급 KING / FRIEND / RETRY
+        private List<String> basicWrongQnums;   // 기본(01)에서 이번까지 남은 오답 문항
     }
 
     /** 특정 recommend_id+qlevel의 문항별 "가장 최근 제출" 정답 여부 — 부분 재제출(틀린 문제만 다시 풀기) 시
@@ -169,8 +196,14 @@ public class ClinicRespDTO {
         private RecommendBookDTO book;
         private List<String> wrongQnums;
         private boolean advancedAvailable;
+        // 이 책의 심화(qlevel=02) 문제를 1회 이상 제출했는지 — 재도전 버튼 클릭 시 유형 선택 모달을
+        // 띄울지 판단하는 데 쓴다(2026-09-02). 심화 풀기 전이면 모달 없이 바로 기본 재도전으로 보낸다.
+        private boolean advancedAttempted;
         // 심화 재도전/틀린문제 다시풀기(2026-08-31) — 심화를 1회 이상 풀었고 아직 심화왕이 아니면 true.
         private boolean advancedRetryAvailable;
+        // 심화 만점(심화왕) 달성 여부 — 완료 화면에서 "심화 완료"(재도전·틀린문제 노출)와
+        // "심화왕"(심화 쪽 버튼 없음)을 가르는 값이다(2026-09-02).
+        private boolean advancedKing;
         private List<String> advancedWrongQnums;
         // 결과화면/완료화면 버튼 분기용 (2026-08-28) — KING=심화만, FRIEND=재도전/틀린문제/심화,
         // null(불합격)=재도전만. 재도전으로 합격하면 이 값이 갱신되어 버튼도 바뀐다.

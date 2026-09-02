@@ -27,6 +27,16 @@ public interface BookRepository {
     /** 도서 분류별 상세 삭제 (특정 gubun 값 제거) */
     void deleteContentDetail(@Param("contentId") Integer contentId, @Param("gubun") String gubun);
 
+    /** 수집 카드 이미지 경로 upsert - erp_bookstore_card_path (content_id가 PK라 책당 1행) */
+    void upsertCardPath(@Param("contentId") Integer contentId, @Param("cardUrl") String cardUrl,
+                        @Param("registeredBy") String registeredBy);
+
+    /** 수집 카드 이미지 경로 삭제 (카드 이미지를 지운 경우 — 이후 화면은 기본 카드로 폴백) */
+    void deleteCardPath(@Param("contentId") Integer contentId);
+
+    /** 수집 카드 이미지 경로 단건 조회 (없으면 null) */
+    String findCardPath(@Param("contentId") Integer contentId);
+
     /** 마스터 도서 삭제 (저장 프로시저 sp_delete_book 호출) */
     void deleteBook(@Param("contentId") Integer contentId, @Param("deletedBy") String deletedBy);
 
@@ -123,6 +133,26 @@ public interface BookRepository {
 
     /** 반납 처리 시 그 판본의 loaned_qty를 1 줄인다 */
     void markItemReturned(@Param("itemId") Integer itemId);
+
+    // ── 추천 취소(책 없음/훼손) 시 재고 조정 — BookService.loseCopy (2026-09-02) ──────────
+
+    /** 대여 이력을 분실 처리(LOANED -> LOST) — 반납이 아니라 재고에서 빠지는 종결이다 */
+    int updateLoanLost(@Param("loanId") Integer loanId);
+
+    /** 대여 중이던 한 권을 분실로 옮긴다 (loaned_qty -1, lost_qty +1) — 반영된 행 수 */
+    int markLoanedItemLost(@Param("itemId") Integer itemId);
+
+    /** 대여 이력 없이 가용 재고 한 권을 분실로 옮긴다 (lost_qty +1) — 반영된 행 수 */
+    int markAvailableItemLost(@Param("itemId") Integer itemId);
+
+    /** 분실/훼손 한 권을 되돌린다 (lost_qty -1) — 반영된 행 수(0이면 되돌릴 분실분이 없음) */
+    int restoreLostCopy(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
+
+    /** 재고 변경 전 스냅샷을 item_del에 UPDATE 로그로 남긴다 (item_id 1건) */
+    void archiveItemByIdForUpdate(@Param("itemId") Integer itemId, @Param("updatedBy") String updatedBy);
+
+    /** (bcode + center) 판본의 item_id — 없으면 null */
+    Integer findItemIdByBcodeCenter(@Param("bcode") String bcode, @Param("centerCode") String centerCode);
 
     /** 대여 이력 등록 (사본의 item_id 기준) */
     void insertItemLoan(@Param("itemId") Integer itemId, @Param("studentId") String studentId);

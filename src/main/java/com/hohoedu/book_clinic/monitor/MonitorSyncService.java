@@ -52,6 +52,7 @@ public class MonitorSyncService {
         doc.put("sessionId", card.getSessionId());
         doc.put("studentId", card.getStudentId());
         doc.put("studentName", card.getStudentName());
+        doc.put("gradeName", card.getGradeName());
         doc.put("centerCode", card.getCenterCode());
         doc.put("sessionStatus", card.getSessionStatus());
         doc.put("sessionDate", card.getSessionDate() == null ? null : card.getSessionDate().toString());
@@ -77,6 +78,7 @@ public class MonitorSyncService {
         doc.put("advancedCorrectCount", card.getAdvancedCorrectCount());
         doc.put("advancedTotalCount", card.getAdvancedTotalCount());
         doc.put("badgeCount", card.getBadgeCount());
+        doc.put("badgeIds", card.getBadgeIds());
         doc.put("latestBadgeName", card.getLatestBadgeName());
         doc.put("diaryKey", card.getDiaryKey());
         doc.put("attitudeCodes", card.getAttitudeCodes());
@@ -139,6 +141,7 @@ public class MonitorSyncService {
             // 책별 뱃지(stat-row 획득 뱃지 칸) — 같은 이유로 빠져 있어서 실시간 갱신 때만 뱃지가
             // 사라졌다가 새로고침하면 다시 보였다
             m.put("badgeCount", book.getBadgeCount());
+            m.put("badgeIds", book.getBadgeIds());
             m.put("latestBadgeName", book.getLatestBadgeName());
             result.add(m);
         }

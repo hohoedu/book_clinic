@@ -46,4 +46,21 @@ public class MonitorReqDTO {
         private String studentId;
     }
 
+    /**
+     * 추천 도서 교체 요청 (2026-09-02) — 추천된 책이 실제로 서가에 없거나 못 읽을 정도로 훼손됐을 때
+     * 직원이 모니터링 카드에서 누른다. 지금 추천을 없애고 다음 책을 바로 추천한다.
+     * reason은 재고에서 뺀 사유를 이력에 남기기 위한 값으로, 처리 자체는 두 사유가 동일하다
+     * (둘 다 "그 한 권을 재고에서 뺀다") — 구분해두는 건 나중에 되돌릴 가능성이 다르기 때문이다.
+     */
+    @Data
+    public static class CancelRecommendReqDTO {
+        @NotNull(message = "추천 ID는 필수입니다.")
+        private Integer recommendId;
+        @NotBlank(message = "학생 ID는 필수입니다.")
+        private String studentId;
+        /** MISSING(책이 없음) / DAMAGED(훼손) — quiz_reset_log.log_type에 그대로 남는다 */
+        @NotBlank(message = "사유는 필수입니다.")
+        private String reason;
+    }
+
 }

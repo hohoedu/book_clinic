@@ -194,7 +194,7 @@ CREATE TABLE erp_bookstore_item_loan (
     student_id   VARCHAR(100)  NOT NULL,  -- 대여한 학생 (erp_student.student_id)
     loaned_at    DATETIME2     DEFAULT CURRENT_TIMESTAMP,  -- 대여일시
     returned_at  DATETIME2,     -- 반납일시 (미반납이면 NULL)
-    status       VARCHAR(20)   NOT NULL DEFAULT 'LOANED',  -- LOANED / RETURNED / LOST
+    status       VARCHAR(20)   NOT NULL DEFAULT 'LOANED',  -- LOANED / RETURNED / LOST(추천 교체로 재고에서 뺀 한 권, 2026-09-02)
     FOREIGN KEY (item_id) REFERENCES erp_bookstore_item(item_id)
 );
 
@@ -338,8 +338,10 @@ CREATE TABLE erp_bookstore_quiz_reset_log (
     log_id        INT IDENTITY(1,1) PRIMARY KEY,
     logged_at     DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 삭제 처리 시각(KST)
     logged_by     VARCHAR(50),                                           -- 처리한 직원 (로그인 계정명)
-    -- RESET  = 삭제 대상 책. recommend_log 행은 PENDING으로 남아 다시 풀 수 있다
-    -- CANCEL = 그 뒤에 추천받은 책. 되돌아가려면 비켜줘야 해서 recommend_log 행까지 지운다
+    -- RESET   = 삭제 대상 책. recommend_log 행은 PENDING으로 남아 다시 풀 수 있다
+    -- CANCEL  = 그 뒤에 추천받은 책. 되돌아가려면 비켜줘야 해서 recommend_log 행까지 지운다
+    -- MISSING = 추천 도서 교체 "책이 없음" (2026-09-02). recommend_log 행을 지우고 실물 1권을 lost_qty로 옮긴다
+    -- DAMAGED = 추천 도서 교체 "훼손" — 처리는 MISSING과 동일하고 사유만 다르다
     log_type      VARCHAR(10)   NOT NULL DEFAULT 'RESET',
     recommend_id  INT           NOT NULL,  -- 초기화한 추천(도전) — 행 자체는 PENDING으로 남는다
     student_id    VARCHAR(100)  NOT NULL,
@@ -364,11 +366,12 @@ CREATE TABLE erp_bookstore_level (
     PRIMARY KEY (schoolyear, level_no)
 );
 
--- 뱃지 마스터 — 5종 고정. id→이름/설명 조회용 룩업 테이블
+-- 뱃지 마스터 — 4종 고정(2026-09-02). id→이름/설명 조회용 룩업 테이블
+--   1 독서완료(기본 합격·불합격 공통) / 2 독서왕 / 3 심화완료 / 4 심화왕
 IF OBJECT_ID('erp_bookstore_badge', 'U') IS NULL
 CREATE TABLE erp_bookstore_badge (
-    badge_id    INT            PRIMARY KEY,      -- 1~5 고정 번호
-    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (참 잘했어요 ...)
+    badge_id    INT            PRIMARY KEY,      -- 1~4 고정 번호
+    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (독서완료 ...)
     badge_desc  NVARCHAR(200),                   -- 특징/설명 문구 (화면 표시용)
     category    VARCHAR(20)    NOT NULL,         -- (레거시) 판정 유형 — 현재 미사용
     threshold   INT            NOT NULL,         -- (레거시) 달성 기준치 — 현재 미사용

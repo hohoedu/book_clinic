@@ -168,14 +168,14 @@ INSERT INTO erp_bookstore_level (schoolyear, level_no, title) VALUES
 ('06', 11, N'책방 대현자'),
 ('06', 12, N'GRADE6 Master');
 
--- 뱃지 마스터 (1~5)
+-- 뱃지 마스터 (1~4) — 2026-09-02 5종 → 4종. 구 1번 "참 잘했어요!"와 2번 "독서친구"를 "독서완료"로 합쳤다.
+-- 이미 구 5종이 들어 있는 운영 DB는 이 스크립트가 건너뛰므로 patch-erp_bookstore_badge-4types.sql로 이관한다.
 IF NOT EXISTS (SELECT 1 FROM erp_bookstore_badge WHERE badge_id = 1)
 INSERT INTO erp_bookstore_badge (badge_id, badge_name, badge_desc, category, threshold, param) VALUES
-(1, N'참 잘했어요!', N'책을 끝까지 읽음',                        'BASIC_ATTEMPT', 1, NULL),
-(2, N'독서친구',     N'책의 내용을 이해하고 문제풀이 완료',      'BASIC_PASS',    1, NULL),
-(3, N'독서왕',       N'책의 내용을 정확하게 이해',              'BASIC_PERFECT', 1, NULL),
-(4, N'심화 완료',    N'한 단계 깊은 사고 활동에 도전',          'ADV_PASS',      1, NULL),
-(5, N'심화왕',       N'어휘력과 문해력의 실력 증가',            'ADV_PERFECT',   1, NULL);
+(1, N'독서완료', N'책을 읽고 문제풀이를 완료',     'BASIC_PASS',    1, NULL),
+(2, N'독서왕',   N'책의 내용을 정확하게 이해',     'BASIC_PERFECT', 1, NULL),
+(3, N'심화완료', N'한 단계 깊은 사고 활동에 도전', 'ADV_PASS',      1, NULL),
+(4, N'심화왕',   N'어휘력과 문해력의 실력 증가',   'ADV_PERFECT',   1, NULL);
 
 -- ────────────────────────────────────────────────────────
 -- 난이도 자동 부여 — 도서 시드가 difficulty를 넣지 않아 전 권이 비어 있으면

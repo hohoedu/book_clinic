@@ -245,7 +245,7 @@
             r.student_id     AS studentId,
             st.student_name  AS studentName,
             st.school        AS school,
-            st.grade_key     AS gradeKey,
+            st.clinic_grade_key AS gradeKey,
             st.billing_phone AS contact,
             si.seq            AS seq,
             si.starts_at      AS startsAt,

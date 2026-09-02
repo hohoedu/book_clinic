@@ -389,6 +389,11 @@ function buildItemCard(item, master) {
     <div class="item-loan-panel">
       <div class="item-loan-stock">
         보유 <b class="loan-qty-total">-</b> · 대여중 <b class="loan-qty-loaned">-</b> · 대여가능 <b class="loan-qty-available">-</b>
+        <!-- 분실/훼손은 0권이면 아예 숨긴다 — 평소엔 없는 값이라 항상 보이면 오히려 시선을 뺏는다 -->
+        <span class="loan-qty-lost-wrap" hidden>
+          · 분실/훼손 <b class="loan-qty-lost">-</b>
+          <button type="button" class="btn outline small it-lost-restore" title="찾은 책을 다시 재고에 넣습니다">복구</button>
+        </span>
       </div>
       <div class="item-loan-form">
         <input type="text" class="it-loan-appid" placeholder="학생 앱ID">
@@ -432,6 +437,7 @@ function buildItemCard(item, master) {
     renderLoanStock(card, item);
     card.querySelector(".it-loan-btn").addEventListener("click", () => loanBranchItem(card, item));
     card.querySelector(".it-loan-list-btn").addEventListener("click", () => toggleLoanList(card, item));
+    card.querySelector(".it-lost-restore").addEventListener("click", () => restoreLostCopy(card, item));
   } else {
     card.querySelector(".it-cancel").addEventListener("click", () => card.remove());
     card.querySelector(".it-register").addEventListener("click", () => registerBranchItem(card));
@@ -440,7 +446,9 @@ function buildItemCard(item, master) {
   return card;
 }
 
-/* 보유/대여중/대여가능 수량 표시 */
+/* 보유/대여중/대여가능 수량 표시 — 분실/훼손분은 있을 때만 복구 버튼과 함께 보여준다.
+   모니터링의 "추천 도서 교체"(책이 없음/훼손)가 재고를 여기로 옮기므로, 못 찾던 책을 나중에
+   찾았을 때 되돌릴 수 있는 곳이 이 자리다(2026-09-02). */
 function renderLoanStock(card, item) {
   const total = item.quantity ?? 0;
   const loaned = item.loanedQty ?? 0;
@@ -449,6 +457,24 @@ function renderLoanStock(card, item) {
   card.querySelector(".loan-qty-total").textContent = total;
   card.querySelector(".loan-qty-loaned").textContent = loaned;
   card.querySelector(".loan-qty-available").textContent = available;
+  card.querySelector(".loan-qty-lost").textContent = lost;
+  card.querySelector(".loan-qty-lost-wrap").hidden = lost <= 0;
+}
+
+/* 분실/훼손 한 권을 재고로 되돌린다 — 서가에서 책을 다시 찾은 경우 */
+async function restoreLostCopy(card, item) {
+  if (!confirm(`${item.bookTitle ?? "이 책"}\n\n분실/훼손 처리된 1권을 재고로 되돌립니다. 진행할까요?`)) return;
+  try {
+    const data = await postJson("/book/item/lost/restore", {
+      bcode: item.bcode,
+      centerCode: currentUser?.centerCode,
+    });
+    alert(data.response ?? "복구되었습니다.");
+    await refreshBranchItems();
+  } catch (error) {
+    console.error(error);
+    alert(error.message ?? "복구 중 오류가 발생했습니다.");
+  }
 }
 
 /* 학생에게 대여 처리 (재고 확인은 서버에서 최종 판단) */

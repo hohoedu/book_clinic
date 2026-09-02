@@ -75,8 +75,16 @@
   // "틀린 문제 다시 풀기"로 진입했는지 — 채점 제출 시 mode=WRONG_ONLY로 보내 점수/등급을 고정한다.
   // (일반 재도전은 mode=RETRY로 보내 최종 점수/등급이 갱신된다. 첫 시도 여부는 서버가 판단한다.)
   let wrongOnlyMode = false;
+  // "틀린 문제 다시 풀기"(완료화면)에서 기본+심화 오답을 한 번에 푸는 모드 — 문항마다 q.__qlevel을
+  // 달고, 제출은 레벨별로 나눠 각각 WRONG_ONLY로 보낸 뒤 결과를 합쳐서 결과 화면에 넘긴다(2026-09-02).
+  let mergedMode = false;
   // 결과 화면 문구("OO을(를) 완독하고...")에 쓸 책 제목 — loadBookInfo에서 채운다
   let currentBookTitle = null;
+
+  // 문항 하나가 어느 난이도인지 — 병합 모드면 문항에 붙은 __qlevel, 아니면 페이지 qlevel
+  function levelOf(q) {
+    return q.__qlevel || qlevel;
+  }
 
   function showState(name) {
     emptyState.hidden = name !== 'empty';
@@ -114,6 +122,14 @@
     preloadQtypeIcons();
     loadBookInfo();
 
+    // 완료화면 "틀린 문제 다시 풀기"(기본+심화 병합) — retryQnumsMerged가 있으면 이 경로로 처리한다
+    const mergedRaw = sessionStorage.getItem('retryQnumsMerged');
+    if (mergedRaw) {
+      sessionStorage.removeItem('retryQnumsMerged');
+      await loadMergedWrongQuestions(JSON.parse(mergedRaw));
+      return;
+    }
+
     try {
       const res = await fetch(`/question/search?contentId=${encodeURIComponent(contentId)}&state=S&qlevel=${encodeURIComponent(qlevel)}`);
       const data = await res.json();
@@ -150,16 +166,55 @@
     }
   }
 
+  // 완료화면 "틀린 문제 다시 풀기" — map = { '01': [qnum...], '02': [qnum...] }.
+  // 두 난이도 문제를 각각 불러와 틀린 문항만 추려 __qlevel을 달고 하나로 합친다(기본 먼저, 심화 다음).
+  async function loadMergedWrongQuestions(map) {
+    const levels = ['01', '02'].filter((lv) => (map[lv] ?? []).length > 0);
+    try {
+      const perLevel = await Promise.all(levels.map(async (lv) => {
+        const res = await fetch(`/question/search?contentId=${encodeURIComponent(contentId)}&state=S&qlevel=${lv}`);
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message ?? '문제를 불러오지 못했어요.');
+        const want = map[lv] ?? [];
+        return (data.response ?? [])
+          .filter((q) => q.q && want.includes(q.qnum))
+          .map((q) => ({ ...q, __qlevel: lv }));
+      }));
+      questions = perLevel.flat();
+
+      if (questions.length === 0) {
+        document.getElementById('emptyStateMsg').textContent = '다시 풀 틀린 문제가 없어요.';
+        showState('empty');
+        return;
+      }
+
+      mergedMode = true;
+      wrongOnlyMode = true;
+      answered = new Array(questions.length).fill(null);
+      current = 0;
+      showState('quiz');
+      renderQuestion();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('emptyStateMsg').textContent = '문제를 불러오는 중 오류가 발생했어요.';
+      showState('empty');
+    }
+  }
+
   function renderQuestion() {
     const q = questions[current];
 
     // "틀린 문제 다시 풀기"처럼 일부 문항만 걸러서 낼 때도 원래 문제 번호(qnum)를 그대로 보여준다 —
     // 배열 순번(current+1)을 쓰면 3/5/8번을 틀렸는데 화면엔 1/2/3번으로 보이는 문제가 있었다(2026-08-25)
-    qBadge.textContent = `Q${q.qnum}`;
+    // 병합 모드에선 기본/심화 문제 번호가 겹칠 수 있어 심화 문항은 빨간 뱃지 + Q01·Q02 형식으로 구분한다.
+    // 기본 문항은 기존 그대로(Q1 형식, 초록 뱃지).
+    const advBadge = mergedMode && levelOf(q) === '02';
+    qBadge.classList.toggle('is-advanced', advBadge);
+    qBadge.textContent = advBadge ? `Q${String(q.qnum).padStart(2, '0')}` : `Q${q.qnum}`;
     qIndexEl.textContent = current + 1;
     qTotalEl.textContent = questions.length;
     renderProgressDots();
-    renderQtype(q.qtype);
+    renderQtype(q);
 
     if (q.qex) {
       qexText.innerHTML = q.qex;
@@ -205,10 +260,11 @@
     }
   }
 
-  function renderQtype(qtype) {
+  function renderQtype(q) {
+    const qtype = q.qtype;
     const info = QTYPE_INFO[qtype] ?? QTYPE_INFO['03'];
-    // 심화(qlevel=02)에서 어휘 유형은 심화 어휘 아이콘으로 교체
-    const advVoca = isAdvanced && qtype === '06';
+    // 심화(qlevel=02)에서 어휘 유형은 심화 어휘 아이콘으로 교체 — 병합 모드는 문항별 난이도로 판단
+    const advVoca = levelOf(q) === '02' && qtype === '06';
     const imgFile = advVoca ? 'advance_voca.png' : info.img;
     qtypeIcon.innerHTML = `<img src="/images/icons/${imgFile}" alt="${info.name} 유형" />`;
     qtypeName.textContent = info.name;
@@ -220,7 +276,7 @@
   // (다시 눌러 바꾸는 것도 마지막 제출 전까지 자유)
   function selectChoice(num) {
     const q = questions[current];
-    answered[current] = { qnum: q.qnum, selected: num };
+    answered[current] = { qnum: q.qnum, selected: num, qlevel: levelOf(q) };
     updateSelectedVisual();
     updateNextButton();
   }
@@ -258,6 +314,11 @@
     const totalCount = questions.length;
 
     showState('grading');
+
+    if (mergedMode) {
+      await showMergedResult();
+      return;
+    }
 
     // 정답 수는 서버가 문항별 제출 답안(qnum+selected)을 itempool.ans와 직접 대조해서 계산한다
     // (클라이언트에서 계산한 correctCount/totalCount는 devtools로 조작 가능해서 신뢰하지 않는다)
@@ -301,6 +362,79 @@
     // 결과 화면(student-result.html)이 읽어갈 채점 결과를 세션 저장소에 담아두고 이동한다
     sessionStorage.setItem('quizResult', JSON.stringify(result));
     window.location.href = `/student/result?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${encodeURIComponent(qlevel)}`;
+  }
+
+  // 완료화면 "틀린 문제 다시 풀기"(기본+심화 병합) 채점 — 다시 푼 난이도만 각각 WRONG_ONLY로 제출하고
+  // (점수/등급/뱃지는 서버가 바꾸지 않음), 화면에는 기본+심화 성적을 합산해 한 번에 보여준다(2026-09-02).
+  async function showMergedResult() {
+    const byLevel = { '01': [], '02': [] };
+    answered.filter((a) => a).forEach((a) => {
+      (byLevel[a.qlevel] || byLevel['01']).push({ qnum: a.qnum, selected: a.selected });
+    });
+
+    const merged = {
+      advanced: false,
+      mergedWrong: true,
+      bookTitle: currentBookTitle,
+      correctCount: 0,
+      totalCount: 0,
+      wrongQnums: [],
+      alreadyCompleted: true,
+    };
+    // 난이도별 "전체 기준" 정답/문항 수 — 합산해서 화면 헤드라인 점수로 쓴다
+    const part = {};
+
+    // 등급·레벨·뱃지 등 화면 표시값은 기본 문제 결과를 이어받는다(WRONG_ONLY라 변동 없음)
+    const carryBasic = (src) => {
+      merged.grade = src.grade;
+      merged.passed = src.passed;
+      merged.firstCorrectCount = src.firstCorrectCount;
+      merged.finalCorrectCount = src.finalCorrectCount;
+      merged.bookBadge = src.bookBadge;
+      merged.attemptNo = src.attemptNo;
+      merged.levelNo = src.levelNo;
+      merged.levelTitle = src.levelTitle;
+      merged.progressPercent = src.progressPercent;
+      merged.booksToNextLevel = src.booksToNextLevel;
+      merged.stepNow = src.stepNow;
+      merged.stepTotal = src.stepTotal;
+    };
+
+    try {
+      for (const lv of ['01', '02']) {
+        if (byLevel[lv].length === 0) continue;
+        const res = await fetch('/clinic/quiz/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId, contentId: Number(contentId), qlevel: lv, mode: 'WRONG_ONLY', answers: byLevel[lv] }),
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');
+        const r = data.response;
+        part[lv] = { correct: r.correctCount ?? 0, total: r.totalCount ?? 0 };
+        (r.wrongQnums ?? []).forEach((qn) => merged.wrongQnums.push(qn));
+        if (lv === '01') carryBasic(r);
+      }
+
+      // 기본을 다시 풀지 않았으면(심화만 재도전) 기본 성적/등급은 직전 결과에서 채운다
+      if (!part['01']) {
+        const res = await fetch(`/clinic/last-result?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=01`);
+        const data = await res.json();
+        if (data.success && data.response) {
+          part['01'] = { correct: data.response.correctCount ?? 0, total: data.response.totalCount ?? 0 };
+          carryBasic(data.response);
+        }
+      }
+
+      merged.correctCount = (part['01'] ? part['01'].correct : 0) + (part['02'] ? part['02'].correct : 0);
+      merged.totalCount = (part['01'] ? part['01'].total : 0) + (part['02'] ? part['02'].total : 0);
+    } catch (err) {
+      console.error(err);
+      merged.wrongQnums = [];
+    }
+
+    sessionStorage.setItem('quizResult', JSON.stringify(merged));
+    window.location.href = `/student/result?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=01`;
   }
 
   nextBtn.addEventListener('click', goNext);

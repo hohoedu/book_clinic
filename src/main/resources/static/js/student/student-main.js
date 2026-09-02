@@ -86,7 +86,46 @@
     } else if (logoutButton) {
       logoutButton.addEventListener('click', doLogout);
     }
+
+    initBookcaseModal();
   });
+
+  // "더보기"(카드 컬렉션 / 이번 달에 읽은 책) → student-bookcase.html 을 iframe 으로 띄운다.
+  // 같은 화면에 ?type=card / ?type=book 만 바꿔 데이터를 갈아끼운다. 닫기는 iframe 안에서
+  // postMessage({type:'bookcase:close'}) 를 보내면 여기서 받아 닫는다(2026-09-02).
+  function initBookcaseModal() {
+    const modal = document.getElementById('bookcaseModal');
+    const frame = document.getElementById('bookcaseFrame');
+    if (!modal || !frame) return;
+
+    const page = document.getElementById('mainPage');
+    const studentId = page ? page.getAttribute('data-student-id') : null;
+
+    function openBookcase(type) {
+      const params = new URLSearchParams({ type: type === 'card' ? 'card' : 'book' });
+      if (studentId) params.set('studentId', studentId);
+      frame.src = `/student/bookcase?${params.toString()}`;
+      modal.hidden = false;
+    }
+
+    function closeBookcase() {
+      modal.hidden = true;
+      frame.src = 'about:blank';
+    }
+
+    document.querySelectorAll('.more-link[data-bookcase]').forEach((link) => {
+      link.addEventListener('click', (e) => {
+        e.preventDefault();
+        openBookcase(link.dataset.bookcase);
+      });
+    });
+
+    window.addEventListener('message', (e) => {
+      if (e.source === frame.contentWindow && e.data && e.data.type === 'bookcase:close') {
+        closeBookcase();
+      }
+    });
+  }
 
   // student-main.html(#mainPage)에서만 동작 — 홈 진입 시 입실 처리 + "지금 보여줄 책"만 확인한다.
   // 다음 책 추천은 여기서 자동으로 일어나지 않는다(2026-07-29) — 예전엔 홈 화면에 들어오기만 해도
@@ -120,8 +159,10 @@
     const completionRetryBtn = document.getElementById('completionRetryBtn');
     const completionWrongRetryBtn = document.getElementById('completionWrongRetryBtn');
     const completionAdvancedBtn = document.getElementById('completionAdvancedBtn');
-    const completionAdvancedRetryBtn = document.getElementById('completionAdvancedRetryBtn');
-    const completionAdvancedWrongBtn = document.getElementById('completionAdvancedWrongBtn');
+    const retryTypeModal = document.getElementById('retryTypeModal');
+    const retryTypeBasicBtn = document.getElementById('retryTypeBasicBtn');
+    const retryTypeAdvancedBtn = document.getElementById('retryTypeAdvancedBtn');
+    const retryTypeCancelBtn = document.getElementById('retryTypeCancelBtn');
     const recommendErrorModal = document.getElementById('recommendErrorModal');
     const recommendErrorMsg = document.getElementById('recommendErrorMsg');
     const recommendErrorOkBtn = document.getElementById('recommendErrorOkBtn');
@@ -172,9 +213,57 @@
         : '';
     }
 
+    // ── 추천 책 바뀜 감지 (2026-09-02) ──────────────────────────────────────────
+    // 추천된 책이 서가에 없거나 훼손된 경우 선생님이 모니터링 화면에서 다른 책으로 교체한다.
+    // 이 화면은 진입 시 1회만 상태를 읽어서, 그대로 두면 학생 폰엔 없는 책이 계속 떠 있고 그 상태로
+    // 문제풀이에 들어가면 이미 지워진 추천 이력을 찾다가 에러가 난다. 그래서 책을 보여주는 동안에만
+    // 조용히 상태를 다시 물어보고, 실제로 바뀌었을 때만 화면을 다시 그린다(버튼이나 안내 UI는 없다).
+    const BOOK_POLL_MS = 15000;
+    let currentBookContentId = null;
+    let bookPollTimer = null;
+
+    function stopBookPoll() {
+      if (bookPollTimer) clearInterval(bookPollTimer);
+      bookPollTimer = null;
+    }
+
+    function startBookPoll() {
+      stopBookPoll();
+      bookPollTimer = setInterval(pollBookChange, BOOK_POLL_MS);
+    }
+
+    async function pollBookChange() {
+      // 화면이 가려져 있으면(폰을 덮어둠 등) 굳이 서버를 두드리지 않는다 — 돌아올 때 한 번 확인한다
+      if (document.hidden) return;
+      try {
+        const res = await fetch('/clinic/quiz-home-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ studentId }),
+        });
+        const data = await res.json();
+        if (!data.success) return;
+        const changed = data.response.state !== 'READING'
+          || (data.response.book?.contentId ?? null) !== currentBookContentId;
+        if (!changed) return;
+        stopBookPoll();
+        loadHomeState();
+      } catch (err) {
+        // 폴링 실패는 조용히 넘긴다 — 다음 주기에 다시 확인한다. 여기서 화면을 건드리면
+        // 잠깐 끊긴 네트워크 때문에 멀쩡히 보던 책이 에러 화면으로 바뀐다.
+        console.debug('책 상태 확인 실패(다음 주기에 재시도)', err);
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && bookPollTimer) pollBookChange();
+    });
+
     // 문제풀이 화면 홈은 이미 확정된 PENDING 추천 책만 보여준다 — 입실/추천은 출석체크 기기에서만 일어난다
     function renderBook(book) {
       fillBookInfo(book);
+      currentBookContentId = book.contentId;
+      startBookPoll();
       actionBtn.hidden = false;
       completionActions.hidden = true;
       recommendNextBtn.hidden = true;
@@ -191,44 +280,65 @@
     // 왔을 때 — 문제 풀기 버튼 대신 남은 액션(틀린 문제 다시 풀기/심화 문제 풀기)과 "책 추천받기"만
     // 보여준다. 둘 다 없을 수도 있다(이미 다 끝낸 경우 — 책 추천받기만 노출)
     function renderCompletion(state) {
+      // 완료 화면은 이미 다 읽은 책을 보여주는 자리라 교체 대상이 아니다 — 폴링을 멈춘다
+      stopBookPoll();
       const book = state.book;
       fillBookInfo(book);
       actionBtn.hidden = true;
       completionActions.hidden = false;
-      // 오늘 추천 한도를 다 썼으면(canRecommendNext=false) "책 추천받기" 버튼을 아예 숨긴다(2026-08-28)
-      recommendNextBtn.hidden = state.canRecommendNext === false;
+      // "책 추천받기"는 (1) 오늘 추천 한도를 다 썼거나(canRecommendNext=false),
+      // (2) 이 책에 아직 안 푼 심화 문제가 남아 있으면(advancedAvailable) 숨긴다.
+      // 심화 문항이 없는 책은 advancedAvailable=false라 그대로 노출된다(2026-09-02).
+      recommendNextBtn.hidden = state.canRecommendNext === false || state.advancedAvailable === true;
 
-      // 버튼 분기(2026-08-28): KING=심화만 / FRIEND=재도전·틀린문제·심화 / null(불합격)=재도전만.
-      const hasWrong = (state.wrongQnums ?? []).length > 0;
-      const failed = !state.grade;               // 불합격(재도전만)
-      const isKing = state.grade === 'KING';     // 만점(심화만 — 재도전·틀린문제 없음)
-      completionRetryBtn.hidden = isKing;
-      completionWrongRetryBtn.hidden = failed || isKing || !hasWrong;
-      completionAdvancedBtn.hidden = failed || !state.advancedAvailable;
-
-      // 심화 재도전 / 심화 틀린 문제 다시 풀기(2026-08-31) — 심화를 1회 이상 풀었고 아직 심화왕이 아닐 때.
+      // 완료 화면 액션 — 기본(01) 등급과 심화(02) 진행도의 조합으로 정한다(2026-09-02):
+      //  1. 기본 불합격(RETRY)      → 재도전
+      //  2. 독서친구(FRIEND)+심화 전 → 재도전 / 틀린 문제 다시 풀기 / 심화 문제 풀기
+      //  3. 독서왕(KING)+심화 전     → 심화 문제 풀기 (기본은 만점이라 더 풀 게 없다)
+      //  4. 심화 완료(만점 아님)     → 재도전 / 틀린 문제 다시 풀기
+      //  5. 심화왕(만점)             → 없음. 단 기본이 독서친구면 재도전 / 틀린 문제 다시 풀기가 남는다
+      const basicWrong = state.wrongQnums ?? [];
       const advWrong = state.advancedWrongQnums ?? [];
-      completionAdvancedRetryBtn.hidden = failed || !state.advancedRetryAvailable;
-      completionAdvancedWrongBtn.hidden = failed || !state.advancedRetryAvailable || advWrong.length === 0;
+      const failed = !state.grade || state.grade === 'RETRY';   // 기본 불합격 — 재도전만
+      const advTried = state.advancedAttempted === true;        // 심화 1회 이상 제출
+      const advKing = state.advancedKing === true;              // 심화 만점 — 심화 쪽은 끝
+
+      // 기본 재도전이 남았는지 — 불합격이면 당연히 남고, 독서친구면 점수를 올릴 여지가 있다.
+      // 독서왕(만점)은 더 올릴 점수가 없어 기본 쪽 버튼이 모두 사라진다.
+      const basicRetryLeft = failed || state.grade === 'FRIEND';
+      // 심화 재도전이 남았는지 — 한 번이라도 풀었고 아직 심화왕이 아닐 때
+      const advRetryLeft = advTried && !advKing;
+
+      completionRetryBtn.hidden = !(basicRetryLeft || advRetryLeft);
+      // 틀린 문제 다시 풀기는 불합격(=아직 합격도 못 한 상태)에선 열지 않는다
+      completionWrongRetryBtn.hidden = failed
+        || (basicRetryLeft ? basicWrong.length : 0) + (advRetryLeft ? advWrong.length : 0) === 0;
+      // 심화는 기본을 통과한 뒤에만 — 불합격(재도전) 상태에선 심화 문항이 남아 있어도 숨긴다
+      completionAdvancedBtn.hidden = failed || state.advancedAvailable !== true;
+
+      const goQuestion = (qlevel) => {
+        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=${qlevel}`;
+      };
 
       completionRetryBtn.onclick = () => {
-        // 전체 다시 풀기 — retryQnums를 심지 않으므로 student-question.js가 mode=RETRY로 제출한다
-        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;
+        // 기본·심화 둘 다 재도전이 남은 경우에만 유형을 물어본다. 한쪽만 남았으면 바로 그쪽으로 보낸다.
+        if (basicRetryLeft && advRetryLeft) { retryTypeModal.hidden = false; return; }
+        goQuestion(advRetryLeft ? '02' : '01');
       };
+      completionAdvancedBtn.onclick = () => goQuestion('02');
+      retryTypeBasicBtn.onclick = () => goQuestion('01');
+      retryTypeAdvancedBtn.onclick = () => goQuestion('02');
+      retryTypeCancelBtn.onclick = () => { retryTypeModal.hidden = true; };
+      retryTypeModal.onclick = (e) => { if (e.target === retryTypeModal) retryTypeModal.hidden = true; };
+
       completionWrongRetryBtn.onclick = () => {
-        sessionStorage.setItem('retryQnums', JSON.stringify(state.wrongQnums ?? []));
-        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=01`;
-      };
-      completionAdvancedBtn.onclick = () => {
-        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
-      };
-      completionAdvancedRetryBtn.onclick = () => {
-        // 심화 전체 다시 풀기 — retryQnums 없이 qlevel=02로 진입하면 서버가 mode=RETRY로 처리한다
-        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
-      };
-      completionAdvancedWrongBtn.onclick = () => {
-        sessionStorage.setItem('retryQnums', JSON.stringify(advWrong));
-        window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}&qlevel=02`;
+        // 기본/심화 틀린 문제를 한 번에 — student-question.js가 두 레벨을 합쳐서 낸다(retryQnumsMerged).
+        // 이미 만점인 쪽(독서왕/심화왕)은 남은 오답이 없으므로 애초에 제외된다.
+        sessionStorage.setItem('retryQnumsMerged', JSON.stringify({
+          '01': basicRetryLeft ? basicWrong : [],
+          '02': advRetryLeft ? advWrong : [],
+        }));
+        goQuestion('01');
       };
       recommendNextBtn.onclick = async () => {
         recommendNextBtn.disabled = true;
@@ -256,6 +366,7 @@
     // 정상적인 업무 상황이라, 같은 "실패" 톤이 아니라 전용 카드(passExhausted)로 구분해서 보여준다.
     // 서버가 별도 에러 코드를 내려주지 않아 메시지 문구로 구분한다 — enterSession의 문구와 짝이 맞아야 한다.
     function showError(err) {
+      stopBookPoll();
       console.error(err);
       if (err.message && err.message.includes('이용권이 모두 소진')) {
         showState('passExhausted');

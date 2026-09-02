@@ -93,7 +93,7 @@
         SELECT TOP 20
                id                     AS id,
                center_code            AS centerCode,
-               grade_key              AS gradeKey,
+               clinic_grade_key              AS gradeKey,
                school                 AS school,
                student_id             AS studentId,
                student_name           AS studentName,

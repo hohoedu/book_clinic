@@ -240,21 +240,22 @@
         WHERE recommend_id = #{recommendId}
     </update>
 
-    <!-- 재도전으로 등급이 올라 상위 뱃지로 교체할 때 — 그 책의 기본 문제 뱃지(1~3)를 먼저 지운다 -->
+    <!-- 재도전으로 등급이 올라 상위 뱃지로 교체할 때 — 그 책의 기본 문제 뱃지(1~2)를 먼저 지운다
+         (2026-09-02 뱃지 4종 재편: 기본=1 독서친구·2 독서왕 / 심화=3 심화완료·4 심화왕) -->
     <delete id="deleteBasicBadge">
         DELETE FROM erp_bookstore_student_badge
-        WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (1, 2, 3)
+        WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (1, 2)
     </delete>
 
     <select id="findAdvancedBadgeId" resultType="java.lang.Integer">
         SELECT MAX(badge_id)
         FROM erp_bookstore_student_badge
-        WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (4, 5)
+        WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (3, 4)
     </select>
 
     <delete id="deleteAdvancedBadge">
         DELETE FROM erp_bookstore_student_badge
-        WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (4, 5)
+        WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (3, 4)
     </delete>
 
     <!-- 단계 = 학생 학년. 그 학년 도서(content.schoolyear)의 완독(DONE) 권수를 센다 -->
@@ -275,13 +276,18 @@
           AND YEAR(completed_at) = YEAR(DATEADD(HOUR, 9, GETUTCDATE()))
     </select>
 
+    <!--
+      카드 이미지는 표지(content.image_url)가 아니라 erp_bookstore_card_path.card_url이다 (2026-09-02).
+      카드 그림이 아직 등록되지 않은 책은 행이 없으므로 기본 카드 이미지로 폴백한다.
+    -->
     <select id="findCardByContent" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CardDTO">
-        SELECT content_id     AS contentId,
-               original_title AS cardName,
-               author         AS bookTitle,
-               image_url      AS imageUrl
-        FROM erp_bookstore_content
-        WHERE content_id = #{contentId}
+        SELECT c.content_id     AS contentId,
+               c.original_title AS cardName,
+               c.author         AS bookTitle,
+               ISNULL(cp.card_url, '/images/student_result/card.png') AS imageUrl
+        FROM erp_bookstore_content c
+        LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = c.content_id
+        WHERE c.content_id = #{contentId}
     </select>
 
     <!-- ══════════════ 카드 지급 이력 (2026-07-28) ══════════════ -->
@@ -322,9 +328,11 @@
                sc.card_type                          AS cardType,
                CASE WHEN sc.card_type = 'RARE' THEN N'레어 카드' ELSE c.original_title END AS cardName,
                CASE WHEN sc.card_type = 'RARE' THEN NULL ELSE c.author END AS bookTitle,
-               CASE WHEN sc.card_type = 'RARE' THEN '/images/student_result/rare.png' ELSE c.image_url END AS imageUrl
+               CASE WHEN sc.card_type = 'RARE' THEN '/images/student_result/rare.png'
+                    ELSE ISNULL(cp.card_url, '/images/student_result/card.png') END AS imageUrl
         FROM erp_bookstore_student_card sc
         LEFT JOIN erp_bookstore_content c ON c.content_id = sc.content_id
+        LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = sc.content_id
         WHERE sc.student_id = #{studentId}
         ORDER BY sc.earned_at DESC
     </select>
@@ -348,6 +356,41 @@
         SELECT title
         FROM erp_bookstore_level
         WHERE schoolyear = #{schoolyear} AND level_no = #{levelNo}
+    </select>
+
+    <!-- "나의 책장" 모달 — 올해 추천받은 도서 전체(완독일/추천일 KST 기준). status는 화면 뱃지값으로 바로 매핑:
+         PENDING→reading(읽는 중) / grade=KING→king / grade=FRIEND→complete / 그 외 DONE(RETRY·NULL)→retry -->
+    <select id="findYearBooksForBookcase" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BookcaseItemDTO">
+        SELECT TRY_CAST(c.schoolyear AS INT) AS grade,
+               CONVERT(varchar(10), COALESCE(rl.completed_at, rl.recommended_at), 23) AS date,
+               c.original_title AS title,
+               c.image_url      AS imageUrl,
+               CASE
+                   WHEN rl.status = 'PENDING' THEN 'reading'
+                   WHEN rl.grade = 'KING'     THEN 'king'
+                   WHEN rl.grade = 'FRIEND'   THEN 'complete'
+                   ELSE 'retry'
+               END AS status
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        WHERE rl.student_id = #{studentId}
+          AND YEAR(COALESCE(rl.completed_at, rl.recommended_at)) = YEAR(DATEADD(HOUR, 9, GETUTCDATE()))
+        ORDER BY COALESCE(rl.completed_at, rl.recommended_at) DESC
+    </select>
+
+    <!-- "나의 카드 컬렉션" 모달 — 보유 카드 전체. RARE는 책이 없어 grade=null, 고정 이름/이미지 -->
+    <select id="findCardsForBookcase" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BookcaseItemDTO">
+        SELECT CASE WHEN sc.card_type = 'RARE' THEN NULL ELSE TRY_CAST(c.schoolyear AS INT) END AS grade,
+               CONVERT(varchar(10), sc.earned_at, 23) AS date,
+               CASE WHEN sc.card_type = 'RARE' THEN N'레어 카드' ELSE c.original_title END AS title,
+               CASE WHEN sc.card_type = 'RARE' THEN '/images/student_result/rare.png'
+                    ELSE ISNULL(cp.card_url, '/images/student_result/card.png') END AS imageUrl,
+               CASE WHEN sc.card_type = 'RARE' THEN 'rare' ELSE 'normal' END AS status
+        FROM erp_bookstore_student_card sc
+        LEFT JOIN erp_bookstore_content c ON c.content_id = sc.content_id
+        LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = sc.content_id
+        WHERE sc.student_id = #{studentId}
+        ORDER BY sc.earned_at DESC
     </select>
 
     <!-- ══════════════ 뱃지 판정 (2026-07-10) ══════════════ -->
@@ -392,8 +435,8 @@
         WHERE sb.student_id = #{studentId}
           AND sb.content_id = #{contentId}
         <choose>
-            <when test="advanced">AND sb.badge_id IN (4, 5)</when>
-            <otherwise>AND sb.badge_id IN (1, 2, 3)</otherwise>
+            <when test="advanced">AND sb.badge_id IN (3, 4)</when>
+            <otherwise>AND sb.badge_id IN (1, 2)</otherwise>
         </choose>
         ORDER BY b.badge_id DESC
     </select>

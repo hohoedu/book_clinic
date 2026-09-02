@@ -53,6 +53,75 @@
   box-shadow: inset 0 -4px 0 var(--red-dark, #b6301f);
 }
 
+/* 재도전 유형 선택 모달 — 기본 문제=완료화면 재도전 버튼과 같은 초록, 심화 문제=빨강(문제 풀기 톤) 유지 */
+#retryTypeBasicBtn {
+  background: #1aa864;
+  color: #fff;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .15);
+}
+
+/* 재도전 유형 선택 모달 — 하단 "닫기" 링크 대신 오른쪽 위 X를 쓰고, 선택지 두 개가
+   충분히 커 보이도록 박스를 조금 키운다(2026-09-02). 다른 모달(로그아웃/추천 실패)은 그대로 둔다. */
+#retryTypeModal .modal-box {
+  position: relative;
+  width: 480px;
+  padding: 40px 36px 36px;
+}
+
+#retryTypeModal .modal-msg {
+  font-size: 24px;
+  margin-bottom: 32px;
+}
+
+#retryTypeModal .modal-actions {
+  gap: 16px;
+}
+
+#retryTypeModal .modal-btn {
+  min-height: 66px;
+  font-size: 22px;
+}
+
+/* 모달 오른쪽 위 닫기 X */
+.modal-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  width: 36px;
+  height: 36px;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--muted, #8c8c8c);
+  font-size: 22px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.modal-close:hover {
+  background: var(--cream, #f4efe6);
+  color: var(--text, #333);
+}
+
+/* 나의 책장 / 카드 컬렉션 모달 — student-bookcase.html 을 iframe 으로 띄운다.
+   딤 배경은 iframe 안 .stage 가 그리므로 여기선 자리만 잡는다. */
+.bookcase-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+}
+
+.bookcase-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: transparent;
+}
+
 .topbar {
   height: 44px;
   display: flex;
@@ -159,45 +228,51 @@
   box-shadow: var(--shadow);
 }
 
+/* 자식이 오늘의 추천 도서 / 제목·저자 / 정보·표지 2단 / 버튼 순서로 쌓인다.
+   자식 개수가 상황에 따라 달라지므로(버튼이 완독 액션으로 바뀜) 행 트랙을 세지 않는 flex로 둔다 */
 .book-card {
   min-height: 662px;
   padding: 40px 30px 40px;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  gap: 30px;
+  display: flex;
+  flex-direction: column;
   height: 100%;
 }
 
 .book-content {
+  flex: 1;
+  margin-bottom: 30px;
   display: grid;
   grid-template-columns: minmax(295px, 1fr) minmax(250px, .95fr);
   gap: 28px;
   align-items: stretch;
 }
 
-/* 책마다 제목 길이·소개 분량·메타 개수가 달라도 각 영역이 같은 자리에 오도록 행 높이를 고정한다.
-   위에서부터 오늘의 추천 도서 / 제목 / 저자·출판사 / 책 소개(남는 높이 전부) / 메타 박스 순서이고,
-   소개가 짧아도 메타 박스는 항상 맨 아래에 붙는다 */
+/* 책 소개(남는 높이 전부) / 메타 박스 순서 — 소개가 짧아도 메타 박스는 항상 맨 아래에 붙는다 */
 .book-info {
   min-width: 0;
   display: grid;
-  grid-template-rows: auto minmax(calc(34px * 1.18 * 2), auto) auto 1fr auto;
-  min-height: 482px;
+  grid-template-rows: 1fr auto;
+  min-height: 396px;
 }
 
 .eyebrow {
   display: flex;
   align-items: center;
   gap: 8px;
+
+  justify-content: space-between;
+}
+
+.today-recommend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eyebrow-label{
   color: var(--green);
   font-size: 17px;
   font-weight: 700;
-  margin-top: 25px;
-}
-
-/* "오늘의 추천 도서" 라벨은 왼쪽, 책 추천받기 버튼은 오른쪽 끝으로 (space-between 효과) */
-.eyebrow .recommend-next-btn {
-  margin-left: auto;
 }
 
 .eyebrow .star {
@@ -212,23 +287,28 @@
   font-size: 13px;
 }
 
-/* 제목은 최대 2줄 — 2줄 높이는 위 grid-template-rows에서 확보하고,
-   제목 자체는 아래(저자·출판사 쪽)에 붙여 한 줄짜리 제목이 위로 떠 보이지 않게 한다 */
+/* 제목·저자 묶음 — 카드 전체 너비를 쓰고, 아래 2단 영역과 분리되어 있다 */
+.book-heading {
+  min-width: 0;
+  margin: 18px 0 24px;
+}
+
 .book-title {
   margin: 0;
-  align-self: end;
+  min-width: 0;
   font-size: 34px;
   line-height: 1.18;
   letter-spacing: -1.2px;
   font-weight: 600;
+  /* 제목이 길어도 항상 1줄 — 2줄이 되면 아래 요소가 통째로 밀려 내려가기 때문 */
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
 .book-author {
-  margin: 8px 0 27px;
+  margin: 8px 0 0;
   color: #a2a2a2;
   font-size: 14px;
   font-weight: 400;
@@ -292,82 +372,8 @@
   font-size: 13px;
 }
 
-.book-visual {
-  position: relative;
-  align-self: center;
-  min-height: 370px;
-  isolation: isolate;
-}
-
-.book-visual::before {
-  content: "";
-  position: absolute;
-  width: min(330px, 90%);
-  aspect-ratio: 1;
-  border-radius: 50%;
-  background: #ffd95f;
-  left: 50%;
-  bottom: 62px;
-  transform: translateX(-50%);
-  z-index: 0;
-}
-
-.sparkle {
-  --sparkle-color: #ffd85a;
-  position: absolute;
-  width: 30px;
-  height: 30px;
-  z-index: 6;
-  pointer-events: none;
-  animation: sparklePulse 2.2s ease-in-out infinite;
-}
-
-.sparkle i { display: none; }
-
-.sparkle::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--sparkle-color);
-  clip-path: polygon(
-    50% 0%,
-    61% 37%,
-    100% 50%,
-    61% 63%,
-    50% 100%,
-    39% 63%,
-    0% 50%,
-    39% 37%
-  );
-  filter: drop-shadow(0 0 8px rgba(255,216,90,.55));
-}
-
-.sparkle::after {
-  content: "";
-  position: absolute;
-  inset: 27%;
-  background: rgba(255,247,198,.9);
-  clip-path: polygon(
-    50% 0%,
-    61% 37%,
-    100% 50%,
-    61% 63%,
-    50% 100%,
-    39% 63%,
-    0% 50%,
-    39% 37%
-  );
-  opacity: .52;
-}
-
-.sparkle.s1 { left: 9%; top: 6%; }
-.sparkle.s2 { left: 2%; top: 15%; width: 19px; height: 19px; animation-delay: .35s; }
-.sparkle.s3 { right: 1%; top: 69%; --sparkle-color: #a593ee; width: 24px; height: 24px; animation-delay: .7s; }
-
-@keyframes sparklePulse {
-  0%, 100% { transform: scale(.82); opacity: .65; }
-  50% { transform: scale(1.08); opacity: 1; }
-}
+/* 3D 책 목업(.book-visual / .book-mockup / .book-stand ...)은 book-mockup.css로 분리했다
+   — 출석 후 추천 화면(book-confirm)과 공유한다(2026-09-02). 아래 NEW 딱지는 홈 카드 전용이라 남긴다. */
 .new-badge {
   position: absolute;
   top: 91px;
@@ -380,136 +386,15 @@
   z-index: 4;
 }
 
-.book-stand {
-  position: absolute;
-  left: 50%;
-  bottom: 13px;
-  width: min(320px, 89%);
-  height: 34px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, #e4d4c1 0%, #dfcbb7 100%);
-  border-radius: 2px 2px 4px 4px;
-  z-index: 1;
-  box-shadow: 0 10px 14px rgba(117, 91, 54, .18);
-}
 
-.book-stand::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -21px;
-  width: 100%;
-  height: 22px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, #f4eadf 0%, #eadccb 100%);
-  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
-  border-radius: 2px 2px 0 0;
-}
-
-/*책 목업*/
-.book-mockup {
-  --cover-w: 200px;
-  --cover-h: 268px;
-  --page-w: 22px;
-  position: absolute;
-  left: 50%;
-  bottom: 52px;
-  z-index: 3;
-  width: calc(var(--cover-w) + var(--page-w));
-  height: var(--cover-h);
-  transform: translateX(-50%);
-  filter: drop-shadow(12px 16px 12px rgba(75, 59, 36, .22));
-}
-
-.book-cover {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: var(--cover-w);
-  height: var(--cover-h);
-  overflow: hidden;
-  background: #fff;
-  border-radius: 14px 10px 10px 14px;
-  clip-path: polygon(0 4.5%, 100% 0, 100% 100%, 0 95.5%);
-  z-index: 5;
-  box-shadow:
-    inset -8px 0 8px rgba(0,0,0,.08),
-    inset 6px 0 8px rgba(255,255,255,.32);
-}
-
-.main-book-img {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center center;
-  display: block;
-  transform: scale(1.015);
-  transform-origin: center center;
-  backface-visibility: hidden;
-}
-
-.book-cover::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgba(0,0,0,.10) 0%, rgba(255,255,255,.32) 6%, transparent 15%),
-    linear-gradient(115deg, rgba(255,255,255,.32) 0%, transparent 28%, transparent 72%, rgba(0,0,0,.04) 100%);
-  pointer-events: none;
-  z-index: 2;
-}
-
-.book-pages {
-  position: absolute;
-  top: 12px;
-  right: 0;
-  width: var(--page-w);
-  height: calc(var(--cover-h) - 24px);
-  border-radius: 0 12px 12px 0;
-  background:
-    linear-gradient(90deg, rgba(115,115,115,.30) 0%, rgba(255,255,255,.42) 16%, transparent 34%),
-    repeating-linear-gradient(90deg, #eeeeea 0 3px, #c8c8c3 3px 5px, #fbfbf7 5px 8px);
-  border: 1px solid rgba(110,110,105,.28);
-  border-left: 0;
-  z-index: 2;
-  box-shadow:
-    inset 6px 0 7px rgba(0,0,0,.12),
-    3px 3px 4px rgba(91,75,52,.14);
-}
-
-.book-pages::before {
-  content: "";
-  position: absolute;
-  left: -8px;
-  top: -6px;
-  width: 16px;
-  height: calc(100% + 12px);
-  background: linear-gradient(90deg, rgba(0,0,0,.09), rgba(255,255,255,.06));
-  border-radius: 0 6px 6px 0;
-}
-
-.book-pages::after {
-  content: "";
-  position: absolute;
-  right: 4px;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: rgba(165,165,160,.75);
-  border-radius: 99px;
-}
-
-.book-bottom-pages {
-  display: none;
-}
-
-.book-spine-line {
-  display: none;
-}
-
+/* 버튼 입체감(2026-09-02) — 세 겹으로 만든다:
+     1) 위쪽 안쪽 흰 선   = 빛 받는 윗면
+     2) 아래쪽 안쪽 진한 선 = 버튼 두께(옆면)
+     3) 바깥 그림자        = 바닥에서 떠 있는 느낌
+   눌리면 두께를 줄이고 아래로 내려가 실제로 눌린 것처럼 보인다.
+   색만 다른 변형(초록 등)은 --btn-shade만 바꾸면 된다. */
 .solve-btn {
+  --btn-shade: var(--red-dark);
   width: 100%;
   min-height: 62px;
   border-radius: 35px;
@@ -517,15 +402,31 @@
   color: #fff;
   font-size: 27px;
   font-weight: 700;
-  box-shadow: inset 0 -5px 0 var(--red-dark);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, .3),
+    inset 0 -6px 0 var(--btn-shade),
+    0 6px 14px rgba(0, 0, 0, .16);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
-  transition: transform .18s ease, filter .18s ease;
+  transition: transform .12s ease, box-shadow .12s ease, filter .18s ease;
 }
-.solve-btn:hover { transform: translateY(-2px); filter: brightness(1.03); }
-.solve-btn:active { transform: translateY(2px); box-shadow: inset 0 -2px 0 var(--red-dark); }
+.solve-btn:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, .3),
+    inset 0 -6px 0 var(--btn-shade),
+    0 11px 20px rgba(0, 0, 0, .2);
+}
+.solve-btn:active {
+  transform: translateY(4px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -2px 0 var(--btn-shade),
+    0 2px 6px rgba(0, 0, 0, .14);
+}
 .solve-btn .book-icon { font-size: 31px; line-height: 1; }
 
 /* 완독 후 홈 화면 — 문제 풀기 버튼 대신 남은 액션 버튼들 */
@@ -534,19 +435,47 @@
   gap: 14px;
 }
 
+/* 재도전 / 틀린 문제 다시 풀기 — 글자가 두 줄로 접히면 안 되므로 폭을 나눠 갖지 않고
+   자기 글자 길이만큼만 차지한다(flex: 0 1 auto + nowrap). 셋이 함께 떠도 한 줄로 들어간다. */
+.completion-actions .solve-btn {
+  flex: 0 1 auto;
+  /* .solve-btn의 width:100%를 풀어준다 — flex-basis:auto가 그 값을 집어가면
+     세 버튼이 저마다 전체 폭을 요구해 다시 글자가 접힌다 */
+  width: auto;
+  min-width: 0;
+  padding: 0 18px;
+  white-space: nowrap;
+}
+
+.completion-actions .solve-btn--sub {
+  font-size: 17px;
+  gap: 8px;
+}
+.completion-actions .solve-btn--sub .fa-rotate-right,
+.completion-actions .solve-btn--sub .fa-rotate-left { font-size: 18px; }
+
+/* "심화 문제 풀기"는 남는 폭을 전부 가져간다(2026-09-02) — 다음으로 눌러야 할 버튼이라
+   항상 가장 넓다. 혼자 뜰 때는 그대로 꽉 찬다. */
+.completion-actions .solve-btn--advanced {
+  flex: 1;
+  font-size: 21px;
+}
+.completion-actions .solve-btn--advanced .fa-book-open { font-size: 23px; }
+
+/* 재도전 / 틀린 문제 다시 풀기 — 결과 화면의 .btn-retry와 같은 초록 톤(2026-09-02, 기존 파랑에서 변경) */
 .solve-btn--sub {
+  --btn-shade: #12764a;
   font-size: 19px;
   min-height: 54px;
-  background: var(--blue, #0988d8);
-  box-shadow: inset 0 -5px 0 rgba(0, 0, 0, .15);
+  background: #1aa864;
 }
 .solve-btn--sub .fa-rotate-left,
 .solve-btn--sub .fa-book-open { font-size: 22px; }
 
-/* 심화 문제 풀기 — "문제 풀기"(.solve-btn)와 같은 빨강 톤으로. 재도전/틀린문제 다시풀기(파랑)와 구분 */
+/* 심화 문제 풀기 — "문제 풀기"(.solve-btn)와 같은 빨강 톤으로. 재도전/틀린문제 다시풀기(초록)와 구분 */
 .solve-btn--advanced {
+  --btn-shade: var(--red-dark);
   background: var(--red);
-  box-shadow: inset 0 -5px 0 var(--red-dark);
 }
 
 .recommend-next-btn {
@@ -598,32 +527,37 @@
 }
 
 .level-name { min-width: 0; }
-.level-pill {
-  display: inline-flex;
+
+/* 메달 아이콘 + "Lv. n" 한 줄 (2026-09-02, 기존 보라색 알약 .level-pill 대체) */
+.level-no {
+  display: flex;
   align-items: center;
-  justify-content: center;
-  height: 28px;
-  padding: 0 12px;
-  border-radius: 8px;
-  background: #c65ed7;
-  color: #fff;
-  font-size: 16px;
-  font-weight: 900;
-  margin-bottom: 5px;
+  gap: 8px;
+  margin: 0 0 2px;
+  color: #6b6b6b;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -.3px;
 }
-.level-name h2 {
+.level-medal {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+  flex: none;
+}
+
+/* 칭호 — 선택자가 h2였는데 마크업은 h3라 스타일이 하나도 먹지 않고 있었다(2026-09-02 수정) */
+.level-title {
   margin: 0;
-  font-size: 25px;
+  font-size: 27px;
   line-height: 1.2;
-  font-weight: 900;
-  letter-spacing: -.6px;
-}
-.level-name p {
-  margin: 8px 0 0;
-  font-size: 14px;
-  color: #777;
-  line-height: 1.55;
-  word-break: keep-all;
+  font-weight: 800;
+  letter-spacing: -.8px;
+  color: #333;
+  /* 칭호가 길어도 한 줄 — 두 줄이 되면 카드 높이가 흔들린다 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .level-progress {
@@ -643,7 +577,7 @@
 }
 .progress-track {
   margin-top: 13px;
-  height: 8px;
+  height: 14px;
   border-radius: 99px;
   background: #e9e5e7;
   overflow: hidden;

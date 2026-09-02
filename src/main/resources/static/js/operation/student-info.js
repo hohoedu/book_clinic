@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initStudentModal();
   loadGradeOptions();
   loadStudentList();
+  document.getElementById("btnPrintQrCard").addEventListener("click", printQrCards);
 });
 
 const RESULT_LABEL = { DONE_KING: "독서왕", DONE_FRIEND: "통과", PENDING: "재도전" };
@@ -186,6 +187,192 @@ async function openStudentModal(studentId, studentName) {
 function closeStudentModal() {
   document.getElementById("studentModal").hidden = true;
   currentDetail = null;
+}
+
+/* ===================== QR 카드 출력 ===================== */
+
+/*
+ * 학생증 QR 카드 출력 — 카드 디자인(밴드/로고/문구)은 이미 선인쇄된 세로형 PVC 원판(54 x 86mm)이고,
+ * 여기서는 그 위에 겹쳐 찍을 가변 정보 3가지 — QR · 지점명 · ID — 만 레이어로 인쇄한다.
+ * 인쇄 창 상단 토글로 용지 방식을 고른다:
+ *   - A4 시트: A4(세로) 한 장에 여러 장 + 점선 재단선 (일반 프린터로 정렬 테스트)
+ *   - 카드 낱장: 카드 1장 = 페이지 1장 @page 54x86mm 세로 (카드 프린터 원판 위에 오버프린트)
+ * QR/지점명/ID 좌표는 인쇄 doc 안 .qr/.center-name/.serial 규칙에서 원판에 맞춰 조정.
+ *
+ * QR 원문은 시리얼 넘버 원문 그대로다 — 학생 로그인/스캔이 app_id 또는 serial_num 어느 쪽으로도
+ * 학생을 찾으므로(StudentMapper.findByAppId 참고), 실물 카드에는 임의 발급한 시리얼 넘버를 싣는다.
+ *
+ * 아래 QR_CARD_SERIALS는 지금은 테스트용 고정 배치다(요청: 100260002 ~ 100260009 8장).
+ * 실제 발급 플로우(임의 시리얼 생성 → 학생 등록)를 붙일 땐 이 배열을 그 결과로 바꾸면 된다.
+ */
+const QR_CARD_SERIALS = serialRange(100260002, 100260009);
+const QR_CARD_CENTER_NAME = "부산 센텀점";
+
+function serialRange(from, to) {
+  const list = [];
+  for (let n = from; n <= to; n += 1) list.push(String(n));
+  return list;
+}
+
+function makeQrDataUrl(text) {
+  const holder = document.createElement("div");
+  holder.style.display = "none";
+  document.body.appendChild(holder);
+  // eslint-disable-next-line no-new
+  new QRCode(holder, { text, width: 480, height: 480, correctLevel: QRCode.CorrectLevel.M });
+  const canvas = holder.querySelector("canvas");
+  const dataUrl = canvas ? canvas.toDataURL("image/png") : (holder.querySelector("img") || {}).src;
+  holder.remove();
+  return dataUrl;
+}
+
+function printQrCards() {
+  if (typeof QRCode !== "function") {
+    alert("QR 생성 모듈을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.");
+    return;
+  }
+
+  const cards = QR_CARD_SERIALS.map((serial) => {
+    const dataUrl = makeQrDataUrl(serial);
+    return `
+      <div class="card">
+        <img class="qr" src="${dataUrl}" alt="QR ${escapeHtml(serial)}">
+        <span class="center-name">${escapeHtml(QR_CARD_CENTER_NAME)}</span>
+        <span class="serial">ID : ${escapeHtml(serial)}</span>
+      </div>`;
+  }).join("");
+
+  const win = window.open("", "_blank", "width=920,height=760");
+  if (!win) {
+    alert("팝업이 차단되어 있습니다. 팝업 허용 후 다시 시도해주세요.");
+    return;
+  }
+  win.document.write(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>학생증 QR 카드 (${QR_CARD_SERIALS.length}장)</title>
+<style id="pageRule">@page { size: A4 portrait; margin: 8mm; }</style>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Malgun Gothic", "Apple SD Gothic Neo", -apple-system, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #e9ecef; }
+
+  /* 상단 컨트롤 바 — 인쇄 시에는 숨김 */
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 14px; background: #fff; border-bottom: 1px solid #ddd;
+  }
+  .toolbar button {
+    padding: 6px 13px; font-size: 13px; font-weight: 600;
+    border: 1px solid #1c3aa1; border-radius: 6px;
+    background: #fff; color: #1c3aa1; cursor: pointer;
+  }
+  .toolbar button.active { background: #1c3aa1; color: #fff; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .hint { font-size: 12px; color: #888; font-weight: 400; }
+  .toolbar .print-btn { background: #1c3aa1; color: #fff; }
+
+  .sheet { display: flex; flex-wrap: wrap; }
+
+  /* A4 시트 모드 — 한 장에 여러 카드 + 점선 재단선 */
+  body.mode-a4 .sheet { padding: 16px; gap: 4px; justify-content: flex-start; }
+  body.mode-a4 .card { outline: 0.2mm dashed #b0b0b0; }
+
+  /* 카드 낱장 모드 — 카드 1장 = 페이지 1장 (flex 대신 block: 카드 프린터에서 page-break가 더 확실) */
+  body.mode-card .sheet { display: block; padding: 16px; }
+  body.mode-card .card { margin: 0 auto 16px; page-break-after: always; }
+  body.mode-card .card:last-child { page-break-after: auto; }
+
+  @media screen {
+    .card { box-shadow: 0 1px 6px rgba(0, 0, 0, .18); }
+  }
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    body.mode-a4 .sheet { padding: 0; gap: 0; }
+    body.mode-card .sheet { padding: 0; }
+    body.mode-card .card { margin: 0; }
+    .card { box-shadow: none; }
+  }
+
+  /*
+   * 세로형 카드. 카드 원판(디자인·로고·밴드 전부 선인쇄된 PVC)에 겹쳐 찍는 레이어라 배경은 투명.
+   * QR / 지점명 / ID 3가지만 올린다. ▼ 아래 좌표(mm)를 실제 원판에 맞춰 조정하세요.
+   */
+  .card {
+    position: relative;
+    /* CR-80(ISO ID-1) 세로 = 53.98 x 85.60mm. IDP SMART-51 카드 크기와 정확히 맞춰야 함 */
+    width: 53.98mm; height: 85.6mm;
+    background: transparent;
+    overflow: hidden;
+  }
+  .qr {
+    position: absolute; left: 50%; top: 19mm;
+    transform: translateX(-50%);
+    width: 22mm; height: 22mm;
+    image-rendering: pixelated;
+  }
+  .center-name {
+    position: absolute; left: 50%; top: 50mm;
+    transform: translateX(-50%);
+    font-size: 3.2mm; color: #000000;
+    white-space: nowrap;
+  }
+  .serial {
+    position: absolute; left: 50%; top: 66mm;
+    transform: translateX(-50%);
+    font-size: 3.2mm; color: #000000;
+  }
+
+  /* 화면 미리보기에서만 원판 위치 감을 잡도록 옅은 상단 밴드 표시 (인쇄 안 됨) */
+  @media screen {
+    .card { background: #fff; }
+    .card::before {
+      content: ""; position: absolute; left: 0; right: 0; top: 0; height: 16mm;
+      background: #1c3aa1; opacity: .12;
+    }
+  }
+</style>
+</head>
+<body class="mode-a4">
+  <div class="toolbar">
+    <button type="button" data-mode="a4" class="active">A4 시트</button>
+    <button type="button" data-mode="card">카드 낱장</button>
+    <span class="hint" id="modeHint"></span>
+    <span class="spacer"></span>
+    <button type="button" class="print-btn" id="btnDoPrint">인쇄하기</button>
+  </div>
+  <div class="sheet">${cards}</div>
+  <script>
+    (function () {
+      var HINTS = {
+        a4: "A4 용지에 여러 장 배치(점선 따라 재단). 일반 프린터용.",
+        card: "카드 1장 = 페이지 1장 (54 x 86mm 세로). 카드 프린터/인쇄소용."
+      };
+      function setMode(m) {
+        document.body.className = "mode-" + m;
+        document.querySelectorAll(".toolbar [data-mode]").forEach(function (b) {
+          b.classList.toggle("active", b.dataset.mode === m);
+        });
+        document.getElementById("pageRule").textContent = m === "a4"
+          ? "@page { size: A4 portrait; margin: 8mm; }"
+          : "@page { size: 53.98mm 85.6mm; margin: 0; }";
+        document.getElementById("modeHint").textContent = HINTS[m];
+      }
+      document.querySelectorAll(".toolbar [data-mode]").forEach(function (b) {
+        b.addEventListener("click", function () { setMode(b.dataset.mode); });
+      });
+      document.getElementById("btnDoPrint").addEventListener("click", function () {
+        window.focus();
+        window.print();
+      });
+      setMode("a4");
+    })();
+  <\/script>
+</body>
+</html>`);
+  win.document.close();
 }
 
 function switchTab(tab) {

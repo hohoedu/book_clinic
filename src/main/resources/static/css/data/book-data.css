@@ -1014,3 +1014,22 @@ select {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+/* 분실/훼손 재고 표시 — 0권이면 숨기고, 있을 때만 복구 버튼과 함께 나온다 (2026-09-02) */
+.loan-qty-lost-wrap {
+  color: #d9534f;
+}
+
+.loan-qty-lost-wrap[hidden] {
+  display: none;
+}
+
+.loan-qty-lost-wrap b {
+  color: #d9534f;
+}
+
+.item-loan-stock .it-lost-restore {
+  margin-left: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  vertical-align: middle;
+}

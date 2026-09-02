@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>호호책방 - 나의 책장</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" th:href="@{/css/student/student-bookcase.css}" />
+</head>
+
+<body>
+  <!--
+    나의 책장 / 나의 카드 컬렉션 공용 화면.
+    student-main 에서 <iframe src="/student/bookcase?type=book|card"> 로 띄운다.
+    type 파라미터로 데이터(책 / 카드)만 바꿔 끼우고 레이아웃은 그대로 재사용한다.
+  -->
+  <div class="stage" id="stage">
+    <section class="library">
+      <header class="library-header">
+        <button class="close" type="button" aria-label="닫기">×</button>
+
+        <div class="title-wrap">
+          <h1 id="bcTitle">나의 책장</h1>
+          <p id="bcSubtitle">지금까지 읽은 책을 모았어요!</p>
+        </div>
+
+        <div class="header-tools">
+          <div class="grade-tabs" id="gradeTabs">
+            <button class="grade-tab active" type="button" data-grade="1">1학년</button>
+            <button class="grade-tab" type="button" data-grade="2">2학년</button>
+            <button class="grade-tab" type="button" data-grade="3">3학년</button>
+          </div>
+
+          <div class="summary">
+            <span id="bcSummaryLabel">올해 읽은 책</span> <strong id="bcCount">0권</strong>
+          </div>
+
+          <div class="sort-wrap">
+            <select class="sort-select" id="sortSelect" aria-label="정렬">
+              <option value="latest">최신순</option>
+              <option value="oldest">오래된순</option>
+            </select>
+          </div>
+        </div>
+      </header>
+
+      <div class="shelf-shell">
+        <div class="bookshelf">
+          <div class="shelf-scroll" id="shelfScroll">
+            <div id="shelfRows"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- 서버가 내려준 책장/카드 데이터 — student-bookcase.js 가 이 값을 읽어 렌더링한다.
+       (없으면 스크립트 내부 목업으로 폴백) -->
+  <script th:inline="javascript">
+    /*<![CDATA[*/
+    window.__BOOKCASE__ = /*[[${bookcase}]]*/ null;
+    /*]]>*/
+  </script>
+  <script th:src="@{/js/student/student-bookcase.js}"></script>
+</body>
+
+</html>

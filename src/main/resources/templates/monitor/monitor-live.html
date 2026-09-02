@@ -141,6 +141,40 @@
 
   </div>
 
+  <!--
+    추천 도서 교체 모달 (2026-09-02) — 추천된 책이 서가에 없거나 못 읽을 정도로 훼손됐을 때.
+    사유를 고르면 그 한 권이 재고에서 빠지고(다음 학생에게 다시 추천되지 않는다) 곧바로 다음 책이 추천된다.
+  -->
+  <div class="modal-overlay" id="bookSwapModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3>추천 도서 교체</h3>
+        <button type="button" class="modal-close" id="bookSwapCloseBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="swap-target" id="bookSwapTarget"></p>
+        <p class="swap-desc">
+          이 책을 추천에서 빼고 다음 책을 바로 추천합니다.<br>
+          고른 사유대로 <b>이 책 한 권이 재고에서 빠져</b> 다른 학생에게도 추천되지 않습니다.
+        </p>
+        <div class="swap-reasons">
+          <label class="swap-reason">
+            <input type="radio" name="bookSwapReason" value="MISSING" checked>
+            <span><b>책이 없어요</b><em>서가에서 찾을 수 없음 (나중에 찾으면 도서관리에서 복구)</em></span>
+          </label>
+          <label class="swap-reason">
+            <input type="radio" name="bookSwapReason" value="DAMAGED">
+            <span><b>훼손됐어요</b><em>못 읽을 정도로 손상됨</em></span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn outline" id="bookSwapCancelBtn">취소</button>
+        <button type="button" class="btn primary" id="bookSwapConfirmBtn">교체하기</button>
+      </div>
+    </div>
+  </div>
+
   <script th:src="@{/js/monitor/monitor-live.js}"></script>
 </body>
 

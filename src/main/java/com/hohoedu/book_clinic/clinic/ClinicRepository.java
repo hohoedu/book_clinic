@@ -147,6 +147,17 @@ public interface ClinicRepository {
     List<ClinicRespDTO.MonthBookDTO> findCompletedThisMonth(@Param("studentId") String studentId,
                                                              @Param("limit") int limit);
 
+    /**
+     * "나의 책장" 모달용 — 올해(완독일/추천일 KST 기준) 추천받은 도서 전체.
+     * status: king/complete/retry/reading (grade·recommend_log.status 조합으로 매퍼에서 계산), 최신순.
+     */
+    List<ClinicRespDTO.BookcaseItemDTO> findYearBooksForBookcase(@Param("studentId") String studentId);
+
+    /**
+     * "나의 카드 컬렉션" 모달용 — 보유 카드 전체(NORMAL+RARE), 지급일(KST)/학년 포함, 최신순.
+     */
+    List<ClinicRespDTO.BookcaseItemDTO> findCardsForBookcase(@Param("studentId") String studentId);
+
     // ── 뱃지 판정 (2026-07-27 재작업) — 책마다 부여 · 등급형 배타 · 첫 시도 결과 기준 ──
 
     /** 뱃지 마스터 1건 (badge_id로 이름/설명 조회 — 결과화면 팝업용) */

@@ -28,24 +28,40 @@ public class ImageUploadController {
 
     private final ImageStorageService imageStorageService;
 
-    /** 도서 이미지 업로드 — 저장 후 접근 가능한 URL 반환 */
+    /** 도서 표지 업로드 — 저장 후 접근 가능한 URL 반환 */
     @PostMapping("/image")
     public ResponseEntity<?> uploadImage(@RequestParam("file") MultipartFile file) {
+        validateImage(file);
+        try {
+            return ResponseEntity.ok(ApiUtils.success(Map.of("url", imageStorageService.store(file))));
+        } catch (IOException e) {
+            log.error("표지 이미지 업로드 실패", e);
+            throw new Exception400("이미지 업로드 중 오류가 발생했습니다.");
+        }
+    }
+
+    /**
+     * 수집 카드 이미지 업로드 (2026-09-02) — 표지와 저장 디렉터리가 다르다(FTP cards/).
+     * 반환된 URL을 도서 저장 시 card_url로 함께 보내면 erp_bookstore_card_path에 기록된다.
+     */
+    @PostMapping("/card-image")
+    public ResponseEntity<?> uploadCardImage(@RequestParam("file") MultipartFile file) {
+        validateImage(file);
+        try {
+            return ResponseEntity.ok(ApiUtils.success(Map.of("url", imageStorageService.storeCard(file))));
+        } catch (IOException e) {
+            log.error("카드 이미지 업로드 실패", e);
+            throw new Exception400("이미지 업로드 중 오류가 발생했습니다.");
+        }
+    }
+
+    private void validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new Exception400("업로드할 이미지가 없습니다.");
         }
-
         String contentType = file.getContentType();
         if (contentType == null || !contentType.startsWith("image/")) {
             throw new Exception400("이미지 파일만 업로드할 수 있습니다.");
-        }
-
-        try {
-            String url = imageStorageService.store(file);
-            return ResponseEntity.ok(ApiUtils.success(Map.of("url", url)));
-        } catch (IOException e) {
-            log.error("이미지 업로드 실패", e);
-            throw new Exception400("이미지 업로드 중 오류가 발생했습니다.");
         }
     }
 }

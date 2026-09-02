@@ -12,6 +12,7 @@
   <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" th:href="@{/css/student/attendance-home.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/book-mockup.css}" />
   <link rel="stylesheet" th:href="@{/css/student/book-confirm.css}" />
 </head>
 
@@ -25,23 +26,38 @@
       <a class="confirm-close-btn" th:href="@{/attendance}">닫기</a>
     </div>
 
-    <!-- 정상: 입실 처리 완료 + 오늘의 추천 도서만 보여준다(문제 풀기 버튼 없음 — 공용 기기라 여기서 학습으로 안 이어지게) -->
-    <div class="confirm-card" th:unless="${error}">
-      <p class="confirm-eyebrow"><i class="fa-solid fa-circle-check"></i> 입실 처리 완료</p>
-      <h1 class="confirm-student" th:text="|${studentName} 학생, 반가워요!|">학생 이름</h1>
+    <!-- 정상: 입실 처리 완료 + 오늘의 추천 도서. 문제 풀기로는 이어지지 않는다 —
+         공용 기기라 학습은 학생 개인 앱에서만 한다. -->
+    <div class="confirm-stage" th:unless="${error}">
+      <p class="confirm-eyebrow">
+        <span class="confirm-star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+        오늘의 추천 도서
+      </p>
 
-      <div class="confirm-book">
-        <img class="confirm-book-img" th:src="${book?.imageUrl ?: '/images/book-sample.png'}" alt="추천 도서 표지" />
-        <div class="confirm-book-info">
-          <p class="confirm-book-eyebrow">오늘의 추천 도서</p>
-          <h2 class="confirm-book-title" th:text="${book?.originalTitle ?: '-'}">책 제목</h2>
-          <p class="confirm-book-author"
-             th:text="${book != null ? (#strings.isEmpty(book.author) ? book.publisher : book.author + ' | ' + book.publisher) : '-'}">저자 | 출판사</p>
+      <!-- 책 제목은 대괄호로 감싸 한 문장 안에 넣는다 -->
+      <h1 class="confirm-headline">
+        <span class="confirm-headline-title"
+          th:text="|[${book?.originalTitle ?: '오늘의 책'}]|">[치과의사 드소토 선생님]</span>
+        책을 읽고 문제를 풀어보세요.
+      </h1>
+
+      <!-- 홈 화면과 같은 3D 책 목업(book-mockup.css 공유) -->
+      <div class="book-visual confirm-visual" aria-label="추천 도서 표지 영역">
+        <span class="sparkle s1"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+        <span class="sparkle s2"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+        <span class="sparkle s3"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
+        <div class="book-mockup">
+          <div class="book-cover">
+            <img class="main-book-img" th:src="${book?.imageUrl ?: '/images/book-sample.png'}" alt="추천 도서 표지" />
+            <span class="book-spine-line" aria-hidden="true"></span>
+          </div>
+          <div class="book-pages" aria-hidden="true"></div>
+          <div class="book-bottom-pages" aria-hidden="true"></div>
         </div>
+        <div class="book-stand"></div>
       </div>
 
-      <p class="confirm-hint">문제 풀이는 학생 개인 앱(문제풀이)에서 진행해주세요.</p>
-      <a class="confirm-close-btn" th:href="@{/attendance}">닫기</a>
+      <a class="confirm-close-btn confirm-ok-btn" th:href="@{/attendance}">확인</a>
     </div>
   </div>
 

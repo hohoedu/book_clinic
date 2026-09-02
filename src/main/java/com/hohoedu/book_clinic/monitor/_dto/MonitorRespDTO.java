@@ -19,6 +19,7 @@ public class MonitorRespDTO {
         private Integer sessionId;
         private String studentId;
         private String studentName;
+        private String gradeName;       // 학년 표시명(초1~중등) — 카드 상단 "이름 · 학년"용. clinic_grade_key 기준 (2026-09-02)
         private String centerCode;      // 학생 소속 센터 — 모니터링 센터별 스코핑/Firestore 구독 필터 기준
         private String sessionStatus;   // ENTERED / EXITED (raw, 미입실이면 null)
         private LocalDate sessionDate;  // 예약일(=입실일, Firestore 구독 시 날짜 필터 기준)
@@ -50,6 +51,7 @@ public class MonitorRespDTO {
 
         private Integer badgeCount;
         private String latestBadgeName;
+        private String badgeIds;        // 획득 뱃지 id를 콤마로 묶은 값(획득순) — 카드에 실제 뱃지 아이콘을 그리는 데 쓴다 (2026-09-02)
 
         private Integer diaryKey;       // null이면 독서일지 미등록
         private String attitudeCodes;   // attitude 행들을 콤마로 묶은 값
@@ -110,6 +112,7 @@ public class MonitorRespDTO {
         // 보이는 문제가 있었다). 2026-07-29
         private Integer badgeCount;
         private String latestBadgeName;
+        private String badgeIds;   // 이 책에서 딴 뱃지 id 콤마 목록(획득순) — 카드 뱃지 아이콘용 (2026-09-02)
     }
 
     /** 문제풀이 기록 삭제 대상 1건 — 초기화 직전 recommend_log 스냅샷(삭제 이력에 그대로 남긴다) */
@@ -135,6 +138,21 @@ public class MonitorRespDTO {
         private int cancelledCount;      // 함께 취소된 뒤 추천 권수
         private boolean bookSecured;     // 실물 확보 성공 — 학생에게 책을 건네주면 된다
         private boolean copySwitched;    // 원래 판본이 없어 같은 책의 다른 사본으로 대체됨
+    }
+
+    /**
+     * 추천 도서 교체 결과 (2026-09-02) — 직원이 곧바로 알아야 하는 건 "이제 어떤 책을 가져다주면
+     * 되느냐"다. 다음 후보가 아예 없을 수도 있어서(그 학년 책을 다 읽었거나 재고가 없음) 새 책이
+     * 잡혔는지 여부를 함께 내려준다.
+     */
+    @Data
+    public static class CancelRecommendRespDTO {
+        private boolean stockRemoved;      // 문제의 그 한 권을 재고에서 뺐는지
+        private Integer cancelledContentId; // 교체 전(취소된) 도서
+        private String cancelledTitle;     // 교체 전(취소된) 도서명
+        private String nextTitle;        // 새로 추천된 도서명 — 다음 후보가 없으면 null
+        private Integer nextContentId;
+        private String failMessage;      // 다음 책을 못 잡은 이유(추천 후보 없음/한도 초과 등)
     }
 
     /** 독서태도 코드 옵션(use_yn=1만) — 화면 체크박스 렌더링용. erp_bookstore_attitude_code 조회 결과 */

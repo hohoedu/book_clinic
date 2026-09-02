@@ -248,6 +248,11 @@
   justify-content: center;
 }
 
+/* "틀린 문제 다시 풀기"(기본+심화 병합)에서 심화 문항 뱃지 — 빨강으로 기본 문항과 구분 */
+.q-badge.is-advanced {
+  background: var(--red, #e5432f);
+}
+
 .qex-box {
   background: var(--cream);
   border-radius: var(--radius-md);

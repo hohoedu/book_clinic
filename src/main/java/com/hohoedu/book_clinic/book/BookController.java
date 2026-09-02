@@ -42,8 +42,9 @@ public class BookController {
 
     /** 마스터 도서 등록 (등록 직후 이어서 문제를 저장할 수 있도록 생성된 contentId를 응답으로 반환) */
     @PostMapping("/register")
-    public ResponseEntity<?> registerContent(@RequestBody @Valid BookReqDTO.RegisterReqDTO reqDTO) {
-        bookService.registerContent(reqDTO);
+    public ResponseEntity<?> registerContent(@RequestBody @Valid BookReqDTO.RegisterReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        bookService.registerContent(reqDTO, userDetails == null ? null : userDetails.getUsername());
         return ResponseEntity.ok(ApiUtils.success(reqDTO.getContentId()));
     }
 
@@ -204,6 +205,18 @@ public class BookController {
     public ResponseEntity<?> returnItem(@RequestBody @Valid BookReqDTO.ItemReturnReqDTO reqDTO) {
         bookService.returnItem(reqDTO);
         return ResponseEntity.ok(ApiUtils.success("반납 처리되었습니다."));
+    }
+
+    /**
+     * 분실/훼손 재고 복구 — 추천 교체("책이 없음"/"훼손")로 재고에서 뺀 한 권을 되돌린다.
+     * 못 찾던 책을 나중에 서가에서 찾는 일이 실제로 생기므로, 이 복구 경로가 없으면 그 재고가
+     * 영영 안 살아난다(2026-09-02).
+     */
+    @PostMapping("/item/lost/restore")
+    public ResponseEntity<?> restoreLostCopy(@RequestBody @Valid BookReqDTO.LostRestoreReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        boolean restored = bookService.restoreLostCopy(reqDTO.getBcode(), reqDTO.getCenterCode(), userDetails.getUsername());
+        return ResponseEntity.ok(ApiUtils.success(restored ? "복구되었습니다." : "되돌릴 분실/훼손 수량이 없습니다."));
     }
 
     /** 특정 실물도서(bcode+센터)의 대여 중 이력 조회 */

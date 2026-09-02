@@ -14,6 +14,8 @@
 
   <script th:src="@{/js/common.js}"></script>
   <script th:src="@{/js/sidebar.js}"></script>
+  <!-- QR 카드 출력용 QR 생성기 (davidshimjs/qrcodejs) — 카드 QR에 시리얼 넘버 원문을 인코딩한다 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <script th:src="@{/js/operation/student-info.js}"></script>
 </head>
 
@@ -28,6 +30,10 @@
       <header class="page-header">
         <h1>학생 정보</h1>
         <div class="page-header-actions">
+          <button type="button" id="btnPrintQrCard" class="guide-btn">
+            <i class="fa-solid fa-id-card"></i>
+            QR 카드 출력
+          </button>
           <button type="button" id="btnGuide" class="guide-btn">
             <i class="fa-regular fa-circle-question"></i>
             사용 가이드

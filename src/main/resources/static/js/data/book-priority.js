@@ -37,10 +37,10 @@ const DIFFICULTY_BADGE_CLASS = {
   상: "diff-high",
 };
 
-const activeYear = String(new Date().getFullYear() + 1); // 이 화면은 기본적으로 "다음 해" 순위를 미리 준비하는 용도 — 연도 선택 UI는 아직 없음
-const CURRENT_YEAR = String(new Date().getFullYear()); // 저장 시 "이번년도 즉시 적용"을 선택하면 이 연도로 저장한다
+const CURRENT_YEAR = String(new Date().getFullYear()); // 화면 기본 조회 연도 — 항상 올해 순위를 보여준다
+const activeYear = String(new Date().getFullYear() + 1); // "내년에 적용되도록 등록"으로 저장할 때만 쓰는 대상 연도 — 연도 선택 UI는 아직 없음
 let activeGrade = SCHOOLYEAR_CODES[0].code;
-let viewYear = getStoredViewYear(activeGrade); // 지금 화면에 조회/표시 중인 연도 — 즉시 적용 직후엔 새로고침해도 CURRENT_YEAR로 유지되도록 학년별로 세션에 기억해둔다
+let viewYear = getStoredViewYear(activeGrade); // 지금 화면에 조회/표시 중인 연도 — 기본은 올해, 세션에 "next"가 기억돼 있을 때만 내년
 let gradeBooks = []; // 현재 학년의 전체 도서 (표시 순서 = 순위)
 let originalOrder = []; // 조회 직후(=마지막으로 확정된) 순서 스냅샷 — 드래그 변경 여부 판단용
 
@@ -50,7 +50,8 @@ function viewYearStorageKey(grade) {
 }
 
 function getStoredViewYear(grade) {
-  return sessionStorage.getItem(viewYearStorageKey(grade)) === "current" ? CURRENT_YEAR : activeYear;
+  // 기본은 항상 올해. 세션에 "next"가 명시적으로 기억돼 있을 때만 내년 화면으로 이어서 보여준다
+  return sessionStorage.getItem(viewYearStorageKey(grade)) === "next" ? activeYear : CURRENT_YEAR;
 }
 
 function setStoredViewYear(grade, year) {
@@ -545,8 +546,7 @@ async function saveRankingDraft() {
     originalOrder = gradeBooks.map((b) => String(b.contentId));
 
     if (applyNow) {
-      // 화면은 평소 "다음해" 데이터만 보여주므로, 즉시 적용 직후엔 올해 데이터로 바꿔서 실제로 반영된 것을 바로 보여준다
-      // 새로고침해도 이 화면이 유지되도록 학년별로 세션에 기억해둔다
+      // 기본이 올해 화면이지만, 혹시 내년 화면을 보던 중이었다면 올해로 되돌려 방금 적용한 순위를 바로 보여준다
       viewYear = CURRENT_YEAR;
       setStoredViewYear(activeGrade, CURRENT_YEAR);
       await loadBooks();

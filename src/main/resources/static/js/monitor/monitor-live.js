@@ -10,6 +10,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   schedulePoll(POLL_FAST_MS);
   connectFirestore();
   initReadingLogPanel();
+  initBookSwapModal();
   // 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에 기대지 않고 startElapsedTicker가 브라우저에서
   // 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를 기준점으로 삼아 그 위로 초를 더하는 방식이라
   // DB/브라우저 시계 차이 문제가 없다.
@@ -452,6 +453,7 @@ function bookPages(card) {
     advancedCorrectCount: card.advancedCorrectCount,
     advancedTotalCount: card.advancedTotalCount,
     badgeCount: card.badgeCount,
+    badgeIds: card.badgeIds,
     latestBadgeName: card.latestBadgeName,
   }];
 }
@@ -478,17 +480,23 @@ function buildCardEl(card) {
   const pageIndex = currentPageIndex(card, pages);
   const page = pages[pageIndex];
 
+  // "혼자 읽기 어려워요!" 말풍선은 새싹 아이콘을 감싼 .name-flair-wrap 안에 넣는다(2026-09-02) —
+  // 예전엔 카드 기준 left 고정이라 이름/학년 길이가 바뀌면 새싹과 어긋났다. 이제 항상 새싹 바로 위에 붙는다.
+  const helpFlair = card.helpNeeded
+    ? `<span class="name-flair-wrap"><i class="fa-solid fa-seedling name-flair"></i>` +
+      `<span class="help-flag"><i class="fa-solid fa-seedling"></i> 혼자 읽기 어려워요!</span></span>`
+    : "";
+
   el.innerHTML = `
-    ${card.helpNeeded ? `<div class="help-flag"><i class="fa-solid fa-seedling"></i> 혼자 읽기 어려워요!</div>` : ""}
     <div class="card-top">
-      <span class="student-name">${card.studentName ?? ""}${card.helpNeeded ? `<i class="fa-solid fa-seedling name-flair"></i>` : ""}</span>
+      <span class="student-name">${card.studentName ?? ""}${card.gradeName ? `<span class="student-grade">· ${card.gradeName}</span>` : ""}${helpFlair}</span>
       <span class="status-badge"><i class="fa-solid ${badge.icon}"></i> ${badge.text}</span>
     </div>
     <div class="book-row"></div>
-    <div class="book-dots-row"></div>
     <div class="stat-row"></div>
     <div class="card-bottom">
       <span class="entered-at">${notEntered ? "미입실" : `${formatTime(card.enteredAt)} 입실`}</span>
+      <div class="book-dots-row"></div>
       ${notEntered ? "" : `
       <button type="button" class="btn outline small exit-btn" ${exited ? "disabled" : ""}>
         ${exited ? "퇴실 완료" : "퇴실 처리"}
@@ -516,8 +524,8 @@ function buildCardEl(card) {
   return el;
 }
 
-/* book-row(표지/책 정보/독서일지 버튼) + 여러 장 추천 시 그 아래(book-dots-row)에 점 페이지네이션.
-   표지·정보는 세로 가운데 정렬, 페이지네이션은 그와 무관하게 카드 하단에 고정한다(2026-08-26). */
+/* book-row(표지/책 정보/독서일지 버튼) + 책이 2권 이상이면 점 페이지네이션.
+   점은 카드 맨 아래(card-bottom)의 입실 시간과 퇴실 버튼 사이에 놓인다(2026-09-02, 기존엔 book-row 바로 아래). */
 function renderBookRow(el, card, pages, pageIndex) {
   const page = pages[pageIndex];
   const notEntered = card.cardStatus === "NOT_ENTERED";
@@ -531,12 +539,15 @@ function renderBookRow(el, card, pages, pageIndex) {
     </div>
     <div class="book-actions">
       ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+      ${canSwapBook(card, page) ? `<button type="button" class="book-swap-btn" title="책이 없거나 훼손됨 — 다른 책으로 교체"><i class="fa-solid fa-rotate"></i></button>` : ""}
     </div>
   `;
 
   if (!notEntered) {
     bookRow.querySelector(".log-open-btn").addEventListener("click", () => toggleReadingLogPanel(card));
   }
+  const swapBtn = bookRow.querySelector(".book-swap-btn");
+  if (swapBtn) swapBtn.addEventListener("click", () => openBookSwapModal(card, page));
 
   const dotsRow = el.querySelector(".book-dots-row");
   dotsRow.innerHTML = pages.length > 1
@@ -548,6 +559,84 @@ function renderBookRow(el, card, pages, pageIndex) {
       render();
     });
   });
+}
+
+/* ── 추천 도서 교체 (2026-09-02) ────────────────────────────────────────────────
+   추천된 책이 서가에 실제로 없거나 못 읽을 정도로 훼손된 경우, 직원이 그 추천을 없애고 다음 책을
+   바로 추천해준다. 서버는 그 한 권을 재고에서 빼서(분실 처리) 같은 책이 곧바로 다시 추천되거나
+   다른 학생에게 추천되는 것을 막는다. */
+
+let bookSwapContext = null;   // { studentId, studentName, recommendId, bookTitle }
+
+/* 교체할 수 있는 책인지 — 아직 문제를 풀지 않은(PENDING) "지금 읽는 중인 책"에만 허용한다.
+   이미 푼 책은 점수/뱃지/일지가 딸려 있어 문제풀이 기록 삭제(resetQuiz) 쪽에서 다뤄야 한다. */
+function canSwapBook(card, page) {
+  if (card.cardStatus === "NOT_ENTERED" || card.sessionStatus === "EXITED") return false;
+  if (page.recommendId == null) return false;
+  return page.basicStatus !== "DONE" && !hasQuizRecord(page);
+}
+
+function openBookSwapModal(card, page) {
+  bookSwapContext = {
+    studentId: card.studentId,
+    studentName: card.studentName ?? "",
+    recommendId: page.recommendId,
+    bookTitle: page.bookTitle ?? "이 책",
+  };
+  document.getElementById("bookSwapTarget").textContent =
+    `[${bookSwapContext.studentName}] ${bookSwapContext.bookTitle}`;
+  const first = document.querySelector('input[name="bookSwapReason"][value="MISSING"]');
+  if (first) first.checked = true;
+  document.getElementById("bookSwapModal").hidden = false;
+}
+
+function closeBookSwapModal() {
+  bookSwapContext = null;
+  document.getElementById("bookSwapModal").hidden = true;
+}
+
+function initBookSwapModal() {
+  const modal = document.getElementById("bookSwapModal");
+  if (!modal) return;
+  document.getElementById("bookSwapCloseBtn").addEventListener("click", closeBookSwapModal);
+  document.getElementById("bookSwapCancelBtn").addEventListener("click", closeBookSwapModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeBookSwapModal(); });
+  document.getElementById("bookSwapConfirmBtn").addEventListener("click", swapBook);
+}
+
+async function swapBook() {
+  if (!bookSwapContext) return;
+  const reason = document.querySelector('input[name="bookSwapReason"]:checked')?.value ?? "MISSING";
+  const confirmBtn = document.getElementById("bookSwapConfirmBtn");
+  confirmBtn.disabled = true;
+
+  try {
+    const result = await postJson("/admin/monitor/recommend/cancel", {
+      studentId: bookSwapContext.studentId,
+      recommendId: bookSwapContext.recommendId,
+      reason,
+    });
+    const cancelledTitle = bookSwapContext.bookTitle;
+    closeBookSwapModal();
+    await loadLiveView();
+    alert(swapResultMessage(cancelledTitle, result));
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    confirmBtn.disabled = false;
+  }
+}
+
+/* 교체 후 직원이 곧바로 해야 할 행동을 알려준다 — 핵심은 "이제 어떤 책을 가져다주면 되느냐"다.
+   다음 후보가 아예 없을 수도 있어서(그 학년 책을 다 읽었거나 센터 재고가 없음) 그 경우를 구분한다. */
+function swapResultMessage(cancelledTitle, result) {
+  const head = `${cancelledTitle}을(를) 추천에서 뺐습니다.\n`;
+  if (!result || !result.nextTitle) {
+    return head +
+      `\n[다음 책 없음] ${result?.failMessage ?? "추천할 수 있는 다음 책을 찾지 못했습니다."}\n` +
+      "학생에게 줄 책은 직접 챙겨주세요.";
+  }
+  return head + `\n다음 책으로 "${result.nextTitle}"을(를) 추천했습니다.\n학생에게 이 책을 전달해 주세요.`;
 }
 
 /* 지울 문제풀이 기록이 실제로 있는 책 페이지인지 — 아직 한 번도 안 푼 책엔 삭제 버튼을 안 띄운다.
@@ -630,8 +719,16 @@ function renderStatRow(el, card, page) {
     : "";
   const advancedPill = page.advancedCorrectCount != null ? `<span class="stat-pill pill-pass">완료</span>` : "";
 
+  // 획득 뱃지 — 실제 뱃지 이미지(/images/icons/badge_<id>.png)를 획득순으로 나열한다(2026-09-02).
+  // badgeIds가 없는 구버전 Firestore 문서는 예전처럼 방패 아이콘 하나로 폴백한다.
+  // id는 파일 경로에 그대로 들어가므로 숫자만 통과시킨다.
+  const badgeIds = String(page.badgeIds ?? "").split(",").map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
+  const badgeIcons = badgeIds.length > 0
+    ? badgeIds.map((id) => `<img class="badge-img" src="/images/icons/badge_${id}.png" alt="뱃지" onerror="this.remove()" />`).join("")
+    : (page.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-");
+
   el.querySelector(".stat-row").innerHTML = `
-    <div class="stat-cell">
+    <div class="stat-cell${isOverTime ? " stat-cell--overtime" : ""}">
       <div class="stat-label">독서 시간</div>
       <div class="stat-value ${isOverTime ? "value-danger" : ""}">${readingTimeText}</div>
       <div class="stat-sub">${recommendedText}</div>
@@ -648,8 +745,7 @@ function renderStatRow(el, card, page) {
     </div>
     <div class="stat-cell">
       <div class="stat-label">획득 뱃지</div>
-      <div class="stat-value badge-value">${page.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-"}</div>
-      <div class="stat-sub">${page.latestBadgeName ?? ""}</div>
+      <div class="stat-value badge-value">${badgeIcons}</div>
     </div>
   `;
 }

@@ -22,10 +22,8 @@ IF OBJECT_ID('erp_notification',                    'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_bookstore_code',                  'U') IS NOT NULL DROP TABLE erp_bookstore_code;
 IF OBJECT_ID('erp_bookstore_item_loan',             'U') IS NOT NULL DROP TABLE erp_bookstore_item_loan;
 IF OBJECT_ID('erp_bookstore_item',                  'U') IS NOT NULL DROP TABLE erp_bookstore_item;
-IF OBJECT_ID('erp_bookstore_priority_del',          'U') IS NOT NULL DROP TABLE erp_bookstore_priority_del;
-IF OBJECT_ID('erp_bookstore_priority',              'U') IS NOT NULL DROP TABLE erp_bookstore_priority;
-IF OBJECT_ID('erp_bookstore_priority_draft_del',    'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft_del;
-IF OBJECT_ID('erp_bookstore_priority_draft',        'U') IS NOT NULL DROP TABLE erp_bookstore_priority_draft;
+-- 권장도서 순위(priority 계열)는 화면에서 편집한 순위가 재기동 때 날아가지 않도록 리셋 제외 —
+-- DROP 하지 않고, 아래 CREATE도 IF OBJECT_ID ... IS NULL 로 감싼다. 최초 시딩은 data-priority.sql 수동 실행.
 IF OBJECT_ID('erp_student',                         'U') IS NOT NULL DROP TABLE erp_student;
 IF OBJECT_ID('erp_user',                            'U') IS NOT NULL DROP TABLE erp_user;
 
@@ -145,6 +143,21 @@ CREATE TABLE erp_bookstore_content (
     difficulty     VARCHAR(20)    -- 난이도
 );
 
+-- 도서별 수집 카드 이미지 (2026-09-02) — 완독 시 지급되는 카드의 그림.
+-- 표지(content.image_url)와는 다른 이미지라 컬럼을 늘리지 않고 별도 테이블로 뺐다. 도서 마스터는
+-- 외부에서 들어오는 데이터 성격이고 카드는 클리닉 고유의 리워드 개념이라 관심사가 다르다.
+-- 행이 없는 책 = 카드 이미지가 아직 없는 책(화면에서 기본 카드로 폴백). 카드 지급 자체는
+-- erp_bookstore_student_card가 담당하고, 이 테이블은 "그 카드가 어떻게 생겼는지"만 갖는다.
+-- 리셋 제외 — 사람이 등록한 값이라 재기동에 날아가면 안 된다(content/priority와 같은 취급).
+IF OBJECT_ID('erp_bookstore_card_path', 'U') IS NULL
+CREATE TABLE erp_bookstore_card_path (
+    content_id    INT          NOT NULL PRIMARY KEY,  -- erp_bookstore_content.content_id (책 1권당 카드 1장)
+    card_url      VARCHAR(500) NOT NULL,  -- 카드 이미지 URL (ImageStorageService가 반환한 가비아 호스팅 주소)
+    registered_by VARCHAR(100),           -- 등록한 사용자 이름
+    registered_at DATETIME2    DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 등록일시(KST)
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+
 -- 도서(erp_bookstore_content) 삭제/수정 로그 — 복구는 원본 테이블로 복사만 하고 로그는 보존
 IF OBJECT_ID('erp_bookstore_content_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_content_del (
@@ -202,6 +215,8 @@ IF COL_LENGTH('erp_bookstore_content_detail_del', 'log_type') IS NULL ALTER TABL
 -- 권장도서 순위 초안 (연도+학년별로 여러 건 저장 가능, 그중 하나만 적용 상태)
 -- 학년탭을 각각 편집/저장하므로 초안 선택도 학년별로 독립적이어야 해서 schoolyear를 둔다 (content_detail과 달리 여긴 학년이 '어느 편집 세션인지'를 나타내는 키라 중복 저장 아님)
 -- "1월 1일 반영"은 스케줄러 없이, 조회 시 year=올해 AND is_active='Y'로 필터링하는 것만으로 처리
+-- 리셋 제외(화면에서 편집한 순위 보존) — 위 DROP 블록에서 빠졌고 여기도 IS NULL 가드로 최초 1회만 생성
+IF OBJECT_ID('erp_bookstore_priority_draft', 'U') IS NULL
 CREATE TABLE erp_bookstore_priority_draft (
     draft_id    INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     year        VARCHAR(4)  NOT NULL,  -- 노출 연도 (예: '2026', '2027')
@@ -212,6 +227,7 @@ CREATE TABLE erp_bookstore_priority_draft (
 );
 
 -- 초안별 순위 내용 — 학년은 content.schoolyear로 이미 정해지므로 별도 컬럼 없이 content_id로 조인해서 판별
+IF OBJECT_ID('erp_bookstore_priority', 'U') IS NULL
 CREATE TABLE erp_bookstore_priority (
     draft_id    INT         NOT NULL,  -- erp_bookstore_priority_draft.draft_id
     content_id  INT         NOT NULL,  -- erp_bookstore_content.content_id
@@ -222,6 +238,7 @@ CREATE TABLE erp_bookstore_priority (
 );
 
 -- 순위 초안 삭제 로그 (복구 기능 없음 — 삭제 시 로그만 남기고 끝)
+IF OBJECT_ID('erp_bookstore_priority_draft_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_priority_draft_del (
     log_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     log_type    VARCHAR(10) NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
@@ -236,6 +253,7 @@ CREATE TABLE erp_bookstore_priority_draft_del (
 );
 
 -- 순위(erp_bookstore_priority) 삭제 로그
+IF OBJECT_ID('erp_bookstore_priority_del', 'U') IS NULL
 CREATE TABLE erp_bookstore_priority_del (
     log_id      INT IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
     log_type    VARCHAR(10) NOT NULL DEFAULT 'DELETE',  -- DELETE(삭제) / UPDATE(수정 전 스냅샷)
@@ -421,7 +439,7 @@ CREATE TABLE erp_bookstore_recommend_log (
     correct_count       INT,      -- "처음 점수" — 기본(qlevel=01) 최초 제출 정답 수에서 고정
     total_count         INT,      -- 기본 문제풀이 총 문항 수
     final_correct_count INT,      -- "최종 점수" — 재도전(mode=RETRY)에서 더 잘한 경우에만 올라간다(max). 첫 제출 시 correct_count와 동일 (2026-08-28)
-    grade               VARCHAR(20),   -- KING / FRIEND / NULL(불합격) — 재도전으로 "올라가기만"(null→FRIEND→KING). 오르면 기본 뱃지도 상위로 교체돼 항상 일치 (2026-08-28)
+    grade               VARCHAR(20),   -- KING / FRIEND / RETRY(첫 제출 불합격) / NULL(첫 제출 전·레거시) — 재도전으로 "올라가기만"(RETRY→FRIEND→KING). 오르면 기본 뱃지도 상위로 교체돼 항상 일치 (2026-09-02)
     completed_at        DATETIME2,     -- 첫 제출(DONE) 처리 시각
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id),
     FOREIGN KEY (item_id)    REFERENCES erp_bookstore_item(item_id)
@@ -483,14 +501,17 @@ CREATE TABLE erp_bookstore_level (
     PRIMARY KEY (schoolyear, level_no)
 );
 
--- 뱃지 마스터 (2026-07-27 재편) — 5종 고정. id→이름/설명 조회용 룩업 테이블.
---   1 참 잘했어요 / 2 독서친구 / 3 독서왕 / 4 심화 완료 / 5 심화왕
+-- 뱃지 마스터 (2026-09-02 재편) — 4종 고정. id→이름/설명 조회용 룩업 테이블.
+--   1 독서완료 / 2 독서왕 / 3 심화완료 / 4 심화왕
+--   (구 5종의 "참 잘했어요!"(기본 불합격)와 "독서친구"를 "독서완료"로 합쳤다 — 기본 문제를 풀기만 하면 1번)
+--   badge_name은 아이콘 이미지에 그려진 문구와 반드시 같게 유지한다.
 -- 판정은 "책마다 첫 시도 결과"로 코드에서 badge_id를 직접 매핑한다(ClinicService.awardBasicBadge/awardAdvancedBadge).
---   기본 첫 시도: 불합격→1 / 합격→2 / 만점→3,  심화 첫 시도: 합격→4 / 만점→5 (불합격은 없음)
+--   기본 첫 시도: 불합격·합격→1 / 만점→2,  심화 첫 시도: 합격→3 / 만점→4 (불합격은 없음)
+-- 아이콘은 /images/icons/badge_<id>.png (1~4).
 -- category/threshold/param 컬럼은 구(누적 판정) 방식의 잔재로 현재 로직에서 사용하지 않음(호환 위해 유지).
 CREATE TABLE erp_bookstore_badge (
-    badge_id    INT            PRIMARY KEY,      -- 1~5 고정 번호
-    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (참 잘했어요 ...)
+    badge_id    INT            PRIMARY KEY,      -- 1~4 고정 번호
+    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (독서완료 ...)
     badge_desc  NVARCHAR(200),                   -- 특징/설명 문구 (화면 표시용)
     category    VARCHAR(20)    NOT NULL,         -- (레거시) 판정 유형 — 현재 미사용
     threshold   INT            NOT NULL,         -- (레거시) 달성 기준치 — 현재 미사용
@@ -498,7 +519,7 @@ CREATE TABLE erp_bookstore_badge (
 );
 
 -- 학생별 뱃지 획득 이력 — PK로 중복 획득을 원천 차단, 판정은 매 제출마다 로그 재계산(멱등)
--- 학생이 획득한 뱃지 — "책(도서)마다" 부여된다. 책당 기본 1개(참잘했어요/독서친구/독서왕 중 택1) +
+-- 학생이 획득한 뱃지 — "책(도서)마다" 부여된다. 책당 기본 1개(독서완료/독서왕 중 택1) +
 -- 심화 1개(심화완료/심화왕 중 택1). 같은 학생이 같은 종류 뱃지를 여러 책에서 얻을 수 있으므로 content_id를 PK에 포함.
 CREATE TABLE erp_bookstore_student_badge (
     student_id  VARCHAR(100)  NOT NULL,

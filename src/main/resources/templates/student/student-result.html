@@ -80,18 +80,19 @@
           <div class="score-notes">
             <p class="score-note" id="resultTitle">문제를 다 풀었어요!</p>
             <div class="score-retry">
-              <span>재도전 여부</span>
+              <span>재도전 횟수</span>
               <strong id="resultRetryText">없음</strong>
             </div>
           </div>
         </article>
 
-        <div class="new-card">
+        <!-- 이번 제출로 카드를 새로 받은 경우에만 노출 — 카드 이미지는 서버가 내려준 cardImageUrl
+             (erp_bookstore_card_path.card_url, 미등록 책은 기본 카드로 폴백된 값)로 채운다 -->
+        <div class="new-card" id="newCard" hidden>
           <div class="new-card-frame">
             <img class="new-flag" th:src="@{/images/student_result/new.png}" alt="NEW" />
-            <!-- 카드 컬렉션 기능 구현 전이라 획득 카드는 샘플 이미지(card.png) 고정 -->
             <div class="new-card-slot">
-              <img th:src="@{/images/student_result/card.png}" alt="새로 획득한 카드" />
+              <img id="newCardImg" th:src="@{/images/student_result/card.png}" alt="새로 획득한 카드" />
             </div>
           </div>
           <p class="new-card-caption">신규 카드를 획득했어요!</p>

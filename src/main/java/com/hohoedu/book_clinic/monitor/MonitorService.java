@@ -373,6 +373,62 @@ public class MonitorService {
 
 
     /**
+     * 추천 도서 교체 1단계 — "지금 추천을 없애고 그 책을 재고에서 뺀다" (2026-09-02).
+     *
+     * 다음 책 추천까지 한 번에 하려면 ClinicService.recommendBook을 불러야 하는데, ClinicService가
+     * 이미 MonitorService를 주입받고 있어 여기서 되부르면 순환 참조가 된다. 그래서 이 메서드는 DB
+     * 되돌리기까지만 하고, 다음 책 추천은 ClinicService.replaceRecommendedBook이 이어서 한다.
+     *
+     * recommend_log 행은 남기지 않고 지운다 — 상태값(PENDING/DONE)에 CANCELED를 하나 더 늘리면
+     * 그 2값을 전제로 짜인 조회가 Clinic/Monitor/Student/Diary 매퍼 전반에 흩어져 있어 전수 수정이
+     * 필요해진다. 대신 "취소한 책이 곧바로 다시 추천되는" 문제는 재고 차감(BookService.loseCopy)이
+     * 막아준다 — 후보 쿼리가 가용 재고 없는 판본을 이미 거르기 때문이다.
+     *
+     * @return 재고 차감 여부와 취소된 도서(content_id)만 채운 결과 — 도서명/다음 책은 호출부가 채운다
+     */
+    @Transactional
+    public MonitorRespDTO.CancelRecommendRespDTO cancelRecommendRecord(MonitorReqDTO.CancelRecommendReqDTO req, String staffName) {
+        MonitorRespDTO.QuizResetTargetDTO target =
+                monitorRepository.findQuizResetTarget(req.getRecommendId(), req.getStudentId());
+        if (target == null) {
+            throw new Exception404("교체할 추천 도서를 찾을 수 없습니다: recommendId=" + req.getRecommendId());
+        }
+        // 이미 문제를 푼 책은 점수/뱃지/일지가 딸려 있어 이 경로로 지우면 안 된다 — 그건 문제풀이
+        // 기록 삭제(resetQuiz)의 몫이다. 교체는 "아직 안 푼 지금 읽는 책"에만 허용한다.
+        if (!"PENDING".equals(target.getStatus())) {
+            throw new Exception400("이미 문제를 푼 책은 교체할 수 없습니다. 문제풀이 기록 삭제를 먼저 진행해주세요.");
+        }
+
+        String reason = "DAMAGED".equals(req.getReason()) ? "DAMAGED" : "MISSING";
+        boolean stockRemoved = bookService.loseCopy(target.getStudentId(), target.getItemId(), staffName);
+
+        // PENDING이면 채점 제출 전이라 자식 행이 없는 게 정상이지만, 중간에 끊긴 기록이 남아 있으면
+        // FK에 걸려 삭제가 실패한다 — resetQuiz와 같은 순서로 방어적으로 먼저 치운다.
+        monitorRepository.deleteQuizAnswerLogs(target.getRecommendId());
+        monitorRepository.deleteDiaryDetailByRecommend(target.getRecommendId());
+        monitorRepository.deleteRecommendLog(target.getRecommendId());
+        // quiz_reset_log는 recommend_id에 FK가 없어 행을 지운 뒤에도 이력을 남길 수 있다.
+        // log_type에 사유(MISSING/DAMAGED)를 그대로 넣어 RESET/CANCEL과 구분한다.
+        monitorRepository.insertQuizResetLog(target, reason, staffName, 0, 0, 0);
+
+        log.info("추천 도서 교체 — staff={}, studentId={}, recommendId={}, contentId={}, itemId={}, 사유={}, 재고차감={}",
+                staffName, target.getStudentId(), target.getRecommendId(), target.getContentId(),
+                target.getItemId(), reason, stockRemoved);
+
+        // 읽던 책이 사라졌으니 "문제 푸는 중" 같은 진행 표시도 함께 푼다
+        Integer sessionId = monitorRepository.findOpenSessionId(target.getStudentId(), KstClock.today());
+        if (sessionId != null) {
+            monitorRepository.clearQuizStarted(sessionId);
+            monitorRepository.clearResultViewing(sessionId);
+        }
+
+        MonitorRespDTO.CancelRecommendRespDTO resp = new MonitorRespDTO.CancelRecommendRespDTO();
+        resp.setStockRemoved(stockRemoved);
+        resp.setCancelledContentId(target.getContentId());
+        return resp;
+    }
+
+    /**
      * 다른 화면(독서일지 등)이 같은 세션의 일지를 고친 뒤 모니터링 카드를 갱신하려고 호출한다 —
      * 저장 경로가 달라도 Firestore 미러링은 이 한 곳을 지나게 둔다.
      */

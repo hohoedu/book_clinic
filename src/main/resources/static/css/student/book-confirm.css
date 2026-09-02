@@ -1,100 +1,122 @@
+/* 출석 후 "오늘의 추천 도서" 안내 화면 (2026-09-02 시안 반영).
+   세로 한 줄 구성: 초록 뱃지 → 안내 문구 → 3D 책 목업(book-mockup.css) → 확인 버튼.
+   흰 카드를 걷어내고 배경 위에 그대로 얹는다. */
 .confirm-viewport {
   width: 100%;
-  max-width: 640px;
-  padding: 40px;
+  max-width: 540px;
+  padding: 30px 24px;
 }
 
+.confirm-stage {
+  text-align: center;
+}
+
+/* ── 오늘의 추천 도서 뱃지 ── */
+.confirm-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #00a984;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -.5px;
+  margin-bottom: 16px;
+}
+
+.confirm-star {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #00a984;
+  color: #fff;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+/* ── 안내 문구 ── */
+.confirm-headline {
+  margin: 0 auto 6px;
+  max-width: 15em;
+  font-size: 33px;
+  line-height: 1.35;
+  font-weight: 800;
+  letter-spacing: -1px;
+  color: #252525;
+  word-break: keep-all;
+}
+
+/* ── 3D 책 목업 ── 홈 카드보다 크게 키운다(공용 기기라 멀리서도 보여야 한다) */
+.confirm-visual {
+  min-height: 450px;
+  margin-bottom: 30px;
+}
+
+.confirm-visual .book-mockup {
+  --cover-w: 225px;
+  --cover-h: 302px;
+  --page-w: 22px;
+  bottom: 58px;
+}
+
+.confirm-visual::before {
+  width: min(352px, 88%);
+  bottom: 69px;
+}
+
+.confirm-visual .book-stand {
+  width: min(345px, 86%);
+  height: 35px;
+  bottom: 14px;
+}
+
+.confirm-visual .book-stand::before {
+  top: -21px;
+  height: 22px;
+}
+
+.confirm-visual .sparkle { width: 33px; height: 33px; }
+.confirm-visual .sparkle.s1 { left: 14%; top: 12%; }
+.confirm-visual .sparkle.s2 { left: 8%; top: 20%; width: 21px; height: 21px; }
+.confirm-visual .sparkle.s3 { right: 6%; top: 58%; width: 26px; height: 26px; }
+
+/* ── 확인 버튼 ── 학생 앱 버튼과 같은 입체감(위 하이라이트 / 아래 두께 / 바닥 그림자) */
+.confirm-close-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 66px;
+  border-radius: 999px;
+  background: #e5342a;
+  color: #fff;
+  font-size: 26px;
+  font-weight: 800;
+  text-decoration: none;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, .28),
+    inset 0 -5px 0 #b4241c,
+    0 6px 14px rgba(0, 0, 0, .18);
+  transition: transform .12s ease, box-shadow .12s ease, filter .18s ease;
+}
+
+.confirm-close-btn:active {
+  transform: translateY(5px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -2px 0 #b4241c,
+    0 3px 8px rgba(0, 0, 0, .14);
+}
+
+/* ── 오류 카드(잘못된 QR 등) ── 기존 흰 카드 그대로 */
 .confirm-card {
   background: rgba(255, 255, 255, .95);
   border-radius: 28px;
   box-shadow: 0 12px 28px rgba(93, 75, 36, .14);
   padding: 48px 40px;
   text-align: center;
-}
-
-.confirm-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--green, #00a984);
-  font-size: 15px;
-  font-weight: 800;
-  margin-bottom: 14px;
-}
-
-.confirm-student {
-  font-size: 24px;
-  font-weight: 900;
-  color: #252525;
-  margin-bottom: 32px;
-}
-
-.confirm-book {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  text-align: left;
-  background: #f7f6e8;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 28px;
-}
-
-.confirm-book-img {
-  width: 90px;
-  height: 122px;
-  object-fit: cover;
-  border-radius: 8px;
-  flex-shrink: 0;
-  box-shadow: 0 8px 16px rgba(0, 0, 0, .12);
-}
-
-.confirm-book-info {
-  min-width: 0;
-}
-
-.confirm-book-eyebrow {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--green, #00a984);
-  margin-bottom: 6px;
-}
-
-.confirm-book-title {
-  font-size: 22px;
-  font-weight: 800;
-  color: #252525;
-  margin-bottom: 6px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.confirm-book-author {
-  font-size: 14px;
-  color: #8c8c8c;
-}
-
-.confirm-hint {
-  font-size: 13px;
-  color: #8c8c8c;
-  margin-bottom: 28px;
-}
-
-.confirm-close-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 56px;
-  border-radius: 14px;
-  background: #0988d8;
-  color: #fff;
-  font-size: 18px;
-  font-weight: 800;
-  text-decoration: none;
 }
 
 .error-card i {
@@ -109,4 +131,9 @@
   font-weight: 700;
   color: #252525;
   margin-bottom: 28px;
+}
+
+.error-card .confirm-close-btn {
+  height: 56px;
+  font-size: 18px;
 }

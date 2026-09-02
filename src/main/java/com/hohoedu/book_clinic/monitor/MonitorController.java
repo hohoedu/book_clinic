@@ -19,6 +19,7 @@ import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.handler.exception.Exception500;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic._core.utils.KstClock;
+import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 
 import jakarta.validation.Valid;
@@ -31,6 +32,7 @@ import lombok.RequiredArgsConstructor;
 public class MonitorController {
 
     private final MonitorService monitorService;
+    private final ClinicService clinicService;
     private final CenterAccessGuard centerAccessGuard;
 
     /** 화면 최초 진입용 카드 목록 — 이후 갱신은 Firestore 구독으로 받는다 */
@@ -76,6 +78,19 @@ public class MonitorController {
                                        @AuthenticationPrincipal CustomUserDetails userDetails) {
         centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
         return ResponseEntity.ok(ApiUtils.success(monitorService.resetQuiz(reqDTO, userDetails.getUsername())));
+    }
+
+    /**
+     * 추천 도서 교체 — 추천된 책이 서가에 실제로 없거나 못 읽을 정도로 훼손됐을 때 직원이 카드에서
+     * 실행한다. 지금 추천을 취소하고(그 한 권은 재고에서 빠진다) 곧바로 다음 책을 추천한다.
+     * exit/quiz-reset과 같은 이유로 대상 학생이 내 센터 소속인지 대조한다.
+     */
+    @PostMapping("/recommend/cancel")
+    public ResponseEntity<?> cancelRecommend(@RequestBody @Valid MonitorReqDTO.CancelRecommendReqDTO reqDTO,
+                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
+        return ResponseEntity.ok(ApiUtils.success(
+                clinicService.replaceRecommendedBook(reqDTO, userDetails.getUsername())));
     }
 
     /**

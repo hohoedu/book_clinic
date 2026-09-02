@@ -342,6 +342,26 @@ public class StudentViewController {
         return "/student/student-result";
     }
 
+    /**
+     * 나의 책장 / 나의 카드 컬렉션 공용 화면 — student-main 에서 &lt;iframe&gt; 으로 띄운다.
+     * type=book(기본) 이면 올해 읽은 책, type=card 면 수집 카드를 보여준다. 레이아웃은 동일하고
+     * 화면 JS(student-bookcase.js)가 type 파라미터로 데이터만 갈아끼운다.
+     * (실제 데이터 연동 전까지는 화면 JS의 임시 목업으로 렌더링된다.)
+     */
+    @GetMapping("/student/bookcase")
+    public String getBookcasePage(@RequestParam(value = "studentId", required = false) String studentId,
+            @RequestParam(value = "type", required = false, defaultValue = "book") String type,
+            Model model, HttpServletRequest request) {
+        studentId = requireSessionStudentId(request, studentId);
+        if (studentId == null) {
+            return "redirect:/student/login";
+        }
+        model.addAttribute("studentId", studentId);
+        model.addAttribute("type", type);
+        model.addAttribute("bookcase", clinicService.getBookcase(studentId, type));
+        return "/student/student-bookcase";
+    }
+
     // ── 출석체크 앱 ──────────────────────────────────────────────────────
 
     /**

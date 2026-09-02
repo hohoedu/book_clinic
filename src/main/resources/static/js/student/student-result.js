@@ -18,6 +18,8 @@
   const rewardLevelNo = document.getElementById('rewardLevelNo');
   const rewardLevelName = document.getElementById('rewardLevelName');
   const rewardExpDesc = document.getElementById('rewardExpDesc');
+  const newCard = document.getElementById('newCard');
+  const newCardImg = document.getElementById('newCardImg');
   const cardReward = document.getElementById('cardReward');
   const rareFlag = document.getElementById('rareFlag');
   const rewardCardImg = document.getElementById('rewardCardImg');
@@ -65,6 +67,10 @@
   // 문제 풀기 버튼 자리에 남은 액션(틀린 문제 다시 풀기/심화 문제 풀기)과 "책 추천받기" 버튼을
   // 보여주기 위함이다(2026-08-25, 예전의 "다음 책 받을까요?" 팝업을 대체)
   let bookFinished = false;
+
+  // "틀린 문제 다시 풀기"로 넘길 문항 번호 — 보통 이번 제출의 오답이지만, 심화왕일 때는
+  // 기본(01) 쪽 오답을 넘긴다. 각 render*Result가 채운다(2026-09-02).
+  let wrongRetryTargets = [];
 
   if (homeBtn) {
     homeBtn.addEventListener('click', (e) => {
@@ -115,13 +121,22 @@
       renderRetryResult(result);
     }
     renderExp(result);
+    renderNewCard(result);
     renderCard(result);
     renderBadge(result);
 
-    // "틀린 문제 풀기" — 이번에 틀린 문항 번호만 세션 저장소에 담아두면 student-question.js가
+    // 완료화면 "틀린 문제 다시 풀기"(기본+심화 병합)로 온 결과 — 점수/등급은 이미 확정된 값이라
+    // 이 화면에선 추가 액션 버튼(재도전/틀린문제/심화)을 숨기고 "홈으로"만 남긴다(2026-09-02).
+    if (result.mergedWrong) {
+      retryBtn.hidden = true;
+      wrongRetryBtn.hidden = true;
+      advancedBtn.hidden = true;
+    }
+
+    // "틀린 문제 풀기" — 다시 풀 문항 번호만 세션 저장소에 담아두면 student-question.js가
     // 문제 목록을 불러온 뒤 그 번호만 걸러서 다시 낸다
     wrongRetryBtn.addEventListener('click', () => {
-      sessionStorage.setItem('retryQnums', JSON.stringify(result.wrongQnums ?? []));
+      sessionStorage.setItem('retryQnums', JSON.stringify(wrongRetryTargets));
     });
   })();
 
@@ -144,6 +159,9 @@
     resultRetryText.textContent = attemptNo > 1 ? `${attemptNo - 1}번째` : '없음';
   }
 
+  // 심화(qlevel=02) 결과 — 버튼 규칙(2026-09-02)
+  //   심화 완료(만점 아님) : 재도전 / 틀린 문제 다시 풀기 (둘 다 심화 문제 대상)
+  //   심화왕(만점)         : 버튼 없음. 단 기본이 독서왕이 아니면 기본 "틀린 문제 다시 풀기"만 남긴다.
   function renderAdvancedResult(result) {
     const total = result.totalCount ?? 0;
     const correct = result.correctCount ?? 0;
@@ -159,15 +177,27 @@
     // "심화 문제 풀기"(첫 진입용)는 결과 화면에선 항상 숨긴다
     advancedBtn.hidden = true;
 
-    // 만점이 아니면 심화 재도전 / 심화 틀린 문제 다시 풀기를 열어준다(2026-08-31).
-    // retryBtn·wrongRetryBtn은 HTML에서 qlevel='01'로 고정돼 있어 심화용으로 qlevel=02로 다시 연결한다.
-    const q2Href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=02`;
-    retryBtn.hidden = perfect;
-    wrongRetryBtn.hidden = perfect || (result.wrongQnums ?? []).length === 0;
+    // retryBtn·wrongRetryBtn은 HTML에서 qlevel='01'로 고정돼 있어 심화용은 qlevel=02로 다시 연결한다.
+    const hrefFor = (qlevel) =>
+      `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${qlevel}`;
+
     if (!perfect) {
-      retryBtn.setAttribute('href', q2Href);
-      wrongRetryBtn.setAttribute('href', q2Href);
+      retryBtn.hidden = false;
+      retryBtn.setAttribute('href', hrefFor('02'));
+      wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
+      wrongRetryBtn.setAttribute('href', hrefFor('02'));
+      wrongRetryTargets = result.wrongQnums ?? [];
+      return;
     }
+
+    // ── 심화왕 ── 심화 쪽은 더 풀 게 없다. 기본이 독서왕이 아니고 기본 오답이 남아 있으면
+    // 그 오답만 다시 풀 수 있게 남긴다(기본 재도전은 열지 않는다 — 이미 책을 끝낸 상태).
+    const basicWrong = result.basicWrongQnums ?? [];
+    const basicKing = result.basicGrade === 'KING';
+    retryBtn.hidden = true;
+    wrongRetryBtn.hidden = basicKing || basicWrong.length === 0;
+    wrongRetryBtn.setAttribute('href', hrefFor('01'));
+    wrongRetryTargets = basicWrong;
   }
 
   function renderKingResult(result) {
@@ -195,12 +225,14 @@
     retryBtn.hidden = false;
     // "틀린 문제 다시 풀기"로 남은 오답을 다 없앴으면(result.wrongQnums가 비었으면) 버튼을 감춘다
     wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
+    wrongRetryTargets = result.wrongQnums ?? [];
     advancedBtn.hidden = false;
     bookFinished = true;
   }
 
   function renderRetryResult(result) {
-    setHeroRibbon(false);
+    // 재도전(불합격)도 통과 등급과 동일하게 green.png 리본을 쓴다(2026-09-02).
+    setHeroRibbon(true);
     setHero('RETRY', '다시 도전!');
     resultTitle.textContent = '합격선에 조금 못 미쳤어요. 다시 풀어볼까요?';
 
@@ -210,10 +242,10 @@
     bookFinished = false;
   }
 
-  // 통과 등급은 "정말 잘했어요!" 리본 이미지(green.png), 재도전은 문구가 맞지 않아 텍스트 리본
+  // 모든 등급이 green.png 리본 이미지를 쓴다(2026-09-02, 재도전도 포함). 텍스트 리본은 미사용.
   function setHeroRibbon(passed) {
-    heroRibbon.hidden = !passed;
-    heroRibbonText.hidden = passed;
+    heroRibbon.hidden = false;
+    heroRibbonText.hidden = true;
   }
 
   // 달성 문구는 등급별 이미지가 있으면 이미지, 없으면 같은 자리에 텍스트로 표시한다.
@@ -255,23 +287,23 @@
       stepReward.hidden = true;
     }
 
+    // 레벨 문구는 등급(독서왕/독서친구/불합격)으로 가르지 않는다(2026-09-02) — 첫 제출은 결과와
+    // 무관하게 완독 1권으로 카운트돼 레벨이 오르므로, "완독하지 못했다"처럼 안 오른 듯한 문구를 쓰지 않는다.
     if (result.advanced) {
       rewardExpDesc.textContent = '심화문제는 레벨과 무관해요.';
     } else if (result.alreadyCompleted) {
       rewardExpDesc.textContent = '이미 완독한 책이에요.';
     } else if (result.leveledUp) {
       rewardExpDesc.textContent = `레벨업했어요! 🎉 Lv. ${result.levelNo} 달성`;
-    } else if (result.passed && result.booksToNextLevel != null) {
-      rewardExpDesc.textContent = `완독! 다음 레벨까지 ${result.booksToNextLevel}권 남았어요.`;
-    } else if (result.passed) {
-      rewardExpDesc.textContent = '완독했어요! 참 잘했어요 🎉';
+    } else if (result.booksToNextLevel != null) {
+      rewardExpDesc.textContent = `다음 레벨까지 ${result.booksToNextLevel}권 남았어요!`;
     } else {
-      rewardExpDesc.textContent = '아직 완독하지 못했어요. 다시 도전해봐요!';
+      rewardExpDesc.textContent = '이 책을 다 읽었어요! 🎉';
     }
   }
 
-  // 독서여권 도장 칸 — 이번에 받은 뱃지를 이미지로 보여준다(2026-09-01). 미달(참 잘했어요)/독서친구/
-  // 독서왕 모두 뱃지가 있으므로 불합격이어도 칸이 뜬다. 재도전·틀린문제 재제출처럼 "새로 받은" 뱃지가
+  // 독서여권 도장 칸 — 이번에 받은 뱃지를 이미지로 보여준다(2026-09-01). 독서완료(합격·불합격 공통)/
+  // 독서왕 둘 다 뱃지가 있으므로 불합격이어도 칸이 뜬다. 재도전·틀린문제 재제출처럼 "새로 받은" 뱃지가
   // 없을 때는 서버가 내려준 bookBadge(그 책에서 보유 중인 뱃지)로 대신 채운다.
   // 뱃지 이미지는 badgeId로 찾는다(/images/icons/badge_<id>.png). 아직 이미지가 없는 뱃지는
   // 여권 아이콘으로 대체해 깨진 이미지가 뜨지 않게 한다.
@@ -290,6 +322,32 @@
     rewardBadgeImg.alt = badge.badgeName ?? '획득한 뱃지';
     rewardBadgeName.textContent = badge.badgeName ?? '뱃지 획득!';
     rewardBadgeDesc.textContent = badge.badgeDesc ?? '읽은 책을 여권에 기록해 주세요.';
+  }
+
+  /**
+   * "신규 카드를 획득했어요!" 칸 (2026-09-02) — 이번 제출로 카드를 새로 받았을 때만 보여준다.
+   * 카드는 그 책 첫 제출에서만 지급되므로(ClinicService.submitQuiz), 재도전·틀린문제 재제출에는
+   * cardName이 비어 있고 이 칸도 뜨지 않는다. 예전엔 마크업이 항상 떠 있어 카드를 받지 않은
+   * 재제출에도 "신규 카드 획득" 문구가 보였다.
+   *
+   * 이미지는 서버가 내려준 cardImageUrl(erp_bookstore_card_path.card_url)이다. 카드 그림이 아직
+   * 등록되지 않은 책은 쿼리에서 이미 기본 카드로 폴백돼 오지만, 호스팅 주소가 깨진 경우까지
+   * 대비해 onerror로 한 번 더 기본 카드로 되돌린다.
+   */
+  function renderNewCard(result) {
+    if (!result.cardName) {
+      newCard.hidden = true;
+      return;
+    }
+    newCard.hidden = false;
+    if (result.cardImageUrl) {
+      newCardImg.onerror = () => {
+        newCardImg.onerror = null;
+        newCardImg.src = '/images/student_result/card.png';
+      };
+      newCardImg.src = result.cardImageUrl;
+    }
+    newCardImg.alt = result.cardName;
   }
 
   // 스페셜 카드 칸 — 완독 카드 10장을 채운 순간(레어 카드 지급)에만 칸 전체를 노출한다(2026-09-01).

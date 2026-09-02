@@ -71,6 +71,7 @@
             cs.session_id      AS sessionId,
             cs.student_id      AS studentId,
             st.student_name    AS studentName,
+            gradeCd.codeNm     AS gradeName,
             st.center_code     AS centerCode,
             cs.status          AS sessionStatus,
             cs.session_date    AS sessionDate,
@@ -110,6 +111,7 @@
             adv.totalCount   AS advancedTotalCount,
 
             badge.badgeCount      AS badgeCount,
+            badge.badgeIds        AS badgeIds,
             badge.latestBadgeName AS latestBadgeName,
 
             dia.diary_key    AS diaryKey,
@@ -120,6 +122,9 @@
             dia.memo         AS memo
         FROM erp_bookstore_clinic_session cs
         JOIN erp_student st ON st.student_id = cs.student_id
+        <!-- 학년 표시명(초1~중등) — 올패스 코드인 grade_key가 아니라 클리닉 자체 코드(01~07)인
+             clinic_grade_key로 조인해야 gubun='S' 코드표와 맞는다(2026-09-02) -->
+        LEFT JOIN erp_bookstore_code gradeCd ON gradeCd.gubun = 'S' AND gradeCd.code = st.clinic_grade_key
         OUTER APPLY (
             -- 한 학생이 같은 날 여러 회차를 예약할 수 있는지는 아직 미정(2026-08-18) — 여러 건이면
             -- 회차 오름차순 첫 건만 표시한다(그 학생이 그날 처음 올 시간대라는 뜻).
@@ -156,6 +161,15 @@
             -- B책에서 딴 뱃지가 같이 보이는 문제가 생긴다(2026-07-29 수정)
             SELECT
                 COUNT(*) AS badgeCount,
+                -- 카드에 실제 뱃지 아이콘(/images/icons/badge_&lt;id&gt;.png)을 그리기 위한 id 목록(2026-09-02).
+                -- STRING_AGG는 SQL Server 2017+ 전용이라 attitudeCodes와 같은 FOR XML PATH 방식을 쓴다.
+                (SELECT STUFF((
+                     SELECT ',' + CAST(sb3.badge_id AS VARCHAR(10))
+                     FROM erp_bookstore_student_badge sb3
+                     WHERE sb3.student_id = cs.student_id AND sb3.content_id = rl.content_id
+                     ORDER BY sb3.earned_at
+                     FOR XML PATH('')
+                 ), 1, 1, '')) AS badgeIds,
                 (SELECT TOP 1 b.badge_name
                  FROM erp_bookstore_student_badge sb2
                  JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
@@ -202,6 +216,7 @@
             cs.session_id      AS sessionId,
             r.student_id       AS studentId,
             st.student_name    AS studentName,
+            gradeCd.codeNm     AS gradeName,
             st.center_code     AS centerCode,
             cs.status          AS sessionStatus,
             si.service_date    AS sessionDate,
@@ -237,6 +252,7 @@
             adv.totalCount   AS advancedTotalCount,
 
             badge.badgeCount      AS badgeCount,
+            badge.badgeIds        AS badgeIds,
             badge.latestBadgeName AS latestBadgeName,
 
             dia.diary_key    AS diaryKey,
@@ -248,6 +264,8 @@
         FROM erp_bookstore_reservation r
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
         JOIN erp_student st ON st.student_id = r.student_id
+        <!-- 학년 표시명 — cardColumns와 동일하게 clinic_grade_key 기준(2026-09-02) -->
+        LEFT JOIN erp_bookstore_code gradeCd ON gradeCd.gubun = 'S' AND gradeCd.code = st.clinic_grade_key
         OUTER APPLY (
             SELECT TOP 1 session_id, status, entered_at, exited_at, quiz_started_at, quiz_qlevel, result_viewed_at
             FROM erp_bookstore_clinic_session
@@ -279,6 +297,14 @@
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지가 아니다(2026-07-29 수정)
             SELECT
                 COUNT(*) AS badgeCount,
+                -- 카드 뱃지 아이콘용 id 목록(2026-09-02) — cardColumns와 동일
+                (SELECT STUFF((
+                     SELECT ',' + CAST(sb3.badge_id AS VARCHAR(10))
+                     FROM erp_bookstore_student_badge sb3
+                     WHERE sb3.student_id = r.student_id AND sb3.content_id = rl.content_id
+                     ORDER BY sb3.earned_at
+                     FOR XML PATH('')
+                 ), 1, 1, '')) AS badgeIds,
                 (SELECT TOP 1 b.badge_name
                  FROM erp_bookstore_student_badge sb2
                  JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
@@ -358,6 +384,7 @@
             adv.correctCount AS advancedCorrectCount,
             adv.totalCount   AS advancedTotalCount,
             badge.badgeCount      AS badgeCount,
+            badge.badgeIds        AS badgeIds,
             badge.latestBadgeName AS latestBadgeName
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
@@ -376,6 +403,14 @@
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계 — 카드 캐러셀에서 책마다 따로 보여줘야 한다
             SELECT
                 COUNT(*) AS badgeCount,
+                -- 카드 뱃지 아이콘용 id 목록(2026-09-02) — cardColumns와 동일
+                (SELECT STUFF((
+                     SELECT ',' + CAST(sb3.badge_id AS VARCHAR(10))
+                     FROM erp_bookstore_student_badge sb3
+                     WHERE sb3.student_id = rl.student_id AND sb3.content_id = rl.content_id
+                     ORDER BY sb3.earned_at
+                     FOR XML PATH('')
+                 ), 1, 1, '')) AS badgeIds,
                 (SELECT TOP 1 b.badge_name
                  FROM erp_bookstore_student_badge sb2
                  JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id
@@ -425,6 +460,7 @@
             adv.correctCount AS advancedCorrectCount,
             adv.totalCount   AS advancedTotalCount,
             badge.badgeCount      AS badgeCount,
+            badge.badgeIds        AS badgeIds,
             badge.latestBadgeName AS latestBadgeName
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
@@ -442,6 +478,14 @@
         OUTER APPLY (
             SELECT
                 COUNT(*) AS badgeCount,
+                -- 카드 뱃지 아이콘용 id 목록(2026-09-02) — cardColumns와 동일
+                (SELECT STUFF((
+                     SELECT ',' + CAST(sb3.badge_id AS VARCHAR(10))
+                     FROM erp_bookstore_student_badge sb3
+                     WHERE sb3.student_id = rl.student_id AND sb3.content_id = rl.content_id
+                     ORDER BY sb3.earned_at
+                     FOR XML PATH('')
+                 ), 1, 1, '')) AS badgeIds,
                 (SELECT TOP 1 b.badge_name
                  FROM erp_bookstore_student_badge sb2
                  JOIN erp_bookstore_badge b ON b.badge_id = sb2.badge_id

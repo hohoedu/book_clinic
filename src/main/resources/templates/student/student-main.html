@@ -19,6 +19,7 @@
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/book-mockup.css}" />
   <link rel="stylesheet" th:href="@{/css/student/student-main.css}" />
   <link rel="stylesheet" th:href="@{/css/student/qr-scan.css}" />
 
@@ -42,7 +43,7 @@
           <article class="card book-card state-card" id="recommendLoading">
             <i class="fa-solid fa-spinner fa-spin" aria-hidden="true"></i>
             <p>오늘의 추천 도서를 고르고 있어요...</p>
-          </article> 
+          </article>
 
           <!-- 이용권 소진 — 결제/재계약이 필요한 상태(일반 에러와 톤을 구분) -->
           <article class="card book-card state-card state-card--warn" id="passExhausted" hidden>
@@ -59,26 +60,35 @@
 
           <!-- 추천 도서 카드 (JS로 채움) -->
           <article class="card book-card" id="recommendCard" hidden>
+            <div class="eyebrow">
+              <div class="today-recommend">
+                <span class="star">
+                  <i class="fa-solid fa-star" aria-hidden="true"></i>
+                </span>
+                <div class="eyebrow-label">오늘의 추천 도서</div>
+              </div>
+              <!-- 완독(KING/FRIEND) 후 홈으로 왔을 때만 노출 — 다음 책을 새로 추천받는 버튼 -->
+              <button type="button" class="recommend-next-btn" id="recommendNextBtn" hidden>
+                <i class="fa-solid fa-rotate" aria-hidden="true"></i>책 추천받기</button>
+            </div>
+            <!-- 제목·저자는 카드 전체 너비를 쓴다 — 정보/표지 2단(.book-content) 바깥 -->
+            <div class="book-heading">
+              <div class="book-title" id="bookTitle">-</div>
+              <p class="book-author" id="bookAuthor">-</p>
+            </div>
+
             <div class="book-content">
               <div class="book-info">
-                <div class="eyebrow">
-                  <span class="star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>오늘의 추천 도서
-                  <!-- 완독(KING/FRIEND) 후 홈으로 왔을 때만 노출 — 다음 책을 새로 추천받는 버튼 -->
-                  <button type="button" class="recommend-next-btn" id="recommendNextBtn" hidden>
-                    <i class="fa-solid fa-rotate" aria-hidden="true"></i>책 추천받기</button>
-                </div>
-                <h1 class="book-title" id="bookTitle">-</h1>
-                <p class="book-author" id="bookAuthor">-</p>
                 <p class="book-desc" id="bookDesc"></p>
-
-                <!-- 값이 없어도 행을 숨기지 않고 "-"로 채운다 — 책마다 메타 정보 개수가 달라도
-                     정보 영역 높이와 각 항목 위치가 항상 같은 자리에 오도록 하기 위함 -->
                 <dl class="book-meta" id="bookMeta">
-                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-bookmark" aria-hidden="true"></i></span>분류</dt>
+                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-bookmark"
+                        aria-hidden="true"></i></span>분류</dt>
                   <dd class="meta-value green" id="bookMetaType">-</dd>
-                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-award" aria-hidden="true"></i></span>수상정보</dt>
+                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-award"
+                        aria-hidden="true"></i></span>수상정보</dt>
                   <dd class="meta-value" id="bookMetaAward">-</dd>
-                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-square-check" aria-hidden="true"></i></span>수록</dt>
+                  <dt class="meta-label"><span class="ico"><i class="fa-solid fa-square-check"
+                        aria-hidden="true"></i></span>수록</dt>
                   <dd class="meta-value" id="bookMetaCurriculum">-</dd>
                   <dd class="book-tags" id="bookMetaTags"></dd>
                 </dl>
@@ -105,19 +115,16 @@
               <span id="mainActionLabel">문제 풀기</span>
             </button>
 
-            <!-- 완독(KING/FRIEND) 후 홈으로 왔을 때만 노출 — 문제 풀기 버튼 대신 남은 액션(틀린 문제
-                 다시 풀기 / 심화 문제 풀기)만 보여준다. 둘 다 없을 수도 있다(둘 다 이미 끝낸 경우) -->
+            <!-- 완독(KING/FRIEND/심화완료) 후 홈으로 왔을 때만 노출 — 문제 풀기 버튼 대신 남은 액션만
+                 보여준다. 상태별 조합은 student-main.js renderCompletion 주석 참고(2026-09-02).
+                 재도전/틀린 문제는 글자 길이만큼만, "심화 문제 풀기"가 남는 폭을 전부 가져간다. -->
             <div class="completion-actions" id="completionActions" hidden>
               <button type="button" class="solve-btn solve-btn--sub" id="completionRetryBtn" hidden>
                 <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>재도전</button>
               <button type="button" class="solve-btn solve-btn--sub" id="completionWrongRetryBtn" hidden>
                 <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 다시 풀기</button>
-              <button type="button" class="solve-btn solve-btn--sub solve-btn--advanced" id="completionAdvancedBtn" hidden>
+              <button type="button" class="solve-btn solve-btn--advanced" id="completionAdvancedBtn" hidden>
                 <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 문제 풀기</button>
-              <button type="button" class="solve-btn solve-btn--sub solve-btn--advanced" id="completionAdvancedRetryBtn" hidden>
-                <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>심화 재도전</button>
-              <button type="button" class="solve-btn solve-btn--sub solve-btn--advanced" id="completionAdvancedWrongBtn" hidden>
-                <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>심화 틀린 문제 다시 풀기</button>
             </div>
           </article>
         </div>
@@ -131,9 +138,13 @@
               <img th:src="${characterImg ?: '/images/img-my-ch01.png'}" alt="레벨 캐릭터" />
             </div>
             <div class="level-name">
-              <span class="level-pill" th:text="|Lv. ${levelNo}|">Lv. 3</span>
-              <h3 th:text="${levelTitle}"></h3>
-              <p class="level-stage" th:if="${levelName != null}" th:text="|${levelName} 단계|"></p>
+              <!-- 레벨은 메달 아이콘 + "Lv. n"을 한 줄로 (2026-09-02, 기존 보라색 알약 pill 대체).
+                   성장 단계(levelName) 문구는 노출하지 않는다. -->
+              <p class="level-no">
+                <img class="level-medal" th:src="@{/images/student_result/medal.png}" alt="" aria-hidden="true" />
+                <span th:text="|Lv. ${levelNo}|">Lv. 3</span>
+              </p>
+              <h3 class="level-title" th:text="${levelTitle}">이야기 친구</h3>
             </div>
             <div class="level-progress">
               <div class="progress-label">다음 레벨까지</div>
@@ -146,17 +157,21 @@
 
           <!--
             카드 컬렉션 — 기존 "획득한 뱃지" 패널을 대체한다.
-            카드 획득/보관 기능은 아직 미구현이라 컨트롤러가 cards 모델을 내려주지 않는다.
-            지금은 빈 슬롯 4칸만 보이고, 나중에 cards(List<카드DTO>)를 채우면
-            아래 th:each가 그대로 카드 4장을 렌더링한다.
+            컨트롤러가 cards(보유 카드 최신순)를 내려주고, 여기선 앞 4장만 보여준다.
+            4장이 안 되면 나머지는 아래 빈 슬롯으로 채운다.
           -->
           <section class="card panel">
             <div class="panel-head">
               <h3 class="panel-title">나의 카드 컬렉션</h3>
+              <a class="more-link" href="#" data-bookcase="card">더보기 <i class="fa-solid fa-chevron-right"
+                  aria-hidden="true"></i></a>
             </div>
             <div class="collect-cards">
               <div class="collect-card" th:each="card, st : ${cards}" th:if="${st.index < 4}">
-                <img class="collect-card-img" th:src="@{/images/student_result/card.png}" alt="획득한 카드" />
+                <!-- 카드 이미지는 erp_bookstore_card_path.card_url (미등록 책은 서버 쿼리에서 이미
+                     기본 카드로 폴백된 값이 온다). 외부 호스팅 주소가 섞이므로 @{}가 아닌 ${}로 그대로 쓴다. -->
+                <img class="collect-card-img" th:src="${card.imageUrl}" th:alt="${card.cardName}"
+                     alt="획득한 카드" onerror="this.onerror=null;this.src='/images/student_result/card.png';" />
               </div>
               <th:block th:with="cardCount=${cards != null ? cards.size() : 0}">
                 <th:block th:if="${cardCount < 4}">
@@ -178,11 +193,13 @@
                     th:classappend="${i <= monthBooks.size()} ? 'active'"></span>
                 </div>
               </div>
-              <a class="more-link" href="#">더보기 <i class="fa-solid fa-chevron-right" aria-hidden="true"></i></a>
+              <a class="more-link" href="#" data-bookcase="book">더보기 <i class="fa-solid fa-chevron-right"
+                  aria-hidden="true"></i></a>
             </div>
             <div class="month-books">
               <div class="month-book" th:each="book, st : ${monthBooks}" th:if="${st.index < 4}">
-                <img th:src="${book.imageUrl ?: '/images/book-sample.png'}" th:alt="${book.originalTitle}" alt="도서 표지" />
+                <img th:src="${book.imageUrl ?: '/images/book-sample.png'}" th:alt="${book.originalTitle}"
+                  alt="도서 표지" />
                 <span class="book-status" th:classappend="${book.status == 'DONE'} ? 'done' : 'reading'"
                   th:text="${book.status == 'DONE'} ? '완료' : '읽는 중'">읽는 중</span>
               </div>
@@ -216,6 +233,27 @@
             <button type="button" class="modal-btn modal-btn-yes" id="recommendErrorOkBtn">확인</button>
           </div>
         </div>
+      </div>
+
+      <!-- "재도전" 클릭 시 문제 유형 선택 모달 — 심화 문항이 있는 책에서만 뜬다(없으면 바로 기본 재도전). -->
+      <div class="modal-overlay" id="retryTypeModal" hidden>
+        <div class="modal-box">
+          <button type="button" class="modal-close" id="retryTypeCancelBtn" aria-label="닫기">
+            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
+          </button>
+          <p class="modal-msg">어떤 문제 유형을 다시 풀까요?</p>
+          <div class="modal-actions">
+            <button type="button" class="modal-btn modal-btn-no" id="retryTypeBasicBtn">기본 문제</button>
+            <button type="button" class="modal-btn modal-btn-yes" id="retryTypeAdvancedBtn">심화 문제</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 나의 책장 / 나의 카드 컬렉션 — "더보기" 클릭 시 student-bookcase.html 을 iframe 으로 띄운다.
+           type=book / type=card 로 같은 화면에 데이터만 바꿔 끼운다. 닫기는 iframe 안에서
+           postMessage({type:'bookcase:close'}) 를 보내면 여기서 받아 닫는다. -->
+      <div class="bookcase-modal" id="bookcaseModal" hidden>
+        <iframe class="bookcase-frame" id="bookcaseFrame" title="나의 책장" src="about:blank"></iframe>
       </div>
     </main>
   </div>

@@ -33,6 +33,7 @@ import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * 도서 비즈니스 로직 서비스
@@ -40,6 +41,7 @@ import lombok.RequiredArgsConstructor;
  * 재설계로 사본 1행=1권 모델을 대체) 처리
  * - 삭제/복구는 저장 프로시저(sp_delete_book, sp_restore_book) 호출
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class BookService {
@@ -54,9 +56,10 @@ public class BookService {
 
     /** 마스터 도서 등록 */
     @Transactional
-    public void registerContent(BookReqDTO.RegisterReqDTO reqDTO) {
+    public void registerContent(BookReqDTO.RegisterReqDTO reqDTO, String registeredBy) {
         bookRepository.registerContent(reqDTO);
         saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
+        saveCardPath(reqDTO.getContentId(), reqDTO.getCardUrl(), registeredBy);
     }
 
     /**
@@ -71,6 +74,26 @@ public class BookService {
         if (reqDTO.getContentType() != null) {
             bookRepository.archiveContentDetailForUpdate(reqDTO.getContentId(), updatedBy);
             saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
+        }
+        saveCardPath(reqDTO.getContentId(), reqDTO.getCardUrl(), updatedBy);
+    }
+
+    /**
+     * 수집 카드 이미지 경로 저장 (2026-09-02) — 완독 시 지급되는 카드의 그림.
+     * 표지와 다른 이미지라 erp_bookstore_card_path에 따로 둔다(도서 마스터는 건드리지 않는다).
+     *
+     * cardUrl의 세 가지 의미를 구분한다. extraDetail과 달리 "안 보냄"과 "지움"을 나눠야 하는데,
+     * 상태 토글처럼 일부 필드만 보내는 부분 수정이 기존 카드를 지워버리면 안 되기 때문이다.
+     *   null        → 이번 요청에서 카드는 건드리지 않는다 (부분 수정)
+     *   빈 문자열    → 카드 이미지 제거 (이후 화면은 기본 카드로 폴백)
+     *   값 있음      → 등록/교체
+     */
+    private void saveCardPath(Integer contentId, String cardUrl, String registeredBy) {
+        if (contentId == null || cardUrl == null) return;
+        if (cardUrl.isBlank()) {
+            bookRepository.deleteCardPath(contentId);
+        } else {
+            bookRepository.upsertCardPath(contentId, cardUrl.trim(), registeredBy);
         }
     }
 
@@ -405,6 +428,58 @@ public class BookService {
         if (securedItemId == null) return null;
         bookRepository.insertItemLoan(securedItemId, studentId);
         return securedItemId;
+    }
+
+    /**
+     * 추천 취소(책이 없음 / 못 읽을 정도로 훼손) — 그 한 권을 재고에서 뺀다 (2026-09-02).
+     *
+     * 반납(returnActiveLoanByStudent)과 결정적으로 다른 점은 loaned_qty만 줄이는 게 아니라 그 한 권을
+     * lost_qty로 옮긴다는 것이다. 가용 재고(qty - loaned_qty - lost_qty)에서 빠져야 추천 후보 쿼리
+     * (ClinicMapper.pickNextItem)가 그 판본을 다시 뽑지 않는다 — 없는 책/훼손된 책이 다음 학생에게
+     * 또 추천되는 것을 막는 게 이 처리의 핵심이다.
+     *
+     * 같은 책의 사본이 2권 이상이면 남은 사본은 그대로 후보로 남는다(훼손된 건 지금 이 한 권뿐이므로
+     * 그게 맞다). 그래서 취소 직후 같은 책이 다시 추천될 수 있는데, 그건 DB상 멀쩡한 사본이 더 있다는
+     * 뜻이라 직원이 한 번 더 누르면 그 사본도 차감된다.
+     *
+     * @param itemId 추천이 가리키던 판본 — 학생의 대여가 이미 풀린 경우(퇴실 등)의 차감 대상
+     * @return 실제로 재고에서 뺐으면 true (이미 재고가 0이라 뺄 게 없었으면 false)
+     */
+    @Transactional
+    public boolean loseCopy(String studentId, Integer itemId, String staffName) {
+        BookRespDTO.ItemLoanRespDTO loan = bookRepository.findActiveLoanByStudent(studentId);
+        Integer targetItemId = loan != null ? loan.getItemId() : itemId;
+        if (targetItemId == null) return false;
+
+        bookRepository.archiveItemByIdForUpdate(targetItemId, staffName);
+        if (loan != null) {
+            bookRepository.updateLoanLost(loan.getLoanId());
+            boolean removed = bookRepository.markLoanedItemLost(targetItemId) > 0;
+            log.info("추천 취소로 대여분을 분실 처리했습니다 — studentId={}, itemId={}, 재고반영={}",
+                    studentId, targetItemId, removed);
+            return removed;
+        }
+        // 대여가 이미 풀린 상태(퇴실 등) — 가용 재고가 남아 있을 때만 한 권 뺀다
+        boolean removed = bookRepository.markAvailableItemLost(targetItemId) > 0;
+        log.info("추천 취소로 가용 재고 한 권을 분실 처리했습니다 — studentId={}, itemId={}, 재고반영={}",
+                studentId, targetItemId, removed);
+        return removed;
+    }
+
+    /**
+     * 분실/훼손 처리 되돌리기 — "책이 없다"로 뺐다가 나중에 책장에서 찾은 경우 (2026-09-02).
+     * 이 경로가 없으면 loseCopy로 뺀 재고가 영영 안 살아난다.
+     *
+     * @return 되돌렸으면 true (되돌릴 분실분이 없으면 false)
+     */
+    @Transactional
+    public boolean restoreLostCopy(String bcode, String centerCode, String staffName) {
+        Integer itemId = bookRepository.findItemIdByBcodeCenter(bcode, centerCode);
+        if (itemId == null) return false;
+        bookRepository.archiveItemByIdForUpdate(itemId, staffName);
+        boolean restored = bookRepository.restoreLostCopy(bcode, centerCode) > 0;
+        log.info("분실/훼손 재고를 복구했습니다 — bcode={}, centerCode={}, 반영={}", bcode, centerCode, restored);
+        return restored;
     }
 
     /** 특정 실물도서(bcode+센터)의 대여 중 이력 목록 조회 */

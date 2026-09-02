@@ -146,7 +146,7 @@
 /* 상단 3단 — 캐릭터 / 문제풀이 결과 / 신규 카드 */
 .result-top {
   display: grid;
-  grid-template-columns: 350px 1fr 250px;
+  grid-template-columns: 1fr 2fr 1fr;
   gap: 36px;
   margin-bottom: 50px; 
 }
@@ -324,7 +324,6 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
 }
 
 .new-card-frame {
@@ -339,7 +338,7 @@
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
 }
 
@@ -361,10 +360,10 @@
 }
 
 .new-card-caption {
-  margin: 0;
+  margin: -26px 0 0;
   font-size: 14px;
   font-weight: 800;
-  color: #6f6a60;
+  color: #01423A;
 }
 
 /* 획득한 보상 패널 */
@@ -499,9 +498,14 @@
   gap: 16px;
 }
 
+/* 입체감(2026-09-02) — 홈 화면 .solve-btn과 같은 방식: 위쪽 흰 선(빛) + 아래쪽 진한 선(두께)
+   + 바깥 그림자(떠 있는 느낌). 누르면 두께가 줄고 아래로 내려간다.
+   색만 다른 버튼은 --btn-shade / --btn-gloss 두 값만 바꾼다. */
 .btn-home,
 .btn-retry,
 .btn-advanced {
+  --btn-shade: rgba(0, 0, 0, .18);
+  --btn-gloss: rgba(255, 255, 255, .3);
   height: 56px;
   min-width: 200px;
   padding: 0 32px;
@@ -512,24 +516,52 @@
   gap: 10px;
   font-size: 20px;
   font-weight: 900;
-  box-shadow: var(--shadow);
+  box-shadow:
+    inset 0 2px 0 var(--btn-gloss),
+    inset 0 -5px 0 var(--btn-shade),
+    0 6px 14px rgba(0, 0, 0, .16);
+  transition: transform .12s ease, box-shadow .12s ease, filter .18s ease;
 }
 
+.btn-home:hover,
+.btn-retry:hover,
+.btn-advanced:hover {
+  transform: translateY(-2px);
+  filter: brightness(1.04);
+  box-shadow:
+    inset 0 2px 0 var(--btn-gloss),
+    inset 0 -5px 0 var(--btn-shade),
+    0 11px 20px rgba(0, 0, 0, .2);
+}
+
+.btn-home:active,
+.btn-retry:active,
+.btn-advanced:active {
+  transform: translateY(4px);
+  box-shadow:
+    inset 0 1px 0 var(--btn-gloss),
+    inset 0 -2px 0 var(--btn-shade),
+    0 2px 6px rgba(0, 0, 0, .14);
+}
+
+/* 밝은 크림색 버튼은 흰 하이라이트가 안 보이므로 두께만 살짝 진하게 준다 */
 .btn-home {
+  --btn-shade: #e2dbc9;
+  --btn-gloss: rgba(255, 255, 255, .6);
   background: #fdfaf1;
   color: #7d7768;
 }
 
 .btn-retry {
+  --btn-shade: #12764a;
   min-width: 290px;
   background: #1aa864;
   color: #fff;
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .12);
 }
 
 .btn-advanced {
+  --btn-shade: var(--red-dark);
   min-width: 310px;
   background: var(--red);
   color: #fff;
-  box-shadow: inset 0 -4px 0 var(--red-dark);
 }

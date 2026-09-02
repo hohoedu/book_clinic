@@ -32,6 +32,9 @@ public class BookReqDTO {
         // 분류(contentType)가 교과연계/기관추천/인증수상작일 때만 의미 있는 부가 정보
         // (연계교과=gubun'C' / 추천기관명=gubun'R' / 수상명=gubun'A', 도서당 최대 1행)
         private String extraDetail;
+        // 완독 시 지급되는 수집 카드 이미지 URL — erp_bookstore_card_path에 별도 저장된다(표지와 다른 그림).
+        // null/빈 값이면 카드 이미지가 없는 책으로 두고, 화면은 기본 카드로 폴백한다.
+        private String cardUrl;
     }
 
     /** 마스터 도서 수정 요청 */
@@ -54,6 +57,9 @@ public class BookReqDTO {
         // 분류(contentType)가 교과연계/기관추천/인증수상작일 때만 의미 있는 부가 정보
         // (연계교과=gubun'C' / 추천기관명=gubun'R' / 수상명=gubun'A', 도서당 최대 1행)
         private String extraDetail;
+        // 수집 카드 이미지 URL. null이면 "이번 수정에서 카드는 건드리지 않는다"는 뜻이고(상태 토글 같은
+        // 부분 수정이 기존 카드를 지우지 않도록), 빈 문자열이면 카드 이미지를 제거한다.
+        private String cardUrl;
     }
 
     /** 마스터 도서 삭제 요청 */
@@ -149,6 +155,18 @@ public class BookReqDTO {
         private String centerCode;
         @NotBlank(message = "학생 앱 ID는 필수입니다.")
         private String appId;
+    }
+
+    /**
+     * 분실/훼손 재고 복구 요청 (2026-09-02) — 추천 교체("책이 없음")로 재고에서 뺐던 한 권을
+     * 나중에 찾았을 때 도서관리 화면에서 되돌린다. 판본은 (bcode + 센터)로 1행이라 이 둘로 특정된다.
+     */
+    @Data
+    public static class LostRestoreReqDTO {
+        @NotBlank(message = "바코드(ISBN)는 필수입니다.")
+        private String bcode;
+        @NotBlank(message = "센터 코드는 필수입니다.")
+        private String centerCode;
     }
 
     /**
