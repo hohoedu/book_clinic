@@ -262,6 +262,17 @@ public class ClinicService {
         resp.setNewBadges(List.of());
         // 새로 받은 뱃지는 없지만(직전 결과 재조회) 그 책에서 보유한 뱃지는 보상 칸에 보여준다
         resp.setBookBadge(clinicRepository.findBookBadge(studentId, contentId, "02".equals(resolvedQlevel)));
+        // 카드 — 직전 결과 재조회라 "이번에 새로 받은" 카드는 아니지만, 그 책 카드를 이미 보유 중이면
+        // 결과 화면 오른쪽 칸이 통째로 비지 않게 보유 카드를 그대로 내려준다(2026-09-03).
+        // 이 값이 없어서 결과 화면을 새로고침하거나 재진입하면 방금 받은 카드가 사라져 보였다.
+        if (clinicRepository.existsNormalCard(studentId, contentId)) {
+            ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
+            if (card != null) {
+                resp.setCardName(card.getCardName());
+                resp.setCardImageUrl(card.getImageUrl());
+            }
+            resp.setTotalCards(clinicRepository.countNormalCards(studentId));
+        }
         // 재도전 화면에서도 레벨 카드 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다.
         String schoolyear = resolveSchoolyear(studentId);
         applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
@@ -646,6 +657,16 @@ public class ClinicService {
             // 남는다 — 결과 화면이 그걸 판단할 수 있게 기본 등급/오답을 함께 내려준다(2026-09-02).
             resp.setBasicGrade(logStatus.getGrade());
             resp.setBasicWrongQnums(findWrongQnums(logStatus.getRecommendId(), "01"));
+            // 심화는 카드를 새로 주지 않지만(카드는 기본 첫 제출 때 책당 1장), 결과 화면 오른쪽 카드
+            // 칸이 통째로 비지 않게 그 책에서 이미 받은 카드를 함께 내려준다(2026-09-03).
+            if (clinicRepository.existsNormalCard(studentId, contentId)) {
+                ClinicRespDTO.CardDTO ownedCard = clinicRepository.findCardByContent(contentId);
+                if (ownedCard != null) {
+                    resp.setCardName(ownedCard.getCardName());
+                    resp.setCardImageUrl(ownedCard.getImageUrl());
+                }
+                resp.setTotalCards(clinicRepository.countNormalCards(studentId));
+            }
             syncMonitorSafely(studentId);
             return resp;
         }
@@ -729,6 +750,7 @@ public class ClinicService {
             if (card != null) {
                 resp.setCardName(card.getCardName());
                 resp.setCardImageUrl(card.getImageUrl());
+                resp.setCardNew(true);
             }
             resp.setTotalCards(totalCards);
 
@@ -737,6 +759,16 @@ public class ClinicService {
             if (rewardReached && !clinicRepository.existsRareCard(studentId, totalCards)) {
                 clinicRepository.insertRareCard(studentId, totalCards);
             }
+        } else if (clinicRepository.existsNormalCard(studentId, contentId)) {
+            // 재도전·틀린문제 재제출 — 카드를 새로 주진 않지만(책당 1장), 이미 받아둔 그 책 카드를
+            // 결과 화면에 계속 보여준다(2026-09-03). 예전엔 여기서 아무것도 안 채워서 재제출 결과
+            // 화면의 카드 칸이 통째로 비었다.
+            ClinicRespDTO.CardDTO ownedCard = clinicRepository.findCardByContent(contentId);
+            if (ownedCard != null) {
+                resp.setCardName(ownedCard.getCardName());
+                resp.setCardImageUrl(ownedCard.getImageUrl());
+            }
+            resp.setTotalCards(clinicRepository.countNormalCards(studentId));
         }
 
         // 기본 문제 뱃지 — 첫 제출은 이번 결과로 지급. 재도전으로 등급이 올라간 경우엔 기존 기본 뱃지(1~2)를

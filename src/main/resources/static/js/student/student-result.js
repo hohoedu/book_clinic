@@ -20,6 +20,8 @@
   const rewardExpDesc = document.getElementById('rewardExpDesc');
   const newCard = document.getElementById('newCard');
   const newCardImg = document.getElementById('newCardImg');
+  const newCardCaption = document.querySelector('.new-card-caption');
+  const newFlag = document.querySelector('.new-flag');
   const cardReward = document.getElementById('cardReward');
   const rareFlag = document.getElementById('rareFlag');
   const rewardCardImg = document.getElementById('rewardCardImg');
@@ -348,6 +350,10 @@
       newCardImg.src = result.cardImageUrl;
     }
     newCardImg.alt = result.cardName;
+    // "신규"는 이번 제출로 처음 받은 카드일 때만(2026-09-03). 재진입·심화 결과처럼 이미 보유 중인
+    // 카드를 보여줄 때는 문구만 바꾼다 — 칸 자체는 비우지 않는다.
+    newCardCaption.textContent = result.cardNew ? '신규 카드를 획득했어요!' : '이 책의 카드예요.';
+    newFlag.hidden = !result.cardNew;
   }
 
   // 스페셜 카드 칸 — 완독 카드 10장을 채운 순간(레어 카드 지급)에만 칸 전체를 노출한다(2026-09-01).

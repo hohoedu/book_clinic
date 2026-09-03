@@ -337,10 +337,10 @@
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error?.message ?? '채점에 실패했어요.');
-      result = isAdvanced
-        ? { advanced: true, correctCount: data.response.correctCount, totalCount: data.response.totalCount,
-            wrongQnums: data.response.wrongQnums ?? [], newBadges: data.response.newBadges }
-        : { advanced: false, bookTitle: currentBookTitle, ...data.response };  // wrongQnums도 응답에 들어있다
+      // 심화도 기본과 똑같이 응답을 통째로 넘긴다(2026-09-03). 예전엔 필요한 필드만 골라 담느라
+      // 서버가 채워 보낸 레벨(levelNo/progressPercent)·보유 뱃지(bookBadge)·카드(cardName)가 버려져서
+      // 심화 결과 화면의 레벨 칸이 placeholder로 남고 카드 칸이 통째로 비어 보였다.
+      result = { advanced: isAdvanced, bookTitle: currentBookTitle, ...data.response };  // wrongQnums도 응답에 들어있다
     } catch (err) {
       console.error(err);
       // 채점 서버 호출이 실패한 경우. 정답을 모르니 점수를 계산할 수 없어 0점으로 두고 재도전으로

@@ -169,7 +169,8 @@ public class ClinicRespDTO {
         // 위해 내려준다(2026-09-01). 독서완료(합격·불합격 공통)/독서왕 둘 다 뱃지가 있어 첫 제출 뒤엔 항상 채워진다.
         private BadgeDTO bookBadge;
         // 온라인 카드 — 이번 제출로 새 완독(DONE)이 되어 카드를 새로 획득한 경우에만 채워진다
-        private String cardName;           // 획득 카드명(=책 제목), 신규 획득이 아니면 null
+        private String cardName;           // 카드명(=책 제목). 신규 획득이거나 그 책 카드를 이미 보유 중이면 채워진다
+        private boolean cardNew;           // 이번 제출로 처음 받은 카드인지(화면 "신규 카드를 획득했어요!" 문구 분기)
         private String cardImageUrl;       // 획득 카드 이미지(card_path.card_url, 미등록 책은 기본 카드로 폴백)
         private Integer totalCards;         // 획득 후 보유 카드 총 수
         private boolean cardRewardReached;  // 이번 획득으로 10장 세트를 채웠는지(실물 1장 교환 시점)
