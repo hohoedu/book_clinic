@@ -32,17 +32,23 @@
         WHERE product_id = #{productId}
     </select>
 
+    <!--
+      cycle_from/cycle_until은 이 결제가 커버하는 이용 주기다(2026-09-07 자동결제 전환).
+      billing_ym만으로는 "3/1~3/31"과 "3/15~4/14"를 구분할 수 없어 주기를 결제 행이 직접 든다.
+      중복 청구 방어선(UX_payment_active_cycle)도 이 값을 기준으로 걸려 있으므로 반드시 채운다.
+    -->
     <insert id="insertReady">
         INSERT INTO erp_bookstore_payment
             (order_no, group_order_no, student_id, center_code, product_id, product_name, service_code, billing_ym,
-             amount, status, requested_at)
+             cycle_from, cycle_until, subscription_id, amount, status, requested_at)
         VALUES
             (#{orderNo}, #{groupOrderNo}, #{studentId}, #{centerCode}, #{productId}, #{productName}, #{serviceCode}, #{billingYm},
-             #{amount}, 'READY', DATEADD(HOUR, 9, GETUTCDATE()))
+             #{cycleFrom}, #{cycleUntil}, #{subscriptionId}, #{amount}, 'READY', DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="paymentColumns">
-        payment_id, order_no, group_order_no, billing_ym, tid, student_id, center_code, product_id, product_name,
+        payment_id, order_no, group_order_no, billing_ym, cycle_from, cycle_until, subscription_id,
+        tid, student_id, center_code, product_id, product_name,
         service_code, amount, refund_amount, status, paid_at
     </sql>
 

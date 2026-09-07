@@ -81,6 +81,16 @@
   // 결과 화면 문구("OO을(를) 완독하고...")에 쓸 책 제목 — loadBookInfo에서 채운다
   let currentBookTitle = null;
 
+  // ── 즉시 채점 (2026-09-03) ──────────────────────────────────────────────────
+  // "틀린 문제 다시 풀기"를 두 번째로 할 때부터는 보기를 고르는 즉시 정답/오답을 보여주고 자동으로
+  // 다음 문제로 넘어간다. 두 번째쯤 되면 답을 몰라서 못 맞히는 상태라, 계속 혼자 붙들고 있게
+  // 하는 것보다 바로 알려주고 넘어가는 편이 낫다는 판단이다(키독 방식).
+  // 판정과 정답은 서버가 내려준다(GET /clinic/wrong-retry-mode) — 첫 번째 다시 풀기에서는
+  // 정답이 아예 오지 않으므로 화면이 답을 들고 있을 수 없다.
+  let instantMode = false;
+  let instantAnswers = {};      // qnum → 정답 보기 번호
+  let instantLocked = false;    // 정답 공개 후 답을 바꿔 고르지 못하게 막는다
+
   // 문항 하나가 어느 난이도인지 — 병합 모드면 문항에 붙은 __qlevel, 아니면 페이지 qlevel
   function levelOf(q) {
     return q.__qlevel || qlevel;
@@ -146,6 +156,7 @@
         if (filtered.length > 0) {
           questions = filtered;
           wrongOnlyMode = true;
+          await loadInstantMode();
         }
       }
 
@@ -201,6 +212,28 @@
     }
   }
 
+  /* 두 번째 다시 풀기인지 서버에 물어본다. 즉시 채점이면 정답 맵도 함께 받는다.
+     조회에 실패하면 조용히 기존 방식(스스로 풀고 제출)으로 둔다 — 답을 못 받은 채로 즉시 채점을
+     켜면 모든 보기가 오답으로 보이므로, 실패 시엔 절대 켜지 않는다. */
+  async function loadInstantMode() {
+    try {
+      const res = await fetch(`/clinic/wrong-retry-mode?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${encodeURIComponent(qlevel)}`);
+      // 인증에 막히면 로그인 화면(HTML)이 돌아온다 — 그대로 json()을 부르면 예외가 나므로 먼저 거른다
+      if (!res.ok) {
+        console.warn('즉시 채점 여부 조회 실패 — 기존 방식으로 진행합니다:', res.status);
+        return;
+      }
+      const data = await res.json();
+      if (!data.success) return;
+      const answers = data.response.answers ?? {};
+      instantMode = data.response.instant === true && Object.keys(answers).length > 0;
+      instantAnswers = answers;
+      console.info(`틀린 문제 다시 풀기 ${(data.response.priorRounds ?? 0) + 1}회차 — 즉시 채점 ${instantMode ? 'ON' : 'OFF'}`);
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
   function renderQuestion() {
     const q = questions[current];
 
@@ -244,7 +277,12 @@
       choiceList.appendChild(btn);
     });
 
-    prevBtn.hidden = current === 0;
+    // 즉시 채점에서는 O가 뜬 뒤 학생이 "다음 문제"를 눌러 직접 넘어간다 — 정답을 충분히 확인할
+    // 시간을 학생이 정하게 두는 편이 낫다(2026-09-03, 자동 진행에서 변경).
+    // 단 "이전 문제"는 감춘다 — 정답을 본 뒤 되돌아가 답을 고치면 채점이 무의미해진다.
+    instantLocked = false;
+    quizCard.classList.remove('reveal-correct', 'reveal-wrong');
+    prevBtn.hidden = instantMode || current === 0;
     quizActions.classList.toggle('has-prev', !prevBtn.hidden);
 
     updateNextButton();
@@ -276,9 +314,57 @@
   // (다시 눌러 바꾸는 것도 마지막 제출 전까지 자유)
   function selectChoice(num) {
     const q = questions[current];
+    if (instantMode && instantLocked) return;   // 이미 정답을 맞혔다 — 답을 바꿀 수 없다
+
     answered[current] = { qnum: q.qnum, selected: num, qlevel: levelOf(q) };
     updateSelectedVisual();
+
+    if (instantMode) revealAnswer(q, num);
     updateNextButton();
+  }
+
+  /* 고른 보기가 맞았는지 그 자리에서 O/X로 보여준다 (2026-09-03 확정).
+       정답 → O 를 띄우고 잠근다. "다음 문제"를 눌러 넘어간다.
+       오답 → X 를 띄우고 그 보기만 막은 뒤, 정답을 맞힐 때까지 다시 고르게 한다.
+     그래서 이 모드를 끝까지 풀면 모든 문항이 정답으로 남는다 — 남은 오답이 0이 되어 다음
+     화면에서 "심화 문제 풀기"가 열린다(student-result.js / student-main.js의 버튼 규칙).
+     서버에 올라가는 답도 마지막에 고른 정답이다.
+     .correct / .wrong 은 student-question.css에 이미 있던 스타일인데(초록/빨강 테두리 +
+     .choice-mark 색상) 여태 아무도 붙이지 않아 쓰이지 않던 클래스라 그대로 재사용한다. */
+  function revealAnswer(q, picked) {
+    const correctNum = Number(instantAnswers[q.qnum]);
+    const isCorrect = picked === correctNum;
+    const btn = choiceList.querySelector(`.choice-item[data-num="${picked}"]`);
+
+    quizCard.classList.remove('reveal-correct', 'reveal-wrong');
+    quizCard.classList.add(isCorrect ? 'reveal-correct' : 'reveal-wrong');
+    if (!btn) return;
+
+    if (isCorrect) {
+      instantLocked = true;
+      btn.classList.add('correct');
+      markChoice(btn, 'O');
+      return;
+    }
+
+    // 오답 — X를 남기고 그 보기는 다시 못 고르게 막는다. 정답을 맞히기 전엔 다음으로 못 넘어가도록
+    // 선택을 지운다(updateNextButton이 answered를 보고 버튼을 잠근다).
+    btn.classList.add('wrong');
+    btn.disabled = true;
+    markChoice(btn, 'X');
+    answered[current] = null;
+    updateSelectedVisual();
+  }
+
+  /** 보기 오른쪽에 O / X 표시를 붙인다 (이미 붙어 있으면 그대로 둔다) */
+  function markChoice(btn, kind) {
+    if (btn.querySelector('.choice-mark')) return;
+    const mark = document.createElement('i');
+    mark.className = kind === 'O'
+      ? 'choice-mark fa-regular fa-circle'
+      : 'choice-mark fa-solid fa-xmark';
+    mark.setAttribute('aria-label', kind === 'O' ? '정답' : '오답');
+    btn.appendChild(mark);
   }
 
   function updateSelectedVisual() {

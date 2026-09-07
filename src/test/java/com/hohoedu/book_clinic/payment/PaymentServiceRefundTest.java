@@ -103,6 +103,10 @@ class PaymentServiceRefundTest {
         fullRefundRule.setRefundRate(100);
         when(paymentRepository.findActiveRefundRules()).thenReturn(List.of(fullRefundRule));
 
+        // 환불 선점(claimRefund)은 동시 요청 방지용 원자적 UPDATE다. 모킹이 없으면 0(=이미 선점됨)이
+        // 돌아와 실제 환불 로직에 들어가기 전에 막힌다.
+        when(paymentRepository.claimRefund(1)).thenReturn(1);
+
         when(paymentTxService.openCancel(eq(1), eq(10_000), any(), any(), any(), anyInt(), anyInt()))
                 .thenReturn(99);
 

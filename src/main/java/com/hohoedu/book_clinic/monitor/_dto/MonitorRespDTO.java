@@ -45,6 +45,8 @@ public class MonitorRespDTO {
         private Integer basicTotalCount;
         private String basicStatus;     // PENDING(추천됨, 첫 제출 전) / DONE(첫 제출 완료) — null이면 아직 추천 전
         private String basicGrade;      // KING / FRIEND / null(불합격) — 재도전 최종 결과. null+DONE이면 "재도전 필요"
+        /** 홀딩(2026-09-03) — 다 못 읽고 넘어간 책에 선생님이 자물쇠로 기록한 "읽은 페이지". 없으면 null */
+        private Integer holdPage;
 
         private Integer advancedCorrectCount;
         private Integer advancedTotalCount;
@@ -100,6 +102,7 @@ public class MonitorRespDTO {
         private Integer basicTotalCount;
         private String basicStatus;
         private String basicGrade;
+        private Integer holdPage;
 
         private Integer advancedCorrectCount;
         private Integer advancedTotalCount;

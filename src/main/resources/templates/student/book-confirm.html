@@ -26,9 +26,25 @@
       <a class="confirm-close-btn" th:href="@{/attendance}">닫기</a>
     </div>
 
-    <!-- 정상: 입실 처리 완료 + 오늘의 추천 도서. 문제 풀기로는 이어지지 않는다 —
+    <!-- 입실은 됐지만 지금 읽는 책이 없는 경우(2026-09-03) — 입실과 책 추천이 분리되면서 생긴
+         화면이다. 여기서 바로 "책 추천받기"를 누르면 QR을 다시 스캔하지 않고 추천으로 넘어간다.
+         심화 게이트에 걸리면 이 화면이 error-card로 다시 그려진다. -->
+    <div class="confirm-card empty-card" th:if="${error == null and book == null}">
+      <i class="fa-solid fa-circle-check"></i>
+      <p th:text="|${studentName} 학생, 입실했어요!|">입실했어요!</p>
+      <p class="empty-sub">읽을 책이 필요하면 아래 버튼을 눌러주세요.</p>
+      <form method="post" th:action="@{/attendance/recommend}">
+        <input type="hidden" name="appId" th:value="${appId}" />
+        <button type="submit" class="confirm-close-btn confirm-recommend-btn">
+          <i class="fa-solid fa-book" aria-hidden="true"></i> 책 추천받기
+        </button>
+      </form>
+      <a class="confirm-close-btn confirm-ghost-btn" th:href="@{/attendance}">닫기</a>
+    </div>
+
+    <!-- 정상: 입실 처리 완료 + 오늘 읽을 책. 문제 풀기로는 이어지지 않는다 —
          공용 기기라 학습은 학생 개인 앱에서만 한다. -->
-    <div class="confirm-stage" th:unless="${error}">
+    <div class="confirm-stage" th:if="${error == null and book != null}">
       <p class="confirm-eyebrow">
         <span class="confirm-star"><i class="fa-solid fa-star" aria-hidden="true"></i></span>
         오늘의 추천 도서

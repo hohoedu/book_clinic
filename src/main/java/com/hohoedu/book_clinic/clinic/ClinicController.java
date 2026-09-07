@@ -124,6 +124,18 @@ public class ClinicController {
      * qlevel=02(심화)는 완독/레벨 처리 없이 채점 결과와 풀이 이력 기록만 한다.
      * 정답 수는 클라이언트가 아니라 서버가 문항별 제출 답안(answers)을 itempool.ans와 대조해 직접 계산한다.
      */
+    /**
+     * "틀린 문제 다시 풀기" 채점 방식 조회 (2026-09-03) — 문제풀이 화면이 진입 시 한 번 호출한다.
+     * 두 번째 다시 풀기부터는 보기를 고르는 즉시 정답/오답을 보여주고, 그때만 정답도 함께 내려온다.
+     */
+    @GetMapping("/wrong-retry-mode")
+    public ResponseEntity<?> wrongRetryMode(@RequestParam("studentId") String studentId,
+                                            @RequestParam("contentId") Integer contentId,
+                                            @RequestParam(value = "qlevel", required = false) String qlevel) {
+        return ResponseEntity.ok(ApiUtils.success(
+                clinicService.getWrongRetryMode(studentId, contentId, qlevel)));
+    }
+
     @PostMapping("/quiz/submit")
     public ResponseEntity<?> submitQuiz(@RequestBody @Valid ClinicReqDTO.QuizSubmitReqDTO reqDTO,
             HttpServletRequest request) {

@@ -123,6 +123,7 @@ public class PaymentCheckoutViewController {
         model.addAttribute("productName", product.getProductName());
         model.addAttribute("price", product.getPrice());
         model.addAttribute("selfStudentId", studentId);
+        model.addAttribute("formAction", "/payment/checkout/group");
         return "payment/payment-sibling-select";
     }
 

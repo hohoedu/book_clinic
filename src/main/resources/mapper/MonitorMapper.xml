@@ -94,6 +94,7 @@
             rl.total_count         AS basicTotalCount,
             rl.status              AS basicStatus,
             rl.grade               AS basicGrade,
+            rl.hold_page           AS holdPage,
             cs.quiz_qlevel         AS quizQlevel,
             -- 기본(qlevel='01') 문제 제출 회차 수(distinct submitted_at) — "문제 푸는 중" 라벨의 회차 계산에 쓴다(2026-08-28)
             (SELECT COUNT(DISTINCT qr.submitted_at) FROM erp_bookstore_quiz_answer_log qr
@@ -239,6 +240,7 @@
             rl.total_count         AS basicTotalCount,
             rl.status              AS basicStatus,
             rl.grade               AS basicGrade,
+            rl.hold_page           AS holdPage,
             cs.quiz_qlevel         AS quizQlevel,
             (SELECT COUNT(DISTINCT qr.submitted_at) FROM erp_bookstore_quiz_answer_log qr
              WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01') AS basicAttemptRounds,
@@ -376,6 +378,7 @@
             rl.total_count         AS basicTotalCount,
             rl.status              AS basicStatus,
             rl.grade               AS basicGrade,
+            rl.hold_page           AS holdPage,
             -- cardColumns/reservationCardColumns와 같은 규칙(독서 시간은 문제풀이 시작 전까지만 흐름)
             COALESCE(
                 frozen.read_minutes,
@@ -453,6 +456,7 @@
             rl.total_count         AS basicTotalCount,
             rl.status              AS basicStatus,
             rl.grade               AS basicGrade,
+            rl.hold_page           AS holdPage,
             COALESCE(
                 frozen.read_minutes,
                 DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))

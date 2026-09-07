@@ -46,10 +46,35 @@ public class PassService {
      * 이 메서드가 "오늘이 몇 월이니 이번 달"이라고 임의로 정하면 둘 다 틀릴 수 있다.
      */
     public void grant(String studentId, String centerCode, int productId, String serviceCode,
-                      String source, String refNo, String billingYm, int totalCount) {
-        YearMonth ym = YearMonth.parse(billingYm, YM);
+                      String source, String refNo, String billingYm,
+                      LocalDate validFrom, LocalDate validUntil, int totalCount) {
         passRepository.insertPass(studentId, centerCode, productId, serviceCode, source, refNo,
-                billingYm, ym.atDay(1), ym.atEndOfMonth(), totalCount);
+                billingYm, validFrom, validUntil, totalCount);
+    }
+
+    /**
+     * 달력 월 단위 발급 — 서당 일괄청구분 전용이다.
+     *
+     * 2026-09-07 자동결제 전환으로 앱 결제분의 주기는 "결제일 기준 1개월"이 됐지만, 서당은
+     * 여전히 전월 20일에 다음 달치를 걷는 월 단위 청구다. 그쪽 주기를 억지로 바꾸면 all_pass의
+     * 청구 내역과 대조가 깨지므로 두 체계를 그대로 공존시킨다 — 발급된 이용권은 어느 쪽이든
+     * valid_from~valid_until 한 쌍으로 표현되므로, 차감·상한·환불 쿼리는 한 벌로 유지된다.
+     */
+    public void grantMonthly(String studentId, String centerCode, int productId, String serviceCode,
+                             String source, String refNo, String billingYm, int totalCount) {
+        YearMonth ym = YearMonth.parse(billingYm, YM);
+        grant(studentId, centerCode, productId, serviceCode, source, refNo, billingYm,
+                ym.atDay(1), ym.atEndOfMonth(), totalCount);
+    }
+
+    /**
+     * 결제일 기준 1개월 주기의 마지막 날 — 3/15 결제면 4/14다(다음 청구일의 전날).
+     *
+     * 말일 처리는 LocalDate.plusMonths가 알아서 당겨준다(1/31 → 2/28, 그 전날 2/27).
+     * 앵커일 자체는 구독이 따로 보존하므로 3월에는 다시 31일로 돌아온다.
+     */
+    public static LocalDate cycleEnd(LocalDate cycleFrom) {
+        return cycleFrom.plusMonths(1).minusDays(1);
     }
 
     /**
@@ -129,13 +154,20 @@ public class PassService {
     }
 
     /**
-     * {@code dateInMonth}가 속한 달에 이 학생이 살 수 있었던 이용권 총량(=그 달 예약 상한, 2026-08-28).
-     * 그 달 이용권이 아직 없으면 0 — 그 달 예약을 막는 근거가 된다.
+     * {@code date}가 속한 이용 주기 — 그 기간과 그 기간에 쓸 수 있는 총 횟수(=예약 상한).
+     *
+     * 자동결제 전환(2026-09-07) 전에는 "그 달"이 곧 단위였지만, 주기가 결제일 기준 1개월이 되면서
+     * 한 달에 두 주기가 걸치게 됐다. 예약 상한은 이 주기 기준으로 세어야 한다 — 달력 월로 세면
+     * 두 주기의 총량이 한 달 상한으로 합산되어 실제보다 최대 두 배까지 열린다.
+     *
+     * 그 날짜를 덮는 이용권이 없으면 capacity=0에 기간은 null이다 — 결제 전까지 예약을 막는 근거다.
      */
-    public int monthlyCapacity(String studentId, String serviceCode, LocalDate dateInMonth) {
-        LocalDate monthStart = dateInMonth.withDayOfMonth(1);
-        LocalDate monthEnd = monthStart.plusMonths(1).minusDays(1);
-        return passRepository.sumMonthlyTotalCount(studentId, serviceCode, monthStart, monthEnd);
+    public PassRespDTO.CycleDTO cycleOn(String studentId, String serviceCode, LocalDate date) {
+        PassRespDTO.CycleDTO cycle = passRepository.findCycleOn(studentId, serviceCode, date);
+        if (cycle == null) {
+            cycle = new PassRespDTO.CycleDTO();
+        }
+        return cycle;
     }
 
     /** 결제/청구 건으로 발급된 이용권 (없으면 null) */
@@ -174,6 +206,6 @@ public class PassService {
             log.info("[이용권] 서당 청구 중복 발급 요청 무시 — billId={}", billId);
             return;
         }
-        grant(studentId, centerCode, productId, serviceCode, SOURCE_SEODANG, billId, billingYm, totalCount);
+        grantMonthly(studentId, centerCode, productId, serviceCode, SOURCE_SEODANG, billId, billingYm, totalCount);
     }
 }

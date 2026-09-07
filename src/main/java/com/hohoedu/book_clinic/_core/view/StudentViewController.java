@@ -368,10 +368,13 @@ public class StudentViewController {
      * 출석체크 홈. 기기 키가 없으면 입실/퇴실 대신 등록 안내를 보여준다 — 쿠키가 HttpOnly라
      * 화면 JS가 직접 못 읽으므로 서버가 판단해서 내려준다.
      *
-     * 입실: QR 스캔 → /attendance/enter로 POST — 입실 처리 + 오늘 추천받은 책만 보여주는
+     * 입실: QR 스캔 → /attendance/enter로 POST — 입실 처리 + 읽던 책(PENDING)만 보여주는
      *      확인 화면으로 간다("닫기"를 누르면 이 출석체크 홈으로 복귀, 문제풀이로는 못 넘어간다 —
      *      출석체크 키오스크는 여러 학생이 돌려쓰는 공용 기기라 여기서 실제 학습까지 이어지면 안 된다).
      *      실제 학습(문제 풀기)은 학생 개인 폰의 문제풀이 앱(/student/login)에서 별도로 한다.
+     * 책 추천: QR 스캔 → /attendance/recommend로 POST (2026-09-03 신규). 입실과 분리된 별도 행동이다 —
+     *      입실이 곧 추천이던 시절엔 심화 게이트를 우회할 수 있었다(enterAttendance 주석 참고).
+     *      확인 화면에서도 같은 버튼을 눌러 QR 재스캔 없이 바로 추천받을 수 있다.
      * 퇴실: QR 스캔 → /student/exit 호출(로그인 컨텍스트 없이 studentId 생략) → 완료 메시지 후 이 화면으로 복귀
      */
     @GetMapping({ "/attendance", "/attendance/" })
@@ -380,14 +383,15 @@ public class StudentViewController {
     }
 
     /**
-     * QR 스캔으로 찾은 학생의 입실을 처리하고, 오늘 읽을 책을 확인시켜주는 화면.
+     * QR 스캔으로 찾은 학생의 입실을 처리하고, 지금 읽고 있는 책을 확인시켜주는 화면.
      *
-     * recommendBook을 부른다(getHomeState 아님, 2026-08-28) — 출석체크 키오스크에는 "책 추천받기"
-     * 버튼 플로우가 없어서, 입실 = 책이 무조건 나와야 한다. PENDING(읽던 책)이 있으면 그 책 그대로,
-     * 없으면(직전 책이 DONE 등) 다음 책을 그 자리에서 추천·대여 확정한다. enterSession은
-     * recommendBook 양쪽 분기에서 처리된다. getHomeState가 DONE 상태에서 새 추천을 안 하는 건
-     * 개인 폰 앱 홈(다 읽고 홈으로만 나가도 다음 책이 자동 대여되던 문제, 2026-07-29 분리) 사정이라
-     * 키오스크에는 해당하지 않는다.
+     * 2026-09-03: 입실에서 "다음 책 추천"을 떼어냈다. 예전엔 여기서 recommendBook을 불러
+     * 입실=책이 무조건 나오게 했는데(키오스크에 추천 버튼이 없었기 때문), 이 경로는 심화 게이트를
+     * 적용하지 않는 오버로드라 **심화 문제를 안 푼 학생도 입실만 하면 다음 책이 추천·대여까지
+     * 확정돼버렸다**. 이제 입실은 getHomeState로 입실 처리 + 읽던 책(PENDING) 확인까지만 하고,
+     * 다음 책은 이 화면과 출석체크 홈의 "책 추천" 버튼(POST /attendance/recommend)에서만 받는다.
+     * 생애 첫 로그인(추천 이력이 아예 없음)만 getHomeState가 예전처럼 그 자리에서 추천해준다 —
+     * 직전 완독 책이 없으니 게이트에 걸릴 것도 없다.
      */
     @PostMapping("/attendance/enter")
     public String enterAttendance(@RequestParam("appId") String appId, Model model) {
@@ -396,6 +400,9 @@ public class StudentViewController {
             model.addAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
             return "/student/book-confirm";
         }
+        // 이 화면에서 곧바로 "책 추천받기"를 누를 수 있게 appId를 넘긴다 — QR을 다시 스캔하지 않아도 된다
+        model.addAttribute("appId", appId);
+        model.addAttribute("studentName", student.getStudentName());
 
         // 예약 회차 시간대가 아니거나(ReservationService.markAttended), 예약이 아예 없거나, 이용권이
         // 소진된 경우 등은 입실 자체가 막혀야 하는 정상적인 업무 상황이지 시스템 오류가 아니다.
@@ -404,10 +411,40 @@ public class StudentViewController {
         // 이 화면은 폼 제출로 들어오는 페이지 이동이라 fetch 에러 처리로 잡히지 않는다) — 여기서
         // 잡아서 학생을 못 찾은 경우와 같은 안내 카드(book-confirm.html의 error-card)로 보여준다.
         try {
-            ClinicRespDTO.RecommendBookDTO book = clinicService.recommendBook(student.getStudentId());
-            model.addAttribute("studentName", student.getStudentName());
-            model.addAttribute("book", book);
-        } catch (Exception400 e) {
+            ClinicRespDTO.BookStatusRespDTO state = clinicService.getHomeState(student.getStudentId());
+            // AWAITING_NEXT일 때 state.getBook()은 "직전에 다 읽은 책"이라 오늘 읽을 책이 아니다 —
+            // 읽는 중인 책(READING)일 때만 화면에 넘기고, 그 외에는 책 없이 추천 버튼만 보여준다.
+            if ("READING".equals(state.getState())) {
+                model.addAttribute("book", state.getBook());
+            }
+        } catch (Exception400 | Exception404 e) {
+            model.addAttribute("error", e.getMessage());
+        }
+        return "/student/book-confirm";
+    }
+
+    /**
+     * 출석체크 기기에서 다음 책을 추천받는다 (2026-09-03 신규 — 입실에서 추천을 떼어내면서 생긴 자리).
+     *
+     * 개인 폰 앱의 "책 추천받기"(POST /clinic/recommend)와 **같은 규칙**으로 심화 게이트를 적용한다
+     * (enforceAdvancedGate=true) — 직전에 완독한 책의 심화(qlevel=02)를 오늘 안에 한 번도 풀지
+     * 않았으면 다음 책이 나오지 않는다. 이 게이트를 우회할 수 있는 경로를 하나도 남기지 않는 것이
+     * 이번 변경의 핵심이다.
+     *
+     * 추천 한도(회차당 2권) 초과나 후보 소진도 정상적인 업무 상황이므로 예외를 잡아 안내 카드로 보여준다.
+     */
+    @PostMapping("/attendance/recommend")
+    public String recommendAttendance(@RequestParam("appId") String appId, Model model) {
+        Student student = studentRepository.findByAppId(appId);
+        if (student == null) {
+            model.addAttribute("error", "일치하는 학생 정보를 찾을 수 없어요. QR을 다시 스캔해주세요.");
+            return "/student/book-confirm";
+        }
+        model.addAttribute("appId", appId);
+        model.addAttribute("studentName", student.getStudentName());
+        try {
+            model.addAttribute("book", clinicService.recommendBook(student.getStudentId(), true));
+        } catch (Exception400 | Exception404 e) {
             model.addAttribute("error", e.getMessage());
         }
         return "/student/book-confirm";

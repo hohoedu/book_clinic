@@ -3,6 +3,7 @@ package com.hohoedu.book_clinic.monitor._dto;
 import java.util.List;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -15,6 +16,19 @@ public class MonitorReqDTO {
     public static class ExitReqDTO {
         @NotBlank(message = "학생 ID는 필수입니다.")
         private String studentId;
+    }
+
+    /**
+     * 책 홀딩(자물쇠, 2026-09-03) — 다 못 읽은 책에 "몇 쪽까지 읽었는지"를 기록한다.
+     * holdPage가 null이면 기록 해제(자물쇠 끄기)다.
+     */
+    @Data
+    public static class HoldReqDTO {
+        @NotBlank(message = "학생 ID는 필수입니다.")
+        private String studentId;
+        /** 읽은 페이지. null이면 해제 */
+        @Positive(message = "읽은 페이지는 1쪽 이상이어야 합니다.")
+        private Integer holdPage;
     }
 
     /** 독서일지 저장 요청 — 세션 1건당 upsert (erp_bookstore_diary + erp_bookstore_attitude) */

@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.clinic._dto;
 
 import java.util.List;
+import java.util.Map;
 
 import lombok.Data;
 
@@ -32,6 +33,8 @@ public class ClinicRespDTO {
         private String curriculumName;   // 연계교과 (detail C)
         private String recommendOrgName; // 추천기관 (detail R)
         private String awardName;        // 수상명 (detail A)
+        /** 홀딩(2026-09-03) — 지난번에 몇 쪽까지 읽었는지. 선생님이 자물쇠로 입력한 값이 있을 때만 채워진다 */
+        private Integer holdPage;
     }
 
     /** 직전 추천 도서의 분류/장르 (연속 추천 시 중복 배제 판정 기준) */
@@ -141,6 +144,23 @@ public class ClinicRespDTO {
         private String type;               // book / card
         private Integer defaultGrade;      // 탭 초기 선택 (학생의 현재 클리닉 학년, 1~3 밖이면 null)
         private List<BookcaseItemDTO> items;
+    }
+
+    /**
+     * "틀린 문제 다시 풀기" 진입 시 채점 방식 (2026-09-03).
+     *
+     * 처음 다시 풀 때는 지금까지처럼 스스로 풀어서 제출하고, **두 번째부터는** 보기를 고르는 즉시
+     * 정답/오답을 보여준다(키독 방식). 두 번째쯤 되면 답을 몰라서 못 맞히는 상태라, 계속 혼자
+     * 붙들고 있게 하는 것보다 바로 알려주고 넘어가는 편이 낫다는 판단이다.
+     */
+    @Data
+    public static class WrongRetryModeDTO {
+        /** 지금까지 "틀린 문제만 다시 풀기"를 제출한 회차 수. 0이면 이번이 첫 번째다 */
+        private int priorRounds;
+        /** true면 보기 선택 즉시 정오답을 보여준다 (= priorRounds >= 1) */
+        private boolean instant;
+        /** 즉시 채점일 때만 채워지는 문항별 정답 (qnum → 보기 번호). 그 외에는 비어 있다 */
+        private Map<String, String> answers;
     }
 
     /** 기본 문제풀이(qlevel=01) 채점 결과 */

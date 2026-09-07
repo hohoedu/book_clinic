@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.payment;
 
+import java.time.YearMonth;
 import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -76,6 +77,9 @@ public class PaymentService {
 
         String centerCode = clinicRepository.findCenterCode(reqDTO.getStudentId());
         String billingYm = passService.nextBillingYm(reqDTO.getStudentId(), product.getServiceCode());
+        // 이 경로(수동 일시불)는 자동결제 전환 이전부터 있던 달력 월 상품이라 주기도 달력 월이다.
+        // 자동결제 건은 SubscriptionService가 결제일 기준 주기를 직접 넣는다(2026-09-07).
+        YearMonth cycleMonth = YearMonth.parse(billingYm, DateTimeFormatter.ofPattern("yyyyMM"));
 
         // 중복 결제 방지(2026-08-07) — 다른 기기에서 같은 학생·서비스·청구월로 이미 결제창을
         // 열어뒀거나(READY) 결제를 끝냈으면(PAID), 새로 만들지 않고 그 주문을 그대로 재사용한다.
@@ -97,7 +101,7 @@ public class PaymentService {
         try {
             paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
                     product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
-                    product.getPrice());
+                    cycleMonth.atDay(1), cycleMonth.atEndOfMonth(), null, product.getPrice());
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // 위 체크와 이 INSERT 사이의 아주 좁은 순간에 다른 기기가 먼저 같은 조합으로 INSERT
             // 했을 때만 여기로 온다 — UX_payment_active_billing 유니크 인덱스가 막아준 것이다.
@@ -160,9 +164,10 @@ public class PaymentService {
                 String orderNo = newOrderNo();
                 String billingYm = billingYmByStudent.get(studentId);
                 billingYms.add(billingYm);
+                YearMonth cycleMonth = YearMonth.parse(billingYm, DateTimeFormatter.ofPattern("yyyyMM"));
                 paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
                         product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
-                        product.getPrice());
+                        cycleMonth.atDay(1), cycleMonth.atEndOfMonth(), null, product.getPrice());
                 totalAmount += product.getPrice();
             }
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
@@ -832,7 +837,7 @@ public class PaymentService {
      * 고객센터 문의 대응에 낫다. 접두어 + KST 시각 + 난수 6자리로 22자다.
      * 난수는 같은 초에 두 건이 들어와도 UNIQUE 제약에 걸리지 않게 하려는 것이다.
      */
-    private String newOrderNo() {
+    static String newOrderNo() {
         String time = LocalDateTime.now(KstClock.ZONE).format(ORDER_NO_TIME);
         int random = ThreadLocalRandom.current().nextInt(100000, 1000000);
         return "BC" + time + random;
@@ -842,7 +847,7 @@ public class PaymentService {
      * 앱이 보낸 이니시스 주소인지 검증. 이걸 빼면 공격자가 자기 서버를 authUrl로 넣고
      * 위조된 성공 응답으로 이용권을 받아갈 수 있다.
      */
-    private void assertInicisUrl(String url) {
+    static void assertInicisUrl(String url) {
         try {
             URI uri = URI.create(url);
             String host = uri.getHost();
@@ -870,7 +875,7 @@ public class PaymentService {
     }
 
     /** 카드번호는 원본을 절대 저장하지 않는다. 앞 6자리 + 뒤 4자리만 남긴다 */
-    private String maskCardNo(String cardNo) {
+    static String maskCardNo(String cardNo) {
         if (cardNo == null || cardNo.length() < 10) {
             return cardNo;
         }
@@ -882,7 +887,7 @@ public class PaymentService {
      * 원문 보존과 개인정보 보호가 부딪히는 지점인데, 분쟁에 필요한 건 응답 구조와 결과 코드지
      * 카드번호 전체가 아니라서 마스킹 쪽을 택한다.
      */
-    private String mask(String raw) {
+    static String mask(String raw) {
         if (raw == null) {
             return null;
         }

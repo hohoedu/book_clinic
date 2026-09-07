@@ -59,11 +59,16 @@ public interface PassRepository {
     int sumRemain(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode);
 
     /**
-     * 유효기간이 [monthStart, monthEnd]와 겹치는 살아있는 이용권의 total_count 합 —
-     * 그 달 예약 상한 검사용(2026-08-28). 그 달 이용권이 없으면 0.
+     * 그 날짜를 덮고 있는 살아있는 이용권들의 기간 합집합과 total_count 합 — 예약 상한 검사용.
+     *
+     * 2026-09-07 자동결제 전환 전에는 달력 월과 겹치는 이용권을 합쳤는데(sumMonthlyTotalCount),
+     * 주기가 결제일 기준 1개월이 되면서 한 달에 두 주기가 걸치게 됐다. 그대로 두면 그 달 상한이
+     * 두 주기의 합이 되어 최대 두 배로 부풀어 오른다. 그래서 "그 달"이 아니라 "그 날짜가 속한
+     * 주기"를 기준으로 바꾼다. 덮는 이용권이 없으면 capacity=0, 기간은 null이다.
      */
-    int sumMonthlyTotalCount(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode,
-                             @Param("monthStart") LocalDate monthStart, @Param("monthEnd") LocalDate monthEnd);
+    PassRespDTO.CycleDTO findCycleOn(@Param("studentId") String studentId,
+                                     @Param("serviceCode") String serviceCode,
+                                     @Param("date") LocalDate date);
 
     /** 결제/청구 건으로 발급된 이용권 찾기 (환불 시 회수 대상) */
     PassRespDTO.PassDTO findByRef(@Param("source") String source, @Param("refNo") String refNo);

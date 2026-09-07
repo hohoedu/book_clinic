@@ -74,6 +74,8 @@
             <!-- 제목·저자는 카드 전체 너비를 쓴다 — 정보/표지 2단(.book-content) 바깥 -->
             <div class="book-heading">
               <div class="book-title" id="bookTitle">-</div>
+              <!-- 지난번에 다 못 읽고 넘어간 책이면 어디까지 읽었는지 알려준다(2026-09-03) -->
+              <p class="book-hold-note" id="bookHoldNote" hidden></p>
               <p class="book-author" id="bookAuthor">-</p>
             </div>
 
@@ -125,6 +127,10 @@
                 <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 다시 풀기</button>
               <button type="button" class="solve-btn solve-btn--advanced" id="completionAdvancedBtn" hidden>
                 <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 문제 풀기</button>
+              <!-- 여권 쓰러 가기(2026-09-03) — 결과 화면과 같은 버튼이고 동작은 로그아웃이다.
+                   심화까지 끝난 책의 마지막 단계에서만 나온다. -->
+              <button type="button" class="solve-btn solve-btn--advanced" id="completionPassportBtn" hidden>
+                <i class="fa-solid fa-passport" aria-hidden="true"></i>여권 쓰러 가기</button>
             </div>
           </article>
         </div>
@@ -235,19 +241,7 @@
         </div>
       </div>
 
-      <!-- "재도전" 클릭 시 문제 유형 선택 모달 — 심화 문항이 있는 책에서만 뜬다(없으면 바로 기본 재도전). -->
-      <div class="modal-overlay" id="retryTypeModal" hidden>
-        <div class="modal-box">
-          <button type="button" class="modal-close" id="retryTypeCancelBtn" aria-label="닫기">
-            <i class="fa-solid fa-xmark" aria-hidden="true"></i>
-          </button>
-          <p class="modal-msg">어떤 문제 유형을 다시 풀까요?</p>
-          <div class="modal-actions">
-            <button type="button" class="modal-btn modal-btn-no" id="retryTypeBasicBtn">기본 문제</button>
-            <button type="button" class="modal-btn modal-btn-yes" id="retryTypeAdvancedBtn">심화 문제</button>
-          </div>
-        </div>
-      </div>
+
 
       <!-- 나의 책장 / 나의 카드 컬렉션 — "더보기" 클릭 시 student-bookcase.html 을 iframe 으로 띄운다.
            type=book / type=card 로 같은 화면에 데이터만 바꿔 끼운다. 닫기는 iframe 안에서

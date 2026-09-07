@@ -307,6 +307,18 @@
   overflow: hidden;
 }
 
+/* 이어 읽는 책 안내(2026-09-03) — 지난번에 몇 쪽까지 읽었는지 알려주는 한 줄 */
+.book-hold-note {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #b9762a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .book-author {
   margin: 8px 0 0;
   color: #a2a2a2;

@@ -137,3 +137,68 @@
   height: 56px;
   font-size: 18px;
 }
+
+/* ── 입실 완료 + 읽는 책 없음 카드(2026-09-03) ──────────────────────────────
+   입실과 책 추천이 분리되면서 생긴 화면. 오류 카드와 같은 흰 카드를 쓰되 아이콘 색만
+   초록(정상 처리)으로 바꾸고, 주 버튼(책 추천받기) + 보조 버튼(닫기) 두 개를 세로로 쌓는다. */
+.empty-card i {
+  font-size: 48px;
+  color: var(--green, #00a984);
+  margin-bottom: 16px;
+  display: block;
+}
+
+.empty-card p {
+  font-size: 20px;
+  font-weight: 800;
+  color: #252525;
+  margin-bottom: 6px;
+}
+
+.empty-card .empty-sub {
+  font-size: 15px;
+  font-weight: 600;
+  color: #6b6b6b;
+  margin-bottom: 28px;
+}
+
+.empty-card form {
+  margin-bottom: 12px;
+}
+
+.empty-card .confirm-close-btn {
+  height: 56px;
+  font-size: 18px;
+  gap: 10px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* 주 버튼 — 추천은 초록(입실 버튼과 같은 계열)으로 두어 빨간 "닫기"와 역할이 구분되게 한다 */
+.confirm-recommend-btn {
+  background: #00a984;
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, .28),
+    inset 0 -5px 0 #007a5f,
+    0 6px 14px rgba(0, 0, 0, .18);
+}
+
+.confirm-recommend-btn:active {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -2px 0 #007a5f,
+    0 3px 8px rgba(0, 0, 0, .14);
+}
+
+/* 보조 버튼 — 책을 안 받고 그냥 나갈 때. 흰 바탕에 테두리만 */
+.confirm-ghost-btn {
+  background: #fff;
+  color: #6b6b6b;
+  box-shadow: inset 0 0 0 2px #dcdcdc;
+}
+
+.confirm-ghost-btn:active {
+  transform: translateY(2px);
+  box-shadow: inset 0 0 0 2px #cfcfcf;
+}

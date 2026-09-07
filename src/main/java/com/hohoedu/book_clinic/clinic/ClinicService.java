@@ -160,6 +160,10 @@ public class ClinicService {
             return homeState("READING", pending);
         }
 
+        // 지난번에 다 못 읽고 넘어간 책이 있으면 새 책보다 먼저 그 책을 되살린다(2026-09-03)
+        ClinicRespDTO.RecommendBookDTO resumed = resumeHeldBook(studentId);
+        if (resumed != null) return homeState("READING", resumed);
+
         ClinicRespDTO.RecommendBookDTO lastDone = clinicRepository.findLastDoneBookCard(studentId);
         if (lastDone == null) {
             // 생애 첫 로그인 — 보여줄 직전 책이 없으니 예전처럼 바로 추천해서 내려준다
@@ -184,6 +188,7 @@ public class ClinicService {
      *   2) 없지만 가장 최근에 끝낸(DONE) 책이 있으면 그 책 — COMPLETED (완료 화면으로 안내)
      *   3) 추천 이력이 아예 없으면(정상 흐름에선 거의 없음) 안내 메시지 — NOT_ENTERED
      */
+    @Transactional
     public ClinicRespDTO.BookStatusRespDTO getQuizHomeState(String studentId) {
         if (monitorService.hasExitedToday(studentId)) {
             return homeState("EXITED", null);
@@ -195,6 +200,11 @@ public class ClinicService {
             ensureActiveLoan(studentId, pending.getItemId());
             return homeState("READING", pending);
         }
+        // 출석 기기를 거치지 않고 곧바로 문제풀이 앱에 들어온 경우에도 이어 읽을 책이 보여야 한다
+        // (2026-09-03). 홀딩이 남아 있는데 여기서 그냥 지나치면 완료 화면이 떠서 흐름이 어긋난다.
+        ClinicRespDTO.RecommendBookDTO resumed = resumeHeldBook(studentId);
+        if (resumed != null) return homeState("READING", resumed);
+
         ClinicRespDTO.RecommendBookDTO lastDone = clinicRepository.findLastDoneBookCard(studentId);
         if (lastDone != null) {
             return homeState("COMPLETED", lastDone);
@@ -223,6 +233,39 @@ public class ClinicService {
         // 올라가 완료 화면으로 바뀐다.
         ClinicRespDTO.RecommendLogStatusDTO logStatus = clinicRepository.findRecommendLogStatus(studentId, contentId);
         return (logStatus != null && isPassGrade(logStatus.getGrade())) ? "COMPLETION" : "RETRY";
+    }
+
+    /**
+     * "틀린 문제 다시 풀기" 채점 방식 판정 (2026-09-03) — 문제풀이 화면 진입 시 호출한다.
+     *
+     * 처음 다시 풀 때는 지금까지처럼 스스로 풀어 제출하고, **두 번째부터는** 보기를 고르는 즉시
+     * 정답/오답을 보여준다. 판정 기준은 그 책+난이도에서 WRONG_ONLY로 제출한 회차 수다
+     * (quiz_answer_log.submit_mode, patch-260903-quiz-mode.sql).
+     *
+     * 정답(itempool.ans)은 **즉시 채점일 때만** 함께 내려준다. 평소 /question/search가 정답을 빼고
+     * 내려주는 것과 같은 이유로(2026-08-20, devtools로 정답을 훔쳐보는 것을 막는다) 필요한 순간에만
+     * 연다 — 이 모드는 애초에 답을 알려주는 게 목적이라 노출이 곧 기능이다. 제출 시 채점은 이 값과
+     * 무관하게 서버가 다시 한다(submitQuiz).
+     */
+    public ClinicRespDTO.WrongRetryModeDTO getWrongRetryMode(String studentId, Integer contentId, String qlevel) {
+        String resolvedQlevel = "02".equals(qlevel) ? "02" : "01";
+        ClinicRespDTO.WrongRetryModeDTO resp = new ClinicRespDTO.WrongRetryModeDTO();
+        resp.setAnswers(Map.of());
+
+        ClinicRespDTO.RecommendLogStatusDTO logStatus = clinicRepository.findRecommendLogStatus(studentId, contentId);
+        if (logStatus == null) return resp;   // 아직 이 책에 도전한 적이 없다 — 첫 번째로 취급
+
+        int priorRounds = clinicRepository.countWrongOnlyRounds(logStatus.getRecommendId(), resolvedQlevel);
+        resp.setPriorRounds(priorRounds);
+        resp.setInstant(priorRounds >= 1);
+        if (!resp.isInstant()) return resp;
+
+        Map<String, String> answers = new java.util.HashMap<>();
+        for (QuestionRespDTO.QuestionDTO q : questionRepository.searchQuestions(contentId, resolvedQlevel, null, "S")) {
+            if (q.getQnum() != null && q.getAns() != null) answers.put(q.getQnum(), q.getAns());
+        }
+        resp.setAnswers(answers);
+        return resp;
     }
 
     /**
@@ -391,6 +434,15 @@ public class ClinicService {
             return existing;
         }
 
+        // 이어 읽기(2026-09-03) — 지난번에 다 못 읽고 넘어간 책이 있으면 새 책 대신 그 책을 돌려준다.
+        // 심화 게이트보다 앞이다: 게이트는 "직전에 완독(DONE)한 책"을 따지는 규칙이고, 홀딩은
+        // 완독하지 않은 책이라 애초에 게이트가 겨냥하는 상황이 아니다.
+        ClinicRespDTO.RecommendBookDTO resumed = resumeHeldBook(studentId);
+        if (resumed != null) {
+            monitorService.enterSession(studentId);
+            return resumed;
+        }
+
         // 심화 게이트(2026-08-31) — 개인 폰 앱 "책 추천받기"에서만. 직전 완독 책의 심화를 오늘 안 풀었으면 막는다.
         if (enforceAdvancedGate && advancedGateBlocks(studentId)) {
             throw new Exception400("심화 문제를 먼저 풀어야 다음 책을 받을 수 있어요.");
@@ -414,6 +466,16 @@ public class ClinicService {
         //   2) 직원 퇴실 처리 (MonitorController.exit → MonitorService.exitSession)
         //   3) 새 책 추천 (여기)
         returnActiveLoanSafely(studentId);
+
+        // 다음 책을 받는 순간 살아있던 홀딩은 폐기한다(논리삭제 hold_use='N', 2026-09-03).
+        // 여기까지 왔다는 건 이어 읽기가 불가능했다는 뜻이다(재고 0). 2주 뒤에 60쪽부터 이어
+        // 읽으라고 해봐야 앞부분이 기억나지 않으니, 최근 책을 이어서 완독하게 두고 폐기된 책은
+        // 나중에 새로 추천받아 처음부터 읽게 한다 — 그래서 유효 홀딩은 학생당 항상 최대 1건이다.
+        // (폐기된 홀딩은 pickNextItem의 재추천 방지 조건에서 제외되어 다시 후보가 된다.)
+        int discarded = clinicRepository.discardHolds(studentId);
+        if (discarded > 0) {
+            log.info("학생 {}이(가) 다음 책을 받아 이전 홀딩을 폐기했습니다: {}건", studentId, discarded);
+        }
 
         String centerCode = clinicRepository.findCenterCode(studentId);
         if (centerCode == null) throw new Exception404("학생의 소속 센터를 찾을 수 없습니다: " + studentId);
@@ -621,7 +683,11 @@ public class ClinicService {
         // 풀이 이력 적재 — 이번에 실제로 제출된 문항만 남긴다(재제출에서 다시 내지 않은 문항까지
         // 미제출로 기록하면 풀이 이력이 오염된다, 2026-08-25)
         if (!answerLogs.isEmpty()) {
-            clinicRepository.insertQuizAnswerLogs(logStatus.getRecommendId(), studentId, contentId, resolvedQlevel, answerLogs);
+            // 제출 모드를 함께 남긴다(2026-09-03) — "틀린 문제 다시 풀기"를 몇 번째로 하는지 세어
+            // 2회차부터 즉시 채점으로 전환하는 판정(getWrongRetryMode)이 이 값을 쓴다.
+            String submitMode = wrongOnly ? "WRONG_ONLY" : (firstAttempt ? "FIRST" : "RETRY");
+            clinicRepository.insertQuizAnswerLogs(logStatus.getRecommendId(), studentId, contentId,
+                    resolvedQlevel, submitMode, answerLogs);
         }
 
         // 심화문제는 완독/등급/레벨 개념이 없다 — 이력 기록/채점 결과에 더해 뱃지(심화완료/심화왕)만 판정.
@@ -812,16 +878,41 @@ public class ClinicService {
      * item(다른 학생이 읽는 중일 수 있음)을 대신 잡으면 recommend_log.item_id와 실제 대여가
      * 어긋난다. 그 item의 재고가 없으면(분실 등) 대여 이력 없이도 읽던 책은 그대로 보여준다.
      */
-    private void ensureActiveLoan(String studentId, Integer itemId) {
-        if (bookRepository.findActiveLoanByStudent(studentId) != null) return;
+    /** @return 대여를 확보했으면 true, 재고가 없어 실패했으면 false(홀딩 이어 읽기 판정에 쓴다, 2026-09-03) */
+    private boolean ensureActiveLoan(String studentId, Integer itemId) {
+        if (bookRepository.findActiveLoanByStudent(studentId) != null) return true;
 
         Integer reservedItemId = bookRepository.reserveItemById(itemId);
         if (reservedItemId == null) {
             log.warn("재입실 재대여 실패 — 대여 가능한 재고 없음: studentId={}, itemId={}", studentId, itemId);
-            return;
+            return false;
         }
         bookRepository.insertItemLoan(reservedItemId, studentId);
         log.info("학생 {}의 읽던 책을 재입실 시점에 재대여했습니다: itemId={}", studentId, reservedItemId);
+        return true;
+    }
+
+    /**
+     * 이어 읽기(2026-09-03) — 지난번에 다 못 읽고 넘어간 책(status='HOLD')을 다시 "읽는 중"으로
+     * 되살린다. 요일·회차와 무관하게, 그 학생이 언제 오든 이 책이 새 책보다 먼저다.
+     *
+     * 되살릴 홀딩이 없거나 그 책의 재고가 하나도 없으면 null을 돌려준다 — 그때는 호출한 쪽이
+     * 다음 책으로 넘어간다. 대여는 입실~퇴실 사이에만 존재하므로(퇴실 시 반납) 며칠이 지나든
+     * 재고는 돌아온다. 재고가 0인 경우는 사실상 하나뿐이다: 1권짜리 책을 같은 시간대의 다른
+     * 학생이 먼저 배정받은 순간. 그때는 붙잡아두지 않고 다음 책을 주기로 했다(사용자 확정).
+     */
+    private ClinicRespDTO.RecommendBookDTO resumeHeldBook(String studentId) {
+        ClinicRespDTO.RecommendBookDTO held = clinicRepository.findHeldRecommendBookCard(studentId);
+        if (held == null) return null;
+        if (!ensureActiveLoan(studentId, held.getItemId())) {
+            log.info("학생 {}의 이어 읽을 책 재고가 없어 다음 책으로 넘어갑니다: contentId={}, itemId={}",
+                    studentId, held.getContentId(), held.getItemId());
+            return null;
+        }
+        clinicRepository.resumeHeldRecommend(studentId);
+        log.info("학생 {}의 홀딩 도서를 이어 읽기로 되살렸습니다: contentId={}, 읽은 페이지={}",
+                studentId, held.getContentId(), held.getHoldPage());
+        return held;
     }
 
     /** 현재 대여 중인 도서를 반납 처리한다(없으면 조용히 넘어감) — 다음 책 추천 시점에 호출된다 */

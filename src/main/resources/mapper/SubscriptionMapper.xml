@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  자동결제(구독) 쿼리 — 2026-09-07 전환.
+
+  시각은 전부 DATEADD(HOUR, 9, GETUTCDATE())로 KST를 만든다(GETDATE()는 서버 타임존을 타서 쓰지 않는다).
+
+  [bill_key] 조회 컬럼 목록에 bill_key가 들어 있는 것은 서버가 승인 요청에 써야 하기 때문이다.
+  이 값이 화면이나 로그로 새어나가지 않게 하는 책임은 서비스/DTO 쪽에 있다.
+-->
+<mapper namespace="com.hohoedu.book_clinic.payment.SubscriptionRepository">
+
+    <sql id="subColumns">
+        subscription_id, reg_order_no, owner_student_id, center_code, bill_key, card_name, card_no,
+        status, anchor_day, next_billing_on, billing_cycle_from, last_paid_at, fail_count, last_fail_reason
+    </sql>
+
+    <!-- 카드등록 시작 — 빌키/앵커/청구일은 아직 없다(등록 확정 때 채운다) -->
+    <insert id="insertPending" useGeneratedKeys="true" keyProperty="subscriptionId" keyColumn="subscription_id"
+            parameterType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        INSERT INTO erp_bookstore_subscription
+            (reg_order_no, owner_student_id, center_code, status, card_reg_at, created_at)
+        VALUES
+            (#{regOrderNo}, #{ownerStudentId}, #{centerCode}, 'PENDING',
+             DATEADD(HOUR, 9, GETUTCDATE()), DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <insert id="insertMember">
+        INSERT INTO erp_bookstore_subscription_member
+            (subscription_id, student_id, product_id, service_code, status, joined_at)
+        VALUES
+            (#{subscriptionId}, #{studentId}, #{productId}, #{serviceCode}, 'PENDING',
+             DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <select id="findByRegOrderNo" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        SELECT <include refid="subColumns"/>
+        FROM erp_bookstore_subscription
+        WHERE reg_order_no = #{regOrderNo}
+    </select>
+
+    <select id="findById" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        SELECT <include refid="subColumns"/>
+        FROM erp_bookstore_subscription
+        WHERE subscription_id = #{subscriptionId}
+    </select>
+
+    <!--
+      살아있는 구독 = ACTIVE 또는 PAUSED. PENDING(등록 미완료)과 CANCELED(해지)는 제외한다.
+      PAUSED를 포함하는 이유는 학부모에게 "결제가 실패해서 멈춰 있다"를 보여줘야 하기 때문이다 —
+      숨기면 왜 예약이 안 되는지 알 길이 없다.
+    -->
+    <select id="findLiveByOwner" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        SELECT TOP 1 <include refid="subColumns"/>
+        FROM erp_bookstore_subscription
+        WHERE owner_student_id = #{studentId}
+          AND status IN ('ACTIVE', 'PAUSED')
+        ORDER BY subscription_id DESC
+    </select>
+
+    <!-- 형제 중 누구로 로그인해도 같은 구독이 보여야 한다 — 대표가 아닌 멤버로도 찾는다 -->
+    <select id="findLiveByMemberStudent" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        SELECT TOP 1 s.subscription_id, s.reg_order_no, s.owner_student_id, s.center_code, s.bill_key,
+               s.card_name, s.card_no, s.status, s.anchor_day, s.next_billing_on, s.billing_cycle_from,
+               s.last_paid_at, s.fail_count, s.last_fail_reason
+        FROM erp_bookstore_subscription s
+        JOIN erp_bookstore_subscription_member m ON m.subscription_id = s.subscription_id
+        WHERE m.student_id = #{studentId}
+          AND m.service_code = #{serviceCode}
+          AND m.status = 'ACTIVE'
+          AND s.status IN ('ACTIVE', 'PAUSED')
+        ORDER BY s.subscription_id DESC
+    </select>
+
+    <!--
+      멤버 + 상품. 가격/횟수는 스냅샷이 아니라 상품 마스터의 현재 값이다 — 본사가 가격을 바꾸면
+      다음 청구부터 바뀐 금액이 나가야 하기 때문이다. "그때 얼마였나"는 payment 행이 답한다.
+      학생명은 결제 화면 표시용이라 없으면 없는 대로 둔다(LEFT JOIN).
+    -->
+    <select id="findMembers" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$MemberDTO">
+        SELECT m.member_id, m.subscription_id, m.student_id, m.product_id, m.service_code, m.status,
+               st.student_name, st.center_code,
+               p.product_name, p.price, p.total_count
+        FROM erp_bookstore_subscription_member m
+        JOIN erp_bookstore_product p ON p.product_id = m.product_id
+        LEFT JOIN erp_student st ON st.student_id = m.student_id
+        WHERE m.subscription_id = #{subscriptionId}
+        <if test="status != null and status != ''">
+          AND m.status = #{status}
+        </if>
+        ORDER BY m.member_id
+    </select>
+
+    <!-- WHERE status='PENDING'이 재확정을 막는다(결제창에서 두 번 돌아오는 경우) -->
+    <update id="activate">
+        UPDATE erp_bookstore_subscription
+        SET bill_key           = #{billKey},
+            card_name          = #{cardName},
+            card_no            = #{cardNo},
+            anchor_day         = #{anchorDay},
+            next_billing_on    = #{nextBillingOn},
+            billing_cycle_from = #{billingCycleFrom},
+            status             = 'ACTIVE'
+        WHERE subscription_id = #{subscriptionId}
+          AND status = 'PENDING'
+    </update>
+
+    <update id="activateMembers">
+        UPDATE erp_bookstore_subscription_member
+        SET status = 'ACTIVE'
+        WHERE subscription_id = #{subscriptionId}
+          AND status = 'PENDING'
+    </update>
+
+    <!-- 시도일이 지난 것까지 함께 집는다 — 배치가 하루 못 떴다고 그날 청구가 사라지면 안 된다 -->
+    <select id="findDue" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        SELECT <include refid="subColumns"/>
+        FROM erp_bookstore_subscription
+        WHERE status = 'ACTIVE'
+          AND next_billing_on IS NOT NULL
+          AND next_billing_on &lt;= #{today}
+        ORDER BY next_billing_on, subscription_id
+    </select>
+
+    <!-- 0행 = 다른 인스턴스가 먼저 선점했다는 뜻. 이중 청구 방어선의 1차다 -->
+    <update id="claimDue">
+        UPDATE erp_bookstore_subscription
+        SET next_billing_on = #{newNextBillingOn}
+        WHERE subscription_id = #{subscriptionId}
+          AND status = 'ACTIVE'
+          AND next_billing_on = #{expectedNextBillingOn}
+    </update>
+
+    <update id="markCharged">
+        UPDATE erp_bookstore_subscription
+        SET billing_cycle_from = #{nextCycleFrom},
+            last_paid_at       = DATEADD(HOUR, 9, GETUTCDATE()),
+            fail_count         = 0,
+            last_fail_reason   = NULL
+        WHERE subscription_id = #{subscriptionId}
+    </update>
+
+    <!-- billing_cycle_from은 그대로 둔다 — 재시도로 이용 기간이 잘려나가면 안 된다 -->
+    <update id="markChargeFailed">
+        UPDATE erp_bookstore_subscription
+        SET next_billing_on  = #{retryOn},
+            fail_count       = fail_count + 1,
+            last_fail_reason = #{reason}
+        WHERE subscription_id = #{subscriptionId}
+    </update>
+
+    <update id="pause">
+        UPDATE erp_bookstore_subscription
+        SET status           = 'PAUSED',
+            last_fail_reason = #{reason}
+        WHERE subscription_id = #{subscriptionId}
+          AND status = 'ACTIVE'
+    </update>
+
+    <!-- PAUSED → ACTIVE. billing_cycle_from은 건드리지 않는다 — 못 산 주기부터 다시 청구해야 한다 -->
+    <update id="resume">
+        UPDATE erp_bookstore_subscription
+        SET status           = 'ACTIVE',
+            fail_count       = 0,
+            last_fail_reason = NULL,
+            next_billing_on  = #{nextBillingOn}
+        WHERE subscription_id = #{subscriptionId}
+          AND status = 'PAUSED'
+    </update>
+
+    <update id="cancel">
+        UPDATE erp_bookstore_subscription
+        SET status      = 'CANCELED',
+            canceled_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE subscription_id = #{subscriptionId}
+          AND status IN ('PENDING', 'ACTIVE', 'PAUSED')
+    </update>
+
+    <update id="removeMembers">
+        UPDATE erp_bookstore_subscription_member
+        SET status     = 'REMOVED',
+            removed_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE subscription_id = #{subscriptionId}
+          AND status IN ('PENDING', 'ACTIVE')
+    </update>
+
+    <update id="closeStalePending">
+        UPDATE erp_bookstore_subscription
+        SET status      = 'CANCELED',
+            canceled_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE status = 'PENDING'
+          AND card_reg_at &lt; #{cutoff}
+    </update>
+
+</mapper>

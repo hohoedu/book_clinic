@@ -175,6 +175,34 @@
     </div>
   </div>
 
+  <!-- 책 홀딩(자물쇠, 2026-09-03) — 다 못 읽은 책에 "몇 쪽까지 읽었는지"만 기록한다.
+       상태 전환(읽는 중 → 홀딩)은 퇴실 시 자동으로 일어나므로 여기서 할 일은 페이지 입력뿐이다. -->
+  <div class="modal-overlay" id="holdModal" hidden>
+    <div class="modal">
+      <div class="modal-head">
+        <h3>어디까지 읽었나요?</h3>
+        <button type="button" class="modal-close" id="holdCloseBtn"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="swap-target" id="holdTarget"></p>
+        <p class="swap-desc">
+          읽은 데까지 기록해두면 <b>이 학생이 다음에 올 때 이 책부터</b> 다시 받습니다.<br>
+          책을 묶어두는 건 아니라서, 그 사이 다른 학생은 이 책을 그대로 빌릴 수 있어요.
+        </p>
+        <div class="hold-page-row">
+          <input type="number" id="holdPageInput" min="1" max="9999" inputmode="numeric" placeholder="예: 60" />
+          <span>쪽까지</span>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <!-- 기록을 지우는 버튼. 이미 적힌 값이 있을 때만 보인다 -->
+        <button type="button" class="btn outline" id="holdClearBtn" hidden>기록 지우기</button>
+        <button type="button" class="btn outline" id="holdCancelBtn">취소</button>
+        <button type="button" class="btn primary" id="holdConfirmBtn">저장</button>
+      </div>
+    </div>
+  </div>
+
   <script th:src="@{/js/monitor/monitor-live.js}"></script>
 </body>
 

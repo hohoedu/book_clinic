@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <title>자동결제 카드 등록</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Malgun Gothic', sans-serif;
+               margin: 0; padding: 24px; background: #f7f8fa; }
+        .box { max-width: 480px; margin: 0 auto; background: #fff;
+               border-radius: 12px; padding: 24px; }
+        h2 { margin: 0 0 20px; font-size: 18px; }
+        .row { display: flex; justify-content: space-between; padding: 10px 0;
+               border-bottom: 1px solid #f0f0f0; font-size: 15px; }
+        .row span:first-child { color: #888; }
+        .total { font-size: 18px; font-weight: 600; padding-top: 16px; border-bottom: 0; }
+        button { width: 100%; margin-top: 24px; padding: 16px; font-size: 16px; font-weight: 600;
+                 border: 0; border-radius: 8px; background: #1f6feb; color: #fff; }
+        .note { margin-top: 16px; padding: 12px; background: #f1f5fb; border-radius: 8px;
+                font-size: 13px; color: #46536b; line-height: 1.6; }
+        .warn { margin-top: 12px; padding: 12px; background: #fff8e1; border-radius: 8px;
+                font-size: 13px; color: #8a6d3b; line-height: 1.5; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>자동결제 카드 등록</h2>
+    <div class="row"><span>상품</span><span th:text="${goodName}"></span></div>
+    <div class="row"><span>등록 학생</span><span th:text="${studentCount} + '명'"></span></div>
+    <div class="row total">
+        <span>매월 결제 금액</span>
+        <span th:text="${#numbers.formatInteger(monthlyAmount, 0, 'COMMA')} + '원'"></span>
+    </div>
+
+    <button type="button" onclick="document.getElementById('billreg').submit()">카드 등록하기</button>
+
+    <div class="note">
+        카드를 등록하면 오늘 첫 결제가 진행되고, 이후 매월 같은 날짜에 자동으로 결제됩니다.<br>
+        해지는 앱의 자동결제 화면에서 언제든 하실 수 있습니다.
+    </div>
+
+    <div class="warn" th:if="${testMode}">
+        테스트 상점이라 실제로 돈이 빠져나가지 않습니다.
+    </div>
+</div>
+
+<!--
+  이니시스 모바일 빌키 발급창으로 보내는 폼.
+
+  [일반 결제창과 다른 모듈이다] 요청 URL도 파라미터도 일반 모바일 결제(smart/payment)와
+  다르다. 이 단계에서는 승인이 일어나지 않으므로 금액(P_AMT)은 0이고, 실제 청구는 등록이
+  확정된 뒤 서버가 빌키로 따로 낸다.
+
+  [P_NOTI] 인증 응답에는 P_OID가 실려오지 않는다. 우리가 실어 보낸 이 값으로만 "어느 등록
+  건인지"를 되짚을 수 있으므로 반드시 채운다(일반 결제창과 같은 이유).
+
+  [매뉴얼 대조 필요] 폼 파라미터 이름과 요청 URL은 이니시스 모바일 빌키발급 매뉴얼과
+  대조해야 한다. 실 빌링 MID를 발급받는 시점에 함께 확인한다.
+-->
+<form id="billreg" method="post" th:action="${billingUrl}" accept-charset="UTF-8">
+    <input type="hidden" name="P_INI_PAYMENT" value="CARD">
+    <input type="hidden" name="P_MID" th:value="${mid}">
+    <input type="hidden" name="P_OID" th:value="${oid}">
+    <input type="hidden" name="P_AMT" value="0">
+    <input type="hidden" name="P_GOODS" th:value="${goodName}">
+    <input type="hidden" name="P_UNAME" th:value="${buyerName}">
+    <input type="hidden" name="P_MOBILE" value="01000000000">
+    <input type="hidden" name="P_EMAIL" value="test@hohoedu.com">
+    <input type="hidden" name="P_NEXT_URL" th:value="${returnUrl}">
+    <input type="hidden" name="P_NOTI" th:value="${oid}">
+    <input type="hidden" name="P_CHARSET" value="utf8">
+</form>
+
+</body>
+</html>

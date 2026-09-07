@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.payment;
 
+import java.time.LocalDate;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -39,7 +40,9 @@ public interface PaymentRepository {
                      @Param("studentId") String studentId,
                      @Param("centerCode") String centerCode, @Param("productId") int productId,
                      @Param("productName") String productName, @Param("serviceCode") String serviceCode,
-                     @Param("billingYm") String billingYm, @Param("amount") int amount);
+                     @Param("billingYm") String billingYm,
+                     @Param("cycleFrom") LocalDate cycleFrom, @Param("cycleUntil") LocalDate cycleUntil,
+                     @Param("subscriptionId") Integer subscriptionId, @Param("amount") int amount);
 
     PaymentRespDTO.PaymentDTO findByOrderNo(@Param("orderNo") String orderNo);
 

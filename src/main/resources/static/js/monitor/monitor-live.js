@@ -11,6 +11,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   connectFirestore();
   initReadingLogPanel();
   initBookSwapModal();
+  initHoldModal();
   // 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에 기대지 않고 startElapsedTicker가 브라우저에서
   // 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를 기준점으로 삼아 그 위로 초를 더하는 방식이라
   // DB/브라우저 시계 차이 문제가 없다.
@@ -450,6 +451,7 @@ function bookPages(card) {
     basicTotalCount: card.basicTotalCount,
     basicStatus: card.basicStatus,
     basicGrade: card.basicGrade,
+    holdPage: card.holdPage,
     advancedCorrectCount: card.advancedCorrectCount,
     advancedTotalCount: card.advancedTotalCount,
     badgeCount: card.badgeCount,
@@ -536,9 +538,11 @@ function renderBookRow(el, card, pages, pageIndex) {
     <div class="book-info">
       <div class="book-title">${page.bookTitle ?? "추천 도서 없음"}</div>
       <div class="book-sub">${[page.publisher, page.author].filter(Boolean).join(" | ")}</div>
+      ${page.holdPage != null ? `<div class="book-hold">${page.holdPage}쪽까지 읽음</div>` : ""}
     </div>
     <div class="book-actions">
       ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
+      ${canHoldBook(card, page) ? `<button type="button" class="book-hold-btn${page.holdPage != null ? " filled" : ""}" title="다 못 읽은 책 — 몇 쪽까지 읽었는지 기록"><i class="fa-solid fa-lock"></i></button>` : ""}
       ${canSwapBook(card, page) ? `<button type="button" class="book-swap-btn" title="책이 없거나 훼손됨 — 다른 책으로 교체"><i class="fa-solid fa-rotate"></i></button>` : ""}
     </div>
   `;
@@ -548,6 +552,9 @@ function renderBookRow(el, card, pages, pageIndex) {
   }
   const swapBtn = bookRow.querySelector(".book-swap-btn");
   if (swapBtn) swapBtn.addEventListener("click", () => openBookSwapModal(card, page));
+
+  const holdBtn = bookRow.querySelector(".book-hold-btn");
+  if (holdBtn) holdBtn.addEventListener("click", () => openHoldModal(card, page));
 
   const dotsRow = el.querySelector(".book-dots-row");
   dotsRow.innerHTML = pages.length > 1
@@ -559,6 +566,86 @@ function renderBookRow(el, card, pages, pageIndex) {
       render();
     });
   });
+}
+
+/* ── 책 홀딩 / 자물쇠 (2026-09-03) ─────────────────────────────────────────────
+   다 못 읽고 넘어가는 책에 "몇 쪽까지 읽었는지"를 기록한다. 이 버튼이 하는 일은 그게 전부다 —
+   읽는 중(PENDING) → 홀딩(HOLD) 상태 전환은 퇴실 시점에 자물쇠 여부와 무관하게 서버가 알아서
+   한다(MonitorService.exitSession). 그래서 입실 중에 눌러도 되고 퇴실한 뒤에 눌러도 된다.
+
+   홀딩은 책을 잠그는 기능이 아니다. 실물은 퇴실 때 반납되므로 그 사이 다른 학생이 그대로 빌려간다.
+   홀딩한 학생은 요일·회차와 무관하게 다음에 언제 오든 그 책을 최우선으로 다시 받는다(이어 읽기). */
+
+let holdContext = null;   // { studentId, studentName, bookTitle, holdPage }
+
+/* 자물쇠를 걸 수 있는 책인지 — 아직 문제를 풀지 않은 책에만. 이미 푼(DONE) 책은 다 읽은 책이라
+   이어 읽을 것이 없다. 교체(canSwapBook)와 조건이 같지만, 퇴실한 학생에게도 눌러야 해서
+   sessionStatus는 보지 않는다(퇴실하고 나서 "몇 쪽까지 읽었더라" 하고 적는 경우가 실제로 많다). */
+function canHoldBook(card, page) {
+  if (card.cardStatus === "NOT_ENTERED") return false;
+  if (page.recommendId == null) return false;
+  return page.basicStatus !== "DONE";
+}
+
+function openHoldModal(card, page) {
+  holdContext = {
+    studentId: card.studentId,
+    studentName: card.studentName ?? "",
+    bookTitle: page.bookTitle ?? "이 책",
+    holdPage: page.holdPage ?? null,
+  };
+  document.getElementById("holdTarget").textContent =
+    `[${holdContext.studentName}] ${holdContext.bookTitle}`;
+  const input = document.getElementById("holdPageInput");
+  input.value = holdContext.holdPage ?? "";
+  document.getElementById("holdClearBtn").hidden = holdContext.holdPage == null;
+  document.getElementById("holdModal").hidden = false;
+  input.focus();
+}
+
+function closeHoldModal() {
+  holdContext = null;
+  document.getElementById("holdModal").hidden = true;
+}
+
+function initHoldModal() {
+  const modal = document.getElementById("holdModal");
+  if (!modal) return;
+  document.getElementById("holdCloseBtn").addEventListener("click", closeHoldModal);
+  document.getElementById("holdCancelBtn").addEventListener("click", closeHoldModal);
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeHoldModal(); });
+  document.getElementById("holdConfirmBtn").addEventListener("click", () => saveHold(false));
+  document.getElementById("holdClearBtn").addEventListener("click", () => saveHold(true));
+  // 숫자만 넣는 입력이라 엔터로 바로 저장되는 편이 빠르다
+  document.getElementById("holdPageInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveHold(false);
+  });
+}
+
+/* @param clear true면 기록 삭제(holdPage=null로 저장) */
+async function saveHold(clear) {
+  if (!holdContext) return;
+  const input = document.getElementById("holdPageInput");
+  let holdPage = null;
+  if (!clear) {
+    holdPage = Number(input.value);
+    if (!Number.isInteger(holdPage) || holdPage < 1) {
+      alert("읽은 쪽수를 1 이상의 숫자로 입력해주세요.");
+      input.focus();
+      return;
+    }
+  }
+  const confirmBtn = document.getElementById("holdConfirmBtn");
+  confirmBtn.disabled = true;
+  try {
+    await postJson("/admin/monitor/hold", { studentId: holdContext.studentId, holdPage });
+    closeHoldModal();
+    await loadLiveView();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    confirmBtn.disabled = false;
+  }
 }
 
 /* ── 추천 도서 교체 (2026-09-02) ────────────────────────────────────────────────

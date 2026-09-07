@@ -19,6 +19,7 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.pass.PassService;
+import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 import com.hohoedu.book_clinic.reservation._dto.ReservationReqDTO;
 import com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO;
 import com.hohoedu.book_clinic.student.StudentRepository;
@@ -271,11 +272,16 @@ public class ReservationService {
         Map<LocalDate, ReservationRespDTO.SlotOptionDTO> byDate = slots.stream()
                 .collect(Collectors.toMap(ReservationRespDTO.SlotOptionDTO::getServiceDate, s -> s));
 
-        // 그 달 예약 상한(2026-08-28)을 미리보기에도 반영한다. 이 배치의 여러 주차가 같은 달에
-        // 몰릴 수 있어, 달마다 상한과 (DB상 기존 예약 + 이 배치에서 앞서 OPEN으로 잡힌 주차)를
+        // 예약 상한(2026-08-28)을 미리보기에도 반영한다. 이 배치의 여러 주차가 같은 이용 주기에
+        // 몰릴 수 있어, 주기마다 상한과 (DB상 기존 예약 + 이 배치에서 앞서 OPEN으로 잡힌 주차)를
         // 누적 추적한다 — 상한을 넘기는 순간부터 남은 주차는 MONTH_FULL/NO_PASS로 표시한다.
-        Map<YearMonth, Integer> capByMonth = new HashMap<>();
-        Map<YearMonth, Integer> usedByMonth = new HashMap<>();
+        //
+        // 2026-09-07 자동결제 전환으로 단위가 달력 월에서 "결제일 기준 1개월 주기"로 바뀌었다.
+        // 주기 시작일을 캐시 키로 쓰되, 이용권이 없는 날짜는 주기 자체가 없으므로(cycleFrom=null)
+        // 그 날짜를 키로 삼는다 — 어차피 상한 0이라 서로 섞여도 판정이 달라지지 않는다.
+        Map<LocalDate, PassRespDTO.CycleDTO> cycleByKey = new HashMap<>();
+        Map<LocalDate, Integer> capByCycle = new HashMap<>();
+        Map<LocalDate, Integer> usedByCycle = new HashMap<>();
 
         List<ReservationRespDTO.BatchPreviewItemDTO> result = new ArrayList<>();
         for (LocalDate date : targetDates) {
@@ -284,11 +290,12 @@ public class ReservationService {
             item.setServiceDate(date);
             item.setSeq(seq);
 
-            YearMonth ym = YearMonth.from(date);
-            int cap = capByMonth.computeIfAbsent(ym,
-                    m -> passService.monthlyCapacity(studentId, "BOOK", m.atDay(1)));
-            int used = usedByMonth.computeIfAbsent(ym,
-                    m -> repository.countReservationsInMonth(studentId, m.atDay(1), m.atEndOfMonth()));
+            PassRespDTO.CycleDTO cycle = passService.cycleOn(studentId, "BOOK", date);
+            LocalDate cycleKey = cycle.getCycleFrom() != null ? cycle.getCycleFrom() : date;
+            cycleByKey.putIfAbsent(cycleKey, cycle);
+            int cap = capByCycle.computeIfAbsent(cycleKey, k -> cycle.getCapacity());
+            int used = usedByCycle.computeIfAbsent(cycleKey, k -> cycle.getCycleFrom() == null ? 0
+                    : repository.countReservationsInMonth(studentId, cycle.getCycleFrom(), cycle.getCycleUntil()));
 
             if (slot == null) {
                 item.setTargetStatus("NOT_OPEN");
@@ -311,7 +318,7 @@ public class ReservationService {
                     item.setTargetStatus(cap == 0 ? "NO_PASS" : "MONTH_FULL");
                 } else {
                     item.setTargetStatus("OPEN");
-                    usedByMonth.put(ym, used + 1);
+                    usedByCycle.put(cycleKey, used + 1);
                 }
             }
             result.add(item);
@@ -379,25 +386,26 @@ public class ReservationService {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 이미 종료된 회차입니다.");
         }
 
-        // 그 달 예약 상한 하드체크(2026-08-28) — "그 달에 이미 잡아둔 비취소 예약 건수 ≥ 그 달
-        // 이용권 total_count 합"이면 막는다. 슬롯의 service_date가 속한 달을 기준으로 본다(오늘이
-        // 아니라) — 4주 일괄(reserveOne을 날짜별로 반복)이 월 경계를 넘어도 각 슬롯이 자기 달의
-        // 상한을 탄다. 차감/홀드는 하지 않는다(예약 취소가 잦아 홀드 방식은 되돌림 비용이 큼) —
+        // 예약 상한 하드체크(2026-08-28) — "그 주기에 이미 잡아둔 비취소 예약 건수 ≥ 그 주기
+        // 이용권 total_count 합"이면 막는다. 슬롯의 service_date가 속한 주기를 기준으로 본다(오늘이
+        // 아니라) — 4주 일괄(reserveOne을 날짜별로 반복)이 주기 경계를 넘어도 각 슬롯이 자기 주기의
+        // 상한을 탄다. 단위가 달력 월에서 주기로 바뀐 배경은 PassService.cycleOn 참고(2026-09-07). 차감/홀드는 하지 않는다(예약 취소가 잦아 홀드 방식은 되돌림 비용이 큼) —
         // 실제 이용권 차감은 입실 시점(MonitorService.enterSession)에 그날 회차 수만큼 일어난다.
         // 그 달 이용권이 아직 없으면 상한 0 → 결제 전까지 그 달 예약 불가.
         // 위 lockStudentForReservation이 같은 학생의 동시 예약 요청을 직렬화하므로, 이 SELECT 뒤
         // INSERT까지 다른 요청이 끼어들어 상한을 넘기지 못한다.
-        int monthlyCap = passService.monthlyCapacity(student.getStudentId(), "BOOK", slot.getServiceDate());
-        int reservedInMonth = repository.countReservationsInMonth(student.getStudentId(),
-                slot.getServiceDate().withDayOfMonth(1),
-                slot.getServiceDate().withDayOfMonth(1).plusMonths(1).minusDays(1));
-        if (reservedInMonth >= monthlyCap) {
-            if (monthlyCap == 0) {
+        PassRespDTO.CycleDTO cycle = passService.cycleOn(student.getStudentId(), "BOOK", slot.getServiceDate());
+        int cycleCap = cycle.getCapacity();
+        int reservedInCycle = cycle.getCycleFrom() == null ? 0
+                : repository.countReservationsInMonth(student.getStudentId(),
+                        cycle.getCycleFrom(), cycle.getCycleUntil());
+        if (reservedInCycle >= cycleCap) {
+            if (cycleCap == 0) {
                 throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
-                        + " — 해당 월 이용권이 없습니다. 결제 후 예약해주세요.");
+                        + " — 해당 날짜에 쓸 수 있는 이용권이 없습니다. 결제 후 예약해주세요.");
             }
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
-                    + " — 그 달 예약 가능 횟수(" + monthlyCap + "회)를 모두 채우셨습니다.");
+                    + " — 이용 기간 내 예약 가능 횟수(" + cycleCap + "회)를 모두 채우셨습니다.");
         }
 
         // 하루 2회차 상한 정책(2026-08-28, 기존 1 → 2) — 4주 일괄(reserveOne을 날짜별로 반복 호출)로

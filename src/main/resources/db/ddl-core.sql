@@ -305,12 +305,16 @@ CREATE TABLE erp_bookstore_recommend_log (
     content_id      INT           NOT NULL,  -- 추천된 도서 (erp_bookstore_content.content_id) — 문제(itempool)는 이 기준
     item_id         INT           NOT NULL,  -- 실제로 대여 확정된 실물 판본 (erp_bookstore_item.item_id)
     recommended_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 추천일시(KST)
-    status              VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(추천됨, 첫 제출 전) / DONE(첫 제출 완료 — 합격/불합격 무관, 2026-08-28)
+    status              VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(추천됨, 첫 제출 전) / HOLD(다 못 읽고 넘어감, 2026-09-03) / DONE(첫 제출 완료 — 합격/불합격 무관, 2026-08-28)
     correct_count       INT,      -- "처음 점수" — 기본(qlevel=01) 최초 제출 정답 수에서 고정
     total_count         INT,      -- 기본 문제풀이 총 문항 수
     final_correct_count INT,      -- "최종 점수" — 재도전(mode=RETRY)에서 더 잘한 경우에만 올라간다(max) (2026-08-28)
     grade               VARCHAR(20),   -- KING / FRIEND / NULL(불합격) — 재도전으로 "올라가기만"(null→FRIEND→KING). 오르면 기본 뱃지도 상위 교체 (2026-08-28)
     completed_at        DATETIME2,     -- 첫 제출(DONE) 처리 시각
+    -- 책 홀딩(2026-09-03) — patch-260903-hold.sql 참고. 홀딩은 책을 잠그는 게 아니라 "다 못 읽고
+    -- 넘어간 책"이라는 표시다. 홀딩된 책도 재고만 있으면 다른 학생에게 그대로 추천된다.
+    hold_page           INT,           -- 홀딩 시점까지 읽은 페이지 (선생님이 자물쇠로 입력)
+    hold_use            VARCHAR(1),    -- 홀딩 유효 여부 'Y'/'N'. 폐기는 논리삭제 'N' (유효 홀딩은 학생당 1건)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id),
     FOREIGN KEY (item_id)    REFERENCES erp_bookstore_item(item_id)
 );
@@ -328,6 +332,9 @@ CREATE TABLE erp_bookstore_quiz_answer_log (
     selected      INT           NOT NULL,  -- 학생이 선택한 보기 번호 (1~4)
     is_correct    BIT           NOT NULL,  -- 서버 채점 결과 (제출 시점 itempool.ans 기준)
     submitted_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 제출일시(KST) (같은 값 = 같은 회차)
+    -- 제출 모드(2026-09-03) — FIRST(첫 제출) / RETRY(재도전) / WRONG_ONLY(틀린 문제만 다시 풀기).
+    -- "틀린 문제 다시 풀기 2회차부터 즉시 채점" 판정에 쓴다(patch-260903-quiz-mode.sql 참고)
+    submit_mode   VARCHAR(10),
     FOREIGN KEY (recommend_id) REFERENCES erp_bookstore_recommend_log(recommend_id),
     FOREIGN KEY (content_id)   REFERENCES erp_bookstore_content(content_id)
 );

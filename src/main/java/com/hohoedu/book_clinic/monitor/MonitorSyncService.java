@@ -73,6 +73,7 @@ public class MonitorSyncService {
         doc.put("basicTotalCount", card.getBasicTotalCount());
         doc.put("basicStatus", card.getBasicStatus());
         doc.put("basicGrade", card.getBasicGrade());
+        doc.put("holdPage", card.getHoldPage());
         doc.put("quizQlevel", card.getQuizQlevel());
         doc.put("basicAttemptRounds", card.getBasicAttemptRounds());
         doc.put("advancedCorrectCount", card.getAdvancedCorrectCount());
@@ -134,6 +135,7 @@ public class MonitorSyncService {
             m.put("basicTotalCount", book.getBasicTotalCount());
             m.put("basicStatus", book.getBasicStatus());
             m.put("basicGrade", book.getBasicGrade());
+            m.put("holdPage", book.getHoldPage());
             m.put("advancedCorrectCount", book.getAdvancedCorrectCount());
             m.put("advancedTotalCount", book.getAdvancedTotalCount());
             m.put("readingTimeMinutes", book.getReadingTimeMinutes());

@@ -16,6 +16,7 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
+import com.hohoedu.book_clinic.clinic.ClinicRepository;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
 import com.hohoedu.book_clinic.pass.PassService;
@@ -43,6 +44,9 @@ public class MonitorService {
     private final PassService passService;
     private final ReservationService reservationService;
     private final StudentSessionRegistry studentSessionRegistry;
+    // 퇴실 시 읽던 책을 홀딩으로 내리기 위해 필요하다(2026-09-03). ClinicService를 주입하면
+    // ClinicService → MonitorService 방향과 맞물려 순환 참조가 되므로 리포지토리를 직접 쓴다.
+    private final ClinicRepository clinicRepository;
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
@@ -113,10 +117,35 @@ public class MonitorService {
         // 여부와 무관하게 퇴실 시점에 대여 중인 책을 반납한다(2026-07-29). 재입실하면 ClinicService
         // (getHomeState/recommendBook의 ensureActiveLoan)가 같은 책을 다시 대여해 이어 읽게 한다.
         bookService.returnActiveLoanByStudent(studentId);
+        // 다 못 읽고 나간 책은 홀딩으로 내린다(2026-09-03). 자물쇠(읽은 페이지 입력)를 눌렀든
+        // 아니든 전환은 동일하고, 차이는 hold_page가 채워졌는지뿐이다. 홀딩은 책을 잠그는 게
+        // 아니라 "이 학생이 다음에 오면 이 책부터"라는 표시일 뿐이라, 위에서 반납된 실물은
+        // 그 사이 다른 학생에게 그대로 나간다. 문제를 제출해 DONE이 된 책은 대상이 아니다.
+        int held = clinicRepository.holdPendingRecommend(studentId);
+        if (held > 0) {
+            log.info("학생 {}의 읽던 책을 홀딩 처리했습니다(다음 방문 시 이어 읽기): {}건", studentId, held);
+        }
         // diary가 메인 데이터가 되려면 퇴실 시각도 diary에 실제로 남아야 한다 — enterSession의
         // ensureDiary가 만들어둔 헤더에 out_time을 채운다(2026-07-30, 직원이 수동 보정한 값은 보존).
         monitorRepository.syncDiaryOutTime(sessionId);
         syncSafely(sessionId);
+    }
+
+    /**
+     * 책 홀딩(자물쇠, 2026-09-03) — 다 못 읽은 책에 "몇 쪽까지 읽었는지"를 기록한다.
+     * holdPage가 null이면 기록을 지운다(자물쇠 끄기).
+     *
+     * 상태 전환(PENDING → HOLD)은 여기서 하지 않는다 — 그건 퇴실 시점에 자물쇠 여부와 무관하게
+     * 일어난다(exitSession). 자물쇠가 하는 일은 페이지 기록뿐이고, 그래서 입실 중에 눌러도 되고
+     * 퇴실한 뒤에 눌러도 된다.
+     */
+    @Transactional
+    public void saveHoldPage(String studentId, Integer holdPage) {
+        int updated = clinicRepository.updateHoldPage(studentId, holdPage);
+        log.info("학생 {}의 홀딩 페이지를 기록했습니다: page={}, 반영 {}건", studentId, holdPage, updated);
+        // 카드에 "○○쪽까지"를 곧바로 띄우기 위해 실시간 모니터링도 갱신한다. 퇴실 뒤에 누른 경우엔
+        // 오늘 열린 세션이 없어 sessionId가 null이고, 그때는 syncSafely가 조용히 넘어간다.
+        syncSafely(monitorRepository.findOpenSessionId(studentId, KstClock.today()));
     }
 
     /**

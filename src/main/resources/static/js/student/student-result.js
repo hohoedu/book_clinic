@@ -38,6 +38,11 @@
   const retryBtn = document.getElementById('retryBtn');
   const wrongRetryBtn = document.getElementById('wrongRetryBtn');
   const advancedBtn = document.getElementById('advancedBtn');
+  // "다시 읽으러 가기"(불합격) / "여권 쓰러 가기"(심화 마무리) — 이름만 다르고 동작은 둘 다
+  // 로그아웃이다(2026-09-03 확정). 학생이 앱에서 나가 실제로 책을 읽거나 종이 여권을 쓰러 가는
+  // 행동이므로, 새 화면을 만들지 않고 기존 로그아웃(logout())을 그대로 재사용한다.
+  const readAgainBtn = document.getElementById('readAgainBtn');
+  const passportBtn = document.getElementById('passportBtn');
 
   const homeBtn = document.querySelector('.btn-home');
   const logoutBtn = document.querySelector('.logout-btn');
@@ -47,22 +52,25 @@
   // 결과 화면의 "로그아웃" 버튼 — 예전엔 아예 연결돼있지 않아 눌러도 아무 반응이 없었다(2026-08-26).
   // student-main.js와 같은 방식으로 서버 세션을 먼저 무효화하고("문제 푸는 중"/"결과 확인중" 표시도
   // 함께 해제) 로그인 화면으로 이동한다.
-  if (logoutBtn) {
-    logoutBtn.addEventListener('click', async () => {
-      try {
-        await fetch('/student/logout', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ studentId }),
-        });
-      } catch (err) {
-        console.error(err);
-      }
-      localStorage.clear();
-      sessionStorage.clear();
-      window.location.replace('/student');
-    });
+  async function logout() {
+    try {
+      await fetch('/student/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+    localStorage.clear();
+    sessionStorage.clear();
+    window.location.replace('/student');
   }
+
+  if (logoutBtn) logoutBtn.addEventListener('click', logout);
+  // 라벨만 다른 로그아웃 버튼들 — 어느 등급에서 보일지는 render*Result가 정한다
+  if (readAgainBtn) readAgainBtn.addEventListener('click', logout);
+  if (passportBtn) passportBtn.addEventListener('click', logout);
 
   // 이 책이 끝난 상태인지(=책은 이미 반납됨) — 독서왕/독서친구/심화완료면 true, 재도전(불합격)이면
   // false. true일 때 "홈으로"를 누르면 일반 홈이 아니라 완료 화면(mode=retryDone)으로 보낸다 —
@@ -127,13 +135,11 @@
     renderCard(result);
     renderBadge(result);
 
-    // 완료화면 "틀린 문제 다시 풀기"(기본+심화 병합)로 온 결과 — 점수/등급은 이미 확정된 값이라
-    // 이 화면에선 추가 액션 버튼(재도전/틀린문제/심화)을 숨기고 "홈으로"만 남긴다(2026-09-02).
-    if (result.mergedWrong) {
-      retryBtn.hidden = true;
-      wrongRetryBtn.hidden = true;
-      advancedBtn.hidden = true;
-    }
+    // 기본+심화 오답을 한 번에 푸는 병합 모드로 온 결과 — 2026-09-03 버튼 규칙 재정리로 단계가
+    // 기본/심화 중 하나로 배타적이 되면서 이 모드를 만드는 화면이 사라졌다(완료 화면이 이제
+    // 단계에 맞는 한쪽 오답만 넘긴다). 도달할 일이 없지만, 예전 세션 저장소가 남아 있는 경우를
+    // 대비해 방어적으로 남겨둔다 — 확정된 점수라 추가 액션 없이 "홈으로"만 보여준다.
+    if (result.mergedWrong) resetActionButtons();
 
     // "틀린 문제 풀기" — 다시 풀 문항 번호만 세션 저장소에 담아두면 student-question.js가
     // 문제 목록을 불러온 뒤 그 번호만 걸러서 다시 낸다
@@ -161,9 +167,57 @@
     resultRetryText.textContent = attemptNo > 1 ? `${attemptNo - 1}번째` : '없음';
   }
 
-  // 심화(qlevel=02) 결과 — 버튼 규칙(2026-09-02)
-  //   심화 완료(만점 아님) : 재도전 / 틀린 문제 다시 풀기 (둘 다 심화 문제 대상)
-  //   심화왕(만점)         : 버튼 없음. 단 기본이 독서왕이 아니면 기본 "틀린 문제 다시 풀기"만 남긴다.
+  /* ── 결과 화면 버튼 규칙 (2026-09-03 전면 재정리) ────────────────────────────
+     학생이 한 책을 두고 지나가는 단계는 아래 다섯뿐이고, 각 단계에서 보이는 버튼은 최대 2개다.
+     홈의 완료 화면(student-main.js renderCompletion)도 똑같은 규칙을 쓴다 — 두 화면이 다르게
+     보이면 "홈으로"를 눌렀을 때 갑자기 다른 버튼이 나타나 흐름이 끊긴다.
+
+       1. 재도전(기본 합격선 미달)     → 다시 읽으러 가기            ※ 로그아웃
+       2. 독서완료(합격선~만점 미만)   → 재도전 + 틀린 문제 다시 풀기
+          2-2. 틀린 문제를 다 맞히면   → 재도전 + 심화 문제 풀기
+       3. 독서왕(기본 만점)            → 심화 문제 풀기
+       4. 심화완료(심화 만점 아님)     → 재도전 + 틀린 문제 다시 풀기
+          4-2. 틀린 문제를 다 맞히면   → 재도전 + 여권 쓰러 가기
+       5. 심화왕(심화 만점)            → 여권 쓰러 가기              ※ 로그아웃
+
+     재도전으로 만점을 치면(2-1 / 4-1) 등급이 독서왕·심화왕으로 올라가므로 다음 화면부터는
+     자연히 3번·5번 규칙으로 그려진다 — 처음부터 만점이었던 것과 같은 상태가 된다.
+     심화왕은 기본 오답이 남아 있어도 더 붙잡지 않는다(여권으로 끝낸다). */
+
+  /** 버튼을 전부 끈다 — 각 단계는 이 위에 필요한 것만 켠다 */
+  function resetActionButtons() {
+    retryBtn.hidden = true;
+    wrongRetryBtn.hidden = true;
+    advancedBtn.hidden = true;
+    readAgainBtn.hidden = true;
+    passportBtn.hidden = true;
+  }
+
+  /** 재도전·틀린 문제 버튼이 열 문제풀이 주소 — 단계에 따라 기본(01)/심화(02)가 갈린다 */
+  function questionHref(level) {
+    return `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${level}`;
+  }
+
+  /**
+   * 2·4단계 공통 — 재도전은 항상 열고, 나머지 한 자리는 남은 오답 유무로 갈린다.
+   * @param level   이 단계에서 다시 풀 문제의 난이도 ('01' 기본 / '02' 심화)
+   * @param wrong   아직 틀린 채로 남은 문항 번호
+   * @param nextBtn 오답을 다 맞혔을 때 그 자리에 들어올 버튼(심화 문제 풀기 / 여권 쓰러 가기)
+   */
+  function renderRetryStage(level, wrong, nextBtn) {
+    retryBtn.hidden = false;
+    retryBtn.setAttribute('href', questionHref(level));
+
+    if (wrong.length > 0) {
+      wrongRetryBtn.hidden = false;
+      wrongRetryBtn.setAttribute('href', questionHref(level));
+      wrongRetryTargets = wrong;
+      return;
+    }
+    nextBtn.hidden = false;
+  }
+
+  // 4·5단계 — 심화(qlevel=02) 결과
   function renderAdvancedResult(result) {
     const total = result.totalCount ?? 0;
     const correct = result.correctCount ?? 0;
@@ -176,72 +230,49 @@
       : '심화문제를 풀었어요! 더 도전해 볼까요?';
     bookFinished = true;
 
-    // "심화 문제 풀기"(첫 진입용)는 결과 화면에선 항상 숨긴다
-    advancedBtn.hidden = true;
-
-    // retryBtn·wrongRetryBtn은 HTML에서 qlevel='01'로 고정돼 있어 심화용은 qlevel=02로 다시 연결한다.
-    const hrefFor = (qlevel) =>
-      `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${qlevel}`;
-
-    if (!perfect) {
-      retryBtn.hidden = false;
-      retryBtn.setAttribute('href', hrefFor('02'));
-      wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
-      wrongRetryBtn.setAttribute('href', hrefFor('02'));
-      wrongRetryTargets = result.wrongQnums ?? [];
+    resetActionButtons();
+    if (perfect) {
+      passportBtn.hidden = false;                                  // 5단계
       return;
     }
-
-    // ── 심화왕 ── 심화 쪽은 더 풀 게 없다. 기본이 독서왕이 아니고 기본 오답이 남아 있으면
-    // 그 오답만 다시 풀 수 있게 남긴다(기본 재도전은 열지 않는다 — 이미 책을 끝낸 상태).
-    const basicWrong = result.basicWrongQnums ?? [];
-    const basicKing = result.basicGrade === 'KING';
-    retryBtn.hidden = true;
-    wrongRetryBtn.hidden = basicKing || basicWrong.length === 0;
-    wrongRetryBtn.setAttribute('href', hrefFor('01'));
-    wrongRetryTargets = basicWrong;
+    renderRetryStage('02', result.wrongQnums ?? [], passportBtn);   // 4단계
   }
 
+  // 3단계 — 독서왕(기본 만점). 더 맞힐 기본 문제가 없으니 심화만 남는다.
   function renderKingResult(result) {
     setHeroRibbon(true);
     setHero('KING', '독서왕 달성!');
     resultTitle.textContent = `${bookTitle(result)}을(를) 완독하고 멋지게 문제를 풀었어요!`;
-
-    // 만점(독서왕)은 재도전·틀린 문제 다시 풀기 둘 다 없고, 심화만 남는다(2026-08-28)
-    retryBtn.hidden = true;
-    wrongRetryBtn.hidden = true;
-    advancedBtn.hidden = false;
-    // "홈으로"를 누르면 완료 화면(남은 액션 + 책 추천받기)으로 간다 — 다시풀기(alreadyCompleted)
+    // "홈으로"를 누르면 완료 화면(같은 버튼 규칙)으로 간다 — 다시풀기(alreadyCompleted)
     // 재제출이어도 마찬가지다(2026-08-25, 예전엔 이때만 예외로 그냥 홈으로 보냈다)
     bookFinished = true;
+
+    resetActionButtons();
+    advancedBtn.hidden = false;
   }
 
+  // 2단계 — 독서완료(합격선 이상 만점 미만)
   function renderFriendResult(result) {
     setHeroRibbon(true);
     setHero('FRIEND', '독서친구 달성!');
     resultTitle.textContent = `${bookTitle(result)}을(를) 읽고 문제를 풀었어요!`;
-
-    // 독서친구는 재도전(점수 올리기) / 틀린 문제 다시 풀기 / 심화 셋 다 열어준다(2026-08-28).
-    // 재도전으로 만점 치면 grade·뱃지가 독서왕으로 올라가 다음엔 renderKingResult로 그려진다.
-    // 재도전 점수가 더 낮으면 처음 점수·등급·뱃지는 그대로고 최종 점수도 안 내려간다(max).
-    retryBtn.hidden = false;
-    // "틀린 문제 다시 풀기"로 남은 오답을 다 없앴으면(result.wrongQnums가 비었으면) 버튼을 감춘다
-    wrongRetryBtn.hidden = (result.wrongQnums ?? []).length === 0;
-    wrongRetryTargets = result.wrongQnums ?? [];
-    advancedBtn.hidden = false;
     bookFinished = true;
+
+    resetActionButtons();
+    // 오답이 남았으면 "틀린 문제 다시 풀기", 다 맞혔으면 그 자리에 "심화 문제 풀기"
+    renderRetryStage('01', result.wrongQnums ?? [], advancedBtn);
   }
 
+  // 1단계 — 불합격(합격선 미달). 문제를 다시 푸는 게 아니라 책을 다시 읽으러 간다.
+  // "다시 읽으러 가기"는 로그아웃이다 — 읽고 와서 QR로 다시 들어오면 홈에 "문제 풀러 가기"가 뜬다.
   function renderRetryResult(result) {
-    // 재도전(불합격)도 통과 등급과 동일하게 green.png 리본을 쓴다(2026-09-02).
     setHeroRibbon(true);
     setHero('RETRY', '다시 도전!');
-    resultTitle.textContent = '합격선에 조금 못 미쳤어요. 다시 풀어볼까요?';
-
-    retryBtn.hidden = false;
-    wrongRetryBtn.hidden = true;
-    advancedBtn.hidden = true;
+    resultTitle.textContent = '합격선에 조금 못 미쳤어요. 책을 다시 읽어볼까요?';
     bookFinished = false;
+
+    resetActionButtons();
+    readAgainBtn.hidden = false;
   }
 
   // 모든 등급이 green.png 리본 이미지를 쓴다(2026-09-02, 재도전도 포함). 텍스트 리본은 미사용.

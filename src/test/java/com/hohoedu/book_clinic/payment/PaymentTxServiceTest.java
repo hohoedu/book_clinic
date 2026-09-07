@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.payment;
 
+import java.time.LocalDate;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -59,6 +60,9 @@ class PaymentTxServiceTest {
         PaymentRespDTO.PaymentDTO payment = new PaymentRespDTO.PaymentDTO();
         payment.setOrderNo("BC002");
         payment.setGroupOrderNo("BG001"); // 형제 묶음결제 — 이미 그룹 내 다른 학생 행이 같은 tid를 씀
+        // 자동결제 전환(2026-09-07) 이후 이용권 기간은 결제 행의 주기를 그대로 따른다
+        payment.setCycleFrom(LocalDate.of(2026, 9, 7));
+        payment.setCycleUntil(LocalDate.of(2026, 10, 6));
 
         PaymentRespDTO.ProductDTO product = new PaymentRespDTO.ProductDTO();
         product.setProductId(1);
@@ -74,7 +78,8 @@ class PaymentTxServiceTest {
                 payment, product, "SHARED_TID", "Card", "국민카드", "123456******7890", "00000000", "0000");
 
         assertTrue(updated);
-        verify(passService).grant(any(), any(), anyInt(), any(), any(), any(), any(), anyInt());
+        verify(passService).grant(any(), any(), anyInt(), any(), any(), any(), any(),
+                eq(LocalDate.of(2026, 9, 7)), eq(LocalDate.of(2026, 10, 6)), anyInt());
     }
 
     @Test

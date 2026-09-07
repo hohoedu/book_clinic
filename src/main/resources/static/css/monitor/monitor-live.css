@@ -674,6 +674,68 @@ i.badge-icon {
   color: #ef7d7d;
 }
 
+/* ── 책 홀딩 / 자물쇠 (2026-09-03) ───────────────────────────────────────────
+   다 못 읽은 책에 "몇 쪽까지 읽었는지"를 기록한다. 교체 버튼과 같은 톤으로 두되, 이미 기록이
+   있으면(.filled) 색을 넣어 카드만 봐도 홀딩된 책인지 알 수 있게 한다. */
+.book-hold-btn {
+  background: transparent;
+  border: none;
+  color: #cfd6da;
+  font-size: 17px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.book-hold-btn:hover {
+  color: #f0a12f;
+}
+
+.book-hold-btn.filled {
+  color: #f0a12f;
+}
+
+/* 책 제목 아래 "60쪽까지 읽음" — 이어 읽을 책이라는 표시 */
+.book-hold {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fff3e0;
+  color: #b9762a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 모달의 쪽수 입력 한 줄 */
+.hold-page-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.hold-page-row input {
+  width: 120px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #d8dee2;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.hold-page-row input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.hold-page-row span {
+  font-size: 14px;
+  color: #6b7278;
+  font-weight: 600;
+}
+
 .modal-overlay {
   position: fixed;
   inset: 0;

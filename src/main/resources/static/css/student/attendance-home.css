@@ -42,13 +42,17 @@ body {
 
 .attendance-buttons {
   display: flex;
-  gap: 28px;
+  gap: 24px;
   justify-content: center;
 }
 
+/* 버튼이 2개(입실/퇴실)에서 3개(입실/책 추천/퇴실)로 늘었다(2026-09-03). 320px 고정폭으로 두면
+   뷰포트(max-width 900px) 안에 3개가 들어가지 않아, 남는 폭을 나눠 갖되 정사각은 유지하도록 바꿨다. */
 .attendance-btn {
-  width: 320px;
-  height: 320px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 320px;
+  aspect-ratio: 1 / 1;
   border-radius: 28px;
   border: none;
   background: rgba(255, 255, 255, .95);
@@ -57,8 +61,8 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
-  font-size: 30px;
+  gap: 18px;
+  font-size: 26px;
   font-weight: 900;
   color: #252525;
   cursor: pointer;
@@ -70,10 +74,11 @@ body {
 }
 
 .attendance-btn i {
-  font-size: 90px;
+  font-size: 72px;
 }
 
 .attendance-btn.enter i { color: var(--green, #00a984); }
+.attendance-btn.recommend i { color: var(--blue, #0988d8); }
 .attendance-btn.exit i { color: var(--red, #ff4b38); }
 
 .attendance-toast {

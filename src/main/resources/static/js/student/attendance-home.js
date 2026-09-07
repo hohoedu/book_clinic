@@ -1,7 +1,9 @@
-/* 출석체크 홈 — 입실/퇴실 선택만 하는 단순한 화면(2026-07-30).
-   입실: QR 스캔 → /attendance/enter로 POST(폼 전송). 이 페이지가 입실 처리 + 오늘 추천 도서만
+/* 출석체크 홈 — 입실/책 추천/퇴실을 고르는 단순한 화면(2026-07-30, 책 추천 2026-09-03 추가).
+   입실: QR 스캔 → /attendance/enter로 POST(폼 전송). 이 페이지가 입실 처리 + 읽던 책만
          보여주고 "닫기"를 누르면 이 출석체크 홈으로 돌아온다 — 문제풀이로는 못 넘어간다(공용 기기라
          여기서 실제 학습까지 이어지면 안 됨. 학습은 학생 개인 폰의 /student/login에서 따로 함).
+   책 추천: QR 스캔 → /attendance/recommend로 POST. 입실과 분리된 별도 행동이다 — 입실이 곧 추천이던
+         시절엔 심화 문제를 안 푼 학생도 입실만 하면 다음 책을 받아 심화 게이트가 무력화됐다.
    퇴실: QR 스캔 → /student/exit 호출(로그인 컨텍스트가 없어 studentId 없이 appId만 보낸다 —
          StudentViewController.exitByQr가 studentId 없으면 본인 확인 없이 스캔된 QR을 그대로 신뢰한다)
          → 완료 메시지를 보여준 뒤 이 화면 그대로 유지(재사용 대비). */
@@ -20,13 +22,14 @@
     setTimeout(() => toast.remove(), duration || 1800);
   }
 
-  // 입실은 이용권을 소진시키는 "쓰기" 요청이라 GET으로 두면 주소창 한 줄로 남의 이용권이 깎인다
-  // (2026-08-20). 폼을 만들어 POST로 보내면 CSRF 토큰이 함께 실려 우리 화면에서 온 요청만 통과한다.
-  // fetch가 아니라 폼 전송인 이유는 서버가 JSON이 아니라 확인 화면(HTML)을 그대로 내려주기 때문이다.
-  function submitEnter(appId) {
+  // 입실·책 추천은 이용권과 추천 한도를 소진시키는 "쓰기" 요청이라 GET으로 두면 주소창 한 줄로
+  // 남의 이용권이 깎인다(2026-08-20). 폼을 만들어 POST로 보내면 CSRF 토큰이 함께 실려 우리 화면에서
+  // 온 요청만 통과한다. fetch가 아니라 폼 전송인 이유는 서버가 JSON이 아니라 확인 화면(HTML)을
+  // 그대로 내려주기 때문이다.
+  function submitTo(action, appId) {
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = '/attendance/enter';
+    form.action = action;
     form.appendChild(hiddenInput('appId', appId));
     const csrf = readCsrfToken();
     if (csrf) form.appendChild(hiddenInput('_csrf', csrf));
@@ -49,12 +52,24 @@
   }
 
   const enterBtn = document.getElementById('enterBtn');
+  const recommendBtn = document.getElementById('recommendBtn');
   const exitBtn = document.getElementById('exitBtn');
 
   if (enterBtn) enterBtn.addEventListener('click', async () => {
     try {
       const appId = await window.openQrScanner('QR 스캔 — 입실');
-      submitEnter(appId);
+      submitTo('/attendance/enter', appId);
+    } catch (err) {
+      if (err.message !== 'cancelled') showToast('error', err.message || 'QR 스캔에 실패했어요.');
+    }
+  });
+
+  // 책 추천 — 입실과 완전히 같은 흐름이고 보내는 주소만 다르다. 심화 게이트/추천 한도에 걸리면
+  // 서버가 확인 화면(book-confirm)의 안내 카드로 이유를 보여준다.
+  if (recommendBtn) recommendBtn.addEventListener('click', async () => {
+    try {
+      const appId = await window.openQrScanner('QR 스캔 — 책 추천');
+      submitTo('/attendance/recommend', appId);
     } catch (err) {
       if (err.message !== 'cancelled') showToast('error', err.message || 'QR 스캔에 실패했어요.');
     }

@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.payment._dto;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import lombok.Data;
@@ -128,8 +129,18 @@ public class PaymentRespDTO {
         private String orderNo;
         /** 형제 묶음결제일 때만 값이 있다. 단일결제는 항상 null */
         private String groupOrderNo;
-        /** 몇 월치 이용권인지(YYYYMM). prepare() 시점에 정해지고 승인 확정 때 그대로 이용권에 옮겨진다 */
+        /**
+         * 몇 월분 청구인지(YYYYMM) — 정산 대조용 라벨이다.
+         * 자동결제 전환(2026-09-07) 전에는 이 값이 곧 이용 주기였지만, 주기가 결제일 기준
+         * 1개월이 되면서 그 역할은 cycleFrom/cycleUntil로 넘어갔다.
+         */
         private String billingYm;
+        /** 이 결제가 커버하는 이용 주기 시작일 — 이용권의 valid_from이 되는 값 */
+        private LocalDate cycleFrom;
+        /** 주기 종료일(다음 주기 시작 전일) — 이용권의 valid_until이 되는 값 */
+        private LocalDate cycleUntil;
+        /** 자동결제로 생긴 건이면 그 구독 id. 과거 일시불/수기 건은 null */
+        private Integer subscriptionId;
         private String tid;
         private String studentId;
         private String centerCode;

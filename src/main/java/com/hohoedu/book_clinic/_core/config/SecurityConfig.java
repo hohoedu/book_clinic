@@ -48,6 +48,7 @@ public class SecurityConfig {
                                                                 "/clinic/book-info",
                                                                 "/clinic/completion-state",
                                                                 "/clinic/last-result",
+                                                                "/clinic/wrong-retry-mode",
                                                                 "/clinic/recommend",
                                                                 "/clinic/quiz/submit",
                                                                 "/clinic/home-state",

@@ -57,9 +57,20 @@ public class PaymentTxService {
             return false;
         }
 
-        passService.grant(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
-                product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
-                payment.getBillingYm(), product.getTotalCount());
+        // 이용권 주기는 결제 행이 들고 있는 값을 그대로 쓴다(2026-09-07). 여기서 billing_ym으로
+        // 다시 역산하면 자동결제의 "결제일 기준 1개월"이 달력 월로 되돌아가 화면에 보여준 기간과
+        // 실제 유효기간이 어긋난다. cycle_from이 비어 있는 건 이 컬럼 도입 이전에 시작된
+        // 결제뿐이라, 그때는 예전 규칙대로 달력 월로 발급한다.
+        if (payment.getCycleFrom() != null && payment.getCycleUntil() != null) {
+            passService.grant(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
+                    product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
+                    payment.getBillingYm(), payment.getCycleFrom(), payment.getCycleUntil(),
+                    product.getTotalCount());
+        } else {
+            passService.grantMonthly(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
+                    product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
+                    payment.getBillingYm(), product.getTotalCount());
+        }
         return true;
     }
 

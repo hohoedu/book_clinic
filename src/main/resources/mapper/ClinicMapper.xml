@@ -76,6 +76,10 @@
         WHERE NOT EXISTS (
             SELECT 1 FROM erp_bookstore_recommend_log rl
             WHERE rl.student_id = #{studentId} AND rl.content_id = c.content_id
+              <!-- 폐기된 홀딩(2026-09-03)은 끝까지 읽은 적이 없는 책이라 다시 추천 후보가 되어야 한다.
+                   다음 책을 받는 순간 이전 홀딩은 hold_use='N'이 되는데, 그 행 때문에 그 책이 영영
+                   이 학생에게 안 나오면 "나중에 처음부터 다시 읽는다"는 규칙이 성립하지 않는다. -->
+              AND NOT (rl.status = 'HOLD' AND rl.hold_use = 'N')
         )
         <if test="applyDedup">
         AND NOT (
@@ -140,7 +144,8 @@
                g.codeNm          AS genreName,
                dc.name           AS curriculumName,
                dr.name           AS recommendOrgName,
-               da.name           AS awardName
+               da.name           AS awardName,
+               rl.hold_page      AS holdPage
         FROM erp_bookstore_recommend_log rl
         JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
         LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
@@ -212,12 +217,20 @@
     <!-- 제출 1회분을 다중 VALUES 한 문장으로 적재 — 같은 문장이라 submitted_at이 전부 동일해 회차 구분에 쓰인다 -->
     <insert id="insertQuizAnswerLogs">
         INSERT INTO erp_bookstore_quiz_answer_log
-            (recommend_id, student_id, content_id, qlevel, qnum, selected, is_correct, qtype)
+            (recommend_id, student_id, content_id, qlevel, qnum, selected, is_correct, qtype, submit_mode)
         VALUES
         <foreach collection="answerLogs" item="a" separator=",">
-            (#{recommendId}, #{studentId}, #{contentId}, #{qlevel}, #{a.qnum}, #{a.selected}, #{a.correct}, #{a.qtype})
+            (#{recommendId}, #{studentId}, #{contentId}, #{qlevel}, #{a.qnum}, #{a.selected}, #{a.correct}, #{a.qtype}, #{submitMode})
         </foreach>
     </insert>
+
+    <!-- "틀린 문제만 다시 풀기"를 지금까지 몇 회차 제출했는지(2026-09-03) — 2회차부터는 보기를 고르는
+         즉시 정답/오답을 보여준다. submitted_at이 같으면 같은 회차라 DISTINCT로 센다. -->
+    <select id="countWrongOnlyRounds" resultType="int">
+        SELECT COUNT(DISTINCT submitted_at)
+        FROM erp_bookstore_quiz_answer_log
+        WHERE recommend_id = #{recommendId} AND qlevel = #{qlevel} AND submit_mode = 'WRONG_ONLY'
+    </select>
 
     <!-- 첫 제출 — 처음 점수/최종 점수를 같은 값으로 세우고, 합격/불합격 무관하게 status=DONE (2026-08-28) -->
     <update id="updateRecommendResult">
@@ -471,5 +484,74 @@
               WHERE q2.recommend_id = q1.recommend_id AND q2.qlevel = q1.qlevel AND q2.qnum = q1.qnum
           )
     </select>
+
+    <!-- ── 책 홀딩(2026-09-03) ────────────────────────────────────────────────
+         홀딩 = "다 못 읽고 넘어간 책". 실물은 퇴실 시 이미 반납되므로(MonitorService.exitSession)
+         홀딩된 책도 재고만 있으면 다른 학생에게 그대로 추천된다 — 잠그는 기능이 아니다. -->
+
+    <!-- 이어 읽어야 할 책(status='HOLD', hold_use='Y') — 컬럼 구성은 findPendingRecommendBookCard와 동일하다.
+         유효 홀딩은 학생당 1건이지만, 과거 데이터 등으로 여러 건이 남아도 가장 최근 것을 쓴다. -->
+    <select id="findHeldRecommendBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
+        SELECT TOP 1
+               rl.item_id        AS itemId,
+               bc.content_id     AS contentId,
+               COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
+               COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
+               COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
+               COALESCE(NULLIF(it.image_url, ''),  bc.image_url)      AS imageUrl,
+               bc.summary        AS summary,
+               bc.keywords       AS keywords,
+               bc.content_type   AS contentType,
+               ct.codeNm         AS contentTypeName,
+               bc.genre          AS genre,
+               g.codeNm          AS genreName,
+               dc.name           AS curriculumName,
+               dr.name           AS recommendOrgName,
+               da.name           AS awardName,
+               rl.hold_page      AS holdPage
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
+        LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
+        LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
+        LEFT JOIN erp_bookstore_content_detail dr ON dr.content_id = bc.content_id AND dr.gubun = 'R'
+        LEFT JOIN erp_bookstore_content_detail da ON da.content_id = bc.content_id AND da.gubun = 'A'
+        WHERE rl.student_id = #{studentId} AND rl.status = 'HOLD' AND rl.hold_use = 'Y'
+        ORDER BY rl.recommend_id DESC
+    </select>
+
+    <!-- 퇴실 시 읽던 책을 홀딩으로 내린다. 자물쇠를 눌렀든 아니든 전환은 동일하고, 차이는
+         hold_page가 채워졌는지뿐이다. hold_use는 여기서 'Y'로 세워둔다(유효한 홀딩). -->
+    <update id="holdPendingRecommend">
+        UPDATE erp_bookstore_recommend_log
+           SET status = 'HOLD', hold_use = 'Y'
+         WHERE student_id = #{studentId} AND status = 'PENDING'
+    </update>
+
+    <!-- 이어 읽기 — 홀딩을 다시 "읽는 중"으로 되돌린다. hold_page는 지우지 않는다(몇 쪽부터
+         이어 읽는지 화면에 계속 보여줘야 하고, 또 못 읽고 나가면 그 값을 갱신한다). -->
+    <update id="resumeHeldRecommend">
+        UPDATE erp_bookstore_recommend_log
+           SET status = 'PENDING'
+         WHERE student_id = #{studentId} AND status = 'HOLD' AND hold_use = 'Y'
+    </update>
+
+    <!-- 홀딩 폐기(논리삭제) — 다음 책을 받는 순간 호출된다. 행은 남기고 hold_use만 'N'으로 내려
+         "이 학생이 예전에 읽다 만 책"이라는 이력은 보존한다. -->
+    <update id="discardHolds">
+        UPDATE erp_bookstore_recommend_log
+           SET hold_use = 'N'
+         WHERE student_id = #{studentId} AND status = 'HOLD' AND hold_use = 'Y'
+    </update>
+
+    <!-- 자물쇠 — 아직 끝내지 않은 추천에 읽은 페이지를 기록한다. 입실 중(PENDING)에 눌러도 되고
+         퇴실 뒤(HOLD)에 눌러도 되므로 두 상태를 모두 대상으로 한다(DONE은 이미 끝난 책이라 제외). -->
+    <update id="updateHoldPage">
+        UPDATE erp_bookstore_recommend_log
+           SET hold_page = #{holdPage}
+         WHERE student_id = #{studentId}
+           AND (status = 'PENDING' OR (status = 'HOLD' AND hold_use = 'Y'))
+    </update>
 
 </mapper>

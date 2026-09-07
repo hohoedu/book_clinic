@@ -433,3 +433,27 @@
   color: var(--muted);
   cursor: not-allowed;
 } 
+
+/* ── 즉시 채점 (2026-09-03) ─────────────────────────────────────────────────
+   "틀린 문제 다시 풀기" 두 번째부터는 보기를 고르는 즉시 정답/오답을 보여주고 자동으로 다음
+   문제로 넘어간다. 보기 자체의 초록/빨강은 위 .choice-item.correct/.wrong 이 이미 담당하므로,
+   여기서는 "정답 공개 중"이라는 상태만 카드 테두리로 알려준다. */
+.quiz-card.reveal-correct {
+  box-shadow: 0 0 0 3px var(--green, #00a984);
+}
+
+.quiz-card.reveal-wrong {
+  box-shadow: 0 0 0 3px var(--red, #ff4b38);
+}
+
+/* 정답이 공개된 뒤에는 다시 고를 수 없다 — 눌리는 느낌만 없앤다 */
+.quiz-card.reveal-correct .choice-item,
+.quiz-card.reveal-wrong .choice-item {
+  cursor: default;
+}
+
+/* 오답으로 이미 X가 붙은 보기 — 다시 고를 수 없다는 걸 흐리게 표시한다(2026-09-03) */
+.choice-item:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}

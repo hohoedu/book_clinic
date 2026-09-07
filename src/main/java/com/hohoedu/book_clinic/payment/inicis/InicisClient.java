@@ -70,6 +70,18 @@ public class InicisClient {
             return "00".equals(get("P_STATUS"));
         }
 
+        /**
+         * 빌링 승인(iniapi) 계열의 성공 코드 — 환불과 같은 "00" 체계다(결제창 승인의 "0000"이 아니다).
+         *
+         * [왜 tid까지 보나] 자동결제는 사람이 화면을 보고 있지 않은 배치에서 일어난다. 성공으로
+         * 잘못 읽으면 돈은 안 빠졌는데 이용권만 나가고, 아무도 그 자리에서 알아채지 못한다.
+         * 그래서 결과 코드와 거래번호가 둘 다 있어야만 승인으로 인정한다.
+         */
+        public boolean isBillingSuccess() {
+            String tid = get("tid");
+            return "00".equals(get("resultCode")) && tid != null && !tid.isBlank();
+        }
+
         /** 거래조회(v2) 계열의 성공 코드 — "조회 자체가 됐다"는 뜻이지 "승인됐다"는 뜻이 아니다 */
         public boolean isInquirySuccess() {
             return "SUCCESS".equals(get("resultCode"));
@@ -93,15 +105,19 @@ public class InicisClient {
      * 있으므로, 호출 전에 이니시스 도메인인지 검증한 뒤 들어와야 한다(PaymentService 담당).
      */
     public Result approve(String authUrl, String authToken) {
+        return approve(authUrl, authToken, props.getMid(), props.getSignKey());
+    }
+
+    private Result approve(String authUrl, String authToken, String mid, String signKey) {
         String timestamp = String.valueOf(System.currentTimeMillis());
 
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("mid", props.getMid());
+        form.add("mid", mid);
         form.add("authToken", authToken);
         form.add("timestamp", timestamp);
         form.add("signature", sha256("authToken=" + authToken + "&timestamp=" + timestamp));
         form.add("verification",
-                sha256("authToken=" + authToken + "&signKey=" + props.getSignKey() + "&timestamp=" + timestamp));
+                sha256("authToken=" + authToken + "&signKey=" + signKey + "&timestamp=" + timestamp));
         form.add("charset", "UTF-8");
         form.add("format", "JSON");
 
@@ -197,6 +213,19 @@ public class InicisClient {
      * JSON 문자열) — dataJson과 정확히 같은 문자열이어야 한다(매뉴얼: manual.inicis.com/pay/etc-inquiry.html).
      */
     public Result inquiry(String oid) {
+        return inquiry(oid, props.getMid(), props.getApiKey());
+    }
+
+    /**
+     * 빌링 상점의 거래조회 — 자동결제 승인 응답을 못 받았을 때(타임아웃) "카드사에는 승인이
+     * 났는지"를 확인한다. 거래조회는 원 결제가 일어난 상점으로만 되므로 빌링 건을 일반 MID로
+     * 조회하면 "거래 없음"이 돌아온다 — 그걸 실패로 읽고 재청구하면 이중 청구가 된다.
+     */
+    public Result inquiryBilling(String oid) {
+        return inquiry(oid, props.getBillingMid(), props.getBillingApiKey());
+    }
+
+    private Result inquiry(String oid, String mid, String apiKey) {
         String clientIp = props.getClientIp();
         String type = "inquiry";
         String timestamp = LocalDateTime.now(KST).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
@@ -211,10 +240,10 @@ public class InicisClient {
             throw new IllegalStateException("[이니시스] 거래조회 요청 data 직렬화 실패", e);
         }
 
-        String hashData = sha512(props.getApiKey() + props.getMid() + type + timestamp + dataJson);
+        String hashData = sha512(apiKey + mid + type + timestamp + dataJson);
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("mid", props.getMid());
+        body.put("mid", mid);
         body.put("type", type);
         body.put("timestamp", timestamp);
         body.put("clientIp", clientIp);
@@ -222,6 +251,66 @@ public class InicisClient {
         body.put("data", data);
 
         return postJson(props.getInquiryUrl(), body);
+    }
+
+    /**
+     * 빌링 승인 — 저장해 둔 빌키로 실제로 돈을 뺀다. 자동결제의 핵심 호출이다.
+     *
+     * [일반 승인과 무엇이 다른가] 결제창도 authToken도 없다. 빌키를 아는 것 자체가 결제 권한이라,
+     * 이 메서드를 부를 수 있는 코드는 곧 임의 과금을 할 수 있다는 뜻이다. 그래서 호출부는
+     * 배치(SubscriptionBillingJob)와 최초 등록 직후 1회로만 한정하고, 금액은 언제나 상품
+     * 마스터에서 읽은 값을 쓴다 — 클라이언트가 보낸 금액이 여기까지 흘러오면 안 된다.
+     *
+     * [moid] 주문번호는 호출부가 주기로부터 결정적으로 만들어 넘긴다(SUB{id}-{cycleFrom}).
+     * 같은 주기를 두 번 청구하면 이니시스가 중복 주문번호로 거절하는 것이 이중 청구의 2차 방어선이다.
+     *
+     * [응답] 성공 판정은 Result.isBillingSuccess()(resultCode="00" + tid 존재)로 한다.
+     * 요청/응답 필드 이름과 해시 규칙은 이니시스 빌링 매뉴얼(상점관리자 배포본)과 대조해야 한다 —
+     * 취소 API가 그랬듯 개정으로 바뀐 이력이 있다.
+     */
+    public Result billing(String billKey, String moid, int price, String goodName,
+                          String buyerName, String buyerTel, String buyerEmail) {
+        String type = "billing";
+        String paymethod = "card";
+        // 환불/조회와 같은 iniapi(v2) 계열이라 timestamp도 yyyyMMddHHmmss(14자리)다.
+        // 유닉스 타임을 넣으면 ERR101(Length 오류)로 거절된다.
+        String timestamp = LocalDateTime.now(KST).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("url", props.getBillingSiteUrl());
+        data.put("moid", moid);
+        data.put("goodName", goodName);
+        data.put("buyerName", buyerName);
+        data.put("buyerEmail", nvl(buyerEmail));
+        data.put("buyerTel", nvl(buyerTel));
+        data.put("price", price);
+        data.put("billKey", billKey);
+
+        String dataJson;
+        try {
+            dataJson = objectMapper.writeValueAsString(data);
+        } catch (Exception e) {
+            throw new IllegalStateException("[이니시스] 빌링 요청 data 직렬화 실패", e);
+        }
+
+        // hashData = SHA512(빌링 apiKey + mid + type + timestamp + data JSON) — 위 dataJson과
+        // 글자 하나까지 같아야 한다. body에 같은 Map을 그대로 중첩시키는 것도 그 때문이다.
+        String hashData = sha512(props.getBillingApiKey() + props.getBillingMid() + type + timestamp + dataJson);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("mid", props.getBillingMid());
+        body.put("type", type);
+        body.put("paymethod", paymethod);
+        body.put("timestamp", timestamp);
+        body.put("clientIp", props.getClientIp());
+        body.put("hashData", hashData);
+        body.put("data", data);
+
+        return postJson(props.getBillingUrl(), body);
+    }
+
+    private String nvl(String s) {
+        return s == null ? "" : s;
     }
 
     // ─────────────── 결제창 호출용 서명 (승인 요청과는 별개의 규칙) ───────────────
@@ -255,8 +344,23 @@ public class InicisClient {
      * 검증해야 하며, 그 검증은 PaymentService가 한다.
      */
     public Result approveMobile(String reqUrl, String tid) {
+        return approveMobile(reqUrl, tid, props.getMid());
+    }
+
+    /**
+     * 모바일 빌키 발급의 승인 — 절차는 모바일 결제 승인과 같고 상점만 빌링 MID다.
+     *
+     * 이 호출은 돈을 빼지 않는다. 카드 본인확인 결과로 빌키를 받아오는 것이 전부라, 실패해도
+     * 되돌릴 승인이 없다(빌키를 저장하지 않으면 그만이다). 응답에서 빌키를 꺼내는 필드 이름은
+     * 매뉴얼 개정에 따라 갈릴 수 있어 호출부가 여러 후보를 본다.
+     */
+    public Result approveMobileBilling(String reqUrl, String tid) {
+        return approveMobile(reqUrl, tid, props.getBillingMid());
+    }
+
+    private Result approveMobile(String reqUrl, String tid, String mid) {
         MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-        form.add("P_MID", props.getMid());
+        form.add("P_MID", mid);
         form.add("P_TID", tid);
         return post(reqUrl, form);
     }

@@ -62,6 +62,25 @@ public interface ClinicRepository {
     void insertRecommendLog(@Param("studentId") String studentId, @Param("contentId") Integer contentId,
                              @Param("itemId") Integer itemId);
 
+    // ── 책 홀딩(2026-09-03) ────────────────────────────────────────────────────
+    // 홀딩 = "다 못 읽고 넘어간 책". 책을 잠그는 게 아니라 그 학생이 다음에 언제 오든 최우선으로
+    // 다시 받는다는 표시다(요일·회차 무관). 홀딩된 책도 재고만 있으면 다른 학생에게 그대로 추천된다.
+
+    /** 퇴실 시 읽던 책(PENDING)을 홀딩으로 내린다 — 자물쇠를 눌렀든 아니든 동일하게 전환된다 */
+    int holdPendingRecommend(@Param("studentId") String studentId);
+
+    /** 이 학생이 이어 읽어야 할 책(status='HOLD', hold_use='Y') — 없으면 null */
+    ClinicRespDTO.RecommendBookDTO findHeldRecommendBookCard(@Param("studentId") String studentId);
+
+    /** 홀딩을 다시 읽는 중(PENDING)으로 되돌린다 — 재입실/추천 시점의 이어 읽기 */
+    int resumeHeldRecommend(@Param("studentId") String studentId);
+
+    /** 살아있는 홀딩을 전부 폐기한다(논리삭제 hold_use='N') — 다음 책을 받는 순간 호출된다 */
+    int discardHolds(@Param("studentId") String studentId);
+
+    /** 자물쇠 — 아직 끝내지 않은 추천(PENDING/HOLD)에 읽은 페이지를 기록한다. null이면 기록 해제 */
+    int updateHoldPage(@Param("studentId") String studentId, @Param("holdPage") Integer holdPage);
+
     /** 그날 이 학생에게 새로 생성된 recommend_log 건수 — 하루 추천 한도(2권) 판정 기준 */
     int countTodayRecommends(@Param("studentId") String studentId, @Param("date") LocalDate date);
 
@@ -74,6 +93,7 @@ public interface ClinicRepository {
                                @Param("studentId") String studentId,
                                @Param("contentId") Integer contentId,
                                @Param("qlevel") String qlevel,
+                               @Param("submitMode") String submitMode,
                                @Param("answerLogs") List<ClinicReqDTO.AnswerLogDTO> answerLogs);
 
     /**
@@ -175,6 +195,10 @@ public interface ClinicRepository {
     int countPriorAttempts(@Param("studentId") String studentId,
                            @Param("contentId") Integer contentId,
                            @Param("qlevel") String qlevel);
+
+    /** "틀린 문제만 다시 풀기"를 지금까지 제출한 회차 수(2026-09-03) — 2회차부터 즉시 채점으로 전환하는 기준 */
+    int countWrongOnlyRounds(@Param("recommendId") Integer recommendId,
+                             @Param("qlevel") String qlevel);
 
     /** 해당 추천(도전)+난이도의 기존 제출 "회차" 수(submitted_at 단위) — 몇 번째 시도인지 화면에 보여줄 때 쓴다 */
     int countPriorAttemptRounds(@Param("recommendId") Integer recommendId,

@@ -94,6 +94,18 @@ public class MonitorController {
     }
 
     /**
+     * 책 홀딩(자물쇠, 2026-09-03) — 다 못 읽은 책에 "몇 쪽까지 읽었는지"를 기록한다.
+     * holdPage를 비워 보내면 기록 해제. exit/diary와 같은 이유로 대상 학생의 센터를 대조한다.
+     */
+    @PostMapping("/hold")
+    public ResponseEntity<?> saveHold(@RequestBody @Valid MonitorReqDTO.HoldReqDTO reqDTO,
+                                      @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
+        monitorService.saveHoldPage(reqDTO.getStudentId(), reqDTO.getHoldPage());
+        return ResponseEntity.ok(ApiUtils.success(null));
+    }
+
+    /**
      * 관리자 브라우저가 Firestore를 직접 구독하기 위한 커스텀 토큰 발급.
      * Firestore 보안 규칙은 "인증된 사용자만 read, write는 서버(Admin SDK)만"으로 잠그는 것을
      * 전제로 한다 — 이 엔드포인트는 Spring Security로 이미 로그인된 admin만 호출 가능(/admin/**).

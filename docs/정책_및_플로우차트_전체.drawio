@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram name="00. 시스템 개요" id="overview">
-        <mxGraphModel dx="993" dy="463" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1150" math="0" shadow="0">
+        <mxGraphModel dx="993" dy="465" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1150" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -137,7 +137,7 @@
         </mxGraphModel>
     </diagram>
     <diagram name="01. 학생 전체 여정 (End-to-End)" id="journey">
-        <mxGraphModel dx="993" dy="463" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1900" math="0" shadow="0">
+        <mxGraphModel dx="993" dy="465" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1900" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -290,193 +290,193 @@
         </mxGraphModel>
     </diagram>
     <diagram name="02. 예약 정책 (reserveOne)" id="reservation">
-        <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1750" pageHeight="1450" math="0" shadow="0">
+        <mxGraphModel dx="993" dy="465" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1750" pageHeight="1450" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
-                <mxCell id="t_1" value="회차 예약 — ReservationService.reserveOne" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+                <mxCell id="t_1" value="회차 예약 — ReservationService.reserveOne" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
                     <mxGeometry x="40" y="24" width="1200" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="t_2" value="학생 본인 예약 / 직원 대리 예약(reserveByAdmin) 모두 같은 검증을 탄다" style="text;html=1;fontSize=12;align=left;verticalAlign=middle;fontColor=#666666;" vertex="1" parent="1">
+                <mxCell id="t_2" value="학생 본인 예약 / 직원 대리 예약(reserveByAdmin) 모두 같은 검증을 탄다" style="text;html=1;fontSize=12;align=left;verticalAlign=middle;fontColor=#666666;" parent="1" vertex="1">
                     <mxGeometry x="40" y="56" width="1240" height="20" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r0" value="예약 요청 (slotInstanceId)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="reservation_r0" value="예약 요청 (slotInstanceId)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="230" y="130" width="400" height="50" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r1" value="lockStudentForReservation&#xa;= erp_student 행 UPDLOCK/HOLDLOCK&#xa;같은 학생 동시 요청 직렬화" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_r1" value="lockStudentForReservation&#xa;= erp_student 행 UPDLOCK/HOLDLOCK&#xa;같은 학생 동시 요청 직렬화" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="230" y="220" width="400" height="74" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_3" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r0" target="reservation_r1">
+                <mxCell id="e_3" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r0" target="reservation_r1" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r2" value="슬롯이 존재하는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="reservation_r2" value="슬롯이 존재하는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="230" y="334" width="400" height="80" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_4" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r1" target="reservation_r2">
+                <mxCell id="e_4" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r1" target="reservation_r2" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r3" value="아직 끝나지 않은 회차인가?&#xa;(ends_at &gt; now)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="reservation_r3" value="아직 끝나지 않은 회차인가?&#xa;(ends_at &gt; now)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="230" y="454" width="400" height="90" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_5" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r2" target="reservation_r3">
+                <mxCell id="e_5" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r2" target="reservation_r3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r4" value="그 달 예약 상한 미만인가?&#xa;비취소 예약수 &lt; 그 달 이용권 total_count 합" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="reservation_r4" value="그 달 예약 상한 미만인가?&#xa;비취소 예약수 &lt; 그 달 이용권 total_count 합" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="230" y="584" width="400" height="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_6" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r3" target="reservation_r4">
+                <mxCell id="e_6" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r3" target="reservation_r4" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r5" value="그 날짜 예약이 4회차 미만인가?&#xa;(MAX_SLOTS_PER_DAY = 4)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="reservation_r5" value="그 날짜 예약이 4회차 미만인가?&#xa;(MAX_SLOTS_PER_DAY = 4)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="230" y="724" width="400" height="96" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_7" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r4" target="reservation_r5">
+                <mxCell id="e_7" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r4" target="reservation_r5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r6" value="슬롯 정원이 남았는가?&#xa;(incrementReservedCount)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="reservation_r6" value="슬롯 정원이 남았는가?&#xa;(incrementReservedCount)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="230" y="860" width="400" height="90" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_8" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r5" target="reservation_r6">
+                <mxCell id="e_8" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r5" target="reservation_r6" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r7" value="예약 INSERT + 상태로그(RESERVED)&#xa;날짜는 요청이 아니라 슬롯에서 가져옴" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_r7" value="예약 INSERT + 상태로그(RESERVED)&#xa;날짜는 요청이 아니라 슬롯에서 가져옴" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="230" y="990" width="400" height="62" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_9" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r6" target="reservation_r7">
+                <mxCell id="e_9" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r6" target="reservation_r7" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_r8" value="예약 완료 → 모니터링 &#39;미입실&#39; 카드 생성" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="reservation_r8" value="예약 완료 → 모니터링 &#39;미입실&#39; 카드 생성" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="230" y="1092" width="400" height="50" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_10" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="reservation_r7" target="reservation_r8">
+                <mxCell id="e_10" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="reservation_r7" target="reservation_r8" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_x2" value="404 존재하지 않는 회차입니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_x2" value="404 존재하지 않는 회차입니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="880" y="339" width="300" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_11" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="reservation_r2" target="reservation_x2">
+                <mxCell id="e_11" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="reservation_r2" target="reservation_x2" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_x3" value="400 이미 종료된 회차입니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_x3" value="400 이미 종료된 회차입니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="880" y="459" width="300" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_12" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="reservation_r3" target="reservation_x3">
+                <mxCell id="e_12" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="reservation_r3" target="reservation_x3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_x4" value="400 해당 월 이용권이 없습니다 (상한 0)&#xa;또는 그 달 예약 가능 횟수 초과" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_x4" value="400 해당 월 이용권이 없습니다 (상한 0)&#xa;또는 그 달 예약 가능 횟수 초과" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="880" y="589" width="300" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_13" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="reservation_r4" target="reservation_x4">
+                <mxCell id="e_13" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="reservation_r4" target="reservation_x4" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_x5" value="400 하루 4회차까지만 예약할 수 있습니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_x5" value="400 하루 4회차까지만 예약할 수 있습니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="880" y="729" width="300" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_14" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="reservation_r5" target="reservation_x5">
+                <mxCell id="e_14" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="reservation_r5" target="reservation_x5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_x6" value="400 마감되었습니다 (정원 초과)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="reservation_x6" value="400 마감되었습니다 (정원 초과)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="880" y="865" width="300" height="70" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_15" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="reservation_r6" target="reservation_x6">
+                <mxCell id="e_15" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="reservation_r6" target="reservation_x6" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_rn1" value="월 상한은 홀드/차감을 하지 않는다&#xa;예약 취소가 잦아 되돌림 비용이 커서, 실제 차감은&#xa;입실 시점(enterSession)에만 일어난다.&#xa;기준 달은 &#39;오늘&#39;이 아니라 슬롯의 service_date가 속한 달 —&#xa;4주 일괄 예약이 월 경계를 넘어도 각자 자기 달 상한을 탄다." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+                <mxCell id="reservation_rn1" value="월 상한은 홀드/차감을 하지 않는다&#xa;예약 취소가 잦아 되돌림 비용이 커서, 실제 차감은&#xa;입실 시점(enterSession)에만 일어난다.&#xa;기준 달은 &#39;오늘&#39;이 아니라 슬롯의 service_date가 속한 달 —&#xa;4주 일괄 예약이 월 경계를 넘어도 각자 자기 달 상한을 탄다." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" parent="1" vertex="1">
                     <mxGeometry x="1230" y="339" width="430" height="130" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_rn2" value="동시성 방어&#xa;(student_id, service_date) 유니크 인덱스를 제거한 자리를&#xa;학생 행 락이 대신 지킨다. &#39;N건까지&#39;는 유니크로 표현 불가.&#xa;UX_reservation_slot_student(같은 회차 중복예약)는 유지." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+                <mxCell id="reservation_rn2" value="동시성 방어&#xa;(student_id, service_date) 유니크 인덱스를 제거한 자리를&#xa;학생 행 락이 대신 지킨다. &#39;N건까지&#39;는 유니크로 표현 불가.&#xa;UX_reservation_slot_student(같은 회차 중복예약)는 유지." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" parent="1" vertex="1">
                     <mxGeometry x="1230" y="490" width="430" height="110" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_rb" value="4주 일괄 예약 미리보기 (previewBatch)&#xa;&#xa;같은 요일·회차를 4주치 훑어 주차별 상태를 돌려준다&#xa;  OPEN — 예약 가능&#xa;  DAY_CONFLICT — 그날 이미 4회차&#xa;  MONTH_FULL — 그 달 상한 소진(배치 내 앞선 OPEN도 누적 카운트)&#xa;  NO_PASS — 그 달 이용권 없음&#xa;  CLOSED / FULL — 종료된 회차 · 정원 마감" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+                <mxCell id="reservation_rb" value="4주 일괄 예약 미리보기 (previewBatch)&#xa;&#xa;같은 요일·회차를 4주치 훑어 주차별 상태를 돌려준다&#xa;  OPEN — 예약 가능&#xa;  DAY_CONFLICT — 그날 이미 4회차&#xa;  MONTH_FULL — 그 달 상한 소진(배치 내 앞선 OPEN도 누적 카운트)&#xa;  NO_PASS — 그 달 이용권 없음&#xa;  CLOSED / FULL — 종료된 회차 · 정원 마감" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" parent="1" vertex="1">
                     <mxGeometry x="60" y="1140" width="480" height="170" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_rc" value="취소 · 노쇼&#xa;&#xa;• 학생 취소 / 직원 대리 취소 → status=CANCELED + 로그&#xa;• 노쇼 배치(ReservationNoShowJob): ends_at 지났는데&#xa;  RESERVED로 남은 예약 → NOSHOW (SYSTEM, &#39;미입실 자동 처리&#39;)&#xa;• NOSHOW는 월 상한 계산에 포함된다(status &lt;&gt; CANCELED)&#xa;• 입실 1회로 그날 예약이 전부 ATTENDED가 되므로&#xa;  나중 회차가 노쇼로 잡히지 않는다" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+                <mxCell id="reservation_rc" value="취소 · 노쇼&#xa;&#xa;• 학생 취소 / 직원 대리 취소 → status=CANCELED + 로그&#xa;• 노쇼 배치(ReservationNoShowJob): ends_at 지났는데&#xa;  RESERVED로 남은 예약 → NOSHOW (SYSTEM, &#39;미입실 자동 처리&#39;)&#xa;• NOSHOW는 월 상한 계산에 포함된다(status &lt;&gt; CANCELED)&#xa;• 입실 1회로 그날 예약이 전부 ATTENDED가 되므로&#xa;  나중 회차가 노쇼로 잡히지 않는다" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" parent="1" vertex="1">
                     <mxGeometry x="600" y="1140" width="460" height="170" as="geometry"/>
                 </mxCell>
-                <mxCell id="reservation_rd" value="예약 상태 전이&#xa;&#xa;RESERVED ──입실──▶ ATTENDED&#xa;   │&#xa;   ├──학생/직원 취소──▶ CANCELED&#xa;   └──ends_at 경과(배치)──▶ NOSHOW" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+                <mxCell id="reservation_rd" value="예약 상태 전이&#xa;&#xa;RESERVED ──입실──▶ ATTENDED&#xa;   │&#xa;   ├──학생/직원 취소──▶ CANCELED&#xa;   └──ends_at 경과(배치)──▶ NOSHOW" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" parent="1" vertex="1">
                     <mxGeometry x="1090" y="1140" width="300" height="170" as="geometry"/>
                 </mxCell>
             </root>
         </mxGraphModel>
     </diagram>
     <diagram name="03. 입실 / 퇴실 (MonitorService)" id="session">
-        <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1900" math="0" shadow="0">
+        <mxGraphModel dx="993" dy="465" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="1900" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
-                <mxCell id="t_1" value="입실 / 퇴실 — enterSession · exitSession" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" vertex="1" parent="1">
+                <mxCell id="t_1" value="입실 / 퇴실 — enterSession · exitSession" style="text;html=1;fontSize=20;fontStyle=1;align=left;verticalAlign=middle;" parent="1" vertex="1">
                     <mxGeometry x="40" y="24" width="1200" height="30" as="geometry"/>
                 </mxCell>
-                <mxCell id="t_2" value="입실·퇴실은 하루 1회. 하나의 @Transactional — 중간에 막히면 세션 insert까지 롤백된다" style="text;html=1;fontSize=12;align=left;verticalAlign=middle;fontColor=#666666;" vertex="1" parent="1">
+                <mxCell id="t_2" value="입실·퇴실은 하루 1회. 하나의 @Transactional — 중간에 막히면 세션 insert까지 롤백된다" style="text;html=1;fontSize=12;align=left;verticalAlign=middle;fontColor=#666666;" parent="1" vertex="1">
                     <mxGeometry x="40" y="56" width="1240" height="20" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_hh1" value="입실  enterSession(studentId)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#6c8ebf;strokeColor=#3d5a80;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="session_hh1" value="입실  enterSession(studentId)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#6c8ebf;strokeColor=#3d5a80;fontColor=#ffffff;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="130" y="105" width="420" height="34" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e0" value="입실 요청&#xa;(키오스크 /attendance/enter 또는 앱 로그인)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="session_e0" value="입실 요청&#xa;(키오스크 /attendance/enter 또는 앱 로그인)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="130" y="155" width="420" height="62" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e1" value="오늘 열린 세션이 있는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="session_e1" value="오늘 열린 세션이 있는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="130" y="253" width="420" height="80" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_3" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e0" target="session_e1">
+                <mxCell id="e_3" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e0" target="session_e1" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e2" value="clinic_session INSERT (ENTERED)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_e2" value="clinic_session INSERT (ENTERED)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="130" y="369" width="420" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_4" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e1" target="session_e2">
+                <mxCell id="e_4" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e1" target="session_e2" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e3" value="오늘 예약(RESERVED/ATTENDED)이&#xa;하나라도 있는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="session_e3" value="오늘 예약(RESERVED/ATTENDED)이&#xa;하나라도 있는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="130" y="451" width="420" height="90" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_5" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e2" target="session_e3">
+                <mxCell id="e_5" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e2" target="session_e3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e4" value="이미 ATTENDED가 있는가?&#xa;(= 같은 날 재로그인)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="session_e4" value="이미 ATTENDED가 있는가?&#xa;(= 같은 날 재로그인)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="130" y="577" width="420" height="90" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_6" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e3" target="session_e4">
+                <mxCell id="e_6" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e3" target="session_e4" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e5" value="지금이 예약 회차 이용 시간대인가?&#xa;[회차 시작 - 10분, 회차 종료]" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="session_e5" value="지금이 예약 회차 이용 시간대인가?&#xa;[회차 시작 - 10분, 회차 종료]" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="130" y="703" width="420" height="96" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_7" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e4" target="session_e5">
+                <mxCell id="e_7" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e4" target="session_e5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e6" value="그날 RESERVED 회차를 전부 ATTENDED로 전환&#xa;+ 상태 로그" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_e6" value="그날 RESERVED 회차를 전부 ATTENDED로 전환&#xa;+ 상태 로그" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="130" y="835" width="420" height="62" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_8" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e5" target="session_e6">
+                <mxCell id="e_8" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e5" target="session_e6" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e7" value="countAttendedSlotsToday → 목표 차감 회차 수" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_e7" value="countAttendedSlotsToday → 목표 차감 회차 수" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="130" y="933" width="420" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_9" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e6" target="session_e7">
+                <mxCell id="e_9" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e6" target="session_e7" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e8" value="이용권 차감 성공?&#xa;(consume 반환값 ≠ -1)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="session_e8" value="이용권 차감 성공?&#xa;(consume 반환값 ≠ -1)" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1015" width="420" height="90" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_10" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e7" target="session_e8">
+                <mxCell id="e_10" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e7" target="session_e8" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e9" value="ensureDiary — 독서일지 헤더 생성(멱등)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_e9" value="ensureDiary — 독서일지 헤더 생성(멱등)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1141" width="420" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_11" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e8" target="session_e9">
+                <mxCell id="e_11" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e8" target="session_e9" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_e10" value="입실 완료 → Firestore 카드 &#39;미입실&#39; → &#39;독서 중&#39;" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="session_e10" value="입실 완료 → Firestore 카드 &#39;미입실&#39; → &#39;독서 중&#39;" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1223" width="420" height="50" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_12" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_e9" target="session_e10">
+                <mxCell id="e_12" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_e9" target="session_e10" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_13" value="있음(멱등 재사용)" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#82b366;fontColor=#2d6a2d;" edge="1" parent="1" source="session_e1" target="session_e3">
+                <mxCell id="e_13" value="있음(멱등 재사용)" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#82b366;fontColor=#2d6a2d;" parent="1" source="session_e1" target="session_e3" edge="1">
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points">
                             <mxPoint x="120" y="290"/>
@@ -484,7 +484,7 @@
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="e_14" value="예 — 시간대 검사 생략" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#82b366;fontColor=#2d6a2d;" edge="1" parent="1" source="session_e4" target="session_e6">
+                <mxCell id="e_14" value="예 — 시간대 검사 생략" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#82b366;fontColor=#2d6a2d;" parent="1" source="session_e4" target="session_e6" edge="1">
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points">
                             <mxPoint x="600" y="700"/>
@@ -492,67 +492,67 @@
                         </Array>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="session_ex3" value="400 오늘 예약 내역이 없습니다.&#xa;예약 후 이용해주세요.&#xa;(2026-08-20 예약 필수 정책)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_ex3" value="400 오늘 예약 내역이 없습니다.&#xa;예약 후 이용해주세요.&#xa;(2026-08-20 예약 필수 정책)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="640" y="455" width="300" height="74" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_15" value="없음" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="session_e3" target="session_ex3">
+                <mxCell id="e_15" value="없음" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="session_e3" target="session_ex3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_ex5" value="400 N회차는 HH:MM~HH:MM에&#xa;이용 가능합니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_ex5" value="400 N회차는 HH:MM~HH:MM에&#xa;이용 가능합니다" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="640" y="660" width="300" height="60" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_16" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="session_e5" target="session_ex5">
+                <mxCell id="e_16" value="아니오" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="session_e5" target="session_ex5" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_ex8" value="400 이용권이 모두 소진되었습니다.&#xa;재결제 후 이용해주세요.&#xa;→ 트랜잭션 전체 롤백" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_ex8" value="400 이용권이 모두 소진되었습니다.&#xa;재결제 후 이용해주세요.&#xa;→ 트랜잭션 전체 롤백" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="640" y="1020" width="300" height="74" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_17" value="-1" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="session_e8" target="session_ex8">
+                <mxCell id="e_17" value="-1" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="session_e8" target="session_ex8" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_en1" value="입실 1회 = 그날 예약 전부 출석 (2026-08-28)&#xa;하루 4회차까지 예약 가능한데 입실은 1회뿐이라,&#xa;첫 입실 한 번으로 그날 RESERVED를 모두 ATTENDED로 올린다.&#xa;두 번째 회차 시간대가 아직 아니어도 출석으로 친다." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+                <mxCell id="session_en1" value="입실 1회 = 그날 예약 전부 출석 (2026-08-28)&#xa;하루 4회차까지 예약 가능한데 입실은 1회뿐이라,&#xa;첫 입실 한 번으로 그날 RESERVED를 모두 ATTENDED로 올린다.&#xa;두 번째 회차 시간대가 아직 아니어도 출석으로 친다." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" parent="1" vertex="1">
                     <mxGeometry x="960" y="660" width="400" height="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_en2" value="이용권은 &#39;그날 출석 회차 수&#39;만큼 깎는다.&#xa;재입실 시엔 (목표 − 이미 차감분)만 추가로 깎는다.&#xa;모자라면 있는 만큼만 깎고 입실은 허용,&#xa;하나도 못 깎았고 남은 게 없으면 -1로 차단." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+                <mxCell id="session_en2" value="이용권은 &#39;그날 출석 회차 수&#39;만큼 깎는다.&#xa;재입실 시엔 (목표 − 이미 차감분)만 추가로 깎는다.&#xa;모자라면 있는 만큼만 깎고 입실은 허용,&#xa;하나도 못 깎았고 남은 게 없으면 -1로 차단." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" parent="1" vertex="1">
                     <mxGeometry x="960" y="790" width="400" height="100" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_hh2" value="퇴실  exitSession(studentId)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#6c8ebf;strokeColor=#3d5a80;fontColor=#ffffff;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="session_hh2" value="퇴실  exitSession(studentId)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#6c8ebf;strokeColor=#3d5a80;fontColor=#ffffff;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1340" width="420" height="34" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_q0" value="퇴실 요청 (학생 QR / 직원 모니터링)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="session_q0" value="퇴실 요청 (학생 QR / 직원 모니터링)" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1390" width="420" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_q1" value="studentSessionRegistry.clear&#xa;→ 문제풀이 기기 강제 로그아웃" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_q1" value="studentSessionRegistry.clear&#xa;→ 문제풀이 기기 강제 로그아웃" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1466" width="420" height="58" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_18" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_q0" target="session_q1">
+                <mxCell id="e_18" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_q0" target="session_q1" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_q2" value="오늘 열린 세션이 있는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" vertex="1" parent="1">
+                <mxCell id="session_q2" value="오늘 열린 세션이 있는가?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1554" width="420" height="76" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_19" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_q1" target="session_q2">
+                <mxCell id="e_19" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_q1" target="session_q2" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_q3" value="세션 EXITED 처리 + 대여 도서 반납&#xa;+ 독서일지 out_time 기록(수동 보정값은 보존)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" vertex="1" parent="1">
+                <mxCell id="session_q3" value="세션 EXITED 처리 + 대여 도서 반납&#xa;+ 독서일지 out_time 기록(수동 보정값은 보존)" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1660" width="420" height="62" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_20" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_q2" target="session_q3">
+                <mxCell id="e_20" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_q2" target="session_q3" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_q4" value="퇴실 완료 → Firestore 카드 &#39;퇴실&#39;" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+                <mxCell id="session_q4" value="퇴실 완료 → Firestore 카드 &#39;퇴실&#39;" style="rounded=1;arcSize=50;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;" parent="1" vertex="1">
                     <mxGeometry x="130" y="1752" width="420" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_21" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" parent="1" source="session_q3" target="session_q4">
+                <mxCell id="e_21" value="" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" parent="1" source="session_q3" target="session_q4" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_qx" value="이미 퇴실됨 → 조용히 무시" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" vertex="1" parent="1">
+                <mxCell id="session_qx" value="이미 퇴실됨 → 조용히 무시" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#999999;fontSize=11;align=left;verticalAlign=top;spacingLeft=10;spacingTop=6;" parent="1" vertex="1">
                     <mxGeometry x="640" y="1580" width="260" height="46" as="geometry"/>
                 </mxCell>
-                <mxCell id="e_22" value="없음" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" edge="1" parent="1" source="session_q2" target="session_qx">
+                <mxCell id="e_22" value="없음" style="rounded=0;orthogonalEdgeStyle=orthogonalEdgeStyle;html=1;fontSize=11;strokeColor=#b85450;fontColor=#b85450;" parent="1" source="session_q2" target="session_qx" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="session_qn" value="완독 여부와 무관하게 퇴실 시점에 반납한다 —&#xa;안 그러면 그 사이 다른 학생이 재고를 못 쓴다.&#xa;추천(PENDING)은 남으므로 재입실하면 같은 책을 다시 대여한다." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
+                <mxCell id="session_qn" value="완독 여부와 무관하게 퇴실 시점에 반납한다 —&#xa;안 그러면 그 사이 다른 학생이 재고를 못 쓴다.&#xa;추천(PENDING)은 남으므로 재입실하면 같은 책을 다시 대여한다." style="shape=note;whiteSpace=wrap;html=1;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;align=left;verticalAlign=top;spacingLeft=8;spacingTop=4;" parent="1" vertex="1">
                     <mxGeometry x="960" y="1450" width="400" height="90" as="geometry"/>
                 </mxCell>
             </root>
