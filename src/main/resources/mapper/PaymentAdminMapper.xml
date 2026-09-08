@@ -32,6 +32,7 @@
                ps.valid_until           AS validUntil,
                pm.payment_id            AS paymentId,
                pm.order_no              AS orderNo,
+               pm.subscription_id       AS subscriptionId,
                pm.paid_at               AS paidAt,
                <!-- 결제 행이 없으면(미결제) 이용권에 붙은 상품 가격을 청구 예정액으로 대신 보여준다 -->
                ISNULL(pm.amount, pr.price)      AS amount,
@@ -50,7 +51,8 @@
         ) ps
         LEFT JOIN erp_bookstore_product pr ON pr.product_id = ps.product_id
         OUTER APPLY (
-            SELECT TOP 1 p2.payment_id, p2.order_no, p2.paid_at, p2.amount, p2.refund_amount, p2.status
+            SELECT TOP 1 p2.payment_id, p2.order_no, p2.subscription_id, p2.paid_at, p2.amount,
+                   p2.refund_amount, p2.status
             FROM erp_bookstore_payment p2
             WHERE p2.student_id   = st.student_id
               AND p2.service_code = #{serviceCode}
@@ -71,6 +73,11 @@
         <if test="keyword != null and keyword != ''">
             AND st.student_name LIKE '%' + #{keyword} + '%'
         </if>
+        <!--
+          결제 방식(자동결제/일시불) 필터는 여기서 걸지 않는다. 상단 요약("결제완료 N명")을
+          필터 적용 전 전체 기준으로 세야 해서, 결제 상태 필터와 마찬가지로 PaymentAdminService가
+          Java에서 거른다.
+        -->
         ORDER BY st.student_name ASC
     </select>
 

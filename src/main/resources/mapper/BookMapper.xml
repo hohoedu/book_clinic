@@ -181,6 +181,11 @@
         SELECT TOP 1 content_id FROM erp_bookstore_content WHERE original_title = #{title}
     </select>
 
+    <!-- content_id 존재 여부 (엑셀 일괄 등록에서 수정 대상 검증용) -->
+    <select id="existsContentById" resultType="boolean">
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM erp_bookstore_content WHERE content_id = #{contentId}) THEN 1 ELSE 0 END
+    </select>
+
     <!-- 학년별 도서 목록 엑셀 다운로드용 — 학년 코드명(codeNm) 기준 정렬, 번호는 시트 작성 시 순번으로 매긴다 -->
     <select id="findContentsForGradeExcel" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$GradeListRespDTO">
         SELECT bc.original_title AS originalTitle,

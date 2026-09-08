@@ -139,7 +139,7 @@
         OUTER APPLY (
             -- 어제 이전 추천 이력이 새어 들어오지 않도록 오늘 추천됐거나 아직 PENDING(이어읽기)인
             -- 건만 본다 — findTodayBooksByStudentIds(380행)와 동일한 규칙(2026-08-27 버그 수정)
-            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, final_correct_count, total_count, status, grade
+            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, final_correct_count, total_count, status, grade, hold_page
             FROM erp_bookstore_recommend_log
             WHERE student_id = cs.student_id
               AND (CAST(recommended_at AS DATE) = cs.session_date OR status = 'PENDING')
@@ -277,7 +277,7 @@
         OUTER APPLY (
             -- 어제 이전 추천 이력이 새어 들어오지 않도록 오늘 추천됐거나 아직 PENDING(이어읽기)인
             -- 건만 본다 — findTodayBooksByStudentIds(380행)와 동일한 규칙(2026-08-27 버그 수정)
-            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, final_correct_count, total_count, status, grade
+            SELECT TOP 1 recommend_id, content_id, recommended_at, correct_count, final_correct_count, total_count, status, grade, hold_page
             FROM erp_bookstore_recommend_log
             WHERE student_id = r.student_id
               AND (CAST(recommended_at AS DATE) = si.service_date OR status = 'PENDING')

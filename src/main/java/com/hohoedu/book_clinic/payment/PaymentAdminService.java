@@ -32,6 +32,11 @@ public class PaymentAdminService {
             "PARTIAL_REFUND", "부분 환불",
             "REFUNDED", "환불 완료");
 
+    /** 결제 방식 코드 → 화면 라벨. AUTO/ONCE만 있고, 결제 행이 없는 미결제는 방식 자체가 없다(null) */
+    private static final Map<String, String> PAY_METHOD_LABELS = Map.of(
+            "AUTO", "자동결제",
+            "ONCE", "일시불");
+
     private final PaymentAdminRepository paymentAdminRepository;
 
     /**
@@ -40,7 +45,8 @@ public class PaymentAdminService {
      */
     @Transactional(readOnly = true)
     public PaymentAdminRespDTO.HistoryPageDTO getHistoryPage(String centerCode, String billingYm, String serviceCode,
-                                                             String gradeKey, String statusFilter, String keyword) {
+                                                             String gradeKey, String statusFilter, String payMethodFilter,
+                                                             String keyword) {
         List<PaymentAdminRespDTO.HistoryRowDTO> rows =
                 paymentAdminRepository.findHistoryRows(centerCode, billingYm, serviceCode, gradeKey, keyword);
 
@@ -49,6 +55,10 @@ public class PaymentAdminService {
             String status = resolvePassStatus(row, today);
             row.setPassStatus(status);
             row.setPassStatusLabel(STATUS_LABELS.get(status));
+
+            String payMethod = resolvePayMethod(row);
+            row.setPayMethod(payMethod);
+            row.setPayMethodLabel(payMethod == null ? null : PAY_METHOD_LABELS.get(payMethod));
         });
 
         // 요약("결제완료 89명 | 미결제 11명")은 상태 필터를 적용하기 전 전체 기준으로 센다 —
@@ -60,7 +70,14 @@ public class PaymentAdminService {
             if (!STATUS_LABELS.containsKey(statusFilter)) {
                 throw new Exception400("알 수 없는 결제 상태입니다: " + statusFilter);
             }
-            visible = rows.stream().filter(r -> statusFilter.equals(r.getPassStatus())).toList();
+            visible = visible.stream().filter(r -> statusFilter.equals(r.getPassStatus())).toList();
+        }
+        // 결제 방식 필터도 상태 필터와 같은 자리에서(요약 집계 뒤) 건다.
+        if (payMethodFilter != null && !payMethodFilter.isBlank()) {
+            if (!PAY_METHOD_LABELS.containsKey(payMethodFilter)) {
+                throw new Exception400("알 수 없는 결제 방식입니다: " + payMethodFilter);
+            }
+            visible = visible.stream().filter(r -> payMethodFilter.equals(r.getPayMethod())).toList();
         }
 
         return PaymentAdminRespDTO.HistoryPageDTO.builder()
@@ -97,6 +114,19 @@ public class PaymentAdminService {
         boolean expired = row.getValidUntil() != null && row.getValidUntil().isBefore(today);
         boolean exhausted = row.getRemainCount() == null || row.getRemainCount() <= 0;
         return (expired || exhausted) ? "USED_UP" : "IN_USE";
+    }
+
+    /**
+     * 결제 방식 구분 — 결제 행이 있어야 방식이 있다.
+     *   · subscription_id가 채워져 있으면 자동결제(AUTO)
+     *   · 결제 행은 있는데 구독이 없으면 일시불(ONCE) — 수기 등록분도 여기 들어온다(현재 미구현)
+     *   · 결제 행 자체가 없으면 방식 없음(null) — 뱃지로는 "미결제"로 이미 드러난다
+     */
+    private String resolvePayMethod(PaymentAdminRespDTO.HistoryRowDTO row) {
+        if (row.getPaymentId() == null) {
+            return null;
+        }
+        return row.getSubscriptionId() != null ? "AUTO" : "ONCE";
     }
 
     /**

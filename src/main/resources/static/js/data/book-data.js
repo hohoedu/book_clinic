@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDeleteSelectedButton();
   initToolbarSearch();
   initGradeExcelButton();
+  initBookImportButton();
   initListSearch();
   initDetailFilter();
   initDeletedBooks();
@@ -199,9 +200,14 @@ async function loadCurrentUser() {
 /* 권한별 UI 적용 */
 function applyRoleUi() {
   const newBtn = document.getElementById("btnNewBook");
+  const importBtn = document.getElementById("btnImportExcel");
 
   if (isHq) {
     if (newBtn) newBtn.textContent = "+ 신규 도서 등록";
+    // 템플릿 다운로드 / 엑셀 일괄 등록은 본사 전용
+    if (importBtn) importBtn.hidden = false;
+    const templateBtn = document.getElementById("btnImportTemplate");
+    if (templateBtn) templateBtn.hidden = false;
     return;
   }
 
@@ -689,6 +695,134 @@ function initGradeExcelButton() {
   document.getElementById("btnGradeExcel")?.addEventListener("click", () => {
     window.location.href = "/book/excel/grade";
   });
+}
+
+/* 엑셀(xlsx) 일괄 등록/수정 — A열 content_id가 있으면 수정, 없으면 신규 등록 (본사 전용) */
+function initBookImportButton() {
+  const btn = document.getElementById("btnImportExcel");
+  const input = document.getElementById("importExcelInput");
+  const templateBtn = document.getElementById("btnImportTemplate");
+  if (!btn || !input) return;
+
+  templateBtn?.addEventListener("click", () => {
+    window.location.href = "/book/import/template";
+  });
+
+  btn.addEventListener("click", () => input.click());
+
+  input.addEventListener("change", async () => {
+    const file = input.files[0];
+    if (!file) return;
+
+    const errorLines = (rows) =>
+      rows?.length ? `\n\n건너뛴 행 ${rows.length}건:\n${rows.slice(0, 15).join("\n")}${rows.length > 15 ? `\n… 외 ${rows.length - 15}건` : ""}` : "";
+
+    btn.disabled = true;
+    if (templateBtn) templateBtn.disabled = true;
+    try {
+      // 1) check 모드로 먼저 전체 미리보기 (저장 없음)
+      const preview = await sendImportFile(file, "check", 0, 0);
+
+      if (!preview.total) {
+        alert(
+          `인식된 데이터 행이 없습니다.\n` +
+            `인식된 시트: ${preview.sheets?.length ? preview.sheets.join(", ") : "없음"}\n\n` +
+            `헤더 행에 "content_id" / "도서명" 칸이 있는지, 데이터가 그 아래 행에 있는지 확인해주세요.`
+        );
+        return;
+      }
+
+      const proceed = confirm(
+        `시트 ${preview.sheets?.length ?? 0}개 · 총 ${preview.total}행\n` +
+          `신규 등록 ${preview.inserted ?? 0}건 / 수정 ${preview.updated ?? 0}건 / 변경 없음 ${preview.unchanged ?? 0}건` +
+          errorLines(preview.errors) +
+          `\n\n반영하시겠습니까? (바뀐 값이 있는 행만 수정됩니다)`
+      );
+      if (!proceed) return;
+
+      // 2) 200행씩 나눠 반영 + 진행률 표시 (배치마다 xlsx를 다시 파싱하므로 너무 잘게 쪼개지 않는다)
+      const BATCH = 200;
+      const total = preview.total;
+      const acc = { inserted: 0, updated: 0, unchanged: 0, errors: [] };
+      showImportProgress(total);
+      for (let off = 0; off < total; off += BATCH) {
+        const r = await sendImportFile(file, "upsert", off, BATCH);
+        acc.inserted += r.inserted ?? 0;
+        acc.updated += r.updated ?? 0;
+        acc.unchanged += r.unchanged ?? 0;
+        if (r.errors?.length) acc.errors.push(...r.errors);
+        updateImportProgress(Math.min(off + BATCH, total), total);
+      }
+      hideImportProgress();
+
+      alert(
+        `엑셀 일괄 반영 완료 (총 ${total}행)\n` +
+          `신규 ${acc.inserted}건 / 수정 ${acc.updated}건 / 변경 없음 ${acc.unchanged}건` +
+          errorLines(acc.errors)
+      );
+      await loadBookList(currentFilters());
+    } catch (error) {
+      hideImportProgress();
+      alert(error.message ?? "엑셀 일괄 등록 중 오류가 발생했습니다.");
+    } finally {
+      input.value = "";
+      btn.disabled = false;
+      if (templateBtn) templateBtn.disabled = false;
+    }
+  });
+}
+
+/* /book/import 호출 (mode: check=미리보기 전체 / upsert=[offset, offset+limit) 반영) */
+async function sendImportFile(file, mode, offset = 0, limit = 1000000) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("mode", mode);
+  form.append("offset", offset);
+  form.append("limit", limit);
+
+  const response = await fetch("/book/import", {
+    method: "POST",
+    headers: { [CSRF_HEADER]: getCsrfToken() },
+    body: form,
+  });
+  const data = await response.json();
+  if (!data.success) throw new Error(data.error?.message ?? "엑셀 일괄 등록에 실패했습니다.");
+  return data.response ?? {};
+}
+
+/* 일괄 반영 진행률 오버레이 (CSS 파일 안 건드리려고 인라인 스타일로 주입) */
+function showImportProgress(total) {
+  let el = document.getElementById("importProgressOverlay");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "importProgressOverlay";
+    el.style.cssText =
+      "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)";
+    el.innerHTML =
+      '<div style="background:#fff;border-radius:12px;padding:28px 32px;min-width:320px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)">' +
+      '<div style="font-weight:700;margin-bottom:14px">도서 일괄 반영 중…</div>' +
+      '<div style="height:10px;border-radius:6px;background:#e9ecef;overflow:hidden">' +
+      '<div id="importProgressBar" style="height:100%;width:0%;background:#4caf50;transition:width .2s"></div>' +
+      "</div>" +
+      '<div id="importProgressText" style="margin-top:10px;font-size:13px;color:#666"></div>' +
+      "</div>";
+    document.body.appendChild(el);
+  }
+  el.style.display = "flex";
+  updateImportProgress(0, total);
+}
+
+function updateImportProgress(done, total) {
+  const bar = document.getElementById("importProgressBar");
+  const text = document.getElementById("importProgressText");
+  const pct = total ? Math.round((Math.min(done, total) / total) * 100) : 0;
+  if (bar) bar.style.width = pct + "%";
+  if (text) text.textContent = `${Math.min(done, total)} / ${total} (${pct}%)`;
+}
+
+function hideImportProgress() {
+  const el = document.getElementById("importProgressOverlay");
+  if (el) el.style.display = "none";
 }
 
 /* 목록 검색(클라이언트 필터) + 상세 필터 버튼 */

@@ -23,6 +23,9 @@ const STATUS_CLASS = {
   REFUNDED: "status-refunded",
 };
 
+/* 결제 방식 코드 → 색상 클래스. 글자는 서버가 내려주는 payMethodLabel을 그대로 쓴다 */
+const PAY_METHOD_CLASS = { AUTO: "pay-auto", ONCE: "pay-once" };
+
 const RESERVATION_LABEL = { ATTENDED: "출석 완료", RESERVED: "예약", NOSHOW: "미출석" };
 const TRAIL_STATUS_LABEL = { PAID: "결제 완료", CANCELED: "결제 취소", REQ: "취소 요청", DONE: "취소 완료", FAIL: "취소 실패" };
 
@@ -50,6 +53,7 @@ function currentFilters() {
     month: document.getElementById("filterMonth").value,
     grade: document.getElementById("filterGrade").value,
     status: document.getElementById("filterStatus").value,
+    payMethod: document.getElementById("filterPayMethod").value,
     keyword: document.getElementById("filterKeyword").value.trim(),
   };
 }
@@ -106,7 +110,10 @@ function renderPaymentList(rows) {
         <td class="col-no">${idx + 1}</td>
         <td class="col-name">${escapeHtml(row.studentName)}</td>
         <td>${escapeHtml(row.gradeName ?? "-")}</td>
-        <td class="${row.paidAt ? "" : "col-muted"}">${formatDateTime(row.paidAt)}</td>
+        <td class="${row.paidAt ? "" : "col-muted"}">
+          ${formatDateTime(row.paidAt)}
+          ${payMethodTag(row)}
+        </td>
         <td class="col-amount">${formatMoney(row.amount)}</td>
         <td class="col-refund ${hasRefund ? "has-refund" : "col-muted"}">${hasRefund ? formatMoney(row.refundAmount) : "-"}</td>
         <td>${row.usedCount}회</td>
@@ -118,6 +125,13 @@ function renderPaymentList(rows) {
   listBody.querySelectorAll(".payment-row").forEach((tr) => {
     tr.addEventListener("click", () => toggleDetail(tr));
   });
+}
+
+/* 결제일 아래에 붙는 방식 태그 — 결제 행이 없으면(payMethod=null) 아무것도 그리지 않는다 */
+function payMethodTag(row) {
+  if (!row.payMethod) return "";
+  const cls = PAY_METHOD_CLASS[row.payMethod] ?? "pay-once";
+  return `<span class="pay-method-tag ${cls}">${escapeHtml(row.payMethodLabel ?? "")}</span>`;
 }
 
 /* ===================== 행 펼침 상세 ===================== */
@@ -280,7 +294,7 @@ function initFilterBar() {
       loadPaymentList();
     });
   });
-  ["filterMonth", "filterGrade", "filterStatus"].forEach((id) => {
+  ["filterMonth", "filterGrade", "filterStatus", "filterPayMethod"].forEach((id) => {
     document.getElementById(id).addEventListener("change", loadPaymentList);
   });
 }

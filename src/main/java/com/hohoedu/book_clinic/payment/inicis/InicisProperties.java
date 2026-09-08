@@ -84,6 +84,13 @@ public class InicisProperties {
     private String billingApiKey;
 
     /**
+     * INILite key — 모바일 빌키발급 창(inilitepay.inicis.com/pay/card/billing)의 hashData 생성에 쓴다.
+     * hashData = SHA-512(price + mid + orderId + timestamp + billingLiteKey).
+     * 빌링 승인 API(billingApiKey)와도, 일반 결제(signKey)와도 다른 별도 값이다.
+     */
+    private String billingLiteKey;
+
+    /**
      * 모바일 빌키 발급창 주소. 일반 모바일 결제창(mobile.inicis.com/smart/payment/)과
      * 요청 URL·파라미터가 모두 다른 별도 모듈이라 값을 따로 둔다.
      *
@@ -130,11 +137,11 @@ public class InicisProperties {
         }
         // 자동결제 전환 이후 앱의 신규 결제 경로는 빌링뿐이다. 이 값들이 비어 있으면 결제 자체가
         // 안 되므로 일반 결제 설정과 같은 무게로 기동을 막는다.
-        if (isBlank(billingMid) || isBlank(billingApiKey) || isBlank(billingUrl)
+        if (isBlank(billingMid) || isBlank(billingApiKey) || isBlank(billingLiteKey) || isBlank(billingUrl)
                 || isBlank(billingMobileUrl) || isBlank(billingReturnUrl)) {
             throw new IllegalStateException(
                     "[이니시스] 빌링(자동결제) 운영 설정이 비어 있습니다. billing-mid/billing-api-key/"
-                            + "billing-url/billing-mobile-url/billing-return-url을 채운 뒤 기동하세요.");
+                            + "billing-lite-key/billing-url/billing-mobile-url/billing-return-url을 채운 뒤 기동하세요.");
         }
     }
 

@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +13,10 @@ import java.util.stream.Collectors;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
+import org.apache.poi.ss.usermodel.CellType;
+import org.apache.poi.ss.usermodel.DataValidation;
+import org.apache.poi.ss.usermodel.DataValidationConstraint;
+import org.apache.poi.ss.usermodel.DataValidationHelper;
 import org.apache.poi.ss.usermodel.FillPatternType;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
@@ -20,15 +25,22 @@ import org.apache.poi.ss.usermodel.PrintSetup;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
+import org.apache.poi.ss.util.CellRangeAddressList;
+import org.apache.poi.xssf.usermodel.XSSFCellStyle;
+import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic.book._dto.BookReqDTO;
 import com.hohoedu.book_clinic.book._dto.BookRespDTO;
+import com.hohoedu.book_clinic.common.code.CodeRepository;
+import com.hohoedu.book_clinic.common.code._dto.CodeRespDTO;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -53,6 +65,7 @@ public class BookService {
 
     private final BookRepository bookRepository;
     private final StudentRepository studentRepository;
+    private final CodeRepository codeRepository;
 
     /** 마스터 도서 등록 */
     @Transactional
@@ -60,6 +73,432 @@ public class BookService {
         bookRepository.registerContent(reqDTO);
         saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
         saveCardPath(reqDTO.getContentId(), reqDTO.getCardUrl(), registeredBy);
+    }
+
+    // ===================== 엑셀 일괄 등록 (2026-09-08) =====================
+
+    /**
+     * 일괄 등록 템플릿 컬럼 — 초1_교과연계_28권.xlsx 양식을 따르되 맨 앞에 content_id(수정 금지)를 둔다.
+     * 파싱은 위치가 아닌 헤더명으로 하므로 순서가 바뀌어도 동작한다.
+     */
+    private static final String[] IMPORT_HEADERS = {
+            "content_id", "NO", "학년", "도서분류", "도서명", "연계교과/추천기관/수상명", "장르", "난이도", "출판사", "해시태그", "도서소개", "독서시간" };
+    private static final int[] IMPORT_WIDTHS = {
+            2800, 1800, 2600, 3400, 12000, 5800, 3200, 2400, 5200, 8000, 24000, 2800 };
+    // IMPORT_HEADERS 기준 드롭다운 열 인덱스
+    private static final int COL_CONTENT_TYPE = 3;
+    private static final int COL_GENRE = 6;
+    private static final int COL_DIFFICULTY = 7;
+
+    /** 엑셀 헤더명(공백 제거) → 필드. content_id가 있으면 그 행은 UPDATE, 비어 있으면 INSERT */
+    private static final Map<String, String> HEADER_ALIASES = Map.ofEntries(
+            Map.entry("content_id", "contentId"), Map.entry("contentid", "contentId"), Map.entry("관리번호", "contentId"),
+            Map.entry("학년", "schoolYear"),
+            Map.entry("도서분류", "contentType"), Map.entry("분류", "contentType"),
+            Map.entry("도서명", "title"), Map.entry("제목", "title"),
+            Map.entry("저자", "author"), Map.entry("작가", "author"), Map.entry("지은이", "author"),
+            Map.entry("장르", "genre"),
+            Map.entry("난이도", "difficulty"),
+            Map.entry("출판사", "publisher"),
+            Map.entry("해시태그", "keywords"), Map.entry("키워드", "keywords"), Map.entry("태그", "keywords"),
+            Map.entry("도서소개", "summary"), Map.entry("줄거리", "summary"), Map.entry("요약", "summary"), Map.entry("내용", "summary"),
+            Map.entry("독서시간", "readingTime"), Map.entry("예상독서시간", "readingTime"),
+            Map.entry("부가정보(연계교과/추천기관/수상명)", "extraDetail"), Map.entry("부가정보", "extraDetail"),
+            Map.entry("연계교과/추천기관/수상명", "extraDetail"),
+            Map.entry("연계교과", "extraDetail"), Map.entry("추천기관", "extraDetail"),
+            Map.entry("추천기관명", "extraDetail"), Map.entry("수상명", "extraDetail"), Map.entry("수상작", "extraDetail"));
+
+    /** 파싱된 한 행 — contentId가 있으면 수정, 없으면 신규 */
+    private record ParsedBookRow(Integer contentId, BookReqDTO.RegisterReqDTO dto, int humanRow) {}
+
+    /**
+     * 엑셀(xlsx)로 마스터 도서를 일괄 등록/수정한다.
+     * - A열 content_id가 채워진 행은 그 도서를 UPDATE, 비어 있는 행은 INSERT (도서명 매칭을 쓰지 않는다).
+     * - content_id가 있어도 <b>바뀐 값이 하나도 없으면 건드리지 않는다</b>(unchanged로 집계) — 전체 템플릿을
+     *   그대로 다시 올려도 실제 변경분만 반영되고 수정 로그가 무의미하게 쌓이지 않는다.
+     * - 학년/분류/장르는 드롭다운으로 고른 한글 코드명을 erp_bookstore_code 코드값으로 변환한다.
+     *     mode = "check"        : 저장하지 않고 신규/수정/변경없음 건수만 집계 (offset/limit 무시, 파일 전체)
+     *     mode = "upsert"(기본) : rows[offset, offset+limit) 구간만 실제 반영 — 프런트가 나눠 호출하며 진행률 표시
+     */
+    @Transactional
+    public BookRespDTO.ImportResultDTO importContents(MultipartFile file, String mode, int offset, int limit,
+            String uploadedBy) throws IOException {
+        Map<String, String> gradeByName = nameToCode("S");
+        Map<String, String> typeByName = nameToCode("C");
+        Map<String, String> genreByName = nameToCode("G");
+
+        BookRespDTO.ImportResultDTO result = new BookRespDTO.ImportResultDTO();
+        List<ParsedBookRow> rows = new ArrayList<>();
+
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            for (int s = 0; s < workbook.getNumberOfSheets(); s++) {
+                Sheet sheet = workbook.getSheetAt(s);
+                Map<String, Integer> col = new HashMap<>();
+                int headerRowNum = findHeaderRow(sheet, col);
+                if (headerRowNum < 0) continue; // 도서명 헤더가 없는 시트는 건너뜀
+                result.getSheets().add(sheet.getSheetName());
+
+                // 학년별 시트 템플릿: 행의 학년 칸이 비어 있으면 시트명("초1" 등)으로 보정
+                String sheetGradeCode = gradeByName.get(sheet.getSheetName().replaceAll("\\s+", ""));
+
+                for (Row row : sheet) {
+                    if (row.getRowNum() <= headerRowNum) continue;
+                    String title = cellStr(row, col.get("title"));
+                    String idRaw = cellStr(row, col.get("contentId"));
+                    if (title == null && idRaw == null) continue; // 빈 행
+
+                    int humanRow = row.getRowNum() + 1;
+                    try {
+                        if (title == null)
+                            throw new IllegalArgumentException(humanRow + "행: 도서명이 비어 있습니다.");
+
+                        Integer contentId = null;
+                        if (idRaw != null) {
+                            try {
+                                contentId = Integer.valueOf(idRaw.replaceAll("[^0-9]", ""));
+                            } catch (NumberFormatException e) {
+                                throw new IllegalArgumentException(humanRow + "행: content_id 형식 오류 - " + idRaw);
+                            }
+                        }
+
+                        String gradeRaw = cellStr(row, col.get("schoolYear"));
+
+                        BookReqDTO.RegisterReqDTO dto = new BookReqDTO.RegisterReqDTO();
+                        dto.setTitle(title);
+                        dto.setAuthor(cellStr(row, col.get("author")));
+                        dto.setSchoolYear(gradeRaw != null
+                                ? resolveGrade(gradeRaw, gradeByName, humanRow)
+                                : sheetGradeCode);
+                        dto.setContentType(resolveByName(cellStr(row, col.get("contentType")), typeByName, "분류", humanRow));
+                        dto.setGenre(resolveByName(cellStr(row, col.get("genre")), genreByName, "장르", humanRow));
+                        dto.setDifficulty(cellStr(row, col.get("difficulty")));
+                        dto.setPublisher(cellStr(row, col.get("publisher")));
+                        dto.setKeywords(normalizeKeywords(cellStr(row, col.get("keywords"))));
+                        dto.setSummary(cellStr(row, col.get("summary")));
+                        dto.setReadingTime(cellStr(row, col.get("readingTime")));
+                        dto.setExtraDetail(cellStr(row, col.get("extraDetail")));
+                        // 상태(사용여부)는 템플릿에 없다 — 신규는 "Y", 기존 도서는 건드리지 않는다(아래 반영 루프에서 처리)
+                        rows.add(new ParsedBookRow(contentId, dto, humanRow));
+                    } catch (IllegalArgumentException e) {
+                        result.getErrors().add(e.getMessage());
+                    }
+                }
+            }
+        }
+
+        result.setTotal(rows.size());
+        boolean checkOnly = "check".equals(mode);
+
+        // content_id → 현재 DB 값 (바뀐 게 있는지 비교용)
+        Map<Integer, BookRespDTO.ContentRespDTO> currentById = new HashMap<>();
+        for (BookRespDTO.ContentRespDTO c : bookRepository.searchContents(null, null, null, null, null, null, null)) {
+            currentById.put(c.getContentId(), c);
+        }
+
+        int from = checkOnly ? 0 : Math.max(0, offset);
+        int to = checkOnly ? rows.size() : Math.min(rows.size(), from + Math.max(0, limit));
+
+        for (int i = from; i < to; i++) {
+            ParsedBookRow r = rows.get(i);
+            if (r.contentId() != null) {
+                BookRespDTO.ContentRespDTO cur = currentById.get(r.contentId());
+                if (cur == null) {
+                    result.getErrors().add(r.humanRow() + "행: content_id " + r.contentId() + " 도서를 찾을 수 없습니다.");
+                    continue;
+                }
+                if (!hasChange(r.dto(), cur)) {
+                    result.setUnchanged(result.getUnchanged() + 1);
+                    continue;
+                }
+                if (!checkOnly) updateContent(toUpdateReqDTO(r.dto(), r.contentId()), uploadedBy);
+                result.setUpdated(result.getUpdated() + 1);
+            } else {
+                r.dto().setState("Y");
+                if (!checkOnly) registerContent(r.dto(), uploadedBy);
+                result.setInserted(result.getInserted() + 1);
+            }
+        }
+        result.setProcessed(to);
+        return result;
+    }
+
+    /** 템플릿이 실어온 값(빈 칸=null=그대로 두기)과 현재 DB 값을 비교해 하나라도 다르면 true */
+    private boolean hasChange(BookReqDTO.RegisterReqDTO d, BookRespDTO.ContentRespDTO c) {
+        return valueChanged(d.getTitle(), c.getOriginalTitle())
+                || valueChanged(d.getSchoolYear(), c.getSchoolyear())
+                || valueChanged(d.getContentType(), c.getContentType())
+                || valueChanged(d.getGenre(), c.getGenre())
+                || valueChanged(d.getDifficulty(), c.getDifficulty())
+                || valueChanged(d.getPublisher(), c.getPublisher())
+                || valueChanged(d.getKeywords(), c.getKeywords())
+                || valueChanged(d.getSummary(), c.getSummary())
+                || valueChanged(d.getReadingTime(), c.getReadingTime())
+                || valueChanged(d.getExtraDetail(), c.getExtraDetailName());
+    }
+
+    /** incoming이 null이면(=빈 칸) 변경 아님. 값이 있고 현재 값과 다르면 변경 */
+    private boolean valueChanged(String incoming, String current) {
+        if (incoming == null) return false;
+        return !incoming.strip().equals(current == null ? "" : current.strip());
+    }
+
+    /**
+     * 일괄 등록/수정 템플릿(xlsx) 생성 — 초1_교과연계_28권.xlsx 양식(제목행 + 헤더행 + NO/학년/도서분류/도서명/…)을
+     * 최대한 따르되, 맨 앞에 회색 content_id 열을 둔다. 기존 도서를 <b>학년별 시트</b>로 나눠 채워 내려주고,
+     * 사용자는 값을 고치거나(그 행 UPDATE) 시트 맨 아래에 content_id 없이 새 행을 추가한다(INSERT).
+     * 도서분류/장르/난이도/학년은 드롭다운으로 고르게 해 표기 흔들림을 막는다.
+     */
+    public byte[] buildImportTemplateWorkbook() {
+        List<BookRespDTO.ContentRespDTO> books = bookRepository.searchContents(null, null, null, null, null, null, null);
+        Map<String, List<BookRespDTO.ContentRespDTO>> byGradeCode = books.stream()
+                .collect(Collectors.groupingBy(b -> b.getSchoolyear() == null ? "" : b.getSchoolyear()));
+
+        try (XSSFWorkbook workbook = new XSSFWorkbook()) {
+            // 상단(제목·헤더) 배경색 #EBFFE4
+            XSSFColor topColor = new XSSFColor(new byte[] { (byte) 0xEB, (byte) 0xFF, (byte) 0xE4 }, null);
+
+            Font titleFont = workbook.createFont();
+            titleFont.setBold(true);
+            titleFont.setFontHeightInPoints((short) 14);
+            XSSFCellStyle titleStyle = workbook.createCellStyle();
+            titleStyle.setFont(titleFont);
+            titleStyle.setFillForegroundColor(topColor);
+            titleStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            titleStyle.setAlignment(HorizontalAlignment.CENTER);
+            titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+
+            Font headerFont = workbook.createFont();
+            headerFont.setBold(true);
+            XSSFCellStyle headerStyle = workbook.createCellStyle();
+            headerStyle.setFont(headerFont);
+            headerStyle.setFillForegroundColor(topColor);
+            headerStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+            headerStyle.setAlignment(HorizontalAlignment.CENTER);
+            headerStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            setThinBorder(headerStyle);
+
+            CellStyle bodyStyle = workbook.createCellStyle();
+            bodyStyle.setAlignment(HorizontalAlignment.CENTER);
+            bodyStyle.setVerticalAlignment(VerticalAlignment.CENTER);
+            setThinBorder(bodyStyle);
+
+            CellStyle wrapStyle = workbook.createCellStyle();
+            wrapStyle.cloneStyleFrom(bodyStyle);
+            wrapStyle.setWrapText(true);
+            wrapStyle.setAlignment(HorizontalAlignment.LEFT); // 긴 도서소개는 왼쪽정렬이 읽기 쉬움
+
+            CellStyle lockedStyle = workbook.createCellStyle();
+            lockedStyle.cloneStyleFrom(bodyStyle);
+            lockedStyle.setFillForegroundColor(IndexedColors.GREY_25_PERCENT.getIndex());
+            lockedStyle.setFillPattern(FillPatternType.SOLID_FOREGROUND);
+
+            String[] typeNames = codeNames("C");
+            String[] genreNames = codeNames("G");
+            String[] gradeNames = codeNames("S");
+
+            List<CodeRespDTO.BookstoreCodeDTO> grades = codeRepository.findBookstoreCodesByGubun("S");
+            for (CodeRespDTO.BookstoreCodeDTO grade : grades) {
+                writeTemplateSheet(workbook, grade.getCodeName(), grade.getCodeName(),
+                        byGradeCode.getOrDefault(grade.getCode(), List.of()),
+                        titleStyle, headerStyle, bodyStyle, wrapStyle, lockedStyle,
+                        typeNames, genreNames, gradeNames);
+            }
+            // 학년 코드가 비어 있거나 알 수 없는 도서는 "기타" 시트로 (있을 때만)
+            List<BookRespDTO.ContentRespDTO> etc = new ArrayList<>();
+            for (Map.Entry<String, List<BookRespDTO.ContentRespDTO>> e : byGradeCode.entrySet()) {
+                boolean known = grades.stream().anyMatch(g -> g.getCode().equals(e.getKey()));
+                if (!known) etc.addAll(e.getValue());
+            }
+            if (!etc.isEmpty()) {
+                writeTemplateSheet(workbook, "기타", "학년 미지정", etc,
+                        titleStyle, headerStyle, bodyStyle, wrapStyle, lockedStyle,
+                        typeNames, genreNames, gradeNames);
+            }
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            workbook.write(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new UncheckedIOException("템플릿 생성 중 오류가 발생했습니다.", e);
+        }
+    }
+
+    /** 학년 시트 하나: 0행=제목(병합) / 1행=헤더 / 2행~=도서. 새 행 추가용으로 드롭다운은 아래로 넉넉히 건다 */
+    private void writeTemplateSheet(XSSFWorkbook workbook, String sheetName, String gradeLabel,
+            List<BookRespDTO.ContentRespDTO> rows, CellStyle titleStyle, CellStyle headerStyle,
+            CellStyle bodyStyle, CellStyle wrapStyle, CellStyle lockedStyle,
+            String[] typeNames, String[] genreNames, String[] gradeNames) {
+        Sheet sheet = workbook.createSheet(sheetName);
+        int cols = IMPORT_HEADERS.length;
+        sheet.setDefaultRowHeightInPoints(70f); // 새로 추가하는 행도 70pt로 (도서소개 줄바꿈 대비)
+
+        Row titleRow = sheet.createRow(0);
+        titleRow.setHeightInPoints(28f);
+        for (int c = 0; c < cols; c++) titleRow.createCell(c).setCellStyle(titleStyle);
+        titleRow.getCell(0).setCellValue(gradeLabel + " 도서 정보");
+        sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, cols - 1));
+
+        Row headerRow = sheet.createRow(1);
+        headerRow.setHeightInPoints(20f);
+        for (int c = 0; c < cols; c++) {
+            Cell cell = headerRow.createCell(c);
+            cell.setCellValue(IMPORT_HEADERS[c]);
+            cell.setCellStyle(headerStyle);
+            sheet.setColumnWidth(c, IMPORT_WIDTHS[c]);
+        }
+
+        int rowIdx = 2;
+        int no = 1;
+        for (BookRespDTO.ContentRespDTO b : rows) {
+            Row row = sheet.createRow(rowIdx++);
+            row.setHeightInPoints(70f);
+            Cell idCell = row.createCell(0);
+            if (b.getContentId() != null) idCell.setCellValue(b.getContentId());
+            idCell.setCellStyle(lockedStyle);
+            putCell(row, 1, String.valueOf(no++), bodyStyle);
+            putCell(row, 2, nvl(b.getSchoolyearName()), bodyStyle);
+            putCell(row, 3, nvl(b.getContentTypeName()), bodyStyle);
+            putCell(row, 4, nvl(b.getOriginalTitle()), bodyStyle);
+            putCell(row, 5, nvl(b.getExtraDetailName()), bodyStyle);
+            putCell(row, 6, nvl(b.getGenreName()), bodyStyle);
+            putCell(row, 7, nvl(b.getDifficulty()), bodyStyle);
+            putCell(row, 8, nvl(b.getPublisher()), bodyStyle);
+            putCell(row, 9, nvl(b.getKeywords()), bodyStyle);
+            putCell(row, 10, nvl(b.getSummary()), wrapStyle);
+            putCell(row, 11, nvl(b.getReadingTime()), bodyStyle);
+        }
+
+        int lastRow = Math.max(rowIdx, 3) + 300; // 새로 추가할 행까지 드롭다운 적용
+        DataValidationHelper dv = sheet.getDataValidationHelper();
+        addImportDropdown(dv, sheet, gradeNames, 2, lastRow);
+        addImportDropdown(dv, sheet, typeNames, COL_CONTENT_TYPE, lastRow);
+        addImportDropdown(dv, sheet, genreNames, COL_GENRE, lastRow);
+        addImportDropdown(dv, sheet, new String[] { "상", "중", "하" }, COL_DIFFICULTY, lastRow);
+
+        sheet.createFreezePane(2, 2); // content_id·NO 열 + 제목·헤더 행 고정
+    }
+
+    private void putCell(Row row, int col, String value, CellStyle style) {
+        Cell cell = row.createCell(col);
+        cell.setCellValue(value);
+        cell.setCellStyle(style);
+    }
+
+    private void addImportDropdown(DataValidationHelper dv, Sheet sheet, String[] items, int col, int lastRow) {
+        if (items.length == 0) return;
+        DataValidationConstraint constraint = dv.createExplicitListConstraint(items);
+        DataValidation validation = dv.createValidation(constraint, new CellRangeAddressList(2, lastRow, col, col));
+        validation.setSuppressDropDownArrow(true);
+        validation.setShowErrorBox(true);
+        sheet.addValidationData(validation);
+    }
+
+    private String[] codeNames(String gubun) {
+        return codeRepository.findBookstoreCodesByGubun(gubun).stream()
+                .map(CodeRespDTO.BookstoreCodeDTO::getCodeName)
+                .filter(n -> n != null && !n.isBlank())
+                .toArray(String[]::new);
+    }
+
+    /** 헤더 행(첫 15행 안에서 "도서명" 셀이 있는 행)을 찾아 col 맵에 헤더명→열번호를 채우고, 그 행 번호를 돌려준다 */
+    private int findHeaderRow(Sheet sheet, Map<String, Integer> col) {
+        for (Row row : sheet) {
+            if (row.getRowNum() > 15) break;
+            Map<String, Integer> found = new HashMap<>();
+            for (Cell cell : row) {
+                String raw = cellText(cell);
+                if (raw == null) continue;
+                String field = HEADER_ALIASES.get(raw.replaceAll("\\s+", "").toLowerCase());
+                if (field == null) field = HEADER_ALIASES.get(raw.replaceAll("\\s+", ""));
+                if (field != null) found.putIfAbsent(field, cell.getColumnIndex());
+            }
+            // "도서명"만 있고 다른 인식 가능한 열이 없는 시트(예: 확인자료 링크 시트)는 데이터 시트로 보지 않는다
+            if (found.containsKey("title") && found.size() >= 2) {
+                col.putAll(found);
+                return row.getRowNum();
+            }
+        }
+        return -1;
+    }
+
+    /** erp_bookstore_code gubun의 (코드명 → 코드값) 맵 */
+    private Map<String, String> nameToCode(String gubun) {
+        Map<String, String> map = new HashMap<>();
+        for (CodeRespDTO.BookstoreCodeDTO c : codeRepository.findBookstoreCodesByGubun(gubun)) {
+            if (c.getCodeName() != null) map.put(c.getCodeName().replaceAll("\\s+", ""), c.getCode());
+        }
+        return map;
+    }
+
+    /** 한글 코드명을 코드값으로. 값이 비어 있으면 null, 매핑 실패면 그 행을 건너뛰도록 예외 */
+    private String resolveByName(String name, Map<String, String> byName, String label, int humanRow) {
+        if (name == null) return null;
+        String code = byName.get(name.replaceAll("\\s+", ""));
+        if (code == null) throw new IllegalArgumentException(humanRow + "행: 알 수 없는 " + label + " 값 - " + name);
+        return code;
+    }
+
+    /** 학년: "교과연계 시트의 1", "01학년", "초1", "01" 등을 학년 코드(01~07)로 맞춘다 */
+    private String resolveGrade(String raw, Map<String, String> gradeByName, int humanRow) {
+        if (raw == null) return null;
+        String key = raw.replaceAll("\\s+", "");
+        if (gradeByName.containsKey(key)) return gradeByName.get(key);           // "초1"
+        String digits = key.replaceAll("[^0-9]", "");
+        if (!digits.isEmpty()) {
+            int n = Integer.parseInt(digits);
+            if (n >= 1 && n <= 7) return String.format("%02d", n);              // "1" / "01학년"
+        }
+        throw new IllegalArgumentException(humanRow + "행: 알 수 없는 학년 값 - " + raw);
+    }
+
+    /** "#가을 #운동회 #공동체" → "가을,운동회,공동체" (이미 콤마 구분이면 그대로) */
+    private String normalizeKeywords(String raw) {
+        if (raw == null) return null;
+        if (raw.contains("#")) {
+            return raw.replace("#", " ").trim().replaceAll("\\s+", ",");
+        }
+        return raw;
+    }
+
+    private BookReqDTO.UpdateReqDTO toUpdateReqDTO(BookReqDTO.RegisterReqDTO src, Integer contentId) {
+        BookReqDTO.UpdateReqDTO dto = new BookReqDTO.UpdateReqDTO();
+        dto.setContentId(contentId);
+        dto.setTitle(src.getTitle());
+        dto.setAuthor(src.getAuthor());
+        dto.setGenre(src.getGenre());
+        dto.setContentType(src.getContentType());
+        dto.setSchoolYear(src.getSchoolYear());
+        dto.setSummary(src.getSummary());
+        dto.setKeywords(src.getKeywords());
+        dto.setState(src.getState());
+        dto.setPublisher(src.getPublisher());
+        dto.setReadingTime(src.getReadingTime());
+        dto.setDifficulty(src.getDifficulty());
+        dto.setExtraDetail(src.getExtraDetail());
+        return dto;
+    }
+
+    /** 엑셀 셀 → 문자열 (null/공백이면 null). 숫자셀은 정수로 변환 */
+    private String cellStr(Row row, Integer colIndex) {
+        if (colIndex == null) return null;
+        return cellText(row.getCell(colIndex));
+    }
+
+    private String cellText(Cell cell) {
+        if (cell == null) return null;
+        String value;
+        if (cell.getCellType() == CellType.NUMERIC) {
+            double d = cell.getNumericCellValue();
+            value = (d == Math.rint(d)) ? String.valueOf((long) d) : String.valueOf(d);
+        } else if (cell.getCellType() == CellType.BOOLEAN) {
+            value = String.valueOf(cell.getBooleanCellValue());
+        } else if (cell.getCellType() == CellType.FORMULA) {
+            value = cell.getStringCellValue();
+        } else {
+            value = cell.getStringCellValue();
+        }
+        value = value == null ? null : value.replace("\r\n", "\n").replace("\r", "\n").trim();
+        return (value == null || value.isEmpty()) ? null : value;
     }
 
     /**

@@ -76,6 +76,16 @@
           </select>
         </div>
 
+        <div class="filter-field">
+          <label for="filterPayMethod">결제 방식</label>
+          <!-- 자동결제(구독) 전환분과 기존 일시불/수기분을 구분해서 본다 (2026-09-08) -->
+          <select id="filterPayMethod">
+            <option value="">전체</option>
+            <option value="AUTO">자동결제</option>
+            <option value="ONCE">일시불</option>
+          </select>
+        </div>
+
         <div class="filter-field grow">
           <label class="sr-only" for="filterKeyword">학생명 검색</label>
           <span class="filter-label-text">검색</span>

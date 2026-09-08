@@ -45,6 +45,7 @@ public class PaymentHistoryController {
      * @param type   결제 종류(BOOK/PROGRAM)
      * @param grade  학년 코드(erp_bookstore_code gubun='S'). 비어 있으면 전체
      * @param status 이용권 상태 뱃지 코드(IN_USE/USED_UP/UNPAID/PARTIAL_REFUND/REFUNDED)
+     * @param payMethod 결제 방식 코드(AUTO=자동결제 / ONCE=일시불). 비어 있으면 전체
      * @param keyword 학생명 검색어
      */
     @GetMapping("/list")
@@ -52,12 +53,13 @@ public class PaymentHistoryController {
                                   @RequestParam(value = "type", required = false) String type,
                                   @RequestParam(value = "grade", required = false) String grade,
                                   @RequestParam(value = "status", required = false) String status,
+                                  @RequestParam(value = "payMethod", required = false) String payMethod,
                                   @RequestParam(value = "keyword", required = false) String keyword,
                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
         String centerCode = centerAccessGuard.requireCenterCode(userDetails);
         return ResponseEntity.ok(ApiUtils.success(paymentAdminService.getHistoryPage(
                 centerCode, toBillingYm(month), toServiceCode(type), blankToNull(grade), blankToNull(status),
-                blankToNull(keyword))));
+                blankToNull(payMethod), blankToNull(keyword))));
     }
 
     /**

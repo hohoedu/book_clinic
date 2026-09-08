@@ -353,9 +353,24 @@ public class InicisClient {
      * 이 호출은 돈을 빼지 않는다. 카드 본인확인 결과로 빌키를 받아오는 것이 전부라, 실패해도
      * 되돌릴 승인이 없다(빌키를 저장하지 않으면 그만이다). 응답에서 빌키를 꺼내는 필드 이름은
      * 매뉴얼 개정에 따라 갈릴 수 있어 호출부가 여러 후보를 본다.
+     *
+     * [INILite 방식에서는 안 쓴다] docs/billing 매뉴얼 기준 모바일 빌키발급은 결제창이 returnUrl로
+     * 빌키를 직접 던져줘서(2차 승인 없음) 이 메서드를 타지 않는다. 옛 모바일 결제창(P_REQ_URL)
+     * 규격을 쓰는 상점을 위한 fallback으로만 남겨 둔다.
      */
     public Result approveMobileBilling(String reqUrl, String tid) {
         return approveMobile(reqUrl, tid, props.getBillingMid());
+    }
+
+    /**
+     * 모바일 빌키발급 창(INILite, inilitepay.inicis.com/pay/card/billing)에 넘길 hashData.
+     *
+     * 매뉴얼(docs/billing/INIbill_mo_req_new.jsp) 규칙:
+     *   hashData = SHA-512( price + mid + orderId + timestamp + INILitekey )
+     * timestamp는 yyyyMMddHHmmss 14자리이며, 폼에 함께 실어 보내는 값과 글자 하나까지 같아야 한다.
+     */
+    public String iniLiteBillKeyHash(String price, String mid, String orderId, String timestamp) {
+        return sha512(price + mid + orderId + timestamp + props.getBillingLiteKey());
     }
 
     private Result approveMobile(String reqUrl, String tid, String mid) {

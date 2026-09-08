@@ -34,6 +34,16 @@
       <header class="page-header">
         <h1>도서 데이터 관리</h1>
         <div class="page-header-actions">
+          <!-- 엑셀 일괄 등록/수정: 본사 세션에서만 노출 (book-data.js applyRoleUi) -->
+          <button type="button" id="btnImportTemplate" class="btn outline" hidden>
+            <i class="fa-solid fa-file-arrow-down"></i>
+            템플릿 다운로드
+          </button>
+          <button type="button" id="btnImportExcel" class="btn outline" hidden>
+            <i class="fa-solid fa-file-arrow-up"></i>
+            엑셀 일괄 등록
+          </button>
+          <input type="file" id="importExcelInput" accept=".xlsx" hidden>
           <button id="btnGuideLogout" class="guide-btn">
             <i class="fa-regular fa-circle-question"></i>
             사용 가이드

@@ -174,4 +174,24 @@ public class BookRespDTO {
         private LocalDateTime changedAt;
     }
 
+    /**
+     * 엑셀 일괄 등록 결과 (2026-09-08)
+     * - total: 파일 전체에서 인식된 데이터 행 수 (offset/limit와 무관)
+     * - processed: 이번 요청에서 실제로 처리한 위치(offset+limit 반영) — 진행률 표시용
+     * - inserted/updated: 신규 등록 / 값이 바뀌어 수정된 도서 수
+     * - unchanged: content_id는 있으나 바뀐 값이 없어 건너뛴 수
+     * - sheets: 데이터 시트로 인식된 시트명 (0행이면 헤더 인식 실패 진단용)
+     * - errors: 행 단위 실패 사유
+     */
+    @Data
+    public static class ImportResultDTO {
+        private int total;
+        private int processed;
+        private int inserted;
+        private int updated;
+        private int unchanged;
+        private java.util.List<String> sheets = new java.util.ArrayList<>();
+        private java.util.List<String> errors = new java.util.ArrayList<>();
+    }
+
 }

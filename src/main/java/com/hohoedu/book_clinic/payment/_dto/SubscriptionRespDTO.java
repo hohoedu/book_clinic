@@ -34,6 +34,8 @@ public class SubscriptionRespDTO {
         private LocalDate nextBillingOn;
         /** 다음 청구가 커버할 주기의 시작일 — 실패 재시도로 시도일이 밀려도 이 값은 그대로다 */
         private LocalDate billingCycleFrom;
+        /** 학부모가 고른 첫 결제일(E-1). PENDING 때 저장, 등록 확정 시 anchor_day/next_billing_on의 기준이 된다. NULL이면 등록일 */
+        private LocalDate firstBillingOn;
         private LocalDateTime lastPaidAt;
         private int failCount;
         private String lastFailReason;

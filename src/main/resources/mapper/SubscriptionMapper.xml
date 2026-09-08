@@ -13,16 +13,17 @@
 
     <sql id="subColumns">
         subscription_id, reg_order_no, owner_student_id, center_code, bill_key, card_name, card_no,
-        status, anchor_day, next_billing_on, billing_cycle_from, last_paid_at, fail_count, last_fail_reason
+        status, anchor_day, next_billing_on, billing_cycle_from, first_billing_on,
+        last_paid_at, fail_count, last_fail_reason
     </sql>
 
     <!-- 카드등록 시작 — 빌키/앵커/청구일은 아직 없다(등록 확정 때 채운다) -->
     <insert id="insertPending" useGeneratedKeys="true" keyProperty="subscriptionId" keyColumn="subscription_id"
             parameterType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
         INSERT INTO erp_bookstore_subscription
-            (reg_order_no, owner_student_id, center_code, status, card_reg_at, created_at)
+            (reg_order_no, owner_student_id, center_code, first_billing_on, status, card_reg_at, created_at)
         VALUES
-            (#{regOrderNo}, #{ownerStudentId}, #{centerCode}, 'PENDING',
+            (#{regOrderNo}, #{ownerStudentId}, #{centerCode}, #{firstBillingOn}, 'PENDING',
              DATEADD(HOUR, 9, GETUTCDATE()), DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
@@ -63,7 +64,7 @@
     <select id="findLiveByMemberStudent" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
         SELECT TOP 1 s.subscription_id, s.reg_order_no, s.owner_student_id, s.center_code, s.bill_key,
                s.card_name, s.card_no, s.status, s.anchor_day, s.next_billing_on, s.billing_cycle_from,
-               s.last_paid_at, s.fail_count, s.last_fail_reason
+               s.first_billing_on, s.last_paid_at, s.fail_count, s.last_fail_reason
         FROM erp_bookstore_subscription s
         JOIN erp_bookstore_subscription_member m ON m.subscription_id = s.subscription_id
         WHERE m.student_id = #{studentId}

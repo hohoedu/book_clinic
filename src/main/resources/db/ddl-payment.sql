@@ -425,6 +425,7 @@ CREATE TABLE erp_bookstore_subscription (
                                                 -- 이용권 유효기간의 기준은 언제나 이 값이다 — 시도일을 기준으로
                                                 -- 삼으면 카드사 사정으로 실패할 때마다 학생의 이용 기간이
                                                 -- 하루씩 잘려나간다
+    first_billing_on DATE,                     -- 학부모가 고른 첫 결제일(E-1). NULL이면 등록일로 폴백 (2026-09-08)
     last_paid_at     DATETIME2,                 -- 마지막 청구 성공 시각(KST)
     fail_count       SMALLINT      NOT NULL DEFAULT 0,   -- 연속 실패 횟수. 성공하면 0으로 되돌린다
     last_fail_reason VARCHAR(200),              -- 마지막 실패 사유(카드사 거절 메시지 등). 상담 응대용

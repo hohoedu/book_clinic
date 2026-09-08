@@ -70,6 +70,9 @@ public interface BookRepository {
     /** 도서 제목으로 content_id 단건 조회 (엑셀 업로드 시 도서 선택 매핑용) */
     Integer findContentIdByTitle(@Param("title") String title);
 
+    /** content_id 존재 여부 (엑셀 일괄 등록에서 수정 대상 검증용) */
+    boolean existsContentById(@Param("contentId") Integer contentId);
+
     /** 학년별 도서 목록 엑셀 다운로드용 — 학년 코드명(codeNm) 순 정렬 */
     List<BookRespDTO.GradeListRespDTO> findContentsForGradeExcel();
 

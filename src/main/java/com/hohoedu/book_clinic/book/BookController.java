@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.book;
 
+import java.io.IOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
@@ -103,6 +105,37 @@ public class BookController {
                 .contentType(MediaType.APPLICATION_OCTET_STREAM)
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
                 .body(bytes);
+    }
+
+    /** 일괄 등록/수정 템플릿(xlsx) 다운로드 — 기존 도서 전체 + A열 content_id, 코드값은 드롭다운. 본사 전용 */
+    @GetMapping("/import/template")
+    public ResponseEntity<byte[]> downloadImportTemplate() {
+        byte[] bytes = bookService.buildImportTemplateWorkbook();
+
+        String filename = "도서_일괄등록_템플릿.xlsx";
+        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
+                .body(bytes);
+    }
+
+    /**
+     * 엑셀(xlsx) 파일로 마스터 도서 일괄 등록/수정 — 본사 전용
+     * A열 content_id가 있으면 그 도서를 수정(바뀐 값이 있을 때만), 없으면 신규 등록
+     * mode=check: 저장 없이 신규/수정/변경없음 건수만 집계 (offset/limit 무시)
+     * mode=upsert(기본): rows[offset, offset+limit) 구간만 반영 — 프런트가 나눠 호출하며 진행률 표시
+     */
+    @PostMapping("/import")
+    public ResponseEntity<?> importContents(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "mode", defaultValue = "upsert") String mode,
+            @RequestParam(value = "offset", defaultValue = "0") int offset,
+            @RequestParam(value = "limit", defaultValue = "1000000") int limit,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IOException {
+        String uploadedBy = userDetails != null ? userDetails.getUsername() : "SYSTEM";
+        return ResponseEntity.ok(ApiUtils.success(bookService.importContents(file, mode, offset, limit, uploadedBy)));
     }
 
     // ===================== 실물 도서 관리 =====================

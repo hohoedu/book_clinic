@@ -69,13 +69,20 @@ public class SubscriptionService {
      * 그 정보를 미리 DB에 남겨야 한다 — 일반 결제가 READY 행을 먼저 만드는 것과 같은 이유다.
      */
     public SubscriptionRespDTO.CardRegDTO prepareCardReg(String ownerStudentId, List<String> studentIds,
-                                                         String productCode) {
+                                                         String productCode, LocalDate firstBillingOn) {
         if (studentIds == null || studentIds.isEmpty()) {
             throw new Exception400("자동결제를 등록할 학생을 선택해주세요.");
         }
         PaymentRespDTO.ProductDTO product = paymentRepository.findActiveProduct(productCode);
         if (product == null) {
             throw new Exception404("판매 중인 상품이 아닙니다.");
+        }
+
+        // 첫 결제일 — 학부모가 고른 날. 과거이거나 비어 있으면 등록일(오늘)로 맞춘다.
+        LocalDate today = KstClock.today();
+        LocalDate firstOn = (firstBillingOn != null && !firstBillingOn.isBefore(today)) ? firstBillingOn : today;
+        if (firstBillingOn != null && firstBillingOn.isAfter(today.plusMonths(3))) {
+            throw new Exception400("첫 결제일은 3개월 이내로 선택해주세요.");
         }
 
         // 이미 자동결제가 걸려 있는 학생이 섞여 있으면 등록창을 띄우기 전에 막는다.
@@ -93,6 +100,7 @@ public class SubscriptionService {
         row.setRegOrderNo(regOrderNo);
         row.setOwnerStudentId(ownerStudentId);
         row.setCenterCode(clinicRepository.findCenterCode(ownerStudentId));
+        row.setFirstBillingOn(firstOn);
         subscriptionRepository.insertPending(row);
 
         int monthlyAmount = 0;
@@ -169,6 +177,50 @@ public class SubscriptionService {
         // 첫 청구. 실패해도 빌키는 살아 있으므로 구독을 지우지 않고 PAUSED로 남긴다 —
         // 학부모는 카드 한도/정지 같은 사유를 고친 뒤 앱에서 다시 시도할 수 있다.
         chargeNow(sub.getSubscriptionId(), today);
+        return regResult(subscriptionRepository.findById(sub.getSubscriptionId()));
+    }
+
+    /**
+     * INILite 빌키발급 창에서 돌아온 결과로 등록을 확정한다 (docs/billing 매뉴얼).
+     *
+     * [빌키만 저장하고 끝낸다 — 첫 결제는 여기서 하지 않는다]
+     * 발급 요청 price를 0으로 보내므로 이 창은 돈을 빼지 않는다(응답에 tid가 실려와도
+     * 그건 빌키 발급 거래번호일 뿐 결제가 아니다). 첫 청구는 학부모가 고른 first_billing_on이
+     * 되면 배치(SubscriptionBillingJob)가 빌키로 billing() API를 호출해 낸다.
+     * 그래서 등록 시점에는 anchor_day / next_billing_on / billing_cycle_from을 first_billing_on으로
+     * 세워두기만 한다(비어 있으면 등록일). first_billing_on이 미래면 그날까지 이용권이 없는데,
+     * 아직 결제 전이므로 정상이다.
+     *
+     * @param cardName 카드사명 (INILite 응답 cardCompanyName). 없으면 null
+     * @param cardNo   마스킹된 카드번호 (INILite 응답 cardNumber). 없으면 null
+     */
+    public SubscriptionRespDTO.CardRegResultDTO completeBillKeyReg(String regOrderNo, String billKey,
+                                                                  String cardName, String cardNo) {
+        if (regOrderNo == null || regOrderNo.isBlank()) {
+            throw new Exception400("등록 주문번호가 없습니다.");
+        }
+        SubscriptionRespDTO.SubscriptionDTO sub = subscriptionRepository.findByRegOrderNo(regOrderNo);
+        if (sub == null) {
+            throw new Exception404("자동결제 등록 정보를 찾을 수 없습니다.");
+        }
+        if ("ACTIVE".equals(sub.getStatus()) || "PAUSED".equals(sub.getStatus())) {
+            // 결제창에서 두 번 돌아온 경우. 다시 확정하지 않고 현재 상태를 돌려준다.
+            return regResult(subscriptionRepository.findById(sub.getSubscriptionId()));
+        }
+        if (!"PENDING".equals(sub.getStatus())) {
+            throw new Exception400("이미 종료된 카드등록입니다.");
+        }
+
+        LocalDate firstOn = sub.getFirstBillingOn() != null ? sub.getFirstBillingOn() : KstClock.today();
+        boolean activated = subscriptionTxService.activate(sub.getSubscriptionId(), billKey,
+                cardName, PaymentService.maskCardNo(cardNo), firstOn);
+        if (!activated) {
+            log.info("[자동결제] 카드등록 중복 확정 요청 — regOrderNo={}", regOrderNo);
+            return regResult(subscriptionRepository.findById(sub.getSubscriptionId()));
+        }
+
+        log.info("[자동결제] 빌키 발급·저장 완료 — subscriptionId={}, 첫 결제일={} (첫 청구는 배치가 낸다)",
+                sub.getSubscriptionId(), firstOn);
         return regResult(subscriptionRepository.findById(sub.getSubscriptionId()));
     }
 

@@ -53,9 +53,12 @@ function renderReviewList(list) {
 
   list.forEach((row) => {
     const tr = document.createElement("tr");
+    const autoPayTag = row.subscriptionId
+      ? ` <span class="review-autopay-tag">자동결제</span>`
+      : "";
     tr.innerHTML = `
       <td>${formatDateTime(row.requestedAt)}</td>
-      <td>${row.orderNo}${row.groupOrderNo ? `<br><small>그룹: ${row.groupOrderNo}</small>` : ""}</td>
+      <td>${row.orderNo}${autoPayTag}${row.groupOrderNo ? `<br><small>그룹: ${row.groupOrderNo}</small>` : ""}</td>
       <td>${row.studentId ?? "-"}</td>
       <td>${row.centerCode ?? "-"}</td>
       <td>${row.productName ?? "-"}</td>

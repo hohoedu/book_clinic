@@ -224,7 +224,8 @@
     <select id="findNeedsReview" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$ReviewDTO">
         SELECT payment_id AS paymentId, order_no AS orderNo, group_order_no AS groupOrderNo,
                student_id AS studentId, center_code AS centerCode, product_name AS productName,
-               amount, status, review_reason AS reviewReason, requested_at AS requestedAt
+               amount, status, review_reason AS reviewReason, requested_at AS requestedAt,
+               subscription_id AS subscriptionId
         FROM erp_bookstore_payment
         WHERE needs_review = 1
           AND reviewed_at IS NULL

@@ -107,6 +107,8 @@ public class PaymentRespDTO {
         private String status;
         private String reviewReason;
         private LocalDateTime requestedAt;
+        /** 자동결제(구독)로 생긴 결제면 구독 번호가 채워진다 — 화면이 "자동결제" 태그를 붙인다 */
+        private Integer subscriptionId;
     }
 
     // ───────────────────────────── 내부 조회용 ─────────────────────────────

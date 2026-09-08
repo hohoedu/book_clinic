@@ -47,30 +47,30 @@
 </div>
 
 <!--
-  이니시스 모바일 빌키 발급창으로 보내는 폼.
+  이니시스 INILite 모바일 빌키발급 창으로 보내는 폼.
+  규격: docs/billing/INIbill_mo_req_new.jsp (2026-09-08 확인)
 
-  [일반 결제창과 다른 모듈이다] 요청 URL도 파라미터도 일반 모바일 결제(smart/payment)와
-  다르다. 이 단계에서는 승인이 일어나지 않으므로 금액(P_AMT)은 0이고, 실제 청구는 등록이
-  확정된 뒤 서버가 빌키로 따로 낸다.
-
-  [P_NOTI] 인증 응답에는 P_OID가 실려오지 않는다. 우리가 실어 보낸 이 값으로만 "어느 등록
-  건인지"를 되짚을 수 있으므로 반드시 채운다(일반 결제창과 같은 이유).
-
-  [매뉴얼 대조 필요] 폼 파라미터 이름과 요청 URL은 이니시스 모바일 빌키발급 매뉴얼과
-  대조해야 한다. 실 빌링 MID를 발급받는 시점에 함께 확인한다.
+  요청 URL : https://inilitepay.inicis.com/pay/card/billing  (billingUrl로 주입)
+  hashData : SHA-512(price + mid + orderId + timestamp + INILitekey) — 서버(BillingRegViewController)가 계산
+  [price]  : 발급 시점에 실승인되는 금액이라 첫 주기 결제액(형제 합산 월액)을 그대로 보낸다.
+             이 승인 1건이 곧 첫 청구다 — 서버는 빌키로 billing() API를 다시 부르지 않는다.
+  [orderId]: 결제창이 그대로 되돌려주므로(returnUrl POST의 orderId) 이 값으로 등록 건을 되짚는다.
+  리턴 필드: resultCode / resultMessage / tid / billkey / orderId / billkeyDate / billkeyTime
 -->
-<form id="billreg" method="post" th:action="${billingUrl}" accept-charset="UTF-8">
-    <input type="hidden" name="P_INI_PAYMENT" value="CARD">
-    <input type="hidden" name="P_MID" th:value="${mid}">
-    <input type="hidden" name="P_OID" th:value="${oid}">
-    <input type="hidden" name="P_AMT" value="0">
-    <input type="hidden" name="P_GOODS" th:value="${goodName}">
-    <input type="hidden" name="P_UNAME" th:value="${buyerName}">
-    <input type="hidden" name="P_MOBILE" value="01000000000">
-    <input type="hidden" name="P_EMAIL" value="test@hohoedu.com">
-    <input type="hidden" name="P_NEXT_URL" th:value="${returnUrl}">
-    <input type="hidden" name="P_NOTI" th:value="${oid}">
-    <input type="hidden" name="P_CHARSET" value="utf8">
+<form id="billreg" name="billreg" method="post" th:action="${billingUrl}" accept-charset="UTF-8">
+    <input type="hidden" name="mid" th:value="${mid}">
+    <input type="hidden" name="orderId" th:value="${oid}">
+    <input type="hidden" name="price" th:value="${price}">
+    <input type="hidden" name="goodName" th:value="${goodName}">
+    <input type="hidden" name="buyerName" th:value="${buyerName}">
+    <input type="hidden" name="buyerEmail" value="test@hohoedu.com">
+    <input type="hidden" name="buyerTel" value="01000000000">
+    <input type="hidden" name="merchantRedirectData" value="">
+    <input type="hidden" name="returnUrl" th:value="${returnUrl}">
+    <input type="hidden" name="timestamp" th:value="${timestamp}">
+    <input type="hidden" name="clientIp" th:value="${clientIp}">
+    <input type="hidden" name="url" th:value="${siteUrl}">
+    <input type="hidden" name="hashData" th:value="${hashData}">
 </form>
 
 </body>

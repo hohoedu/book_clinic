@@ -40,6 +40,8 @@ public class PaymentAdminRespDTO {
         /** PG 결제 행(있을 때만). 상세 펼침의 "결제/환불 내역"이 이 값으로 조회된다 */
         private Integer paymentId;
         private String orderNo;
+        /** 자동결제(구독)로 생긴 결제면 구독 번호가 채워진다. 일시불/수기/미결제는 null */
+        private Integer subscriptionId;
         private LocalDateTime paidAt;
         /** 결제 금액. 결제 행이 없으면 이용권 상품 가격, 그것도 없으면 null */
         private Integer amount;
@@ -53,6 +55,14 @@ public class PaymentAdminRespDTO {
         /** 화면 뱃지 값 — PaymentAdminService.resolvePassStatus()가 정한다 */
         private String passStatus;
         private String passStatusLabel;
+
+        /**
+         * 결제 방식 구분 — PaymentAdminService가 정한다.
+         *   AUTO(자동결제) / ONCE(일시불) / null(결제 행이 없는 미결제)
+         * 화면은 색은 코드로, 글자는 payMethodLabel로 쓴다(뱃지와 같은 방식).
+         */
+        private String payMethod;
+        private String payMethodLabel;
     }
 
     /** 목록 + 상단 요약("결제완료 89명 | 미결제 11명")을 한 번에 내린다 */

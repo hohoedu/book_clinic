@@ -33,6 +33,7 @@
     <!-- 자동결제 등록과 일시불 결제가 같은 화면을 쓴다. 어디로 보낼지는 컨트롤러가 정한다 -->
     <form id="groupForm" method="post" th:action="@{${formAction}}">
         <input type="hidden" name="productCode" th:value="${productCode}">
+        <input type="hidden" name="firstBillingOn" th:if="${firstBillingOn != null}" th:value="${firstBillingOn}">
 
         <div class="item" th:each="sibling : ${siblings}">
             <label>
