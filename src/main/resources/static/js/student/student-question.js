@@ -23,7 +23,10 @@
   const qexText = document.getElementById('qexText');
   const qText = document.getElementById('qText');
   const choiceList = document.getElementById('choiceList');
+  const choiceScrollbar = document.getElementById('choiceScrollbar');
+  const choiceScrollThumb = document.getElementById('choiceScrollThumb');
   const quizCard = document.getElementById('quizCard');
+  const answerSplash = document.getElementById('answerSplash');
   const quizActions = document.getElementById('quizActions');
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
@@ -281,13 +284,81 @@
     // 시간을 학생이 정하게 두는 편이 낫다(2026-09-03, 자동 진행에서 변경).
     // 단 "이전 문제"는 감춘다 — 정답을 본 뒤 되돌아가 답을 고치면 채점이 무의미해진다.
     instantLocked = false;
+    hideAnswerSplash();
     quizCard.classList.remove('reveal-correct', 'reveal-wrong');
     prevBtn.hidden = instantMode || current === 0;
     quizActions.classList.toggle('has-prev', !prevBtn.hidden);
 
     updateNextButton();
     updateSelectedVisual();
+    choiceList.scrollTop = 0;
+    requestAnimationFrame(syncChoiceScrollbar);
   }
+
+  /* ── 커스텀 스크롤바 (2026-09-08) ────────────────────────────────────────────
+     네이티브 스크롤바가 앱 WebView·macOS에서 스크롤이 멈추면 사라져서 오른쪽에 직접 그린다.
+     #choiceList가 실제 스크롤을 하고, 여기서 막대 높이/위치만 계산해 붙인다. */
+  function syncChoiceScrollbar() {
+    if (!choiceScrollbar || !choiceScrollThumb) return;
+    const { scrollHeight, clientHeight, scrollTop } = choiceList;
+    const overflow = scrollHeight - clientHeight;
+    if (overflow <= 1) {
+      choiceScrollbar.hidden = true;
+      return;
+    }
+    choiceScrollbar.hidden = false;
+    const trackH = choiceScrollbar.clientHeight;
+    const thumbH = Math.max((clientHeight / scrollHeight) * trackH, 32);
+    const thumbTop = (scrollTop / overflow) * (trackH - thumbH);
+    choiceScrollThumb.style.height = `${thumbH}px`;
+    choiceScrollThumb.style.transform = `translateY(${thumbTop}px)`;
+  }
+
+  choiceList.addEventListener('scroll', syncChoiceScrollbar, { passive: true });
+  window.addEventListener('resize', syncChoiceScrollbar);
+  if (window.ResizeObserver) {
+    new ResizeObserver(syncChoiceScrollbar).observe(choiceList);
+  }
+
+  // 막대를 끌어 스크롤
+  (function enableThumbDrag() {
+    if (!choiceScrollThumb || !choiceScrollbar) return;
+    let dragStartY = 0;
+    let dragStartScroll = 0;
+
+    function onMove(e) {
+      const point = e.touches ? e.touches[0].clientY : e.clientY;
+      const trackH = choiceScrollbar.clientHeight;
+      const thumbH = choiceScrollThumb.offsetHeight;
+      const overflow = choiceList.scrollHeight - choiceList.clientHeight;
+      const movable = trackH - thumbH;
+      if (movable <= 0) return;
+      const delta = point - dragStartY;
+      choiceList.scrollTop = dragStartScroll + (delta / movable) * overflow;
+    }
+
+    function onUp() {
+      choiceScrollThumb.classList.remove('is-dragging');
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('touchmove', onMove);
+      window.removeEventListener('touchend', onUp);
+    }
+
+    function onDown(e) {
+      dragStartY = e.touches ? e.touches[0].clientY : e.clientY;
+      dragStartScroll = choiceList.scrollTop;
+      choiceScrollThumb.classList.add('is-dragging');
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('touchmove', onMove, { passive: false });
+      window.addEventListener('touchend', onUp);
+      e.preventDefault();
+    }
+
+    choiceScrollThumb.addEventListener('pointerdown', onDown);
+    choiceScrollThumb.addEventListener('touchstart', onDown, { passive: false });
+  })();
 
   function renderProgressDots() {
     progressDots.innerHTML = '';
@@ -323,14 +394,13 @@
     updateNextButton();
   }
 
-  /* 고른 보기가 맞았는지 그 자리에서 O/X로 보여준다 (2026-09-03 확정).
-       정답 → O 를 띄우고 잠근다. "다음 문제"를 눌러 넘어간다.
-       오답 → X 를 띄우고 그 보기만 막은 뒤, 정답을 맞힐 때까지 다시 고르게 한다.
+  /* 고른 보기가 맞았는지 그 자리에서 보여준다 (2026-09-03 확정, 2026-09-08 큰 O/X 스플래시로 변경).
+       정답 → 카드 한가운데에 큰 O 를 잠깐 띄우고 잠근다. "다음 문제"를 눌러 넘어간다.
+       오답 → 큰 X 를 잠깐 띄우고 그 보기만 막은 뒤, 정답을 맞힐 때까지 다시 고르게 한다.
      그래서 이 모드를 끝까지 풀면 모든 문항이 정답으로 남는다 — 남은 오답이 0이 되어 다음
      화면에서 "심화 문제 풀기"가 열린다(student-result.js / student-main.js의 버튼 규칙).
      서버에 올라가는 답도 마지막에 고른 정답이다.
-     .correct / .wrong 은 student-question.css에 이미 있던 스타일인데(초록/빨강 테두리 +
-     .choice-mark 색상) 여태 아무도 붙이지 않아 쓰이지 않던 클래스라 그대로 재사용한다. */
+     보기 자체의 초록/빨강 테두리는 .choice-item.correct / .wrong (student-question.css)이 담당한다. */
   function revealAnswer(q, picked) {
     const correctNum = Number(instantAnswers[q.qnum]);
     const isCorrect = picked === correctNum;
@@ -340,31 +410,42 @@
     quizCard.classList.add(isCorrect ? 'reveal-correct' : 'reveal-wrong');
     if (!btn) return;
 
+    showAnswerSplash(isCorrect);
+
     if (isCorrect) {
       instantLocked = true;
       btn.classList.add('correct');
-      markChoice(btn, 'O');
       return;
     }
 
-    // 오답 — X를 남기고 그 보기는 다시 못 고르게 막는다. 정답을 맞히기 전엔 다음으로 못 넘어가도록
+    // 오답 — 그 보기는 다시 못 고르게 막는다. 정답을 맞히기 전엔 다음으로 못 넘어가도록
     // 선택을 지운다(updateNextButton이 answered를 보고 버튼을 잠근다).
     btn.classList.add('wrong');
     btn.disabled = true;
-    markChoice(btn, 'X');
     answered[current] = null;
     updateSelectedVisual();
   }
 
-  /** 보기 오른쪽에 O / X 표시를 붙인다 (이미 붙어 있으면 그대로 둔다) */
-  function markChoice(btn, kind) {
-    if (btn.querySelector('.choice-mark')) return;
-    const mark = document.createElement('i');
-    mark.className = kind === 'O'
-      ? 'choice-mark fa-regular fa-circle'
-      : 'choice-mark fa-solid fa-xmark';
-    mark.setAttribute('aria-label', kind === 'O' ? '정답' : '오답');
-    btn.appendChild(mark);
+  let answerSplashTimer = null;
+
+  /** 카드 한가운데에 큰 O(정답) / X(오답)를 잠깐 띄운다 (2026-09-08) */
+  function showAnswerSplash(isCorrect) {
+    if (!answerSplash) return;
+    clearTimeout(answerSplashTimer);
+    answerSplash.innerHTML = '<span class="answer-splash__mark"></span>';
+    answerSplash.classList.toggle('is-correct', isCorrect);
+    answerSplash.classList.toggle('is-wrong', !isCorrect);
+    answerSplash.setAttribute('aria-label', isCorrect ? '정답' : '오답');
+    answerSplash.hidden = false;
+    answerSplashTimer = setTimeout(hideAnswerSplash, 900);
+  }
+
+  function hideAnswerSplash() {
+    if (!answerSplash) return;
+    clearTimeout(answerSplashTimer);
+    answerSplash.hidden = true;
+    answerSplash.classList.remove('is-correct', 'is-wrong');
+    answerSplash.innerHTML = '';
   }
 
   function updateSelectedVisual() {

@@ -82,6 +82,7 @@
           </aside>
 
           <div class="quiz-main">
+            <div class="answer-splash" id="answerSplash" hidden aria-hidden="true"></div>
             <div class="card quiz-card" id="quizCard">
               <div class="quiz-head">
                 <span class="q-badge" id="qBadge">Q1</span>
@@ -92,7 +93,14 @@
                 <p id="qexText"></p>
               </div>
 
-              <div class="choice-list" id="choiceList"></div>
+              <!-- 보기 목록 + 커스텀 스크롤바(네이티브 스크롤바는 앱 WebView·macOS에서 스크롤이
+                   멈추면 사라져서 직접 그린다). 스크롤은 #choiceList가 하고, 막대는 JS가 갱신한다. -->
+              <div class="choice-scroll" id="choiceScroll">
+                <div class="choice-list" id="choiceList"></div>
+                <div class="choice-scrollbar" id="choiceScrollbar" hidden>
+                  <div class="choice-scrollbar__thumb" id="choiceScrollThumb"></div>
+                </div>
+              </div>
             </div>
           </div>
         </div>

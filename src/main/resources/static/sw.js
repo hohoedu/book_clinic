@@ -1,6 +1,6 @@
 // 캐시 이름을 올리면 activate에서 옛 캐시를 통째로 지운다 — /images/ 는 cache-first라
 // 같은 파일명으로 그림만 교체한 자산(뱃지 아이콘 등)은 이 버전을 올려야 갱신된다.
-const CACHE_NAME = 'book-clinic-student-v17';
+const CACHE_NAME = 'book-clinic-student-v19';
 
 // 앱은 하나(manifest.json, start_url=/launch)지만 그 안에 문제풀이(/student/**)/출석체크
 // (/attendance/**) 두 화면이 있다 — 오프라인 폴백은 지금 들어가려던 화면이 어느 쪽인지에 따라
@@ -18,11 +18,13 @@ const PRECACHE_URLS = [
   '/attendance',
   '/css/student/launcher.css',
   '/css/student/student-common.css',
+  '/css/student/student-login.css',
   '/css/student/student-main.css',
   '/css/student/qr-scan.css',
   '/css/student/attendance-home.css',
   '/css/student/book-confirm.css',
   '/js/student/launcher.js',
+  '/js/student/student-login.js',
   '/js/student/student-main.js',
   '/js/student/qr-scan.js',
   '/js/student/attendance-home.js',

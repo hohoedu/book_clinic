@@ -160,7 +160,6 @@
     const completionRetryBtn = document.getElementById('completionRetryBtn');
     const completionWrongRetryBtn = document.getElementById('completionWrongRetryBtn');
     const completionAdvancedBtn = document.getElementById('completionAdvancedBtn');
-    // "여권 쓰러 가기"(2026-09-03) — 결과 화면과 같은 버튼이고 동작은 로그아웃이다
     const completionPassportBtn = document.getElementById('completionPassportBtn');
     const recommendErrorModal = document.getElementById('recommendErrorModal');
     const recommendErrorMsg = document.getElementById('recommendErrorMsg');
@@ -275,7 +274,7 @@
       completionActions.hidden = true;
       recommendNextBtn.hidden = true;
 
-      actionLabel.textContent = '문제 풀기';
+      actionLabel.textContent = '정독 확인 문제 풀기';
       actionBtn.onclick = () => {
         window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
       };
@@ -366,7 +365,7 @@
         completionActions.hidden = true;
         recommendNextBtn.hidden = true;
         actionBtn.hidden = false;
-        actionLabel.textContent = '문제 풀러 가기';
+        actionLabel.textContent = '정독 확인 문제 풀기';
         actionBtn.onclick = () => goQuestion('01');
         showState('card');
         return;

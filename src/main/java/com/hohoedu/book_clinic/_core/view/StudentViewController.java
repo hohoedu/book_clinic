@@ -20,7 +20,6 @@ import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.clinic.ClinicService;
 import com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO;
 import com.hohoedu.book_clinic.monitor.MonitorService;
-import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.reservation.ReservationService;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
@@ -55,7 +54,6 @@ public class StudentViewController {
     private final StudentRepository studentRepository;
     private final ClinicService clinicService;
     private final MonitorService monitorService;
-    private final PassService passService;
     private final ReservationService reservationService;
     private final Environment environment;
     private final StudentSessionRegistry studentSessionRegistry;
@@ -197,11 +195,9 @@ public class StudentViewController {
             redirectAttributes.addFlashAttribute("noReservation", true);
             return "redirect:/student/login";
         }
-        // 이용권이 없을 경우 로그인 단계에서 막음.
-        if (passService.remain(student.getStudentId(),  "BOOK") <= 0) {
-            redirectAttributes.addFlashAttribute("passExhausted", true);
-            return "redirect:/student/login";
-        }
+        // 이용권 소진은 로그인 단계에서 보지 않는다 — 오늘 예약이 있다는 건 예약 시점에 이용권이
+        // 있었다는 뜻이고(예약 로직이 주기 상한을 강제한다), 실제 차감/차단은 입실(recommendBook →
+        // MonitorService.enterSession)에서 consume()이 -1을 돌려줄 때 안내 카드로 처리한다.
         // 오늘 이미 퇴실했으면 문제풀이 기기에서 다시 입실/추천을 타지 않고 안내만 하고 막는다(2026-08-25).
         if (monitorService.hasExitedToday(student.getStudentId())) {
             redirectAttributes.addFlashAttribute("alreadyExited", true);

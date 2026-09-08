@@ -466,13 +466,26 @@
 .completion-actions .solve-btn--sub .fa-rotate-right,
 .completion-actions .solve-btn--sub .fa-rotate-left { font-size: 18px; }
 
-/* "심화 문제 풀기"는 남는 폭을 전부 가져간다(2026-09-02) — 다음으로 눌러야 할 버튼이라
-   항상 가장 넓다. 혼자 뜰 때는 그대로 꽉 찬다. */
-.completion-actions .solve-btn--advanced {
-  flex: 1;
+/* 재도전 + (틀린 문제 다시 풀기 | 심화 확장 문제 풀기) 두 버튼이 폭을 2:3으로 나눠 갖는다.
+   - 예전엔 재도전이 글자 길이만큼(flex:0 1 auto)만 차지해 심화 버튼 옆에서 너무 좁아 보였다.
+   - 이제 틀린 문제 다시 풀기는 심화와 함께 뜨지 않으므로(재도전과만 공존) 오른쪽 버튼은 항상 하나뿐. (2026-09-08) */
+.completion-actions #completionRetryBtn {
+  flex: 2;
+  font-size: 19px;
+}
+.completion-actions .solve-btn--advanced,
+.completion-actions #completionWrongRetryBtn {
+  flex: 3;
   font-size: 21px;
 }
 .completion-actions .solve-btn--advanced .fa-book-open { font-size: 23px; }
+
+/* "틀린 문제 다시 풀기"는 재도전(초록)과 달리 "문제 풀기"·"심화 확장 문제 풀기"와 같은 빨강으로 (2026-09-08) */
+.completion-actions #completionWrongRetryBtn {
+  --btn-shade: var(--red-dark);
+  background: var(--red);
+}
+.completion-actions #completionWrongRetryBtn .fa-rotate-left { font-size: 22px; }
 
 /* 재도전 / 틀린 문제 다시 풀기 — 결과 화면의 .btn-retry와 같은 초록 톤(2026-09-02, 기존 파랑에서 변경) */
 .solve-btn--sub {

@@ -21,11 +21,11 @@
 <body>
   <div class="attendance-viewport">
     <img class="attendance-logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
-    <h1 class="attendance-title">입실 · 책 추천 · 퇴실을 선택해주세요</h1>
+    <h1 class="attendance-title">선택해주세요</h1>
     <div class="attendance-buttons">
       <button type="button" class="attendance-btn enter" id="enterBtn">
         <i class="fa-solid fa-right-to-bracket"></i>
-        <span>입실</span>
+        <span>체크인</span>
       </button>
       <!-- 책 추천(2026-09-03) — 입실에서 추천을 떼어내면서 생긴 버튼. 입실과 같은 POST 폼 전송이다
            (추천도 이용권/한도를 소진시키는 쓰기 요청이라 GET으로 두면 안 된다) -->
@@ -35,7 +35,7 @@
       </button>
       <button type="button" class="attendance-btn exit" id="exitBtn">
         <i class="fa-solid fa-right-from-bracket"></i>
-        <span>퇴실</span>
+        <span>체크아웃</span>
       </button>
     </div>
     <!-- 이 기기를 문제풀이용으로 바꾸고 싶을 때. 다시 /launch로 보내 용도를 새로 고른다 -->

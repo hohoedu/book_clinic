@@ -1,0 +1,215 @@
+.login-viewport {
+  width: 100vw;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow-y: auto;
+}
+
+.login-card {
+  width: 520px;
+  max-width: 92vw;
+  background: rgba(255, 255, 255, .95);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+  padding: 40px 36px;
+  text-align: center;
+}
+
+.login-card .logo {
+  width: 120px;
+  margin-bottom: 24px;
+}
+
+.login-card h1 {
+  font-size: 22px;
+  margin: 0 0 8px;
+}
+
+.login-card p {
+  font-size: 14px;
+  color: #888;
+  margin: 0 0 28px;
+}
+
+.login-card input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 52px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  padding: 0 16px;
+  font-size: 16px;
+  margin-bottom: 14px;
+}
+
+.login-card button {
+  width: 100%;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.login-error {
+  color: var(--red);
+  font-size: 13px;
+  margin: -6px 0 14px;
+}
+
+/* 카드 메인 = 인라인 QR 스캐너. 카드는 넓어졌지만 스캐너 정사각형은 과하게 커지지 않게 폭을 제한한다 */
+.qr-inline {
+  position: relative;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto 16px;
+  aspect-ratio: 1 / 1;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+
+.qr-inline video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* 가운데 조준 프레임 */
+.qr-inline::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  border: 3px solid rgba(255, 255, 255, .9);
+  border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, .28);
+}
+
+.qr-inline .qr-inline-hint {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12px;
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, .6);
+  z-index: 1;
+}
+
+.qr-inline .qr-inline-error {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  margin: 0;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: rgba(0, 0, 0, .55);
+  border-radius: 10px;
+  padding: 12px 14px;
+  z-index: 2;
+}
+
+/* "다른 방법으로 로그인" 텍스트 버튼 — .login-card button 기본 스타일을 눌러야 하므로 button 태그까지 붙인다 */
+button.alt-login-btn {
+  width: auto;
+  height: auto;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px;
+}
+
+button.alt-login-btn:hover {
+  color: #374151;
+}
+
+/* 앱 아이디 모드 — QR 스캐너 자리에 대신 들어간다 */
+#manualMode {
+  margin: 8px 0 4px;
+}
+
+.pass-exhausted-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, .72);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pass-exhausted-box {
+  width: 360px;
+  max-width: 90vw;
+  background: #fff;
+  border-radius: var(--radius-xl);
+  padding: 32px 28px;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+.pass-exhausted-box i {
+  font-size: 40px;
+  color: var(--orange);
+  margin-bottom: 14px;
+}
+
+.pass-exhausted-box h2 {
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.pass-exhausted-box p {
+  font-size: 14px;
+  color: #888;
+  margin: 0 0 24px;
+}
+
+.pass-exhausted-box button {
+  width: 100%;
+  height: 48px;
+  border-radius: 12px;
+  background: var(--blue);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.change-mode-btn {
+  margin-top: 20px;
+  background: none;
+  border: none;
+  color: #9ca3af;
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  opacity: .35;
+  transition: opacity .15s ease;
+}
+
+.change-mode-btn:hover {
+  opacity: .7;
+  color: #6b7280;
+}

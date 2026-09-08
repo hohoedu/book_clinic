@@ -122,8 +122,11 @@ body {
   font-size: 13px;
   text-decoration: underline;
   cursor: pointer;
+  opacity: .35;
+  transition: opacity .15s ease;
 }
 
 .unregister-btn:hover {
   color: #6b7280;
+  opacity: .7;
 }

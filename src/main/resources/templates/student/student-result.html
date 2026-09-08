@@ -163,20 +163,20 @@
         <div class="result-actions-right">
           <a class="btn-retry" id="retryBtn" hidden
             th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
-            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>다시 풀기</a>
+            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>재도전</a>
           <a class="btn-retry" id="wrongRetryBtn" hidden
             th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
             틀린 문제 다시 풀기</a>
           <a class="btn-advanced" id="advancedBtn" hidden
             th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='02')}">
-            <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 문제 풀기</a>
+            <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 확장 문제 풀기</a>
           <!-- 아래 둘은 라벨만 다른 로그아웃 버튼이다(2026-09-03) — 학생이 앱에서 나가 실제로
                책을 읽거나 종이 여권을 쓰러 가는 행동이라 이동할 화면이 따로 없다.
                button인 이유: href로 페이지를 이동시키면 로그아웃 요청이 끝나기 전에 화면이 바뀐다. -->
           <button type="button" class="btn-read-again" id="readAgainBtn" hidden>
             <i class="fa-solid fa-book-open-reader" aria-hidden="true"></i>다시 읽으러 가기</button>
           <button type="button" class="btn-passport" id="passportBtn" hidden>
-            <i class="fa-solid fa-passport" aria-hidden="true"></i>여권 쓰러 가기</button>
+            <i class="fa-solid fa-passport" aria-hidden="true"></i>여권 작성하기</button>
         </div>
       </div>
     </main>
