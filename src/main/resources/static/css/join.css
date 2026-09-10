@@ -1,0 +1,371 @@
+/* ============================================================
+   회원가입(입회) 페이지 전용 스타일
+   all_pass 의 style.css / media.css 에서 join 관련 규칙만 추출해 이식.
+   ============================================================ */
+
+/* XEIcon (select 화살표 \e943, 체크박스 체크 \e928 글리프에 사용) */
+@import url("https://cdn.jsdelivr.net/gh/xpressengine/XEIcon/xeicon.min.css");
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@100..900&display=swap');
+
+/* ----- reset (join 화면에 필요한 최소한만) ----- */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+html, body {
+    height: 100%;
+}
+
+body, textarea {
+    font-family: 'Noto Sans KR', sans-serif;
+    font-weight: normal;
+    color: #404040;
+    overflow-x: hidden;
+}
+
+body {
+    background-color: #fff;
+}
+
+button, input, select {
+    outline: none;
+    border: none;
+    font-size: 16px;
+}
+
+button {
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    margin-top: 0;
+    font-weight: normal;
+    line-height: 1.5em;
+}
+
+textarea {
+    white-space: pre-line;
+    resize: none;
+    display: inline-block;
+}
+
+textarea:focus {
+    outline: none;
+}
+
+textarea::placeholder {
+    font-size: 14px;
+}
+
+input:focus::placeholder,
+textarea:focus::placeholder {
+    color: transparent;
+}
+
+/* ----- checkbox custom ----- */
+.join-group input[type="checkbox"] {
+    margin-right: 5px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    position: relative;
+    background-color: #fff;
+    border: 1px solid #C2C9D7;
+    border-radius: 50%;
+    vertical-align: middle;
+}
+
+.checkbox-group input[type="checkbox"]:checked {
+    background-color: #334DD7;
+    border-color: #334DD7;
+}
+
+.checkbox-group input[type="checkbox"]:checked::after {
+    content: "\e928";
+    font-family: xeicon;
+    font-size: 12px;
+    color: #fff;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.checkbox-group label {
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.join-group .checkbox-group label {
+    font-size: 14px;
+}
+
+/* ----- 주소 검색 아이콘 필드 ----- */
+.icon-btn {
+    background: #F6F0E3;
+    border-radius: 5px;
+    padding: 6px 8px;
+    border: none;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+.icon-btn img {
+    width: 14px;
+    margin-bottom: -3px;
+}
+
+.icon-field {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+}
+
+/* ----- join page ----- */
+.join-container {
+    max-width: 650px;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    min-height: 95vh;
+}
+
+.join-section {
+    background: #06b790;
+    color: #fff;
+    padding: 80px 0 50px 0;
+    text-align: center;
+}
+
+.join-logo {
+    filter: brightness(0) invert(1);
+    width: 200px;
+}
+
+.join-title {
+    font-weight: bold;
+    font-size: 35px;
+}
+
+.join-subtitle {
+    color: #fff;
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+.join-form {
+    padding: 29px;
+}
+
+.join-group {
+    margin-top: 20px;
+}
+
+.join-group label {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 16px;
+}
+
+.join-group input:not([type="checkbox"]),
+.join-group select,
+.join-group textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #e2e2e2;
+    background: #FFFBEB;
+    border-radius: 5px;
+}
+
+.join-group textarea {
+    padding: 12px;
+    line-height: 1.5em;
+}
+
+.join-group input::placeholder {
+    color: #B8BFCE;
+}
+
+.join-group input[type="text"]:focus,
+.join-group select:focus {
+    outline: none;
+    box-shadow: 0 0 4px rgba(46, 71, 197, 0.5);
+    transition: box-shadow 0.3s ease;
+}
+
+.join-select {
+    position: relative;
+}
+
+.join-select select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+}
+
+.join-select::after {
+    content: "\e943";
+    font-family: xeicon;
+    position: absolute;
+    top: 50%;
+    right: 10px;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: #bbb;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.join-line {
+    border: 1px solid #E2E2E2;
+    margin: 80px 0;
+}
+
+.join-consent {
+    text-align: center;
+}
+
+.join-group h2 {
+    font-weight: bold;
+    font-size: 28px;
+    color: #383838;
+}
+
+.join-group p {
+    color: #7C7C7C;
+    margin-top: 20px;
+    margin-bottom: 80px;
+}
+
+.join-group .checkbox-group {
+    margin-top: 5px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.phone-inputs {
+    display: flex;
+    align-items: center;
+}
+
+.dash {
+    color: #666;
+    padding: 10px;
+}
+
+.signature-container {
+    margin: 20px 0;
+    font-size: 14px;
+    color: #333;
+}
+
+.signature-container h2 {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: bold;
+    font-size: 16px;
+}
+
+#signature-pad {
+    border: 1px solid #d1d5db;
+    border-radius: 5px;
+    background-color: #f5f9ff;
+    cursor: crosshair;
+    display: block;
+}
+
+#clear-button {
+    margin-top: 10px;
+    padding: 10px 20px;
+    border: 1px solid #d1d5db;
+    background-color: #ffffff;
+    color: #333;
+    border-radius: 5px;
+    cursor: pointer;
+}
+
+#clear-button:hover {
+    background-color: #f0f0f0;
+}
+
+.clear-container {
+    display: flex;
+    justify-content: flex-end;
+    transition: .5s;
+}
+
+.submit-container {
+    text-align: center;
+    transition: .3s;
+}
+
+.join-button {
+    border: 1px solid transparent;
+    padding: 15px 70px;
+    background: #008b7a;
+    border-radius: 30px;
+    color: #fff;
+    font-weight: bold;
+    cursor: pointer;
+    transition: .3s;
+}
+
+.join-button:hover { 
+    background: #fff;
+    color: #008b7a;
+    border: 1px solid #008b7a;
+}
+
+.no-spinner::-webkit-outer-spin-button,
+.no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* ----- join page smartphone 320 ~ 480px ----- */
+@media (min-width: 320px) and (max-width: 480px) {
+    .join-title {
+        font-size: 2rem;
+    }
+
+    .join-group h2 {
+        font-size: 1.1rem;
+    }
+
+    .join-line {
+        margin: 60px 0;
+    }
+
+    .join-group p {
+        font-size: 14px;
+        text-align: left;
+        margin-bottom: 50px;
+    }
+
+    .join-group label {
+        font-size: 14px;
+    }
+
+    #privacy-agree label,
+    #guardian-agree label {
+        font-size: 12px;
+    }
+
+    #clear-button {
+        padding: 5px 10px;
+    }
+}

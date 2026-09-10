@@ -1,4 +1,4 @@
-package com.hohoedu.book_clinic.student;
+package com.hohoedu.book_clinic.app;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic._core.utils.HashUtils;
+import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
 import jakarta.servlet.http.HttpServletRequest;

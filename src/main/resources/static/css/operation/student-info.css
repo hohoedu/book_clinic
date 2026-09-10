@@ -84,6 +84,14 @@
   margin-right: 6px;
 }
 
+/* 가입 링크복사는 필터바 오른쪽 끝에 붙인다 — 앞선 버튼들과 분리 */
+.filter-actions #btnCopySignupLink {
+  margin-left: auto;
+  width: auto;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
 /* 목록 */
 .student-panel {
   flex: 1;

@@ -1,0 +1,14 @@
+<script>
+    window.onload = function () {
+        const roadFullAddr = "[[${roadFullAddr}]]"
+        const roadAddrPart = "[[${roadAddrPart}]]";
+        const addrDetail = "[[${addrDetail}]]";
+
+        if (opener && !opener.closed) {
+            opener.document.getElementById("address-input").value = roadAddrPart;
+            opener.document.getElementById("address-detail-input").value = addrDetail;
+        }
+
+        window.close();
+    };
+</script>

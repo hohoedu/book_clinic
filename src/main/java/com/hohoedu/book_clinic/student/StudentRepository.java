@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.student;
 
+import com.hohoedu.book_clinic.student._dto.StudentJoinReqDTO;
 import com.hohoedu.book_clinic.student._dto.StudentRespDTO;
 import com.hohoedu.book_clinic.student.model.Student;
 import org.apache.ibatis.annotations.Mapper;
@@ -11,6 +12,30 @@ import java.util.List;
 public interface StudentRepository {
 
     Student findById(@Param("studentId") String studentId);
+
+    // ===== 회원가입(입회) — all_pass 이식 (2026-09-10) =====
+
+    /** 동명이인 + 보호자 연락처(중간+끝) 중복 체크 */
+    int countDuplicateOnJoin(@Param("studentName") String studentName,
+            @Param("telMiddle") String telMiddle, @Param("telLast") String telLast);
+
+    /** appId 접두어(연락처 중간+끝)로 시작하는 기존 appId 의 최대 접미 숫자 */
+    Integer findMaxAppIdSuffix(@Param("prefix") String prefix);
+
+    /** 학생 행 insert — studentId/appId/appPassword/birth 등은 서비스에서 채워 넣는다 */
+    void insertOnJoin(@Param("s") StudentJoinReqDTO dto,
+            @Param("studentId") String studentId, @Param("birth") String birth,
+            @Param("gender") boolean gender, @Param("appId") String appId,
+            @Param("appPassword") String appPassword, @Param("billingPhone") String billingPhone,
+            @Param("statusKey") String statusKey,
+            @Param("subHan") boolean subHan, @Param("subBook") boolean subBook,
+            @Param("subHoho") boolean subHoho);
+
+    /** 보호자(법정대리인) 행 insert */
+    void insertGuardianOnJoin(@Param("s") StudentJoinReqDTO dto, @Param("studentId") String studentId);
+
+    /** 가입 직후 업로드된 서명 이미지 URL 저장 */
+    int updateGuardianSignature(@Param("studentId") String studentId, @Param("signatureUrl") String signatureUrl);
 
     Student findByAppId(@Param("appId") String appId);
 

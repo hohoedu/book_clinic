@@ -24,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 학생 앱(Flutter, payment_temp) 예약 API (2026-08-18).
  *
- * 인증은 {@code student.AppAuthController}가 만든 세션(studentId)을 그대로 쓴다. studentId는
+ * 인증은 {@code app.AppAuthController}가 만든 세션(studentId)을 그대로 쓴다. studentId는
  * 항상 세션에서만 가져오고 요청 본문으로는 받지 않는다 — 클라이언트가 다른 학생 id를 보내
  * 대신 예약하게 되는 경로를 원천 차단하기 위해서다. 센터 직원 대리 예약은
  * {@link ReservationAdminController}가 같은 {@link ReservationService}를 studentId만 다르게 불러 처리한다.

@@ -464,6 +464,26 @@ public class SubscriptionService {
     }
 
     /**
+     * 앵커일을 기다리지 않고 이 구독을 지금 한 번 청구한다 — 개발/검증용 (dev 프로파일 컨트롤러에서만 부른다).
+     *
+     * 배치의 chargeDue를 그대로 탄다. 선점(claimDue)·결정적 주문번호·유니크 인덱스 방어선이
+     * 모두 살아 있으므로, 이미 이번 주기가 청구된 구독을 다시 눌러도 이중 청구되지 않는다
+     * (선점 0행 → false 반환).
+     */
+    public boolean chargeNow(int subscriptionId) {
+        SubscriptionRespDTO.SubscriptionDTO sub = subscriptionRepository.findById(subscriptionId);
+        if (sub == null) {
+            throw new Exception404("자동결제 정보를 찾을 수 없습니다.");
+        }
+        if (!"ACTIVE".equals(sub.getStatus())) {
+            throw new Exception400("ACTIVE 상태의 구독만 청구할 수 있습니다. 현재 상태=" + sub.getStatus());
+        }
+        log.info("[자동결제][수동] 즉시 청구 요청 — subscriptionId={}, next_billing_on={}",
+                subscriptionId, sub.getNextBillingOn());
+        return chargeDue(sub);
+    }
+
+    /**
      * 배치의 청구 1건 — 선점에 성공한 구독만 실제로 청구한다.
      *
      * 선점은 next_billing_on을 다음 앵커일로 미리 밀어두는 것이다. 실패하면 fail()이 재시도일로

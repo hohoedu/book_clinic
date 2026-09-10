@@ -1,9 +1,11 @@
 package com.hohoedu.book_clinic._core.view;
 
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 
+import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic.common.code.CodeService;
 
 import lombok.RequiredArgsConstructor;
@@ -50,9 +52,11 @@ public class OperationViewController {
         return "operation/payment-history";
     }
 
-    /** 학생 정보 — 화면 스캐폴딩 단계, 하드코딩 목업 데이터로 레이아웃만 구현 (2026-08-24) */
+    /** 학생 정보 — 목록/필터/상세는 /admin/students/* API로 실데이터를 쓴다 (2026-08-26) */
     @GetMapping("/admin/operation/student-view")
-    public String studentInfo() {
+    public String studentInfo(Model model, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        // 가입 링크복사 버튼이 붙일 centerCode 쿼리스트링용 — 로그인 직원의 센터로 스코핑
+        model.addAttribute("centerCode", userDetails.getLoginUser().getCenterCode());
         return "operation/student-info";
     }
 }

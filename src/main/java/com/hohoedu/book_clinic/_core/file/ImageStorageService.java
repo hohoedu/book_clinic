@@ -47,6 +47,10 @@ public class ImageStorageService {
     @Value("${ftp.card-dir:cards}")
     private String cardDir;
 
+    /** 입회 서명 이미지 디렉터리 — 미설정이면 'signatures' */
+    @Value("${ftp.signature-dir:signatures}")
+    private String signatureDir;
+
     /** 도서 표지 저장 후 접근 가능한 URL 반환 */
     public String store(MultipartFile file) throws IOException {
         return store(file, masterBookDir, "book");
@@ -55,6 +59,11 @@ public class ImageStorageService {
     /** 수집 카드 이미지 저장 후 접근 가능한 URL 반환 */
     public String storeCard(MultipartFile file) throws IOException {
         return store(file, cardDir, "card");
+    }
+
+    /** 입회 서명 이미지 저장 후 접근 가능한 URL 반환 (2026-09-10, 회원가입 이식) */
+    public String storeSignature(MultipartFile file) throws IOException {
+        return store(file, signatureDir, "signature");
     }
 
     /**

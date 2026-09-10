@@ -29,12 +29,14 @@ public class SecurityConfig {
                                                                 "/clinic/quiz/submit",
                                                                 "/clinic/home-state", "/clinic/quiz-home-state", "/student/exit",
                                                                 "/payment/**",
+                                                                "/juso", "/signup", "/student/join", "/student/upload/signature",
                                                                 "/app/**", "/pass/**", "/test/**"))
                                 .headers(headers -> headers
                                                 .frameOptions(frame -> frame.sameOrigin()))
                                 .authorizeHttpRequests(auth -> auth
                                                 .requestMatchers(
                                                                 "/login", "/join","/test/**",
+                                                                "/signup", "/juso", "/jusoCallBack",
                                                                 "/error",
                                                                 "/h2-console/**",
                                                                 "/css/**", "/js/**", "/images/**", "/uploads/**",

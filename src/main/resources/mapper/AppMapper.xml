@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  i-with 책방 메인 화면 전용 조회. 화면 하나 = 쿼리 하나.
+  studentId 는 세션에서만 받는다(요청 본문 금지).
+-->
+<mapper namespace="com.hohoedu.book_clinic.app.AppRepository">
+
+    <select id="selectBookstoreMain" resultType="com.hohoedu.book_clinic.app._dto.BookstoreMainRespDTO">
+        SELECT
+            s.student_name AS studentName,
+
+            convert(varchar(10), nxt.starts_at, 23) AS startDate,
+            CASE ((datepart(dw, nxt.starts_at) + @@datefirst - 1) % 7)
+                WHEN 0 THEN N'일요일' WHEN 1 THEN N'월요일' WHEN 2 THEN N'화요일'
+                WHEN 3 THEN N'수요일' WHEN 4 THEN N'목요일' WHEN 5 THEN N'금요일'
+                WHEN 6 THEN N'토요일'
+            END AS startDayName,
+            convert(varchar(5), nxt.starts_at, 108) AS startTime,
+            convert(varchar(5), nxt.ends_at,   108) AS endTime,
+
+            convert(varchar(10), prv.record_date, 23) AS lastVisitDate,
+            CASE ((datepart(dw, prv.record_date) + @@datefirst - 1) % 7)
+                WHEN 0 THEN N'일요일' WHEN 1 THEN N'월요일' WHEN 2 THEN N'화요일'
+                WHEN 3 THEN N'수요일' WHEN 4 THEN N'목요일' WHEN 5 THEN N'금요일'
+                WHEN 6 THEN N'토요일'
+            END AS lastVisitDayName,
+            convert(varchar(5), prv.in_time, 108) AS checkIn,
+            convert(varchar(5), coalesce(prv.out_time, prvres.ends_at), 108) AS checkOut,
+
+            pass.total_count  AS passTotal,
+            pass.remain_count AS passRemain,
+
+            books.img1 AS bookImg1,
+            books.img2 AS bookImg2,
+            books.img3 AS bookImg3,
+            books.img4 AS bookImg4
+
+        FROM erp_student s
+
+        -- 다음 예약: 끝나지 않은(진행중 포함) 가장 이른 슬롯
+        OUTER APPLY (
+            SELECT TOP 1 ebsi.starts_at, ebsi.ends_at
+            FROM erp_bookstore_reservation ebr
+            JOIN erp_bookstore_slot_instance ebsi ON ebsi.slot_instance_id = ebr.slot_instance_id
+            WHERE ebr.student_id = s.student_id
+              AND ebr.status &lt;&gt; 'CANCELED'
+              AND ebsi.ends_at &gt;= getdate()
+            ORDER BY ebsi.starts_at ASC
+        ) nxt
+
+        -- 직전 diary (당일 포함)
+        OUTER APPLY (
+            SELECT TOP 1 ebd.in_time, ebd.out_time, ebd.record_date, ebd.record_time
+            FROM erp_bookstore_diary ebd
+            WHERE ebd.student_id = s.student_id
+              AND ebd.record_date &lt;= cast(getdate() AS date)
+            ORDER BY ebd.record_date DESC, ebd.in_time DESC
+        ) prv
+
+        -- 체크아웃 fallback: 그 diary 와 같은 날짜/회차 예약의 종료시간
+        OUTER APPLY (
+            SELECT TOP 1 ebsi.ends_at
+            FROM erp_bookstore_reservation ebr
+            JOIN erp_bookstore_slot_instance ebsi ON ebsi.slot_instance_id = ebr.slot_instance_id
+            WHERE ebr.student_id = s.student_id
+              AND ebr.status &lt;&gt; 'CANCELED'
+              AND ebsi.center_code  = s.center_code
+              AND ebsi.service_date = prv.record_date
+              AND ebsi.seq          = prv.record_time
+            ORDER BY ebsi.starts_at DESC
+        ) prvres
+
+        -- 활성 이용권 (회수 안 됨 + 유효기간 내, 가장 최근 부여분)
+        OUTER APPLY (
+            SELECT TOP 1 p.total_count, p.remain_count
+            FROM erp_bookstore_pass p
+            WHERE p.student_id = s.student_id
+              AND p.revoked_at IS NULL
+              AND p.valid_until &gt;= cast(getdate() AS date)
+            ORDER BY p.granted_at DESC
+        ) pass
+
+        -- 최근 독서 기록 이미지 4개 (최신순)
+        OUTER APPLY (
+            SELECT
+                max(CASE WHEN rn = 1 THEN book_img END) AS img1,
+                max(CASE WHEN rn = 2 THEN book_img END) AS img2,
+                max(CASE WHEN rn = 3 THEN book_img END) AS img3,
+                max(CASE WHEN rn = 4 THEN book_img END) AS img4
+            FROM (
+                SELECT ebdd.book_img,
+                       row_number() OVER (
+                           ORDER BY ebd2.record_date DESC, ebd2.record_time DESC, ebdd.id DESC
+                       ) AS rn
+                FROM erp_bookstore_diary ebd2
+                JOIN erp_bookstore_diary_detail ebdd ON ebdd.diary_key = ebd2.diary_key
+                WHERE ebd2.student_id = s.student_id
+                  AND ebd2.record_date &lt;= cast(getdate() AS date)
+                  AND ebdd.book_img IS NOT NULL
+                  AND ebdd.book_img &lt;&gt; ''
+            ) t
+            WHERE rn &lt;= 4
+        ) books
+
+        WHERE s.student_id = #{studentId}
+    </select>
+
+</mapper>

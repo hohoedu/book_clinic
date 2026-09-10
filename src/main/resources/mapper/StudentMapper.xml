@@ -208,6 +208,51 @@
         ORDER BY si.service_date DESC, si.seq DESC
     </select>
 
+    <!-- ===== 회원가입(입회) — all_pass 이식 (2026-09-10) ===== -->
+
+    <select id="countDuplicateOnJoin" resultType="int">
+        SELECT COUNT(*)
+        FROM erp_student s
+        JOIN erp_student_guardian g ON s.student_id = g.student_id
+        WHERE s.student_name = #{studentName}
+          AND g.tel_middle   = #{telMiddle}
+          AND g.tel_last     = #{telLast}
+    </select>
+
+    <select id="findMaxAppIdSuffix" resultType="java.lang.Integer">
+        SELECT MAX(CAST(RIGHT(app_id, 1) AS INT))
+        FROM erp_student
+        WHERE app_id LIKE CONCAT(#{prefix}, '%')
+    </select>
+
+    <insert id="insertOnJoin">
+        INSERT INTO erp_student
+            (student_id, student_name, birth, gender, school, address, address_detail,
+             app_id, app_password, center_code, grade_key, clinic_grade_key, status_key,
+             student_privacy_agree, sub_han, sub_book, sub_hoho, is_hoho, billing_phone,
+             created_at, updated_at)
+        VALUES
+            (#{studentId}, #{s.studentName}, #{birth}, #{gender}, #{s.school}, #{s.address}, #{s.addressDetail},
+             #{appId}, #{appPassword}, #{s.centerCode}, #{s.gradeKey}, #{s.gradeKey}, #{statusKey},
+             #{s.studentPrivacyAgree}, #{subHan}, #{subBook}, #{subHoho}, #{subHoho}, #{billingPhone},
+             DATEADD(HOUR, 9, GETUTCDATE()), DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <insert id="insertGuardianOnJoin">
+        INSERT INTO erp_student_guardian
+            (student_id, guardian_name, tel_first, tel_middle, tel_last, relation_key, privacy_agree, created_at, updated_at)
+        VALUES
+            (#{studentId}, #{s.parentName}, #{s.parentTelFirst}, #{s.parentTelMiddle}, #{s.parentTelLast},
+             #{s.relationKey}, #{s.parentPrivacyAgree}, DATEADD(HOUR, 9, GETUTCDATE()), DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <update id="updateGuardianSignature">
+        UPDATE erp_student_guardian
+        SET signature_url = #{signatureUrl},
+            updated_at    = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE student_id = #{studentId}
+    </update>
+
     <select id="findSiblingGroup" resultType="com.hohoedu.book_clinic.student.model.Student">
         SELECT id                     AS id,
                center_code            AS centerCode,

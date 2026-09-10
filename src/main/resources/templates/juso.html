@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8">
+    <title>주소 검색</title>
+
+</head>
+
+<!--
+  all_pass 에서 이식. confmKey 는 juso.go.kr 에 등록된 승인키로, returnUrl 도메인과 쌍으로 묶여 있다.
+  returnUrl 은 요청 스킴+호스트에서 만들어 넣는다(JoinViewController#jusoPopup). 운영 도메인이 확정되면
+  book_clinic 앞으로 별도 confmKey 를 발급받아 교체해야 한다.
+-->
+<body onload="init();">
+<form id="form" name="form" method="post" action="https://business.juso.go.kr/addrlink/addrMobileLinkUrl.do">
+    <input type="hidden" id="confmKey" name="confmKey" value="U01TX0FVVEgyMDI1MTEyMDA5MzUzMjExNjQ3NDA="/>
+    <input type="hidden" id="returnUrl" name="returnUrl" th:value="${jusoReturnUrl}"/>
+    <input type="hidden" id="resultType" name="resultType" value="4"/>
+</form>
+
+<script type="text/javascript">
+    function init() {
+        const roadAddrPart1 = "[[${roadAddrPart1}]]";
+        const roadFullAddr = "[[${roadFullAddr}]]";
+        const addrDetail = "[[${addrDetail}]]";
+
+        if (!roadAddrPart1 || roadAddrPart1.trim() === "") {
+            document.form.submit(); // 주소 검색 실행
+        } else {
+            if (window.opener && !window.opener.closed) {
+                window.opener.document.getElementById("roadFullAddr").value = roadFullAddr;
+                window.opener.document.getElementById("addrDetail").focus();
+            }
+            window.close();
+        }
+    }
+</script>
+</body>
+
+</html>

@@ -1014,6 +1014,26 @@ CREATE TABLE erp_student_sibling (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_sibling_student' AND object_id = OBJECT_ID('erp_student_sibling'))
     CREATE INDEX IX_sibling_student ON erp_student_sibling (student_id);
 
+-- 학생 보호자(법정대리인) — 회원가입(입회) 화면에서 학생과 함께 등록된다 (2026-09-10, all_pass 이식).
+-- all_pass 의 erp_parent 에 해당. student_id 는 erp_student 와 값으로만 연결(위 sibling 과 동일한 이유로 FK 없음).
+IF OBJECT_ID('erp_student_guardian', 'U') IS NULL
+CREATE TABLE erp_student_guardian (
+    id            INT IDENTITY(1,1) PRIMARY KEY,
+    student_id    VARCHAR(100) NOT NULL,           -- erp_student.student_id
+    guardian_name VARCHAR(50),                     -- 법정대리인 성명
+    tel_first     VARCHAR(10),                     -- 연락처 앞자리 (010)
+    tel_middle    VARCHAR(10),                     -- 연락처 중간자리
+    tel_last      VARCHAR(10),                     -- 연락처 끝자리
+    relation_key  VARCHAR(20),                     -- 관계 코드 (MO/FA/GM/GF/ETC)
+    privacy_agree BIT          NOT NULL DEFAULT 0, -- 개인정보 수집·활용 동의
+    signature_url VARCHAR(500),                    -- 서명 이미지 URL (가입 직후 별도 업로드로 채워짐)
+    created_at    DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at    DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_guardian_student' AND object_id = OBJECT_ID('erp_student_guardian'))
+    CREATE INDEX IX_guardian_student ON erp_student_guardian (student_id);
+
 -- 환불(취소) 내역 — 부분환불과 재시도가 있어 결제 1건에 N행이다. PG 결제분 전용이다.
 -- 이번 취소가 부분인지 전액인지는 cancel_amount와 payment.amount - payment.refund_amount 비교로 나오므로
 -- is_partial 같은 플래그를 두지 않는다.

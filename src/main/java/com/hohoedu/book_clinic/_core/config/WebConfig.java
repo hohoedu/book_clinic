@@ -29,13 +29,13 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(commonInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
-                        "/", "/login", "/join",
+                        "/", "/login", "/join", "/signup", "/juso", "/jusoCallBack",
                         "/h2-console/**",
                         "/css/**", "/js/**", "/images/**", "/uploads/**",
                         "/favicon.ico"
                 );
         registry.addInterceptor(studentSessionInterceptor)
-                .addPathPatterns("/app/reservation/**");
+                .addPathPatterns("/app/reservation/**", "/app/bookstore/**");
     }
 
     /** 업로드된 도서 이미지를 /uploads/** URL로 정적 제공 */

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Custom Css / Js -->
+    <link rel="stylesheet" th:href="@{/css/join.css}">
+
+    <!-- jQuery CDN -->
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script th:src="@{/js/join.js}"></script>
+    <script th:src="@{/js/signature.js}"></script>
+    <title>호호책방 가입</title>
+</head>
+
+<body>
+    <div class="join-container">
+        <div class="join-section">
+            <img class="join-logo" th:src="@{/images/logo.png}" alt="호호책방 로고">
+            <h1 class="join-title">입회를 환영합니다!</h1>
+            <p class="join-subtitle">아래의 정보를 입력해 주세요.</p>
+        </div>
+        <form id="joinForm" class="join-form" method="post" th:action="@{/student/join}">
+            <input type="hidden" name="centerCode" th:value="${centerCode}">
+            <input type="hidden" name="inviteCode" th:value="${inviteCode}">
+            <div class="join-group">
+                <label for="student-name">학생 이름</label>
+                <input type="text" id="student-name" name="studentName"
+                    th:value="${pendingStudent != null ? pendingStudent.name : ''}" placeholder="학생 이름을 입력해 주세요.">
+            </div>
+            <div class="join-group">
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label for="birth-date">생년월일</label>
+                        <input type="text" id="birth-date" name="birth" placeholder="YYMMDD"
+                            oninput="this.value=this.value.slice(0,6)" inputmode="numeric" class="no-spinner"
+                            style="width: 100%;">
+                    </div>
+                    <div style="flex: 1;">
+                        <label for="gender">성별</label>
+                        <select id="gender" name="gender" style="height: 40px;">
+                            <option value="true">남</option>
+                            <option value="false">여</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="join-group">
+                    <label for="school-name">학교/유치원명</label>
+                    <input type="text" id="school-name" name="school" placeholder="학교/유치원명을 입력해 주세요.">
+                </div>
+                <div class="join-group">
+                    <label for="grade-filter">연령/학년</label>
+                    <div class="join-select">
+                        <select id="grade-filter" name="gradeKey">
+                            <option value="">선택</option>
+                            <option th:each="grade : ${gradeCodes}" th:value="${grade.code}" th:text="${grade.codeName}"
+                                th:selected="${pendingStudent != null and pendingStudent.gradeKey == grade.code}">
+                            </option>
+                        </select>
+                    </div>
+                </div>
+                <div class="join-group">
+                    <label for="address-input">주소</label>
+                    <div class="icon-field">
+                        <input type="text" id="address-input" name="address" placeholder="부산 해운대구 센텀중앙로 97"
+                            class="s_address" style="width: 100%;">
+                        <button type="button" class="icon-btn" onclick="openJusoPopup()">
+                            <img th:src="@{/images/search.png}" alt="검색 아이콘">
+                        </button>
+                    </div>
+                </div>
+                <div class="join-group">
+                    <label for="address-detail-input">상세 주소</label>
+                    <input type="text" id="address-detail-input" name="addressDetail" placeholder="나머지 주소를 입력해주세요.">
+                </div>
+                <div class="join-group">
+                    <label for="privacy-consent">개인정보 수집 및 활용 동의(필수)</label>
+                    <textarea id="privacy-consent" name="privacyConsent" rows="7" readonly>
+            1. 목적 및 수집 항목
+            호호스쿨에서는 학원 수강, 상담, 학습정보, 공지사항 및 소식지 전달을 위해 개인정보를 수집하고 있습니다.
+            아래의 항목은 학원 등록을 위해 필수적인 항목으로 아래의 목적으로만 사용하며 법령의 근거 없이 제 3자에게 제공하지 않습니다.
+            수집항목: 학생이름, 생년월일, 학교/학년, 부모님 연락처, 주소
+
+            2. 개인정보 보유 및 이용기간
+          </textarea>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="privacy-agree" name="studentPrivacyAgree">
+                        <label for="privacy-agree" style="margin: 0;">개인정보 수집 및 활용에 동의합니다.</label>
+                    </div>
+                </div>
+                <div class="join-line"></div>
+                <div class="join-group">
+                    <div class="join-consent">
+                        <h2>만 14세 미만 아동 법정 대리인 동의</h2>
+                        <p>만 14세 미만 아동인 경우 학부모 등 법정대리인의 동의가 필요합니다.</p>
+                    </div>
+                    <div class="join-group">
+                        <label for="guardian-name">법정대리인 성명</label>
+                        <input type="text" id="guardian-name" name="parentName" placeholder="성명을 입력해 주세요.">
+                    </div>
+                    <div class="join-group phone-input-group">
+                        <label for="phone1">법정대리인 연락처</label>
+                        <div class="phone-inputs">
+                            <input type="text" id="phone1" name="parentTelFirst" maxlength="3" placeholder="010"
+                                th:value="${pendingStudent != null ? #strings.substring(pendingStudent.phone, 0, 3) : ''}">
+                            <span class="dash">-</span>
+                            <input type="text" id="phone2" name="parentTelMiddle" maxlength="4" placeholder="0000"
+                                th:value="${pendingStudent != null ? #strings.substring(pendingStudent.phone, 3, 7) : ''}">
+                            <span class="dash">-</span>
+                            <input type="text" id="phone3" name="parentTelLast" maxlength="4" placeholder="0000"
+                                th:value="${pendingStudent != null ? #strings.substring(pendingStudent.phone, 7) : ''}">
+                        </div>
+                    </div>
+                    <div class="join-group">
+                        <label for="relation-filter">법정대리인과의 관계</label>
+                        <div class="join-select">
+                            <select id="relation-filter" name="relationKey">
+                                <option value="">선택</option>
+                                <option th:each="relation : ${relationCodes}" th:value="${relation.key}"
+                                    th:text="${relation.name}">
+                                </option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="join-group">
+                        <label for="represent">법정대리인 정보수집 및 활용 동의(필수)</label>
+                        <textarea id="represent" name="rePresent" rows="2" readonly>
+              본인은 위 미성년자의 법정 대리인으로 학원 서비스 이용을 위해 위와 같이 개인정보를 이용하는데 동의합니다.
+            </textarea>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="guardian-agree" name="parentPrivacyAgree">
+                        <label for="guardian-agree" style="margin: 0;">개인정보 수집 및 활용에 동의합니다.</label>
+                    </div>
+                </div>
+                <div class="join-group signature-container">
+                    <h2>서명</h2>
+                    <canvas id="signature-pad" width="100%" height="200" style="background: #FFFBEB;"></canvas>
+                    <input type="hidden" name="signatureTempPath" id="signatureTempPath">
+                    <div class="clear-container">
+                        <button type="button" id="clear-button">다시쓰기</button>
+                    </div>
+                </div>
+                <div class="submit-container">
+                    <button type="submit" class="join-button" id="btn-join">가입하기</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</body>
+
+</html>

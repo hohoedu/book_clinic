@@ -19,7 +19,7 @@
   <script th:src="@{/js/operation/student-info.js}"></script>
 </head>
 
-<body>
+<body th:attr="data-center-code=${centerCode}">
 
   <div class="admin-layout">
 
@@ -75,6 +75,10 @@
           <button type="button" id="btnFilterReset" class="btn outline">
             <i class="fa-solid fa-rotate-left"></i>
             필터 초기화
+          </button>
+          <button type="button" id="btnCopySignupLink" class="btn outline">
+            <i class="fa-regular fa-copy"></i>
+            가입 링크복사
           </button>
         </div>
 

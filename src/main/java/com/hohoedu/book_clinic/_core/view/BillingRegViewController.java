@@ -82,6 +82,16 @@ public class BillingRegViewController {
         return render(studentId, List.of(studentId), productCode, parseDate(firstBillingOn), model);
     }
 
+    /**
+     * 개발용 테스트 진입점(BillingRegTestController, @Profile("dev"))이 부르는 통로.
+     * 로그인 세션 없이 넘겨받은 학생으로 형제 선택을 건너뛰고 곧바로 카드등록창을 연다.
+     * render()가 private이라 이 메서드로만 연다 — 운영 경로(/checkout)와 뷰·파라미터 생성은 동일하다.
+     */
+    public String renderForTest(String ownerStudentId, List<String> studentIds, String productCode,
+                                java.time.LocalDate firstBillingOn, Model model) {
+        return render(ownerStudentId, studentIds, productCode, firstBillingOn, model);
+    }
+
     /** 형제 합산 카드등록 — 고른 학생들을 한 구독(카드 1장)에 묶는다 */
     @PostMapping("/checkout/group")
     public String checkoutGroup(@RequestParam("productCode") String productCode,

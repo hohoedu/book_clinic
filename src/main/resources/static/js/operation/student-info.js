@@ -14,6 +14,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 const RESULT_LABEL = { DONE_KING: "독서왕", DONE_FRIEND: "통과", PENDING: "재도전" };
 
+/* 회원가입 화면 링크 — 경로는 아직 확정 전이라 임시다(추후 수정 예정).
+   origin은 현재 접속 도메인, centerCode는 로그인 직원 센터(body[data-center-code])를 붙인다 */
+const SIGNUP_LINK_PATH = "/signup";
+
 /* 목업으로 남아있는 필드(회비 탭 전체)만 계속 쓰는 공용 샘플값 — API 연동 전 안내는 renderFeeTab 참고 */
 const FEE_MOCK = {
   bookLevelName: "독서 3단계",
@@ -134,6 +138,30 @@ function initFilterBar() {
     document.getElementById("filterKeyword").value = "";
     loadStudentList();
   });
+  document.getElementById("btnCopySignupLink").addEventListener("click", copySignupLink);
+}
+
+async function copySignupLink() {
+  const centerCode = document.body.dataset.centerCode || "";
+  const query = centerCode ? `?centerCode=${encodeURIComponent(centerCode)}` : "";
+  const url = window.location.origin + SIGNUP_LINK_PATH + query;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const temp = document.createElement("textarea");
+      temp.value = url;
+      temp.style.position = "fixed";
+      temp.style.opacity = "0";
+      document.body.appendChild(temp);
+      temp.select();
+      document.execCommand("copy");
+      document.body.removeChild(temp);
+    }
+    alert("가입 링크를 복사했습니다.");
+  } catch (e) {
+    alert("링크 복사에 실패했습니다. 아래 주소를 직접 복사해주세요.\n" + url);
+  }
 }
 
 /* ===================== 모달 열기/닫기/탭 ===================== */
