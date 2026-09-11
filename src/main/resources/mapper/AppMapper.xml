@@ -8,7 +8,7 @@
 -->
 <mapper namespace="com.hohoedu.book_clinic.app.AppRepository">
 
-    <select id="selectBookstoreMain" resultType="com.hohoedu.book_clinic.app._dto.BookstoreMainRespDTO">
+    <select id="selectBookstoreMain" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$BookstoreMainDTO">
         SELECT
             s.student_name AS studentName,
 
@@ -106,6 +106,173 @@
         ) books
 
         WHERE s.student_id = #{studentId}
+    </select>
+
+    <!-- ══════════════ 정독 결과(리포트) 화면 ══════════════
+         상단 일자 탭 = 조회 단위. 아래 쿼리들은 전부 그 하루(또는 "그 날짜까지")로 잘려 있다.
+
+         정답률/성향에서 "최종 회차"를 고를 때는 DiaryMapper 와 같은 규칙을 쓴다 —
+         quiz_answer_log 는 submitted_at 이 같으면 같은 제출 회차라서(ddl-core.sql 주석),
+         (recommend_id, qlevel) 별 MAX(submitted_at) 행만 보면 마지막 제출 결과가 된다.
+         재도전으로 점수가 오른 학생이 옛 오답까지 성향에 끌고 가지 않게 하려는 것이다.
+    -->
+
+    <select id="selectBookstoreReportDates" resultType="java.lang.String">
+        SELECT TOP 4 convert(varchar(10), d.record_date, 23)
+        FROM erp_bookstore_diary d
+        WHERE d.student_id = #{studentId}
+          AND d.record_date &lt;= cast(dateadd(hour, 9, getutcdate()) AS date)
+        ORDER BY d.record_date DESC
+    </select>
+
+    <select id="selectBookstoreReportSummary" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$BookstoreReportDTO">
+        SELECT
+            s.student_name AS studentName,
+            isnull(day.bookCount, 0)   AS bookCount,
+            isnull(day.readMinutes, 0) AS readMinutes,
+            day.correctRate            AS correctRate,
+            isnull(cum.totalBookCount, 0) AS totalBookCount
+        FROM erp_student s
+
+        -- 그날 일지 상세 합계. 심화는 재도전으로 갱신되는 final 을 우선한다(diary_detail 주석).
+        OUTER APPLY (
+            SELECT
+                count(*)                         AS bookCount,
+                sum(isnull(dd.read_minutes, 0))  AS readMinutes,
+                CASE
+                    WHEN sum(isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0)) = 0 THEN NULL
+                    ELSE cast(round(
+                        100.0 * sum(isnull(dd.basic_correct_cnt, 0)
+                                    + isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0))
+                        / sum(isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0)), 0) AS int)
+                END AS correctRate
+            FROM erp_bookstore_diary d
+            JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+            WHERE d.student_id = s.student_id
+              AND d.record_date = #{recordDate}
+        ) day
+
+        -- 누적 완독 권수 — 그 날짜까지. 첫 제출(DONE) 기준이라 합격/불합격은 따지지 않는다.
+        OUTER APPLY (
+            SELECT count(*) AS totalBookCount
+            FROM erp_bookstore_recommend_log rl
+            WHERE rl.student_id = s.student_id
+              AND rl.status = 'DONE'
+              AND rl.completed_at IS NOT NULL
+              AND cast(rl.completed_at AS date) &lt;= #{recordDate}
+        ) cum
+
+        WHERE s.student_id = #{studentId}
+    </select>
+
+    <select id="selectBookstoreReportBooks" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportBookDTO">
+        SELECT
+            dd.content_id AS contentId,
+            coalesce(dd.book_name, c.original_title) AS title,
+            coalesce(dd.book_img,  c.image_url)      AS imageUrl,
+
+            isnull(dd.basic_correct_cnt, 0) AS basicCorrect,
+            isnull(dd.basic_total_cnt,   0) AS basicTotal,
+            isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0) AS advancedCorrect,
+            isnull(dd.advanced_total_cnt, 0) AS advancedTotal,
+
+            -- "처음 점수" — 재도전 배지를 그리려면 최종점수와 별개로 최초 제출값이 필요하다
+            rl.correct_count AS firstBasicCorrect,
+            rl.total_count   AS firstBasicTotal,
+
+            CASE WHEN retry.rounds &gt; 0 THEN retry.rounds - 1 ELSE 0 END AS retryCount,
+
+            CASE
+                WHEN isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0) = 0 THEN NULL
+                ELSE cast(round(
+                    100.0 * (isnull(dd.basic_correct_cnt, 0)
+                             + isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0))
+                    / (isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0)), 0) AS int)
+            END AS correctRate
+
+        FROM erp_bookstore_diary d
+        JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+        LEFT JOIN erp_bookstore_content c ON c.content_id = dd.content_id
+        LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
+
+        -- 제출 회차 수 (submitted_at 이 같으면 같은 회차). 기본 문제만 재도전 대상이다.
+        OUTER APPLY (
+            SELECT count(DISTINCT q.submitted_at) AS rounds
+            FROM erp_bookstore_quiz_answer_log q
+            WHERE q.recommend_id = dd.recommend_id
+              AND q.qlevel = '01'
+        ) retry
+
+        WHERE d.student_id = #{studentId}
+          AND d.record_date = #{recordDate}
+        ORDER BY dd.id
+    </select>
+
+    <!-- 보상 4칸 — 마스터 4종을 항상 전부 내린다. 그날 읽은 책에서 받은 것만 earned. -->
+    <select id="selectBookstoreReportBadges" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportBadgeDTO">
+        SELECT
+            b.badge_id   AS badgeId,
+            b.badge_name AS badgeName,
+            b.badge_desc AS badgeDesc,
+            cast(CASE WHEN e.cnt &gt; 0 THEN 1 ELSE 0 END AS BIT) AS earned
+        FROM erp_bookstore_badge b
+        OUTER APPLY (
+            SELECT count(*) AS cnt
+            FROM erp_bookstore_student_badge sb
+            WHERE sb.student_id = #{studentId}
+              AND sb.badge_id   = b.badge_id
+              AND EXISTS (
+                  SELECT 1
+                  FROM erp_bookstore_diary d
+                  JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+                  WHERE d.student_id = #{studentId}
+                    AND d.record_date = #{recordDate}
+                    AND dd.content_id = sb.content_id
+              )
+        ) e
+        ORDER BY b.badge_id
+    </select>
+
+    <!--
+      독서 성향 — 문제 유형(gubun='T')별 누적 정답률. 하루치만 보면 유형당 표본이 한두 문항이라
+      버블이 0%/100%로 튄다. 그래서 "그 날짜까지" 누적으로 내고, 표본 수(answerCount)도 같이
+      보내 앱이 신뢰도를 판단할 수 있게 한다.
+      문법('08')까지 내려가지만 앱 버블 팔레트에 없는 유형은 앱에서 버린다.
+    -->
+    <select id="selectBookstoreReportTendencies" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportTendencyDTO">
+        SELECT
+            cd.code   AS typeCode,
+            cd.codeNm AS typeName,
+            cast(round(100.0 * sum(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) / count(*), 1) AS float) AS rate,
+            count(*)  AS answerCount
+        FROM erp_bookstore_code cd
+        JOIN erp_bookstore_quiz_answer_log q ON q.qtype = cd.code
+        WHERE cd.gubun = 'T'
+          AND q.student_id = #{studentId}
+          AND cast(q.submitted_at AS date) &lt;= #{recordDate}
+          AND q.submitted_at = (
+              SELECT max(q2.submitted_at)
+              FROM erp_bookstore_quiz_answer_log q2
+              WHERE q2.recommend_id = q.recommend_id
+                AND q2.qlevel = q.qlevel
+          )
+        GROUP BY cd.code, cd.codeNm
+        ORDER BY cd.code
+    </select>
+
+    <!-- 독서량 그래프 — 최근 6개월. 앱 ReportGraphData 가 문자열을 받으므로 문자열로 낸다. -->
+    <select id="selectBookstoreReportMonthly" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportMonthlyDTO">
+        SELECT TOP 6
+            convert(varchar(4), year(rl.completed_at)) AS year,
+            right('0' + convert(varchar(2), month(rl.completed_at)), 2) AS month,
+            convert(varchar(10), count(*)) AS count
+        FROM erp_bookstore_recommend_log rl
+        WHERE rl.student_id = #{studentId}
+          AND rl.status = 'DONE'
+          AND rl.completed_at IS NOT NULL
+          AND cast(rl.completed_at AS date) &lt;= #{recordDate}
+        GROUP BY year(rl.completed_at), month(rl.completed_at)
+        ORDER BY year(rl.completed_at) DESC, month(rl.completed_at) DESC
     </select>
 
 </mapper>
