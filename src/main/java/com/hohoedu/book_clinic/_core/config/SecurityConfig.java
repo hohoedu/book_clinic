@@ -40,6 +40,7 @@ public class SecurityConfig {
                                                                 "/error",
                                                                 "/h2-console/**",
                                                                 "/css/**", "/js/**", "/images/**", "/uploads/**",
+                                                                "/lottie/**",
                                                                 "/favicon.ico",
                                                                 "/manifest.json", "/sw.js",
                                                                 "/launch",

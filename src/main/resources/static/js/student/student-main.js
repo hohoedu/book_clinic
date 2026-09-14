@@ -165,7 +165,7 @@
     const recommendErrorMsg = document.getElementById('recommendErrorMsg');
     const recommendErrorOkBtn = document.getElementById('recommendErrorOkBtn');
 
-    // "책 추천받기" 실패 안내(하루 추천 한도 2권 초과 등) — 브라우저 기본 alert() 대신 앱 스타일
+    // "책 추천받기" 실패 안내(심화 게이트, 추천 후보 소진 등) — 브라우저 기본 alert() 대신 앱 스타일
     // 모달로 보여준다(2026-08-25)
     function showRecommendError(message) {
       if (!recommendErrorModal) {
@@ -438,8 +438,9 @@
         showState('passExhausted');
         return;
       }
-      // 하루 추천 한도(2권) 초과는 에러 카드로 붙잡아두지 않고 바로 홈으로 돌려보낸다(2026-08-20) —
-      // 학생이 "추천받기"를 다시 눌러도 매번 같은 에러만 반복되는 상황을 만들지 않기 위해서다.
+      // 한도성 에러는 에러 카드로 붙잡아두지 않고 바로 홈으로 돌려보낸다(2026-08-20) — 학생이
+      // "추천받기"를 다시 눌러도 매번 같은 에러만 반복되는 상황을 만들지 않기 위해서다.
+      // (하루 추천 권수 상한 자체는 2026-09-14에 폐지됐고, 이 분기는 남은 다른 한도용으로 둔다)
       if (err.message && err.message.includes('초과할 수 없습니다')) {
         loadHomeState();
         return;

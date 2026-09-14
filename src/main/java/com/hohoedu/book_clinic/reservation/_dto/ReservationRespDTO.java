@@ -29,8 +29,8 @@ public class ReservationRespDTO {
      * targetStatus: OPEN(신청 가능) / ALREADY_RESERVED(이미 내 예약 있음) /
      *               FULL(마감) / CLOSED(휴무·마감된 회차) / NOT_OPEN(아직 슬롯이 생성되지 않음) /
      *               DAY_CONFLICT(이 날짜에 이미 하루 상한(4회차)만큼 예약함) /
-     *               MONTH_FULL(그 달 예약 가능 횟수를 이미 채움 — 이용권 total_count 기준) /
-     *               NO_PASS(그 달 이용권이 아직 없음 — 결제 후 예약 가능)
+     *               MONTH_FULL(이용권 잔여를 이미 다 씀 — 예약 시 차감이라 잔여 = 예약 가능 횟수) /
+     *               NO_PASS(그 날짜를 덮는 이용권이 없음 — 결제 후 예약 가능)
      */
     @Data
     public static class BatchPreviewItemDTO {
@@ -53,6 +53,12 @@ public class ReservationRespDTO {
         private LocalDateTime endsAt;
         private String status;
         private LocalDateTime reservedAt;
+        /**
+         * 학생 채널에서 지금 취소·변경할 수 있는지 (2026-09-14, 회차 시작 24시간 전까지).
+         * 서버가 취소 시점에 다시 검사하므로 이 값은 화면 표시용이다 — 목록을 띄워둔 채
+         * 마감을 넘겨도 취소 자체는 서버에서 막힌다. 목록 조회에서만 채워진다.
+         */
+        private Boolean cancelable;
     }
 
     /**

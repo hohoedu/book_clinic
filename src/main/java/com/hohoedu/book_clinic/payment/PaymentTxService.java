@@ -57,20 +57,16 @@ public class PaymentTxService {
             return false;
         }
 
-        // 이용권 주기는 결제 행이 들고 있는 값을 그대로 쓴다(2026-09-07). 여기서 billing_ym으로
-        // 다시 역산하면 자동결제의 "결제일 기준 1개월"이 달력 월로 되돌아가 화면에 보여준 기간과
-        // 실제 유효기간이 어긋난다. cycle_from이 비어 있는 건 이 컬럼 도입 이전에 시작된
-        // 결제뿐이라, 그때는 예전 규칙대로 달력 월로 발급한다.
-        if (payment.getCycleFrom() != null && payment.getCycleUntil() != null) {
-            passService.grant(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
-                    product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
-                    payment.getBillingYm(), payment.getCycleFrom(), payment.getCycleUntil(),
-                    product.getTotalCount());
-        } else {
-            passService.grantMonthly(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
-                    product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
-                    payment.getBillingYm(), product.getTotalCount());
-        }
+        // 이용권은 유효기간 없이 발급한다(2026-09-14, 90일 만료 정책). 기간은 이 이용권을
+        // 처음 쓰는 예약이 잡힐 때 "그 회차 날짜부터 90일"로 확정된다.
+        //
+        // payment의 cycle_from/cycle_until을 여기서 쓰지 않는 이유는, 그 두 컬럼이 이제
+        // "청구 주기"만 뜻하기 때문이다 — 자동결제가 다음 청구일을 계산하고 같은 주기를
+        // 두 번 청구하지 않도록 지키는 값이지, 학생이 쓸 수 있는 기간이 아니다.
+        // (2026-09-07~09-14 사이에는 둘이 같은 값이었어서 결제 주기를 그대로 이용권에 넣었다.)
+        passService.grantUnassigned(payment.getStudentId(), payment.getCenterCode(), product.getProductId(),
+                product.getServiceCode(), PassService.SOURCE_PG, payment.getOrderNo(),
+                payment.getBillingYm(), product.getTotalCount());
         return true;
     }
 

@@ -19,6 +19,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDetailFilter();
   initDeletedBooks();
   initImageButtons();
+  initWorksheetButtons();
+  initRewardCardButtons();
   initStatusToggle();
   initCategoryTagInput();
   initQuestionTabs();
@@ -153,6 +155,12 @@ let questionsOriginalSnapshot = "[]"; // 뒤로가기/새로고침/닫기 시 �
 let currentMode = "edit"; // "edit" | "new"
 let currentContentId = null;
 let currentImageUrl = "";
+// 부가 이미지 두 장 — 표지와 다른 그림이고 erp_bookstore_card_path에 한 행으로 따로 저장된다(2026-09-14).
+// 워크시트는 모니터링에서 선생님이 뽑아 쓰는 출력물(없으면 모니터링에 프린터 아이콘이 안 뜬다),
+// 수집 카드는 완독 시 학생에게 지급되는 카드 그림(없으면 화면이 기본 카드로 폴백)이다.
+// 책 1권당 각각 1장이라 새로 올리면 교체된다.
+let currentWorksheetUrl = "";
+let currentRewardCardUrl = "";
 let selectedContentType = "";
 let originalSnapshot = null;
 let categoryTags = [];
@@ -1250,6 +1258,101 @@ function setBookImage(url) {
   if (img) img.src = currentImageUrl || DEFAULT_BOOK_IMAGE;
 }
 
+/* 워크시트(출력용) 이미지 — 표지와 저장 위치도(FTP worksheets/) 테이블도 다르다 */
+function setWorksheetImage(url) {
+  currentWorksheetUrl = url || "";
+  const img = document.getElementById("bookWorksheetImage");
+  const empty = document.getElementById("bookWorksheetEmpty");
+  if (img) {
+    img.src = currentWorksheetUrl;
+    img.hidden = !currentWorksheetUrl;
+  }
+  if (empty) empty.hidden = !!currentWorksheetUrl;
+}
+
+function initWorksheetButtons() {
+  const input = document.getElementById("bookWorksheetInput");
+  const changeBtn = document.getElementById("btnWorksheetChange");
+  const deleteBtn = document.getElementById("btnWorksheetDelete");
+
+  changeBtn?.addEventListener("click", () => input?.click());
+  deleteBtn?.addEventListener("click", () => setWorksheetImage(""));
+
+  input?.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const response = await fetch("/book/worksheet-image", {
+        method: "POST",
+        headers: { [CSRF_HEADER]: getCsrfToken() },
+        body: form,
+      });
+
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
+
+      setWorksheetImage(data.response.url);
+    } catch (error) {
+      console.error(error);
+      alert(error.message ?? "이미지 업로드 중 오류가 발생했습니다.");
+    } finally {
+      input.value = "";
+    }
+  });
+}
+
+/* 수집 카드 이미지 — 워크시트와 저장 테이블은 같고(한 행) 컬럼만 다르다.
+   이름이 setCardImage가 아닌 이유: 그 이름은 하위도서 카드 DOM용으로 이미 쓰이고 있다. */
+function setRewardCardImage(url) {
+  currentRewardCardUrl = url || "";
+  const img = document.getElementById("bookCardImage");
+  const empty = document.getElementById("bookCardEmpty");
+  if (img) {
+    img.src = currentRewardCardUrl;
+    img.hidden = !currentRewardCardUrl;
+  }
+  if (empty) empty.hidden = !!currentRewardCardUrl;
+}
+
+function initRewardCardButtons() {
+  const input = document.getElementById("bookCardInput");
+  const changeBtn = document.getElementById("btnCardChange");
+  const deleteBtn = document.getElementById("btnCardDelete");
+
+  changeBtn?.addEventListener("click", () => input?.click());
+  deleteBtn?.addEventListener("click", () => setRewardCardImage(""));
+
+  input?.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      const form = new FormData();
+      form.append("file", file);
+
+      const response = await fetch("/book/card-image", {
+        method: "POST",
+        headers: { [CSRF_HEADER]: getCsrfToken() },
+        body: form,
+      });
+
+      const data = await response.json();
+      if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
+
+      setRewardCardImage(data.response.url);
+    } catch (error) {
+      console.error(error);
+      alert(error.message ?? "이미지 업로드 중 오류가 발생했습니다.");
+    } finally {
+      input.value = "";
+    }
+  });
+}
+
 function initImageButtons() {
   const input = document.getElementById("bookImageInput");
   const changeBtn = document.getElementById("btnImageChange");
@@ -1304,6 +1407,8 @@ function renderBookInfo(book) {
 
   setStatusRadio(book.state);
   setBookImage(book.imageUrl);
+  setWorksheetImage(book.worksheetUrl);
+  setRewardCardImage(book.cardUrl);
   setContentTypeChip(book.contentType ?? "");
   setCategoryTags(book.keywords ? book.keywords.split(",").map((k) => k.trim()).filter(Boolean) : []);
   updateExtraDetailField(book.extraDetailName ?? "");
@@ -1331,6 +1436,8 @@ function clearBookInfo(isNew) {
 
   setStatusRadio("Y");
   setBookImage("");
+  setWorksheetImage("");
+  setRewardCardImage("");
   setContentTypeChip("");
   setCategoryTags([]);
 
@@ -1386,6 +1493,8 @@ function getFormSnapshot() {
     contentType: selectedContentType,
     state: getStatusValue(),
     imageUrl: currentImageUrl,
+    worksheetUrl: currentWorksheetUrl,
+    cardUrl: currentRewardCardUrl,
     extraDetail: document.getElementById("bookInfoExtraDetail")?.value.trim() ?? "",
   };
 }
@@ -1519,6 +1628,8 @@ async function saveBook(mode, snapshot) {
     contentType: snapshot.contentType,
     state: snapshot.state,
     imageUrl: snapshot.imageUrl,
+    worksheetUrl: snapshot.worksheetUrl,
+    cardUrl: snapshot.cardUrl,
     extraDetail: snapshot.extraDetail,
   };
 

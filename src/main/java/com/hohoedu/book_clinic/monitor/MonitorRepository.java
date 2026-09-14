@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.monitor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
@@ -23,6 +24,9 @@ public interface MonitorRepository {
 
     /** 퇴실 처리 (status=EXITED, exited_at=now) */
     void updateSessionExit(@Param("sessionId") Integer sessionId);
+
+    /** 그날 마지막으로 퇴실한 시각 — 퇴실 뒤에 시작하는 회차가 있는지 따질 때 쓴다(2026-09-14). 퇴실 이력이 없으면 null */
+    LocalDateTime findLastExitedAt(@Param("studentId") String studentId, @Param("date") LocalDate date);
 
     /** 문제풀이 화면 진입 시각 기록 — "문제 푸는 중" 카드 상태의 기준. qlevel=01 기본 / 02 심화 (회차/심화 라벨용) */
     void markQuizStarted(@Param("sessionId") Integer sessionId, @Param("qlevel") String qlevel);

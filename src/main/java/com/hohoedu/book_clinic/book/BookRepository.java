@@ -31,11 +31,24 @@ public interface BookRepository {
     void upsertCardPath(@Param("contentId") Integer contentId, @Param("cardUrl") String cardUrl,
                         @Param("registeredBy") String registeredBy);
 
-    /** 수집 카드 이미지 경로 삭제 (카드 이미지를 지운 경우 — 이후 화면은 기본 카드로 폴백) */
-    void deleteCardPath(@Param("contentId") Integer contentId);
+    /** 워크시트(출력용) 이미지 경로 upsert - 카드와 같은 행(content_id)을 공유한다 (2026-09-14) */
+    void upsertWorksheetPath(@Param("contentId") Integer contentId, @Param("worksheetUrl") String worksheetUrl,
+                             @Param("registeredBy") String registeredBy);
+
+    /** 수집 카드 이미지 경로 비우기 (이후 화면은 기본 카드로 폴백) — 행은 워크시트 때문에 남겨둔다 */
+    void clearCardPath(@Param("contentId") Integer contentId);
+
+    /** 워크시트 이미지 경로 비우기 (이후 모니터링에서 출력 아이콘이 사라진다) */
+    void clearWorksheetPath(@Param("contentId") Integer contentId);
+
+    /** 카드/워크시트가 둘 다 비워진 빈 행 정리 */
+    void purgeEmptyPath(@Param("contentId") Integer contentId);
 
     /** 수집 카드 이미지 경로 단건 조회 (없으면 null) */
     String findCardPath(@Param("contentId") Integer contentId);
+
+    /** 워크시트 이미지 원본 호스팅 주소 단건 조회 (없으면 null) — 프록시 전용, 화면엔 안 내려간다 */
+    String findWorksheetPath(@Param("contentId") Integer contentId);
 
     /** 마스터 도서 삭제 (저장 프로시저 sp_delete_book 호출) */
     void deleteBook(@Param("contentId") Integer contentId, @Param("deletedBy") String deletedBy);

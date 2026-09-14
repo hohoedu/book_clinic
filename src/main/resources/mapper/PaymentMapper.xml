@@ -53,14 +53,18 @@
     </sql>
 
     <!-- 같은 학생·서비스·청구월에 이미 진행 중이거나 완료된 결제가 있는지 — 중복 결제 방지용(2026-08-07) -->
-    <select id="findActiveByStudentServiceBilling" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
+    <!--
+      결제창을 열어둔 채 방치된 주문 재사용(2026-09-14) — 예전에는 같은 청구월의 PAID까지 찾아
+      "이미 이번 달 결제 완료"로 막았지만, 12회권·90일 만료로 바뀌면서 같은 달 재구매가 정상이
+      됐다. 그래서 이제는 진행 중(READY)인 주문만 찾는다. 가장 최근 것을 쓴다.
+    -->
+    <select id="findReadyByStudentService" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">
         SELECT TOP 1 <include refid="paymentColumns"/>
         FROM erp_bookstore_payment
         WHERE student_id = #{studentId}
           AND service_code = #{serviceCode}
-          AND billing_ym = #{billingYm}
-          AND status IN ('READY', 'PAID')
-        ORDER BY CASE status WHEN 'PAID' THEN 0 ELSE 1 END, requested_at DESC
+          AND status = 'READY'
+        ORDER BY requested_at DESC
     </select>
 
     <select id="findByOrderNo" resultType="com.hohoedu.book_clinic.payment._dto.PaymentRespDTO$PaymentDTO">

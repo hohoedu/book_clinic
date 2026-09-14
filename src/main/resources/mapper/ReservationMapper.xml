@@ -102,16 +102,6 @@
           AND r.status &lt;&gt; 'CANCELED'
     </select>
 
-    <!-- 그 달 예약 상한(2026-08-28) 판정용 — service_date가 그 달에 드는 비취소 예약 건수.
-         CANCELED만 제외(RESERVED/ATTENDED/NOSHOW는 "그 달 예약분을 이미 썼다"로 본다). -->
-    <select id="countReservationsInMonth" resultType="int">
-        SELECT COUNT(*)
-        FROM erp_bookstore_reservation r
-        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-        WHERE r.student_id = #{studentId}
-          AND si.service_date BETWEEN #{monthStart} AND #{monthEnd}
-          AND r.status &lt;&gt; 'CANCELED'
-    </select>
 
     <!-- 하루 2회차 상한(2026-08-28)의 동시성 방어 — (student_id, service_date) 유니크 인덱스를
          없앤 대신, 예약 트랜잭션 시작 시 이 학생의 erp_student 행을 UPDLOCK/HOLDLOCK으로 잡아
@@ -142,16 +132,6 @@
           AND si.service_date = #{serviceDate}
           AND r.status IN ('RESERVED', 'ATTENDED')
         ORDER BY si.starts_at ASC, r.reservation_id ASC
-    </select>
-
-    <!-- 책 추천 상한(2026-08-28) — 그날 출석 확정(ATTENDED)된 회차 수. 추천 총량 = 이 값 × 2권. -->
-    <select id="countAttendedSlotsByStudentAndDate" resultType="int">
-        SELECT COUNT(*)
-        FROM erp_bookstore_reservation r
-        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
-        WHERE r.student_id = #{studentId}
-          AND si.service_date = #{serviceDate}
-          AND r.status = 'ATTENDED'
     </select>
 
     <!--

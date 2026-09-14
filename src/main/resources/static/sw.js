@@ -1,6 +1,6 @@
 // 캐시 이름을 올리면 activate에서 옛 캐시를 통째로 지운다 — /images/ 는 cache-first라
 // 같은 파일명으로 그림만 교체한 자산(뱃지 아이콘 등)은 이 버전을 올려야 갱신된다.
-const CACHE_NAME = 'book-clinic-student-v19';
+const CACHE_NAME = 'book-clinic-student-v21';
 
 // 앱은 하나(manifest.json, start_url=/launch)지만 그 안에 문제풀이(/student/**)/출석체크
 // (/attendance/**) 두 화면이 있다 — 오프라인 폴백은 지금 들어가려던 화면이 어느 쪽인지에 따라
@@ -88,9 +88,12 @@ self.addEventListener('fetch', (event) => {
   // 가치가 없고, 캐시가 끼면 "지금 보는 게 최신인지 캐시인지" 혼란만 준다. admin 페이지·API와
   // admin 전용 스크립트(모니터링 JS·Firebase SDK 벤들)는 respondWith 없이 그대로 네트워크로
   // 흘려보내(=SW 미개입) 항상 최신을 받게 한다. (2026-07-24)
+  // 로티 애니메이션(JSON)도 SW가 재요청(respondWith(fetch))하면 ngrok 등 터널 환경에서
+  // net::ERR_FAILED로 실패하는 사례가 있어 admin/vendor와 같이 아예 가로채지 않는다(2026-09-14).
   if (url.pathname.startsWith('/admin/')
       || url.pathname.startsWith('/js/monitor/')
-      || url.pathname.startsWith('/js/vendor/')) {
+      || url.pathname.startsWith('/js/vendor/')
+      || url.pathname.startsWith('/lottie/')) {
     return;
   }
 

@@ -90,6 +90,7 @@ public class ClinicRespDTO {
         private String feature;
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0)
+        private String characterImg;       // 학년별 캐릭터 이미지 경로 (초1~3만 전용 이미지, 나머지는 기본값)
     }
 
     /** student-main "이번 달에 읽은 책" 패널 1건 (완료 도서 + 현재 읽는 중인 도서 1건) */
@@ -174,6 +175,7 @@ public class ClinicRespDTO {
         private Integer finalCorrectCount;  // "최종 점수" — 재도전 반영 최신값 (2026-08-28)
         private int totalCount;
         private int passLine;          // 합격에 필요한 최소 정답 수
+        private String schoolyear;     // 학생의 학년 코드(01~07) — 결과 화면 캐릭터 로티를 학년에 맞게 고르는 데 쓴다(2026-09-14)
         // 이번 제출에서 틀린 문항 번호 — "틀린 문제 풀기"가 쓴다. 화면이 정답(itempool.ans)을
         // 직접 대조해 만들던 값을 서버 계산으로 옮긴 것이다(2026-08-20, 정답 노출 차단).
         private List<String> wrongQnums;
@@ -229,8 +231,8 @@ public class ClinicRespDTO {
         // 결과화면/완료화면 버튼 분기용 (2026-08-28) — KING=심화만, FRIEND=재도전/틀린문제/심화,
         // null(불합격)=재도전만. 재도전으로 합격하면 이 값이 갱신되어 버튼도 바뀐다.
         private String grade;
-        // 지금 "책 추천받기"를 눌러 다음 책을 받을 수 있는 상태인지 (2026-08-28) — 오늘 추천 한도를
-        // 다 썼으면 false → 프론트에서 버튼 자체를 숨긴다.
+        // 지금 "책 추천받기"를 눌러 다음 책을 받을 수 있는 상태인지 (2026-08-28) — 권수 상한이
+        // 폐지되어(2026-09-14) 지금은 심화 게이트에 걸렸을 때만 false → 프론트에서 버튼을 숨긴다.
         private boolean canRecommendNext;
     }
 

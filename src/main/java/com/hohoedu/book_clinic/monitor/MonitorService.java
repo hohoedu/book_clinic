@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.monitor;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
@@ -13,13 +14,13 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception403;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
+import com.hohoedu.book_clinic._core.file.ImageStorageService;
 import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
 import com.hohoedu.book_clinic.clinic.ClinicRepository;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
-import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.reservation.ReservationService;
 
 import lombok.RequiredArgsConstructor;
@@ -41,24 +42,47 @@ public class MonitorService {
     private final MonitorRepository monitorRepository;
     private final MonitorSyncService monitorSyncService;
     private final BookService bookService;
-    private final PassService passService;
     private final ReservationService reservationService;
     private final StudentSessionRegistry studentSessionRegistry;
     // 퇴실 시 읽던 책을 홀딩으로 내리기 위해 필요하다(2026-09-03). ClinicService를 주입하면
     // ClinicService → MonitorService 방향과 맞물려 순환 참조가 되므로 리포지토리를 직접 쓴다.
     private final ClinicRepository clinicRepository;
+    // 워크시트 원본을 서버에서 받아오기 위해 필요하다(2026-09-14) — 호스팅 주소를 화면에 노출하지 않는다
+    private final ImageStorageService imageStorageService;
+
+    /**
+     * 워크시트(출력용 이미지) 원본을 서버가 직접 받아 바이트로 돌려준다 (2026-09-14).
+     *
+     * 화면에는 호스팅 주소 대신 /admin/monitor/worksheet/{contentId}만 내려간다. 주소를 숨기는 게
+     * 목적이라 컨트롤러가 URL을 만지지 않고, 조회·수신을 전부 서버 안에서 끝낸다.
+     * 워크시트가 등록되지 않은 책이면 404.
+     */
+    public byte[] readWorksheet(Integer contentId) {
+        String url = bookService.findWorksheetUrl(contentId);
+        if (url == null || url.isBlank()) {
+            throw new Exception404("이 도서에는 등록된 워크시트가 없습니다.");
+        }
+        try {
+            return imageStorageService.read(url);
+        } catch (java.io.IOException e) {
+            log.warn("워크시트 이미지 로드 실패 — contentId={}", contentId, e);
+            throw new Exception400("워크시트 이미지를 불러오지 못했습니다.");
+        }
+    }
+
+    /** 워크시트 응답의 Content-Type — 원본 확장자 기준 */
+    public String worksheetContentType(Integer contentId) {
+        return imageStorageService.contentTypeOf(bookService.findWorksheetUrl(contentId));
+    }
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
      * 오늘 이미 열린(ENTERED) 세션이 있으면 재사용하고, 없으면(당일 첫 로그인 또는 이전
      * 세션이 이미 퇴실 처리됨) 새로 만든다.
      *
-     * 이용권 차감(2026-08-05)도 여기서 함께 한다 — getHomeState/recommendBook 세 호출부가
-     * 전부 이 메서드를 거치는 유일한 "입실" 지점이라, 차감 규칙을 여기 한 곳에 두면 호출부마다
-     * 중복해서 검사할 필요가 없다. consume()은 그날 이미 썼으면 다시 까지 않고 그대로 잔여값을
-     * 돌려주므로(0이어도) 반복 호출에 안전하다 — 새로 깎을 게 없는데 오늘 아직 한 번도 못 쓴
-     * 경우에만 -1이 오므로, 그 경우에만 입실을 막는다. 예외가 나면 @Transactional이 방금 만든
-     * 세션 insert까지 함께 롤백해서 "이용권도 없는데 세션만 남는" 상태가 생기지 않는다.
+     * 이용권은 여기서 깎지 않는다(2026-09-14 정책 변경, 이전에는 입실 시 차감) — 예약을 잡는
+     * 시점에 이미 차감됐다(ReservationService.reserveOne). 입실은 예약이 있어야만 통과하므로
+     * 그 횟수는 이미 확보된 상태다. 이 메서드가 하는 일은 세션 확보와 출석 전환뿐이다.
      */
     @Transactional
     public void enterSession(String studentId) {
@@ -72,13 +96,11 @@ public class MonitorService {
         // 자체가 없거나 예약 회차 시간이 아니면 markAttended가 예외를 던져 입실을 막는다
         // (2026-08-20 예약 필수 정책) — 그러면 @Transactional이 방금 만든 세션 insert까지
         // 함께 롤백해서 "입실은 막혔는데 세션만 남는" 상태가 생기지 않는다.
-        // markAttended가 그날 예약한 회차를 전부 ATTENDED로 올린 뒤라, 그 회차 수를 세어
-        // 이용권을 회차 수만큼 깐다(2026-08-28, 하루 최대 4회차 정책).
+        //
+        // 이용권 차감은 여기서 하지 않는다(2026-09-14 정책 변경) — 예약을 잡는 시점에 이미
+        // 깎았다(ReservationService.reserveOne). 입실에는 예약이 반드시 있어야 하므로 그 횟수는
+        // 이미 확보돼 있고, 여기서 또 깎으면 같은 이용을 두 번 차감하게 된다.
         reservationService.markAttended(studentId, today);
-        int attendedSlots = reservationService.countAttendedSlotsToday(studentId);
-        if (passService.consume(studentId, "BOOK", sessionId, attendedSlots) == -1) {
-            throw new Exception400("이용권이 모두 소진되었습니다. 재결제 후 이용해주세요.");
-        }
         // 독서일지가 "메인 데이터"가 되도록, 직원이 뭔가 저장하기 전이라도 입실 시점에 바로 헤더를
         // 만들어둔다(2026-07-30) — 예전엔 첫 저장/제출 전까지 diary 행이 없어서, 화면이 세션값
         // COALESCE 폴백으로만 채워지는 불안정한 상태였다. ensureDiary는 이미 있으면 손대지 않는다.
@@ -89,6 +111,13 @@ public class MonitorService {
     /** 오늘 이미 퇴실 처리됐는지 — 문제풀이 기기(앱 로그인) 홈 화면이 "이미 퇴실했습니다" 안내에 쓴다 */
     public boolean hasExitedToday(String studentId) {
         return "EXITED".equals(monitorRepository.findTodaySessionStatus(studentId, KstClock.today()));
+    }
+
+    /** 그날 마지막으로 퇴실한 시각 — 퇴실 뒤에 시작하는 회차가 남았는지 따질 때 쓴다(2026-09-14).
+     *  퇴실 이력이 없으면 null. 판단은 부르는 쪽(StudentViewController)이 한다 — 회차 시간대를
+     *  아는 건 ReservationService라 여기서 합치면 의존이 한 방향 더 늘어난다. */
+    public LocalDateTime findLastExitedAtToday(String studentId) {
+        return monitorRepository.findLastExitedAt(studentId, KstClock.today());
     }
 
     /** 오늘 입실해서 아직 퇴실 전인지 — 문제풀이 기기(앱 로그인) 로그인 단계에서 "입실 먼저 해주세요"
@@ -317,7 +346,7 @@ public class MonitorService {
      *
      * 그 뒤에 추천받은 책(CANCEL): 학생 홈은 가장 최근 PENDING 추천을 "지금 읽는 책"으로 보여주므로,
      * 뒤 책이 남아있으면 되돌린 책이 계속 가려진다. 그래서 뒤 추천은 기록만이 아니라 recommend_log
-     * 행까지 지워 없던 추천으로 만든다(하루 추천 권수 상한 countTodayRecommends도 함께 줄어든다).
+     * 행까지 지워 없던 추천으로 만든다.
      * 그 책들로 딴 뱃지·카드도 근거가 사라지므로 같이 회수한다.
      *
      * 실물 처리: 뒤 추천을 취소했다면 지금 대여 중인 책(마지막 추천 책)을 반납하고, 되돌린 책의

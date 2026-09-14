@@ -203,6 +203,17 @@
     </div>
   </div>
 
+  <!--
+    워크시트 출력대 (2026-09-14) — 모니터링 카드의 프린터 아이콘을 누르면 미리보기 없이 곧바로
+    인쇄 대화상자가 뜬다. 이 영역은 화면에서는 절대 보이지 않고(화면 밖으로 밀어둔다) 인쇄할 때만
+    종이에 올라간다 — 브라우저는 display:none인 요소를 인쇄하지 않으므로 숨기는 대신 밀어낸다.
+    이미지는 호스팅 원본 주소가 아니라 /admin/monitor/worksheet/{contentId} 프록시에서 받는다
+    (로그인한 직원에게만 열리고, 브라우저 캐시에도 남지 않는다). src는 monitor-live.js가 채운다.
+  -->
+  <div class="worksheet-print-stage" id="worksheetPrintStage" aria-hidden="true">
+    <img id="worksheetImage" class="worksheet-image" alt="워크시트" draggable="false" />
+  </div>
+
   <script th:src="@{/js/monitor/monitor-live.js}"></script>
 </body>
 

@@ -143,16 +143,19 @@ CREATE TABLE erp_bookstore_content (
     difficulty     VARCHAR(20)    -- 난이도
 );
 
--- 도서별 수집 카드 이미지 (2026-09-02) — 완독 시 지급되는 카드의 그림.
--- 표지(content.image_url)와는 다른 이미지라 컬럼을 늘리지 않고 별도 테이블로 뺐다. 도서 마스터는
--- 외부에서 들어오는 데이터 성격이고 카드는 클리닉 고유의 리워드 개념이라 관심사가 다르다.
--- 행이 없는 책 = 카드 이미지가 아직 없는 책(화면에서 기본 카드로 폴백). 카드 지급 자체는
--- erp_bookstore_student_card가 담당하고, 이 테이블은 "그 카드가 어떻게 생겼는지"만 갖는다.
+-- 도서별 부가 이미지 (2026-09-02 수집 카드 / 2026-09-14 워크시트 추가) — 표지(content.image_url)와
+-- 다른 이미지들이라 도서 마스터에 컬럼을 늘리지 않고 별도 테이블로 뺐다. 도서 마스터는 외부에서
+-- 들어오는 데이터 성격이고, 카드/워크시트는 클리닉 고유 자산이라 관심사가 다르다.
+--   card_url      완독 시 지급되는 수집 카드 그림 (NULL이면 화면이 기본 카드로 폴백)
+--   worksheet_url 실시간 모니터링에서 선생님이 뽑아 쓰는 출력용 워크시트 (NULL이면 출력 아이콘 자체가 안 뜬다)
+-- 둘 다 책 1권당 1장이라 content_id 하나를 PK로 공유한다. 카드 지급 자체는 erp_bookstore_student_card가
+-- 담당하고, 이 테이블은 "그 이미지가 어디 있는지"만 갖는다.
 -- 리셋 제외 — 사람이 등록한 값이라 재기동에 날아가면 안 된다(content/priority와 같은 취급).
 IF OBJECT_ID('erp_bookstore_card_path', 'U') IS NULL
 CREATE TABLE erp_bookstore_card_path (
-    content_id    INT          NOT NULL PRIMARY KEY,  -- erp_bookstore_content.content_id (책 1권당 카드 1장)
-    card_url      VARCHAR(500) NOT NULL,  -- 카드 이미지 URL (ImageStorageService가 반환한 가비아 호스팅 주소)
+    content_id    INT          NOT NULL PRIMARY KEY,  -- erp_bookstore_content.content_id (책 1권당 1행)
+    card_url      VARCHAR(500) NULL,      -- 수집 카드 이미지 URL (ImageStorageService가 반환한 가비아 호스팅 주소)
+    worksheet_url VARCHAR(500) NULL,      -- 워크시트(출력용) 이미지 URL — 같은 호스팅의 worksheets 디렉터리
     registered_by VARCHAR(100),           -- 등록한 사용자 이름
     registered_at DATETIME2    DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 등록일시(KST)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
@@ -501,17 +504,16 @@ CREATE TABLE erp_bookstore_level (
     PRIMARY KEY (schoolyear, level_no)
 );
 
--- 뱃지 마스터 (2026-09-02 재편) — 4종 고정. id→이름/설명 조회용 룩업 테이블.
---   1 독서완료 / 2 독서왕 / 3 심화완료 / 4 심화왕
---   (구 5종의 "참 잘했어요!"(기본 불합격)와 "독서친구"를 "독서완료"로 합쳤다 — 기본 문제를 풀기만 하면 1번)
+-- 뱃지 마스터 (2026-09-14 5종 복원) — id→이름/설명 조회용 룩업 테이블.
+--   1 완독(기본 불합격) / 2 정독 완료(기본 합격) / 3 정독왕(기본 만점) / 4 문해력 챌린저(심화) / 5 문해력 챔피언(심화 만점)
 --   badge_name은 아이콘 이미지에 그려진 문구와 반드시 같게 유지한다.
 -- 판정은 "책마다 첫 시도 결과"로 코드에서 badge_id를 직접 매핑한다(ClinicService.awardBasicBadge/awardAdvancedBadge).
---   기본 첫 시도: 불합격·합격→1 / 만점→2,  심화 첫 시도: 합격→3 / 만점→4 (불합격은 없음)
--- 아이콘은 /images/icons/badge_<id>.png (1~4).
+--   기본 첫 시도: 불합격→1 / 합격→2 / 만점→3,  심화 첫 시도: 합격→4 / 만점→5 (불합격은 없음)
+-- 아이콘은 /images/icons/badge_<id>.png (1~5).
 -- category/threshold/param 컬럼은 구(누적 판정) 방식의 잔재로 현재 로직에서 사용하지 않음(호환 위해 유지).
 CREATE TABLE erp_bookstore_badge (
-    badge_id    INT            PRIMARY KEY,      -- 1~4 고정 번호
-    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (독서완료 ...)
+    badge_id    INT            PRIMARY KEY,      -- 1~5 고정 번호
+    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (완독 ...)
     badge_desc  NVARCHAR(200),                   -- 특징/설명 문구 (화면 표시용)
     category    VARCHAR(20)    NOT NULL,         -- (레거시) 판정 유형 — 현재 미사용
     threshold   INT            NOT NULL,         -- (레거시) 달성 기준치 — 현재 미사용
@@ -519,8 +521,8 @@ CREATE TABLE erp_bookstore_badge (
 );
 
 -- 학생별 뱃지 획득 이력 — PK로 중복 획득을 원천 차단, 판정은 매 제출마다 로그 재계산(멱등)
--- 학생이 획득한 뱃지 — "책(도서)마다" 부여된다. 책당 기본 1개(독서완료/독서왕 중 택1) +
--- 심화 1개(심화완료/심화왕 중 택1). 같은 학생이 같은 종류 뱃지를 여러 책에서 얻을 수 있으므로 content_id를 PK에 포함.
+-- 학생이 획득한 뱃지 — "책(도서)마다" 부여된다. 책당 기본 1개(완독/정독 완료/정독왕 중 택1) +
+-- 심화 1개(문해력 챌린저/문해력 챔피언 중 택1). 같은 학생이 같은 종류 뱃지를 여러 책에서 얻을 수 있으므로 content_id를 PK에 포함.
 CREATE TABLE erp_bookstore_student_badge (
     student_id  VARCHAR(100)  NOT NULL,
     content_id  INT           NOT NULL,   -- 어느 책에서 얻은 뱃지인지
@@ -776,13 +778,17 @@ CREATE TABLE erp_bookstore_pass (
     billing_ym   CHAR(6),                      -- 이 이용권이 청구된 년월(YYYYMM). 서당 일괄청구는 전월 20일에
                                                -- 다음 달치를 걷으므로 "언제 청구된 몫인지"가 결제일과 다르다.
                                                -- all_pass 청구 내역과 대조하는 키라서 PG 건에도 같은 규칙으로 채운다
-    valid_from   DATE          NOT NULL,       -- 이 이용권이 적용되는 주기의 시작일.
-                                               -- 자동결제(PG)분은 결제일 그 날이고(2026-09-07 전환),
-                                               -- 서당 일괄청구분은 그 달의 1일이다 — 두 체계가 공존하므로
-                                               -- 주기를 billing_ym에서 역산하지 않고 이 컬럼을 단일 진실로 삼는다
-    valid_until  DATE          NOT NULL,       -- 주기의 마지막 날(자동결제분은 한 달 뒤 전일, 서당분은 말일).
-                                               -- 오늘이 이 범위 밖이면 remain_count가 남아 있어도 못 쓴다
-                                               -- — 이월 없이 주기 종료와 함께 소멸한다는 정책
+    -- 유효기간. NULL = 아직 첫 예약이 없어 기간이 정해지지 않은 이용권이다(2026-09-14).
+    -- 책방 앱 결제분(12회권)은 NULL로 발급되고, 그 이용권을 처음 깎는 예약이 잡힐 때
+    -- "그 회차 날짜부터 90일"로 확정된다(PassService.consumeForReservation → activatePass).
+    -- 사둔 묶음을 다 쓴 뒤에 다음 묶음을 쓰기 시작하는 흐름이 정상이라, 결제 시점에는
+    -- 기간을 정할 수 없다. 첫 예약이 취소되어 사용 이력이 0이 되면 다시 NULL로 풀린다.
+    -- 서당 일괄청구분은 여전히 그 달의 1일~말일로 채워진다 — 두 체계가 공존하므로
+    -- 주기를 billing_ym에서 역산하지 않고 이 두 컬럼을 단일 진실로 삼는다.
+    valid_from   DATE,
+    -- 기간의 마지막 날(앱 결제분은 valid_from + 89일, 서당분은 말일).
+    -- 오늘이 이 범위 밖이면 remain_count가 남아 있어도 못 쓴다 — 이월 없이 소멸한다는 정책.
+    valid_until  DATE,
     total_count  SMALLINT      NOT NULL,       -- 지급된 총 횟수 (product.total_count 스냅샷)
     remain_count SMALLINT      NOT NULL,       -- 잔여 횟수. 출석마다 1씩 깐다.
                                                -- pass_use 건수와 total_count - remain_count가 항상 같아야 한다.
@@ -802,18 +808,14 @@ CREATE TABLE erp_bookstore_pass (
 IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_from')
     ALTER TABLE erp_bookstore_pass ADD valid_from DATE NULL, valid_until DATE NULL;
 
-UPDATE erp_bookstore_pass
-SET valid_from  = DATEFROMPARTS(LEFT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 4),
-                                 RIGHT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 2), 1),
-    valid_until = EOMONTH(DATEFROMPARTS(LEFT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 4),
-                                         RIGHT(ISNULL(billing_ym, FORMAT(granted_at, 'yyyyMM')), 2), 1))
-WHERE valid_from IS NULL;
+-- 마이그레이션 (2026-09-14, 90일 만료) — 이 두 컬럼은 한때 NOT NULL이었다(달력 월 주기 시절).
+-- 첫 예약 전까지 기간이 정해지지 않는 정책으로 바뀌면서 NULL을 허용해야 한다.
+-- 기존 행의 값은 건드리지 않는다 — 이미 쓰기 시작한 이용권의 기간을 지우면 안 된다.
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_from' AND is_nullable = 0)
+    ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_from DATE NULL;
 
-IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_from' AND is_nullable = 1)
-    ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_from DATE NOT NULL;
-
-IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_until' AND is_nullable = 1)
-    ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_until DATE NOT NULL;
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_until' AND is_nullable = 0)
+    ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_until DATE NULL;
 
 -- 출석할 때마다 타는 경로 — 살아있는 이용권만 보면 되므로 필터드 인덱스로 좁힌다.
 -- 여러 달치가 겹칠 수 있게 되면서(월 단위 유효기간 도입) 소진 순서 기준이 granted_at(먼저 산 것)에서
@@ -831,25 +833,32 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_ref' AND object_i
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_billing' AND object_id = OBJECT_ID('erp_bookstore_pass'))
     CREATE INDEX IX_pass_billing ON erp_bookstore_pass (billing_ym, source, center_code);
 
--- 횟수 차감 이력 — 출석(입실) 1회당 1행. 환불 규정의 "몇 회 이하로 썼는가"를 이 테이블로 센다.
+-- 횟수 차감 이력 — 예약 1건당 1행. 환불 규정의 "몇 회 이하로 썼는가"를 이 테이블로 센다.
 --
 -- [clinic_session을 세지 않는 이유] 출석 자체는 erp_bookstore_clinic_session에 남지만
 -- 그 테이블은 매 기동 DROP 대상이다. 사용 횟수를 거기서 세면 리셋 한 번에 환불 금액이 틀어진다.
 -- 돈에 영향을 주는 카운트는 리셋되지 않는 곳에 따로 남겨야 한다. session_id는 추적용으로만
 -- 값으로 들고, 리셋되면 사라지는 값이라 FK는 걸지 않는다.
 --
--- [하루 N회] 2026-08-28 정책 변경 — 입실 시 그날 예약한 회차(타임) 수만큼 차감한다(하루 최대 4회차).
--- 그래서 하루 여러 행이 생길 수 있어 (student_id, used_date) UNIQUE는 걸지 않는다. 재입실 이중차감은
--- PassService.consume이 "그날 목표 차감수 − 이미 차감한 수"만큼만 채우는 방식으로 막는다(행 수 = 차감
--- 횟수 불변식은 그대로 — 1행 = remain_count 1 감소).
+-- [예약 시 차감 / 취소 시 복구] 2026-09-14 정책 변경 — 차감 시점이 입실에서 예약으로 옮겨졌다.
+-- 예약을 잡는 순간 1행이 생기고 remain_count가 1 줄며, 그 예약이 취소되면 canceled_at을 찍고
+-- remain_count를 1 되돌린다. 예약 행(erp_bookstore_reservation)은 매 기동 DROP 대상이라
+-- reservation_id는 FK 없이 값으로만 물고, 복구 대상을 되짚는 키로만 쓴다.
+--
+-- 행을 지우지 않고 canceled_at으로 남기는 이유는 "언제 잡았다가 언제 풀었는지"가 사라지면
+-- 잔여 횟수 분쟁을 따라갈 근거가 없어지기 때문이다. 대신 모든 집계는 canceled_at IS NULL만
+-- 센다 — "살아있는 행 수 = total_count − remain_count" 불변식이 그대로 유지돼야 환불 계산
+-- (PaymentService.usedCount ↔ rule.max_count)이 맞는다.
 IF OBJECT_ID('erp_bookstore_pass_use', 'U') IS NULL
 CREATE TABLE erp_bookstore_pass_use (
-    use_id      INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
-    pass_id     INT           NOT NULL,       -- erp_bookstore_pass.pass_id (어느 이용권을 깠는지)
-    student_id  VARCHAR(100)  NOT NULL,       -- erp_student.student_id (조회 편의용 중복 저장)
-    session_id  INT,                          -- erp_bookstore_clinic_session.session_id (값으로만 연결, 추적용)
-    used_date   DATE          NOT NULL,       -- 차감일 (그날 차감 횟수 집계 기준)
-    created_at  DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    use_id         INT           IDENTITY(1,1) PRIMARY KEY,  -- 내부 PK
+    pass_id        INT           NOT NULL,    -- erp_bookstore_pass.pass_id (어느 이용권을 깠는지)
+    student_id     VARCHAR(100)  NOT NULL,    -- erp_student.student_id (조회 편의용 중복 저장)
+    reservation_id INT,                       -- erp_bookstore_reservation.reservation_id (취소 시 복구 대상을 찾는 키. 값으로만 연결)
+    session_id     INT,                       -- erp_bookstore_clinic_session.session_id (입실 차감 시절의 추적용 컬럼)
+    used_date      DATE          NOT NULL,    -- 차감 대상일 = 예약한 회차의 service_date
+    canceled_at    DATETIME2,                 -- 예약 취소로 되돌린 시각(KST). NULL이 아니면 이 차감은 무효다
+    created_at     DATETIME2     NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     FOREIGN KEY (pass_id) REFERENCES erp_bookstore_pass(pass_id)
 );
 
@@ -858,12 +867,26 @@ CREATE TABLE erp_bookstore_pass_use (
 IF EXISTS (SELECT 1 FROM sys.key_constraints WHERE name = 'UQ_pass_use_daily' AND parent_object_id = OBJECT_ID('erp_bookstore_pass_use'))
     ALTER TABLE erp_bookstore_pass_use DROP CONSTRAINT UQ_pass_use_daily;
 
+-- 마이그레이션 (2026-09-14, 예약 시 차감 전환) — 이 테이블은 리셋 대상이 아니라 이미 만들어진
+-- 개발/운영 DB에는 두 컬럼이 없다. 기존 행(입실 차감분)은 reservation_id NULL로 남는데,
+-- 복구 대상을 찾는 조회가 reservation_id로만 걸리므로 옛 행이 섞여 있어도 무해하다.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass_use') AND name = 'reservation_id')
+    ALTER TABLE erp_bookstore_pass_use ADD reservation_id INT NULL;
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass_use') AND name = 'canceled_at')
+    ALTER TABLE erp_bookstore_pass_use ADD canceled_at DATETIME2 NULL;
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_use_pass' AND object_id = OBJECT_ID('erp_bookstore_pass_use'))
     CREATE INDEX IX_pass_use_pass ON erp_bookstore_pass_use (pass_id);
 
--- countTodayUse(그날 차감 횟수) 조회 경로 (UNIQUE를 없앤 자리 — 유일성 강제는 아니고 조회용)
+-- 그 학생의 날짜별 차감 조회 경로 (UNIQUE를 없앤 자리 — 유일성 강제는 아니고 조회용)
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_use_student_date' AND object_id = OBJECT_ID('erp_bookstore_pass_use'))
     CREATE INDEX IX_pass_use_student_date ON erp_bookstore_pass_use (student_id, used_date);
+
+-- 예약 취소 시 복구 대상(그 예약으로 깐 살아있는 차감)을 찾는 경로 (2026-09-14)
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_use_reservation' AND object_id = OBJECT_ID('erp_bookstore_pass_use'))
+    CREATE INDEX IX_pass_use_reservation ON erp_bookstore_pass_use (reservation_id)
+        WHERE reservation_id IS NOT NULL;
 
 -- PG 결제 — 책방만 이용하는 학생의 앱 카드결제. 서당 학생은 여기 행이 생기지 않는다.
 -- 행은 결제 "시작" 시점에 status=READY로 먼저 생긴다(승인 실패/이탈 건도 남아야 정산 대조가 된다).

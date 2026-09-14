@@ -55,6 +55,21 @@ public class ImageUploadController {
         }
     }
 
+    /**
+     * 워크시트(출력용) 이미지 업로드 (2026-09-14) — 카드/표지와 저장 디렉터리가 다르다(FTP worksheets/).
+     * 반환된 URL을 도서 저장 시 worksheetUrl로 함께 보내면 erp_bookstore_card_path에 기록된다.
+     */
+    @PostMapping("/worksheet-image")
+    public ResponseEntity<?> uploadWorksheetImage(@RequestParam("file") MultipartFile file) {
+        validateImage(file);
+        try {
+            return ResponseEntity.ok(ApiUtils.success(Map.of("url", imageStorageService.storeWorksheet(file))));
+        } catch (IOException e) {
+            log.error("워크시트 이미지 업로드 실패", e);
+            throw new Exception400("이미지 업로드 중 오류가 발생했습니다.");
+        }
+    }
+
     private void validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new Exception400("업로드할 이미지가 없습니다.");

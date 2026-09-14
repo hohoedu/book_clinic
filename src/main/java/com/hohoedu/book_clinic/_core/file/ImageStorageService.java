@@ -2,6 +2,8 @@ package com.hohoedu.book_clinic._core.file;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
+import java.net.URLConnection;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -47,6 +49,10 @@ public class ImageStorageService {
     @Value("${ftp.card-dir:cards}")
     private String cardDir;
 
+    /** 워크시트(출력용) 이미지 디렉터리 — 미설정이면 'worksheets' (2026-09-14) */
+    @Value("${ftp.worksheet-dir:worksheets}")
+    private String worksheetDir;
+
     /** 입회 서명 이미지 디렉터리 — 미설정이면 'signatures' */
     @Value("${ftp.signature-dir:signatures}")
     private String signatureDir;
@@ -59,6 +65,15 @@ public class ImageStorageService {
     /** 수집 카드 이미지 저장 후 접근 가능한 URL 반환 */
     public String storeCard(MultipartFile file) throws IOException {
         return store(file, cardDir, "card");
+    }
+
+    /**
+     * 워크시트 이미지 저장 후 접근 가능한 URL 반환 (2026-09-14).
+     * 여기서 돌려주는 호스팅 주소는 DB(erp_bookstore_card_path.worksheet_url)에만 남고 브라우저로는
+     * 내려가지 않는다 — 모니터링 화면은 /admin/monitor/worksheet/{contentId} 프록시로만 받아본다.
+     */
+    public String storeWorksheet(MultipartFile file) throws IOException {
+        return store(file, worksheetDir, "worksheet");
     }
 
     /** 입회 서명 이미지 저장 후 접근 가능한 URL 반환 (2026-09-10, 회원가입 이식) */
@@ -118,6 +133,42 @@ public class ImageStorageService {
                 }
             }
         }
+    }
+
+    /**
+     * 저장된 이미지를 서버가 직접 읽어 바이트로 돌려준다 (2026-09-14, 워크시트 프록시용).
+     *
+     * 워크시트는 호스팅 주소를 브라우저에 노출하지 않는 것이 핵심이라, 화면은 원본 URL 대신
+     * /admin/monitor/worksheet/{contentId}만 받는다. 그 엔드포인트가 이 메서드로 원본을 가져온다.
+     * store()가 만든 두 가지 형태를 모두 처리한다 — 가비아 https 주소, 로컬 폴백('/uploads/...').
+     */
+    public byte[] read(String storedUrl) throws IOException {
+        if (!isNotBlank(storedUrl)) throw new IOException("이미지 주소가 비어 있습니다.");
+
+        if (storedUrl.startsWith("/uploads/")) {
+            // 로컬 폴백본. DB에 저장된 값이라 외부 입력은 아니지만, 정규화 후 업로드 폴더 밖을
+            // 가리키면 거부한다(경로 조작 값이 어떤 경로로든 DB에 들어간 경우 대비).
+            Path base = Paths.get(uploadDir).toAbsolutePath().normalize();
+            Path target = base.resolve(storedUrl.substring("/uploads/".length())).normalize();
+            if (!target.startsWith(base)) throw new IOException("허용되지 않은 이미지 경로: " + storedUrl);
+            return Files.readAllBytes(target);
+        }
+
+        URLConnection conn = URI.create(storedUrl).toURL().openConnection();
+        conn.setConnectTimeout(5000);
+        conn.setReadTimeout(10000);
+        try (InputStream in = conn.getInputStream()) {
+            return in.readAllBytes();
+        }
+    }
+
+    /** 저장 주소의 확장자로 추정한 MIME 타입 — 알 수 없으면 image/jpeg */
+    public String contentTypeOf(String storedUrl) {
+        String url = storedUrl == null ? "" : storedUrl.toLowerCase();
+        if (url.endsWith(".png")) return "image/png";
+        if (url.endsWith(".gif")) return "image/gif";
+        if (url.endsWith(".webp")) return "image/webp";
+        return "image/jpeg";
     }
 
     /** 앞뒤 슬래시 제거 */

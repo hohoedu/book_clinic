@@ -8,7 +8,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
-import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -21,7 +20,9 @@ import lombok.extern.slf4j.Slf4j;
  *   · 책방만 이용 → 앱에서 학부모가 이니시스로 직접 결제 (source=PG)
  *   · 서당 병행   → 교재비에 얹어 전월 20일 일괄 청구 (source=SEODANG, all_pass 소관)
  * 두 경우 모두 "몇 회 남았나"는 똑같이 필요하지만 서당 학생은 이 시스템에 결제 행 자체가
- * 없다. 그래서 이용권을 결제에서 떼어냈고, 그 덕에 출석 차감 코드에는 결제 방식 분기가 없다.
+ * 없다. 그래서 이용권을 결제에서 떼어냈고, 그 덕에 차감 코드에는 결제 방식 분기가 없다.
+ *
+ * [차감 시점] 2026-09-14부터 "예약할 때 깎고, 취소하면 되돌린다"다(이전에는 입실 시 차감).
  */
 @Slf4j
 @Service
@@ -29,6 +30,12 @@ import lombok.extern.slf4j.Slf4j;
 public class PassService {
 
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyyMM");
+
+    /**
+     * 이용권 유효기간(일) — 첫 예약이 잡힌 날부터 이만큼 쓸 수 있다(2026-09-14 정책).
+     * 시작일을 포함해 90일이므로 마지막 날은 시작일 + 89일이다(9/15 첫 예약 → 12/13까지).
+     */
+    public static final int VALID_DAYS = 90;
 
     public static final String SOURCE_PG = "PG";
     public static final String SOURCE_SEODANG = "SEODANG";
@@ -50,6 +57,23 @@ public class PassService {
                       LocalDate validFrom, LocalDate validUntil, int totalCount) {
         passRepository.insertPass(studentId, centerCode, productId, serviceCode, source, refNo,
                 billingYm, validFrom, validUntil, totalCount);
+    }
+
+    /**
+     * 유효기간 미배정 발급 (2026-09-14) — 책방 앱 결제(12회권)가 타는 경로다.
+     *
+     * 만료일이 "첫 예약이 잡힌 날부터 90일"이 되면서, 결제 시점에는 기간을 정할 수 없게 됐다.
+     * 두 묶음을 한꺼번에 사두고 한 묶음을 다 쓴 뒤에 두 번째를 쓰기 시작하는 흐름이 정상이라,
+     * 사놓고 아직 예약하지 않은 이용권은 **만료일 없이** 대기한다(valid_from/valid_until NULL).
+     * 실제 기간은 {@link #consumeForReservation}이 그 이용권을 처음 깎을 때 확정한다.
+     *
+     * 서당 일괄청구분은 여전히 달력 월이라 {@link #grantMonthly}을 그대로 쓴다 — 두 체계가
+     * 공존하므로 기간 판정 쿼리는 "NULL이면 아직 미배정"만 한 갈래 더 보면 된다.
+     */
+    public void grantUnassigned(String studentId, String centerCode, int productId, String serviceCode,
+                                String source, String refNo, String billingYm, int totalCount) {
+        grant(studentId, centerCode, productId, serviceCode, source, refNo, billingYm,
+                null, null, totalCount);
     }
 
     /**
@@ -78,74 +102,92 @@ public class PassService {
     }
 
     /**
-     * 다음 결제의 대상월 — "이 학생이 이 서비스에서 가장 늦게까지 사둔 달"의 다음 달을 자동으로
-     * 찾는다. 날짜 커트오프(예: 20일 이전/이후)를 쓰지 않는 이유는, 그런 고정 기준은 "이미 이번
-     * 달을 샀는데 그 달의 20일 이전에 다음 달 걸 미리 사려는" 경우를 못 걸러내기 때문이다.
-     * 대신 실제로 뭘 샀는지를 본다 — 산 적 없으면 이번 달, 이미 산 것 중 가장 늦은 달이 아직
-     * 안 지났으면 그 다음 달, 지나버렸으면(공백기) 과거에 매이지 않고 이번 달로 리셋한다.
+     * 예약 차감 (2026-09-14 정책 변경 — 차감 시점이 입실에서 예약으로 옮겨졌다).
+     *
+     * [왜 예약 시점인가] 노쇼가 잔여를 그대로 돌려받는 구조였다. 예약만 잡아두고 오지 않으면
+     * 정원은 묶였는데 횟수는 안 줄어서, 그 자리는 다른 학생도 쓸 수 없고 본인도 손실이 없다.
+     * 예약이 곧 차감이 되면 자리를 잡는 행위 자체에 비용이 붙고, 대신 제때(회차 24시간 전)
+     * 취소하면 {@link #restoreForReservation}으로 온전히 돌려받는다.
+     *
+     * 예약한 회차 날짜(serviceDate)를 덮는 이용권에서 깎는다 — 오늘 기준이 아니다. 9월 30일
+     * 회차를 9월 14일에 예약했다면 9월 30일에 유효한 이용권이어야 그날 실제로 쓸 수 있다.
+     *
+     * 호출부(ReservationService.reserveOne)의 트랜잭션 안에서 실행되므로 별도 트랜잭션을 열지
+     * 않는다 — false를 돌려주면 호출부가 예외를 던져 예약 자체(슬롯 정원 증가 포함)가 롤백된다.
+     *
+     * @return 차감 성공 여부. 그 날짜에 쓸 수 있는 이용권이 없으면 false
      */
-    public String nextBillingYm(String studentId, String serviceCode) {
-        LocalDate latestValidUntil = passRepository.findLatestValidUntil(studentId, serviceCode);
-        YearMonth current = YearMonth.from(KstClock.today());
-        if (latestValidUntil == null) {
-            return current.format(YM);
+    public boolean consumeForReservation(String studentId, String serviceCode,
+                                         Long reservationId, LocalDate serviceDate) {
+        PassRespDTO.PassDTO pass = passRepository.findUsablePassOn(studentId, serviceCode, serviceDate);
+        if (pass == null) {
+            log.info("[이용권] 예약 차감 실패(잔여 없음) — studentId={}, service={}, serviceDate={}",
+                    studentId, serviceCode, serviceDate);
+            return false;
         }
-        YearMonth latestMonth = YearMonth.from(latestValidUntil);
-        YearMonth target = latestMonth.isBefore(current) ? current : latestMonth.plusMonths(1);
-        return target.format(YM);
+
+        // 아직 기간이 안 정해진 이용권이면 이 예약이 그 이용권의 "첫 예약"이다 — 예약한 회차
+        // 날짜부터 90일로 기간을 확정한다(2026-09-14). 기준이 예약을 잡은 날이 아니라 회차
+        // 날짜인 것은 정책 그대로다(9/14에 9/15 회차를 예약 → 9/15부터 90일).
+        // 조건부 UPDATE라 0행이면 다른 요청이 먼저 활성화한 것이고, 그 경우엔 기간이 이 예약
+        // 날짜를 덮는지 다시 봐야 하므로 선택부터 새로 한다.
+        if (pass.getValidFrom() == null) {
+            if (passRepository.activatePass(pass.getPassId(), serviceDate, VALID_DAYS - 1) == 0) {
+                log.warn("[이용권] 활성화 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
+                pass = passRepository.findUsablePassOn(studentId, serviceCode, serviceDate);
+                if (pass == null) {
+                    return false;
+                }
+                if (pass.getValidFrom() == null
+                        && passRepository.activatePass(pass.getPassId(), serviceDate, VALID_DAYS - 1) == 0) {
+                    return false;
+                }
+            }
+            log.info("[이용권] 유효기간 확정 — passId={}, {} ~ {}일간", pass.getPassId(), serviceDate, VALID_DAYS);
+        }
+
+        // 조회와 갱신 사이에 다른 요청이 먼저 깎았으면 0행이 된다. 예약은 학생 행 락으로 직렬화돼
+        // 있어 보통 일어나지 않지만, 발생하면 마지막 한 장을 놓친 것이라 실패로 처리한다.
+        if (passRepository.decrementRemain(pass.getPassId()) == 0) {
+            log.warn("[이용권] 예약 차감 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
+            return false;
+        }
+        passRepository.insertUse(pass.getPassId(), studentId, reservationId, serviceDate);
+        return true;
     }
 
     /**
-     * 출석 차감 — 2026-08-28 정책 변경으로 "입실일당 1회"가 아니라 "그날 예약한 회차(타임) 수만큼"
-     * 깐다(하루 최대 4회차). {@code targetUnits}는 그날 출석 확정된 회차 수다.
+     * 예약 취소에 따른 차감 복구 (2026-09-14). 그 예약으로 깐 살아있는 차감 이력을 찾아
+     * 잔여를 되돌리고 이력에 취소 시각을 찍는다.
      *
-     * 같은 날 재입실은 이미 깐 만큼은 다시 깎지 않는다 — 로그아웃 후 재로그인·새로고침이 흔하기
-     * 때문이다. "그날 목표 차감수 − 이미 차감한 수"만큼만 채우는 방식이라, 입실 후 같은 날 회차를
-     * 더 예약하고 재입실하는 경우엔 늘어난 부족분만 추가로 깎는다.
-     *
-     * 이용권이 회차 수보다 모자라면 있는 만큼만 깎고 나머지는 포기한다(입실 자체는 허용). 다만
-     * 오늘 한 번도 못 깠는데 이번에도 하나도 못 깎았다면(=쓸 이용권이 아예 없음) -1을 돌려
-     * 호출부가 입실을 막게 한다.
-     *
-     * 행 수 = remain_count 감소량 불변식은 그대로다(1행 = 1차감) — 환불 로직이 pass_use 행 수에
-     * 의존하므로 이 불변식을 깨면 안 된다.
-     *
-     * @return 차감 후 남은 횟수. 오늘 아무 것도 못 깎았고 쓸 이용권도 없으면 -1
+     * 되돌릴 게 없으면(입실 차감 시절의 옛 예약, 이미 복구된 건) 아무 일도 하지 않는다 — 취소
+     * 자체를 막을 이유는 아니라서 예외로 올리지 않는다. 환불로 회수된 이용권은 incrementRemain의
+     * 조건에서 걸러지므로, 환불받은 횟수가 취소로 되살아나지는 않는다.
      */
-    @Transactional
-    public int consume(String studentId, String serviceCode, Integer sessionId, int targetUnits) {
-        LocalDate today = KstClock.today();
-        int units = Math.max(targetUnits, 1);
-
-        int alreadyCharged = passRepository.countTodayUse(studentId, today);
-        int toCharge = units - alreadyCharged;
-        if (toCharge <= 0) {
-            return passRepository.sumRemain(studentId, serviceCode);
+    public void restoreForReservation(Long reservationId) {
+        if (reservationId == null) {
+            return;
         }
-
-        int charged = 0;
-        for (int i = 0; i < toCharge; i++) {
-            PassRespDTO.PassDTO pass = passRepository.findUsablePass(studentId, serviceCode);
-            if (pass == null) {
-                log.info("[이용권] 잔여 부족 — studentId={}, service={}, 목표 {}회 중 {}회만 차감",
-                        studentId, serviceCode, toCharge, charged);
-                break;
+        for (PassRespDTO.UseDTO use : passRepository.findLiveUsesByReservation(reservationId)) {
+            // 이력을 먼저 무효화한다 — 0행이면 다른 요청이 이미 되돌린 것이므로 잔여는 건드리지
+            // 않는다(순서를 바꾸면 같은 차감에 잔여가 두 번 더해질 수 있다).
+            if (passRepository.markUseCanceled(use.getUseId()) == 0) {
+                continue;
             }
-            // 조회와 갱신 사이에 다른 요청이 먼저 깎았으면 0행이 된다 — 경합으로 보고 중단한다
-            // (재입실 시 alreadyCharged가 늘어 있어 남은 부족분만 다시 시도된다).
-            if (passRepository.decrementRemain(pass.getPassId()) == 0) {
-                log.warn("[이용권] 차감 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
-                break;
+            if (passRepository.incrementRemain(use.getPassId()) == 0) {
+                log.info("[이용권] 복구 대상 아님(회수된 이용권) — passId={}, reservationId={}",
+                        use.getPassId(), reservationId);
+                continue;
             }
-            passRepository.insertUse(pass.getPassId(), studentId, sessionId, today);
-            charged++;
+            // 첫 예약을 취소했다면 그 이용권은 아직 한 번도 쓰지 않은 상태로 되돌아간다 —
+            // 확정해둔 90일 기간도 함께 풀어 미배정으로 되돌린다(2026-09-14). 그러지 않으면
+            // 예약했다 바로 취소한 것만으로 만료일이 박혀버린다. 다른 예약이 아직 그 이용권을
+            // 쓰고 있으면(살아있는 차감이 남아 있으면) 기간은 그대로 유지한다.
+            if (passRepository.countUse(use.getPassId()) == 0) {
+                passRepository.deactivatePass(use.getPassId());
+                log.info("[이용권] 유효기간 해제(첫 예약 취소) — passId={}", use.getPassId());
+            }
         }
-
-        if (charged == 0 && alreadyCharged == 0) {
-            log.info("[이용권] 잔여 없음 — studentId={}, service={}", studentId, serviceCode);
-            return -1;
-        }
-        return passRepository.sumRemain(studentId, serviceCode);
     }
 
     /** 이 학생이 이 서비스에 쓸 수 있는 총 잔여 횟수 */
@@ -154,13 +196,15 @@ public class PassService {
     }
 
     /**
-     * {@code date}가 속한 이용 주기 — 그 기간과 그 기간에 쓸 수 있는 총 횟수(=예약 상한).
+     * {@code date}가 속한 이용 주기 — 그 기간, 그 기간의 총 횟수(capacity), 남은 횟수(remaining).
      *
      * 자동결제 전환(2026-09-07) 전에는 "그 달"이 곧 단위였지만, 주기가 결제일 기준 1개월이 되면서
-     * 한 달에 두 주기가 걸치게 됐다. 예약 상한은 이 주기 기준으로 세어야 한다 — 달력 월로 세면
-     * 두 주기의 총량이 한 달 상한으로 합산되어 실제보다 최대 두 배까지 열린다.
+     * 한 달에 두 주기가 걸치게 됐다. 그래서 달력 월이 아니라 이 주기를 단위로 삼는다.
      *
-     * 그 날짜를 덮는 이용권이 없으면 capacity=0에 기간은 null이다 — 결제 전까지 예약을 막는 근거다.
+     * 2026-09-14 예약 시 차감 전환 이후, 예약 가능 횟수는 remaining이다 — 예약 자체가 잔여를
+     * 깎으므로 별도로 예약 건수를 세지 않는다. capacity는 화면에 총량을 보여주는 용도로만 쓴다.
+     *
+     * 그 날짜를 덮는 이용권이 없으면 둘 다 0에 기간은 null이다 — 결제 전까지 예약을 막는 근거다.
      */
     public PassRespDTO.CycleDTO cycleOn(String studentId, String serviceCode, LocalDate date) {
         PassRespDTO.CycleDTO cycle = passRepository.findCycleOn(studentId, serviceCode, date);
@@ -194,7 +238,7 @@ public class PassService {
      * 서당 일괄청구분 발급 — all_pass가 청구를 확정할 때 호출한다.
      * 같은 청구 건으로 두 번 들어오면 이용권이 두 장 생기므로 ref_no로 중복을 막는다.
      * billingYm은 all_pass가 정한 청구월을 그대로 받는다 — 서당은 전월 20일에 다음 달치를
-     * 걷는 자체 주기가 있어, 우리가 nextBillingYm()으로 임의 추측하면 안 된다.
+     * 걷는 자체 주기가 있어, 우리가 임의로 추측하면 안 된다.
      */
     @Transactional
     public void grantFromSeodang(String studentId, String centerCode, int productId, String serviceCode,

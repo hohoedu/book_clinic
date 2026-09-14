@@ -20,7 +20,6 @@ import com.hohoedu.book_clinic.monitor.MonitorService;
 import com.hohoedu.book_clinic.monitor._dto.MonitorReqDTO;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
 import com.hohoedu.book_clinic.question.QuestionRepository;
-import com.hohoedu.book_clinic.reservation.ReservationService;
 import com.hohoedu.book_clinic.question._dto.QuestionRespDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -85,10 +84,10 @@ public class ClinicService {
     // 단계(학년)별 최고 레벨(만렙) — 각 학년이 레벨 1~12를 가진다
     private static final int MAX_LEVEL = 12;
 
-    // 회차(타임)당 새로 추천받을 수 있는 책 수 상한(2026-08-28, 기존 "하루 2권" → "회차당 2권").
-    // 실제 상한 = 이 값 × 오늘 출석(ATTENDED) 회차 수. 하루 최대 4회차까지 예약 가능하므로 최대 8권.
-    // recommend_log가 회차와 연결돼 있지 않아 "회차별로 정확히 2권씩"이 아니라 그날 총량으로만 제한한다.
-    private static final int MAX_RECOMMENDATIONS_PER_SLOT = 2;
+    // 하루 추천 권수 상한은 없다(2026-09-14 폐지). 예전엔 "회차당 2권 × 오늘 출석 회차 수"로 막았으나
+    // (2026-08-28), 상한 없이 열어달라는 요청으로 제거했다. 지금 남은 제동 장치는 두 가지뿐이다:
+    //   - 심화 게이트(advancedGateBlocks) — 오늘 완독한 직전 책의 심화를 안 풀면 다음 책이 안 나온다
+    //   - 재고/후보 소진 — pickWithFallback이 더 고를 책이 없으면 그 자체가 실질 상한이 된다
 
     /** 학년(단계)별 레벨 규칙 1건 — 단계명/특징 문구/레벨업 1회당 필요 완독 권수 */
     private record LevelRule(String stageName, String feature, int booksPerLevel) {}
@@ -116,6 +115,13 @@ public class ClinicService {
             "07", 50
     );
 
+    // student-main 캐릭터 이미지 — 초1~3(01~03)만 학년 전용 이미지, 나머지 학년은 기본 이미지 유지(2026-09-14 확정)
+    private static final Map<String, String> CHARACTER_IMG_BY_SCHOOLYEAR = Map.of(
+            "01", "/images/character01.png",
+            "02", "/images/character02.png",
+            "03", "/images/character03.png"
+    );
+
     // student-main "이번 달에 읽은 책" 패널이 4칸 고정 레이아웃이라 서버에서도 4건으로 맞춘다
     private static final int MONTH_BOOKS_LIMIT = 4;
 
@@ -125,20 +131,20 @@ public class ClinicService {
     // 온라인 카드(NORMAL) N장마다 온라인 레어카드 1장 추가 지급 + 오프라인 실물 카드 1장(시스템은 진행도/달성 표시까지만)
     private static final int CARD_SET_SIZE = 10;
 
-    // 뱃지 id (erp_bookstore_badge) — 책마다 기본 1개(1~2 택1) + 심화 1개(3~4 택1).
-    // 2026-09-02 5종 → 4종: 구 1번 "참 잘했어요!"(기본 불합격)와 구 2번 "독서친구"를 "독서완료"로 합쳤다 —
-    // 기본 문제를 풀기만 하면 합격/불합격(재도전) 무관하게 독서완료다. 아이콘도 badge_1~4.png로 축소.
-    // 1번은 recommend_log.grade의 FRIEND와 1:1이 아니다(RETRY도 이 뱃지) — 이름을 READ_DONE으로 둔 이유.
-    private static final int BADGE_READ_DONE = 1;   // 독서완료 (기본 첫 시도 — 합격/불합격 공통)
-    private static final int BADGE_KING      = 2;   // 독서왕 (기본 첫 시도 만점)
-    private static final int BADGE_ADV_DONE  = 3;   // 심화완료 (심화 첫 시도 합격)
-    private static final int BADGE_ADV_KING  = 4;   // 심화왕 (심화 첫 시도 만점)
+    // 뱃지 id (erp_bookstore_badge) — 책마다 기본 1개(1~3 택1) + 심화 1개(4~5 택1).
+    // 2026-09-14 4종 → 5종 복원: 기본 문제 결과를 다시 불합격/합격/만점 3단계로 나눈다(2026-09-02에
+    // 합격/불합격 무관 "독서완료" 1개로 합쳤던 것을 되돌림). 심화는 그대로 2단계(합격선 없음) 유지.
+    // 아이콘도 badge_1~5.png로 늘어난다.
+    private static final int BADGE_GREAT_JOB = 1;   // 완독 (기본 첫 시도 불합격)
+    private static final int BADGE_FRIEND    = 2;   // 정독 완료 (기본 첫 시도 합격, 만점 미만)
+    private static final int BADGE_KING      = 3;   // 정독왕 (기본 첫 시도 만점)
+    private static final int BADGE_ADV_DONE  = 4;   // 문해력 챌린저 (심화 첫 시도)
+    private static final int BADGE_ADV_KING  = 5;   // 문해력 챔피언 (심화 첫 시도 만점)
 
     private final ClinicRepository clinicRepository;
     private final BookRepository bookRepository;
     private final QuestionRepository questionRepository;
     private final MonitorService monitorService;
-    private final ReservationService reservationService;
 
     /**
      * 홈 화면(student-main) 진입 시 상태 조회 — 2026-07-29. 예전엔 홈 진입=자동추천이라 책을 다
@@ -318,6 +324,7 @@ public class ClinicService {
         }
         // 재도전 화면에서도 레벨 카드 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다.
         String schoolyear = resolveSchoolyear(studentId);
+        resp.setSchoolyear(schoolyear);
         applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
         applyStepStatus(resp, studentId, schoolyear);
         return resp;
@@ -358,13 +365,10 @@ public class ClinicService {
         // 버튼 분기용(2026-08-28): KING=심화만 / FRIEND=재도전·틀린문제·심화 / RETRY(불합격)=재도전만.
         resp.setGrade(logStatus != null ? logStatus.getGrade() : null);
 
-        // "책 추천받기" 노출 여부 — recommendBook과 같은 규칙(회차당 2권 × 오늘 출석 회차 수)으로,
-        // 오늘 한도를 다 썼으면 버튼을 아예 숨긴다(2026-08-28). 더해서 심화 게이트(2026-08-31)에
-        // 걸려 있으면(직전 완독 책 심화 미응시) 심화를 풀 때까지 버튼을 숨긴다.
-        int attendedSlots = Math.max(reservationService.countAttendedSlotsToday(studentId), 1);
-        int maxAllowed = MAX_RECOMMENDATIONS_PER_SLOT * attendedSlots;
-        int todayCount = clinicRepository.countTodayRecommends(studentId, KstClock.today());
-        resp.setCanRecommendNext(todayCount < maxAllowed && !advancedGateBlocks(studentId));
+        // "책 추천받기" 노출 여부 — recommendBook과 같은 규칙이다. 권수 상한이 사라졌으므로
+        // (2026-09-14) 이제 심화 게이트(2026-08-31)만 본다: 직전 완독 책의 심화를 오늘 안 풀었으면
+        // 심화를 풀 때까지 버튼을 숨긴다.
+        resp.setCanRecommendNext(!advancedGateBlocks(studentId));
         return resp;
     }
 
@@ -448,14 +452,8 @@ public class ClinicService {
             throw new Exception400("심화 문제를 먼저 풀어야 다음 책을 받을 수 있어요.");
         }
 
-        // 추천 상한 = 회차당 2권 × 오늘 출석(ATTENDED) 회차 수. 정상 흐름에선 이 지점에 오기 전
-        // enterSession→markAttended가 이미 실행돼 출석 회차가 최소 1개는 있다 — 방어적으로 하한 1을 둔다.
-        int attendedSlots = Math.max(reservationService.countAttendedSlotsToday(studentId), 1);
-        int maxAllowed = MAX_RECOMMENDATIONS_PER_SLOT * attendedSlots;
-        int todayCount = clinicRepository.countTodayRecommends(studentId, KstClock.today());
-        if (todayCount >= maxAllowed) {
-            throw new Exception400("오늘 추천받을 수 있는 책 " + maxAllowed + "권을 모두 받으셨습니다.");
-        }
+        // 하루 추천 권수 상한 없음(2026-09-14 폐지) — 여기서 막던 체크를 걷어냈다. 이용권은 입실
+        // 시점에 회차 수만큼만 차감되므로(MonitorService.enterSession) 추천을 더 받아도 추가 차감은 없다.
         log.info("학생 {}에게 새 추천 도서를 고릅니다", studentId);
 
         // 새로 추천한다는 건 이전 추천이 이미 DONE 처리됐다는 뜻(PENDING이면 위에서 그대로 반환됨).
@@ -715,6 +713,7 @@ public class ClinicService {
             // 심화는 레벨이 바뀌진 않지만, 레벨 카드에 현재 레벨은 그대로 보여줘야 한다
             // (안 채우면 결과 화면 HTML의 placeholder "Lv. 2"가 그대로 노출된다)
             String schoolyear = resolveSchoolyear(studentId);
+            resp.setSchoolyear(schoolyear);
             applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
             applyStepStatus(resp, studentId, schoolyear);
             // 새로 받은 뱃지가 없어도(틀린문제 재제출 등) 그 책의 심화 뱃지를 보상 칸에 계속 보여준다
@@ -791,6 +790,7 @@ public class ClinicService {
         // 레벨/독서탐험 — 첫 제출이면 status=DONE이라 재도전/통과/만점 구분 없이 완독 1권으로 카운트된다.
         // 재도전 결과 화면에서도 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다(2026-08-25).
         String schoolyear = resolveSchoolyear(studentId);
+        resp.setSchoolyear(schoolyear);
         int doneNow = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
         applyLevelStatus(resp, schoolyear, doneNow);
         applyStepStatus(resp, studentId, schoolyear);
@@ -840,11 +840,11 @@ public class ClinicService {
         // 기본 문제 뱃지 — 첫 제출은 이번 결과로 지급. 재도전으로 등급이 올라간 경우엔 기존 기본 뱃지(1~2)를
         // 지우고 상위 뱃지로 교체한다(내려가는 방향은 gradeUpgraded=false라 손대지 않는다).
         if (firstAttempt) {
-            resp.setNewBadges(awardBasicBadge(studentId, contentId, correctCount, totalCount, firstAttempt));
+            resp.setNewBadges(awardBasicBadge(studentId, contentId, correctCount, totalCount, passLine, firstAttempt));
         } else if (gradeUpgraded) {
-            // 뱃지 4종 재편(2026-09-02) 이후 불합격→독서친구(등급)는 뱃지가 그대로다(둘 다 1번 독서완료).
-            // 그때 지우고 다시 넣으면 "뱃지 획득!"이 또 뜨므로, 뱃지가 실제로 바뀔 때만 교체한다.
-            int targetBadgeId = "KING".equals(effectiveGrade) ? BADGE_KING : BADGE_READ_DONE;
+            // gradeUpgraded는 등급이 오를 때만 true(RETRY→FRIEND/KING, FRIEND→KING) — effectiveGrade가
+            // 여기서 RETRY일 수는 없으므로 KING/FRIEND 둘 중 하나로만 갈린다.
+            int targetBadgeId = "KING".equals(effectiveGrade) ? BADGE_KING : BADGE_FRIEND;
             ClinicRespDTO.BadgeDTO currentBadge = clinicRepository.findBookBadge(studentId, contentId, false);
             boolean sameBadge = currentBadge != null && currentBadge.getBadgeId() != null
                     && currentBadge.getBadgeId() == targetBadgeId;
@@ -961,6 +961,7 @@ public class ClinicService {
         LevelRule rule = LEVEL_RULES.get(schoolyear);
 
         ClinicRespDTO.MainLevelInfoDTO result = new ClinicRespDTO.MainLevelInfoDTO();
+        result.setCharacterImg(CHARACTER_IMG_BY_SCHOOLYEAR.get(schoolyear));
 
         if (rule == null) {
             result.setLevelNo(1);
@@ -1059,13 +1060,16 @@ public class ClinicService {
 
     /**
      * 기본(01) 문제 뱃지 — 책마다 첫 시도 결과로 등급을 확정한다(재도전 고정).
-     *   만점 → 독서왕 / 그 외(합격·불합격) → 독서완료 (2026-09-02 뱃지 4종 재편으로 합격선 구분이 사라졌다)
+     *   불합격 → 완독 / 합격(만점 미만) → 정독 완료 / 만점 → 정독왕 (2026-09-14 5종 복원)
      * 첫 시도가 아니면(재도전) 등급 변화 없이 빈 목록을 반환한다.
      */
     private List<ClinicRespDTO.BadgeDTO> awardBasicBadge(String studentId, Integer contentId,
-                                                         int correct, int total, boolean firstAttempt) {
+                                                         int correct, int total, int passLine, boolean firstAttempt) {
         if (!firstAttempt) return List.of();
-        return awardBookBadge(studentId, contentId, (correct >= total) ? BADGE_KING : BADGE_READ_DONE);
+        int badgeId = (correct >= total) ? BADGE_KING
+                    : (correct >= passLine) ? BADGE_FRIEND
+                    : BADGE_GREAT_JOB;
+        return awardBookBadge(studentId, contentId, badgeId);
     }
 
     /**
@@ -1095,7 +1099,7 @@ public class ClinicService {
         return awardBookBadge(studentId, contentId, targetId);
     }
 
-    /** 심화 뱃지 순위 — null(없음)=0 &lt; 심화완료(3)=1 &lt; 심화왕(4)=2 */
+    /** 심화 뱃지 순위 — null(없음)=0 &lt; 심화완료(4)=1 &lt; 심화왕(5)=2 */
     private int advancedBadgeRank(Integer badgeId) {
         if (badgeId == null) return 0;
         if (badgeId == BADGE_ADV_KING) return 2;

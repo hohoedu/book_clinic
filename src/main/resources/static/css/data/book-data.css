@@ -481,6 +481,36 @@
   border-radius: 6px;
 }
 
+/* 부가 이미지(워크시트·수집 카드) 미등록 표시 (2026-09-14) — 표지와 달리 기본 이미지가 없어서
+   (없으면 없는 것) 빈 자리만 잡아둔다. 등록되면 이미지로 교체되므로 둘이 같이 보이는 일은 없다. */
+.asset-empty {
+  width: 110px;
+  height: 145px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #9aa5ab;
+  border: 1px dashed #d8dde2;
+  border-radius: 6px;
+}
+
+/* display를 가진 클래스는 hidden 속성(display:none)을 덮어버린다 — 안내문과 이미지가 나란히
+   보이던 원인. 숨김 쪽을 명시해서 되돌린다. */
+.asset-empty[hidden],
+.image-area img[hidden] {
+  display: none;
+}
+
+/* 도서 정보 입력란과 부가 이미지를 갈라주는 구분선 */
+.form-divider {
+  margin: 18px 0 16px;
+  border-top: 1px solid #e6eaed;
+}
+
 .image-actions {
   display: flex;
   flex-direction: column;

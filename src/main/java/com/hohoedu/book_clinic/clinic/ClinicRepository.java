@@ -81,7 +81,8 @@ public interface ClinicRepository {
     /** 자물쇠 — 아직 끝내지 않은 추천(PENDING/HOLD)에 읽은 페이지를 기록한다. null이면 기록 해제 */
     int updateHoldPage(@Param("studentId") String studentId, @Param("holdPage") Integer holdPage);
 
-    /** 그날 이 학생에게 새로 생성된 recommend_log 건수 — 하루 추천 한도(2권) 판정 기준 */
+    /** 그날 이 학생에게 새로 생성된 recommend_log 건수 — 하루 추천 상한이 폐지되어(2026-09-14)
+     *  지금은 판정에 쓰이지 않는다. 통계/디버깅용으로 남겨둔다 */
     int countTodayRecommends(@Param("studentId") String studentId, @Param("date") LocalDate date);
 
     /** 학생+도서의 추천 기록 ID와 현재 상태 (없으면 null) */

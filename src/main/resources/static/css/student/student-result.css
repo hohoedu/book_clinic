@@ -116,24 +116,6 @@
   height: auto;
 }
 
-/* 리본 이미지가 없는 경우(재도전 등급)에만 쓰는 텍스트 리본 — 양 끝이 V자로 파인 띠 */
-.ribbon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 190px;
-  height: 44px;
-  padding: 0 34px;
-  color: #fff;
-  font-size: 17px;
-  font-weight: 900;
-  letter-spacing: -.4px;
-  white-space: nowrap;
-  clip-path: polygon(0 0, 100% 0, calc(100% - 15px) 50%, 100% 100%, 0 100%, 15px 50%);
-}
-
-.ribbon-green { background-color: #2fb85f; }
-
 /* 카드 위쪽 테두리에 걸치는 리본 */
 .card-ribbon {
   position: absolute;
@@ -151,13 +133,16 @@
   margin-bottom: 50px; 
 }
 
-/* 왼쪽: 리본 / 달성 문구 이미지 / 캐릭터 이미지 — 셋 다 별도 에셋 */
+/* 왼쪽: 달성 문구 / 캐릭터 로티 — 둘 다 별도 에셋
+   리본 이미지를 걷어내면서(2026-09-14) 그 자리(리본 50px + gap 12px)만큼 위 여백으로 남겨둔다.
+   안 그러면 상단 3단 블록 높이가 그만큼 줄어 아래 보상 패널·버튼까지 전부 위로 딸려 올라간다. */
 .hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
   gap: 12px;
+  padding-top: 62px;
 }
 
 /* 달성 문구 자리(78px) 안에 문구 이미지(원본 277x62)를 비율대로 담는다 */
@@ -184,11 +169,13 @@
   color: var(--red);
 }
 
-/* 캐릭터 자리 — 리본·문구를 뺀 남은 높이 전부. 이미지(원본 217x233)는 넘칠 때만 축소된다 */
+/* 캐릭터 자리 — 문구를 뺀 남은 높이 전부.
+   로티 컨테이너는 height:100%라 고유 높이가 0이고 scale(3)도 레이아웃엔 영향이 없어서,
+   예전 캐릭터 이미지(원본 217x233)가 떠받치던 높이를 min-height로 직접 못박는다(2026-09-14). */
 .hero-character {
   flex: 1;
   width: 100%;
-  min-height: 0;
+  min-height: 233px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -198,6 +185,16 @@
   display: block;
   max-width: 100%;
   max-height: 100%;
+}
+
+.hero-character-anim {
+  width: 100%;
+  height: 100%;
+  transform: scale(3);
+}
+
+.hero-character-anim svg {
+  display: block;
 }
 
 /* 가운데: 문제풀이 결과 카드 — 결과 화면의 주인공이라 다른 패널보다 그림자를 깊게 줘서 띄운다
@@ -338,7 +335,7 @@
   width: 100%;
   height: 100%;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
 }
 

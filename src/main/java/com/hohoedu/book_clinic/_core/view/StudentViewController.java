@@ -261,7 +261,7 @@ public class StudentViewController {
         model.addAttribute("levelName", levelInfo.getLevelName());
         model.addAttribute("levelTitle", levelInfo.getTitle());
         model.addAttribute("feature", levelInfo.getFeature());
-        model.addAttribute("characterImg", (String) null);
+        model.addAttribute("characterImg", levelInfo.getCharacterImg());
         model.addAttribute("booksToNextLevel", levelInfo.getBooksToNextLevel());
         model.addAttribute("progressPercent", levelInfo.getProgressPercent());
         model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));
@@ -361,6 +361,24 @@ public class StudentViewController {
     // ── 출석체크 앱 ──────────────────────────────────────────────────────
 
     /**
+     * 퇴실한 뒤라 출석체크 기기에서 막아야 하는 상태인지 (2026-09-14).
+     *
+     * 개인 폰 문제풀이 앱은 로그인 단계에서 이미 퇴실을 막고 있었는데(hasExitedToday) 출석체크
+     * 기기에는 그 가드가 없어서, 퇴실한 학생이 다시 체크인하면 새 세션이 열리고 다음 책까지
+     * 추천·대여됐다. 퇴실은 "오늘은 여기까지"라는 뜻이므로 두 기기의 판단을 맞춘다.
+     *
+     * 다만 하루 최대 4회차 정책이 있어서 "퇴실했으면 무조건 끝"으로 두면 안 된다 — 1회차에 왔다가
+     * 퇴실하고 2회차를 건너뛴 뒤 3회차에 다시 오는 흐름이 정상이다. 그래서 퇴실 시각 이후에
+     * <b>새로 시작하는</b> 예약 회차의 이용 시간대에 들어와 있으면 통과시킨다. 방금 퇴실한 그 회차
+     * 안에서 QR을 다시 찍는 건 통과하지 않는다(hasSlotWindowStartingAfter 참고).
+     */
+    private boolean blockedAfterExit(String studentId) {
+        if (!monitorService.hasExitedToday(studentId)) return false;
+        return !reservationService.hasSlotWindowStartingAfter(
+                studentId, monitorService.findLastExitedAtToday(studentId));
+    }
+
+    /**
      * 출석체크 홈. 기기 키가 없으면 입실/퇴실 대신 등록 안내를 보여준다 — 쿠키가 HttpOnly라
      * 화면 JS가 직접 못 읽으므로 서버가 판단해서 내려준다.
      *
@@ -381,13 +399,14 @@ public class StudentViewController {
     /**
      * QR 스캔으로 찾은 학생의 입실을 처리하고, 지금 읽고 있는 책을 확인시켜주는 화면.
      *
-     * 2026-09-03: 입실에서 "다음 책 추천"을 떼어냈다. 예전엔 여기서 recommendBook을 불러
-     * 입실=책이 무조건 나오게 했는데(키오스크에 추천 버튼이 없었기 때문), 이 경로는 심화 게이트를
-     * 적용하지 않는 오버로드라 **심화 문제를 안 푼 학생도 입실만 하면 다음 책이 추천·대여까지
-     * 확정돼버렸다**. 이제 입실은 getHomeState로 입실 처리 + 읽던 책(PENDING) 확인까지만 하고,
-     * 다음 책은 이 화면과 출석체크 홈의 "책 추천" 버튼(POST /attendance/recommend)에서만 받는다.
-     * 생애 첫 로그인(추천 이력이 아예 없음)만 getHomeState가 예전처럼 그 자리에서 추천해준다 —
-     * 직전 완독 책이 없으니 게이트에 걸릴 것도 없다.
+     * 2026-09-03: 입실에서 "다음 책 추천"을 떼어냈다. 그 경로가 심화 게이트를 적용하지 않는
+     * 오버로드를 불러서, 심화를 안 푼 학생도 입실만 하면 다음 책을 받아버렸기 때문이다.
+     *
+     * 2026-09-14: 떼어낸 대신 "입실했어요 + 책 추천받기 버튼" 카드를 한 번 더 눌러야 했는데, 이
+     * 한 단계를 없앴다. 읽던 책(PENDING)이 없으면 여기서 곧바로 다음 책을 추천한다 — 단
+     * **enforceAdvancedGate=true**로 부르므로 2026-09-03에 막은 게이트 우회는 그대로 막혀 있다.
+     * 게이트에 걸리거나 고를 책이 없으면 버튼 대신 이유를 적은 안내 카드가 뜬다.
+     * 오늘 이미 퇴실한 학생은 그 앞에서 막는다 — 재체크인으로 새 세션이 열려 책이 또 나가는 걸 막는다.
      */
     @PostMapping("/attendance/enter")
     public String enterAttendance(@RequestParam("appId") String appId, Model model) {
@@ -400,6 +419,11 @@ public class StudentViewController {
         model.addAttribute("appId", appId);
         model.addAttribute("studentName", student.getStudentName());
 
+        if (blockedAfterExit(student.getStudentId())) {
+            model.addAttribute("error", "오늘 이용은 이미 끝났어요. 다음 회차 시간에 다시 와주세요.");
+            return "/student/book-confirm";
+        }
+
         // 예약 회차 시간대가 아니거나(ReservationService.markAttended), 예약이 아예 없거나, 이용권이
         // 소진된 경우 등은 입실 자체가 막혀야 하는 정상적인 업무 상황이지 시스템 오류가 아니다.
         // 예전엔 이 예외가 그대로 던져져 @RestControllerAdvice(GlobalExceptionHandler)가 가로채
@@ -408,13 +432,21 @@ public class StudentViewController {
         // 잡아서 학생을 못 찾은 경우와 같은 안내 카드(book-confirm.html의 error-card)로 보여준다.
         try {
             ClinicRespDTO.BookStatusRespDTO state = clinicService.getHomeState(student.getStudentId());
-            // AWAITING_NEXT일 때 state.getBook()은 "직전에 다 읽은 책"이라 오늘 읽을 책이 아니다 —
-            // 읽는 중인 책(READING)일 때만 화면에 넘기고, 그 외에는 책 없이 추천 버튼만 보여준다.
             if ("READING".equals(state.getState())) {
+                // 읽던 책이 있으면 그 책 그대로 — 추천을 새로 타지 않는다(멱등).
                 model.addAttribute("book", state.getBook());
+            } else {
+                // AWAITING_NEXT일 때 state.getBook()은 "직전에 다 읽은 책"이라 오늘 읽을 책이 아니다.
+                // 예전엔 여기서 책 없이 "책 추천받기" 버튼 카드를 띄웠지만(2026-09-03), 학생이 버튼을
+                // 한 번 더 눌러야 해서 곧바로 추천까지 간다(2026-09-14). 심화 게이트는 그대로 적용한다.
+                model.addAttribute("book", clinicService.recommendBook(student.getStudentId(), true));
             }
         } catch (Exception400 | Exception404 e) {
             model.addAttribute("error", e.getMessage());
+        }
+        // 여기까지 와서 책도 안내 문구도 없으면 화면이 텅 빈다 — 이유를 모를 때도 뭐라도 보여준다.
+        if (!model.containsAttribute("book") && !model.containsAttribute("error")) {
+            model.addAttribute("error", "추천할 수 있는 도서를 찾지 못했어요. 선생님께 말씀해주세요.");
         }
         return "/student/book-confirm";
     }
@@ -427,7 +459,11 @@ public class StudentViewController {
      * 않았으면 다음 책이 나오지 않는다. 이 게이트를 우회할 수 있는 경로를 하나도 남기지 않는 것이
      * 이번 변경의 핵심이다.
      *
-     * 추천 한도(회차당 2권) 초과나 후보 소진도 정상적인 업무 상황이므로 예외를 잡아 안내 카드로 보여준다.
+     * 추천 후보 소진도 정상적인 업무 상황이므로 예외를 잡아 안내 카드로 보여준다
+     * (하루 추천 권수 상한은 2026-09-14에 폐지됐다).
+     *
+     * 오늘 이미 퇴실했으면 추천하지 않는다(2026-09-14) — 퇴실 후 재스캔으로 책을 더 받아가는
+     * 경로를 막는다. 개인 폰 앱이 로그인 단계에서 하던 판단과 같은 규칙이다.
      */
     @PostMapping("/attendance/recommend")
     public String recommendAttendance(@RequestParam("appId") String appId, Model model) {
@@ -438,10 +474,19 @@ public class StudentViewController {
         }
         model.addAttribute("appId", appId);
         model.addAttribute("studentName", student.getStudentName());
+
+        if (blockedAfterExit(student.getStudentId())) {
+            model.addAttribute("error", "오늘 이용은 이미 끝났어요. 다음 회차 시간에 다시 와주세요.");
+            return "/student/book-confirm";
+        }
+
         try {
             model.addAttribute("book", clinicService.recommendBook(student.getStudentId(), true));
         } catch (Exception400 | Exception404 e) {
             model.addAttribute("error", e.getMessage());
+        }
+        if (!model.containsAttribute("book") && !model.containsAttribute("error")) {
+            model.addAttribute("error", "추천할 수 있는 도서를 찾지 못했어요. 선생님께 말씀해주세요.");
         }
         return "/student/book-confirm";
     }

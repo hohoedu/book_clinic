@@ -65,6 +65,7 @@ public class MonitorSyncService {
         doc.put("author", card.getAuthor());
         doc.put("publisher", card.getPublisher());
         doc.put("imageUrl", card.getImageUrl());
+        doc.put("hasWorksheet", card.getHasWorksheet());
         doc.put("readingTimeText", card.getReadingTimeText());
         doc.put("readingTimeMinutes", card.getReadingTimeMinutes());
         doc.put("recommendedAt", toIso(card.getRecommendedAt()));
@@ -128,6 +129,7 @@ public class MonitorSyncService {
             m.put("author", book.getAuthor());
             m.put("publisher", book.getPublisher());
             m.put("imageUrl", book.getImageUrl());
+            m.put("hasWorksheet", book.getHasWorksheet());
             m.put("readingTimeText", book.getReadingTimeText());
             m.put("recommendedAt", toIso(book.getRecommendedAt()));
             m.put("basicCorrectCount", book.getBasicCorrectCount());
@@ -145,6 +147,7 @@ public class MonitorSyncService {
             m.put("badgeCount", book.getBadgeCount());
             m.put("badgeIds", book.getBadgeIds());
             m.put("latestBadgeName", book.getLatestBadgeName());
+            m.put("specialCardReached", book.getSpecialCardReached());
             result.add(m);
         }
         return result;

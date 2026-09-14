@@ -45,7 +45,20 @@ public class PassRespDTO {
     public static class CycleDTO {
         private LocalDate cycleFrom;
         private LocalDate cycleUntil;
+        /** 그 주기에 원래 부여된 총 횟수 합 — 화면 표시용 */
         private int capacity;
+        /** 그 주기에 아직 남은 횟수 합 — 예약 가능 여부는 이 값으로 판정한다(2026-09-14 예약 시 차감) */
+        private int remaining;
+    }
+
+    /** 차감 이력 한 줄 — 예약 취소 시 되돌릴 대상을 집어내는 데만 쓴다 */
+    @Data
+    public static class UseDTO {
+        private int useId;
+        private int passId;
+        private String studentId;
+        private Long reservationId;
+        private LocalDate usedDate;
     }
 
     /** 잔여 횟수 조회 응답 — 학생 화면 상단에 "남은 횟수" 표시용 */

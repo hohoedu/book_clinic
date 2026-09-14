@@ -47,13 +47,14 @@ public interface PaymentRepository {
     PaymentRespDTO.PaymentDTO findByOrderNo(@Param("orderNo") String orderNo);
 
     /**
-     * 이 학생·서비스·청구월에 진행 중(READY)이거나 완료(PAID)된 결제가 이미 있는지 — 다른
-     * 기기로 동시에 새 결제를 시작하려 할 때 중복 방지용으로 prepare()/prepareGroup()이 먼저
-     * 확인한다(2026-08-07). 없으면 null. DB의 UX_payment_active_billing 필터드 유니크 인덱스가
-     * 이 체크를 통과한 뒤에도 남는 아주 좁은 동시 요청 레이스의 최종 방어선이다.
+     * 이 학생이 이 서비스로 결제창을 열어둔 채(READY) 방치한 주문 — 있으면 새로 만들지 않고
+     * 그 주문을 재사용한다(A기기 방치 → B기기 결제로 같은 건이 두 번 승인되는 사고 방지).
+     *
+     * 완료된 결제(PAID)는 보지 않는다(2026-09-14) — 12회를 다 쓰면 같은 달에도 또 사야 하므로
+     * "이미 결제함"이 차단 사유가 아니다. 청구월 조건도 같은 이유로 빠졌다.
      */
-    PaymentRespDTO.PaymentDTO findActiveByStudentServiceBilling(@Param("studentId") String studentId,
-            @Param("serviceCode") String serviceCode, @Param("billingYm") String billingYm);
+    PaymentRespDTO.PaymentDTO findReadyByStudentService(@Param("studentId") String studentId,
+                                                        @Param("serviceCode") String serviceCode);
 
     /** 같은 그룹으로 묶인 형제 묶음결제 행 전체 — 그룹 승인 확정 때 학생별로 순회하기 위함 */
     List<PaymentRespDTO.PaymentDTO> findByGroupOrderNo(@Param("groupOrderNo") String groupOrderNo);

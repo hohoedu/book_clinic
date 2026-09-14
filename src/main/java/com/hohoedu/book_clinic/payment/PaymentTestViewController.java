@@ -31,10 +31,10 @@ public class PaymentTestViewController {
 
     private final PaymentCheckoutViewController checkoutViewController;
 
-    /** 예: /payment/test?studentId=DAE001T01&productCode=BOOK_M8 */
+    /** 예: /payment/test?studentId=DAE001T01&productCode=BOOK_12 */
     @GetMapping("/payment/test")
     public String testPage(@RequestParam("studentId") String studentId,
-                           @RequestParam(name = "productCode", defaultValue = "BOOK_M8") String productCode,
+                           @RequestParam(name = "productCode", defaultValue = "BOOK_12") String productCode,
                            Model model) {
         log.info("[결제테스트] 결제창 진입 — studentId={}, productCode={}", studentId, productCode);
         return checkoutViewController.renderCheckout(studentId, productCode, model);

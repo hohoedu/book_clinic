@@ -2,14 +2,45 @@
   const page = document.getElementById('resultPage');
   const studentId = page ? page.getAttribute('data-student-id') : null;
 
-  const heroRibbon = document.getElementById('heroRibbon');
-  const heroRibbonText = document.getElementById('heroRibbonText');
   const heroHeadline = document.getElementById('heroHeadline');
   const heroHeadlineText = document.getElementById('heroHeadlineText');
 
   // 달성 문구 이미지는 독서왕(ment.png)만 있고, 나머지 등급은 텍스트 제목으로 대체한다
   const HERO_HEADLINE_IMG = { KING: '/images/student_result/ment.png' };
   const heroCharacter = document.getElementById('heroCharacter');
+  const heroCharacterAnim = document.getElementById('heroCharacterAnim');
+
+  // 등급별 캐릭터 로티 종류 — 파일명은 /lottie/basic_{category}_NN.json
+  const HERO_LOTTIE_CATEGORY = {
+    RETRY: 'fail',
+    FRIEND: 'pass',
+    KING: 'perfect',
+    ADVANCED: 'pass',
+    ADVANCED_PERFECT: 'perfect',
+  };
+  // 학년(schoolyear) 코드 → 로티 변형 번호. 초1=01, 초2=02, 초3~중3(03~07)은 03을 그대로 쓴다(2026-09-14).
+  const HERO_LOTTIE_VARIANT_BY_SCHOOLYEAR = { '01': '01', '02': '02' };
+  const HERO_LOTTIE_DEFAULT_VARIANT = '03';
+  let heroAnim = null;
+  let heroSchoolyear = null;
+
+  function playHeroCharacter(grade) {
+    if (!heroCharacterAnim || typeof lottie === 'undefined') return;
+    const category = HERO_LOTTIE_CATEGORY[grade] ?? 'pass';
+    const variant = HERO_LOTTIE_VARIANT_BY_SCHOOLYEAR[heroSchoolyear] ?? HERO_LOTTIE_DEFAULT_VARIANT;
+
+    if (heroAnim) {
+      heroAnim.destroy();
+      heroAnim = null;
+    }
+    heroAnim = lottie.loadAnimation({
+      container: heroCharacterAnim,
+      renderer: 'svg',
+      loop: true,
+      autoplay: true,
+      path: `/lottie/basic_${category}_${variant}.json`,
+    });
+  }
   const scoreCorrectEl = document.getElementById('scoreCorrect');
   const scoreTotalEl = document.getElementById('scoreTotal');
   const scoreStars = document.getElementById('scoreStars');
@@ -20,13 +51,12 @@
   const rewardExpDesc = document.getElementById('rewardExpDesc');
   const newCard = document.getElementById('newCard');
   const newCardImg = document.getElementById('newCardImg');
-  const newCardCaption = document.querySelector('.new-card-caption');
   const newFlag = document.querySelector('.new-flag');
   const cardReward = document.getElementById('cardReward');
   const rareFlag = document.getElementById('rareFlag');
   const rewardCardImg = document.getElementById('rewardCardImg');
-  const rewardCardName = document.getElementById('rewardCardName');
   const rewardCardDesc = document.getElementById('rewardCardDesc');
+  const rewardCardName = document.getElementById('rewardCardName');
   const rewardProgressBar = document.getElementById('rewardProgressBar');
   const badgeReward = document.getElementById('badgeReward');
   const rewardBadgeImg = document.getElementById('rewardBadgeImg');
@@ -119,6 +149,7 @@
       return;
     }
 
+    heroSchoolyear = result.schoolyear ?? null;
     renderScore(result);
 
     if (result.advanced) {
@@ -154,9 +185,12 @@
     scoreCorrectEl.textContent = correct;
     scoreTotalEl.textContent = total;
 
-    // 별 5개를 정답률로 채운다 (한 문제라도 맞히면 최소 1개)
-    const ratio = total > 0 ? correct / total : 0;
-    const onCount = correct > 0 ? Math.max(1, Math.round(ratio * 5)) : 0;
+    // 별 개수는 정답률이 아니라 단계(뱃지)별로 고정한다(2026-09-14) —
+    // 완독 1개 / 정독 완료·문해력 챌린저 3개 / 정독왕·문해력 챔피언 5개
+    const perfect = total > 0 && correct >= total;
+    const onCount = result.advanced
+      ? (perfect ? 5 : 3)
+      : (result.grade === 'KING' ? 5 : result.grade === 'FRIEND' ? 3 : 1);
     Array.from(scoreStars.children).forEach((star, i) => {
       star.classList.toggle('is-on', i < onCount);
     });
@@ -223,11 +257,10 @@
     const correct = result.correctCount ?? 0;
     const perfect = total > 0 && correct >= total;   // 만점 = 심화왕
 
-    setHeroRibbon(true);
-    setHero('ADVANCED', perfect ? '심화왕 달성!' : '심화문제 완료!');
+    setHero(perfect ? 'ADVANCED_PERFECT' : 'ADVANCED', perfect ? '심화왕 달성!' : '심화문제 완료!');
     resultTitle.textContent = perfect
-      ? '심화문제까지 만점으로 풀었어요!'
-      : '심화문제를 풀었어요! 더 도전해 볼까요?';
+      ? '정독 완료! 한 권을 완벽하게 끝냈어요.'
+      : '더 어려운 문제까지 도전했어요.';
     bookFinished = true;
 
     resetActionButtons();
@@ -240,9 +273,8 @@
 
   // 3단계 — 독서왕(기본 만점). 더 맞힐 기본 문제가 없으니 심화만 남는다.
   function renderKingResult(result) {
-    setHeroRibbon(true);
     setHero('KING', '독서왕 달성!');
-    resultTitle.textContent = `${bookTitle(result)}을(를) 완독하고 멋지게 문제를 풀었어요!`;
+    resultTitle.textContent = '더 어려운 문제에 도전해 보세요.';
     // "홈으로"를 누르면 완료 화면(같은 버튼 규칙)으로 간다 — 다시풀기(alreadyCompleted)
     // 재제출이어도 마찬가지다(2026-08-25, 예전엔 이때만 예외로 그냥 홈으로 보냈다)
     bookFinished = true;
@@ -253,9 +285,8 @@
 
   // 2단계 — 독서완료(합격선 이상 만점 미만)
   function renderFriendResult(result) {
-    setHeroRibbon(true);
     setHero('FRIEND', '독서친구 달성!');
-    resultTitle.textContent = `${bookTitle(result)}을(를) 읽고 문제를 풀었어요!`;
+    resultTitle.textContent = '틀린 문제를 다시 풀어보세요.';
     bookFinished = true;
 
     resetActionButtons();
@@ -266,19 +297,12 @@
   // 1단계 — 불합격(합격선 미달). 문제를 다시 푸는 게 아니라 책을 다시 읽으러 간다.
   // "다시 읽으러 가기"는 로그아웃이다 — 읽고 와서 QR로 다시 들어오면 홈에 "문제 풀러 가기"가 뜬다.
   function renderRetryResult(result) {
-    setHeroRibbon(true);
     setHero('RETRY', '다시 도전!');
-    resultTitle.textContent = '합격선에 조금 못 미쳤어요. 책을 다시 읽어볼까요?';
+    resultTitle.textContent = '책을 다시 읽고 한 번 더 도전해 보세요.';
     bookFinished = false;
 
     resetActionButtons();
     readAgainBtn.hidden = false;
-  }
-
-  // 모든 등급이 green.png 리본 이미지를 쓴다(2026-09-02, 재도전도 포함). 텍스트 리본은 미사용.
-  function setHeroRibbon(passed) {
-    heroRibbon.hidden = false;
-    heroRibbonText.hidden = true;
   }
 
   // 달성 문구는 등급별 이미지가 있으면 이미지, 없으면 같은 자리에 텍스트로 표시한다.
@@ -295,10 +319,7 @@
     }
     heroHeadline.dataset.grade = grade;
     heroCharacter.dataset.grade = grade;
-  }
-
-  function bookTitle(result) {
-    return result.bookTitle || '이 책';
+    playHeroCharacter(grade);
   }
 
   // 보상 패널의 레벨 칸 — EXP 폐지, 완독 권수로 레벨업(카드/독서여권 칸은 기능 미구현이라 자리만 잡아둔 상태)
@@ -381,9 +402,6 @@
       newCardImg.src = result.cardImageUrl;
     }
     newCardImg.alt = result.cardName;
-    // "신규"는 이번 제출로 처음 받은 카드일 때만(2026-09-03). 재진입·심화 결과처럼 이미 보유 중인
-    // 카드를 보여줄 때는 문구만 바꾼다 — 칸 자체는 비우지 않는다.
-    newCardCaption.textContent = result.cardNew ? '신규 카드를 획득했어요!' : '이 책의 카드예요.';
     newFlag.hidden = !result.cardNew;
   }
 

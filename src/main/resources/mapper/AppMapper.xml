@@ -32,6 +32,7 @@
 
             pass.total_count  AS passTotal,
             pass.remain_count AS passRemain,
+            convert(varchar(10), pass.valid_until, 23) AS passValidUntil,
 
             books.img1 AS bookImg1,
             books.img2 AS bookImg2,
@@ -75,7 +76,7 @@
 
         -- 활성 이용권 (회수 안 됨 + 유효기간 내, 가장 최근 부여분)
         OUTER APPLY (
-            SELECT TOP 1 p.total_count, p.remain_count
+            SELECT TOP 1 p.total_count, p.remain_count, p.valid_until
             FROM erp_bookstore_pass p
             WHERE p.student_id = s.student_id
               AND p.revoked_at IS NULL
@@ -142,12 +143,13 @@
                 CASE
                     WHEN sum(isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0)) = 0 THEN NULL
                     ELSE cast(round(
-                        100.0 * sum(isnull(dd.basic_correct_cnt, 0)
+                        100.0 * sum(isnull(coalesce(rl.final_correct_count, dd.basic_correct_cnt), 0)
                                     + isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0))
                         / sum(isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0)), 0) AS int)
                 END AS correctRate
             FROM erp_bookstore_diary d
             JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+            LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
             WHERE d.student_id = s.student_id
               AND d.record_date = #{recordDate}
         ) day
@@ -171,7 +173,9 @@
             coalesce(dd.book_name, c.original_title) AS title,
             coalesce(dd.book_img,  c.image_url)      AS imageUrl,
 
-            isnull(dd.basic_correct_cnt, 0) AS basicCorrect,
+            -- 기본은 재도전해도 diary_detail 스냅샷(basic_correct_cnt)이 처음 점수로 고정된다.
+            -- "최종 점수"는 recommend_log.final_correct_count 쪽만 max로 오르므로 그걸 우선한다.
+            isnull(coalesce(rl.final_correct_count, dd.basic_correct_cnt), 0) AS basicCorrect,
             isnull(dd.basic_total_cnt,   0) AS basicTotal,
             isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0) AS advancedCorrect,
             isnull(dd.advanced_total_cnt, 0) AS advancedTotal,
@@ -185,7 +189,7 @@
             CASE
                 WHEN isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0) = 0 THEN NULL
                 ELSE cast(round(
-                    100.0 * (isnull(dd.basic_correct_cnt, 0)
+                    100.0 * (isnull(coalesce(rl.final_correct_count, dd.basic_correct_cnt), 0)
                              + isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0))
                     / (isnull(dd.basic_total_cnt, 0) + isnull(dd.advanced_total_cnt, 0)), 0) AS int)
             END AS correctRate

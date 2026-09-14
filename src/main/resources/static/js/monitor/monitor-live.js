@@ -69,11 +69,13 @@ const STATUS_BADGE = {
   READING: { text: "독서 중", icon: "fa-book-open", cls: "status-reading" },
   QUIZ_IN_PROGRESS: { text: "문제 푸는 중", icon: "fa-pen", cls: "status-quiz" },
   TIME_OVER: { text: "시간초과", icon: "fa-hourglass-end", cls: "status-timeover" },
-  KING: { text: "독서왕", icon: "fa-crown", cls: "status-completed" },
-  FRIEND: { text: "독서친구", icon: "fa-circle-check", cls: "status-completed" },
+  // 결과류 배지 문구는 그 책에서 받는 뱃지 이름을 그대로 쓴다(2026-09-14) — 배지와 뱃지 아이콘이
+  // 다른 말을 쓰면(독서왕 vs 정독왕) 같은 결과를 두 가지로 부르는 셈이라 헷갈린다.
+  KING: { text: "정독왕", icon: "fa-crown", cls: "status-completed" },
+  FRIEND: { text: "정독완료", icon: "fa-circle-check", cls: "status-completed" },
   RETRY_NEEDED: { text: "재도전 필요", icon: "fa-triangle-exclamation", cls: "status-retry" },
-  ADV_DONE: { text: "심화완료", icon: "fa-book-open-reader", cls: "status-completed" },
-  ADV_KING: { text: "심화왕", icon: "fa-crown", cls: "status-completed" },
+  ADV_DONE: { text: "문해력챌린저", icon: "fa-book-open-reader", cls: "status-completed" },
+  ADV_KING: { text: "문해력챔피언", icon: "fa-crown", cls: "status-completed" },
   EXITED: { text: "퇴실", icon: "fa-right-from-bracket", cls: "status-exited" },
 };
 
@@ -85,6 +87,27 @@ function statusBadgeFor(card) {
     ? "심화"
     : `${(card.basicAttemptRounds ?? 0) + 1}회차`;
   return { ...badge, text: `${badge.text} (${suffix})` };
+}
+
+/* 화살표로 고른 책 기준 배지/테두리 (2026-09-14).
+   서버의 cardStatus는 "학생의 지금 상태"라 항상 최신 책 기준이다. 그래서 1번째 책을 펼쳐
+   점수칸엔 "만점"이 떠 있는데 테두리·배지만 최신 책의 "재도전 필요"로 남는 불일치가 있었다.
+   최신 책 페이지에서는 예전대로 cardStatus를 그대로 쓰고(미입실/독서중/문제푸는중/시간초과/퇴실 같은
+   실시간 상태는 그 페이지에서만 의미가 있다), 과거 책 페이지에서는 그 책의 결과로 다시 계산한다.
+   계산 규칙은 서버 MonitorService.resolveCardStatus의 결과류 판정과 같다.
+   아직 안 푼 과거 책(홀딩·미제출)은 새 상태를 만들지 않고 "독서 중" 그대로 둔다. */
+function statusBadgeForPage(card, page, isLatestPage) {
+  if (isLatestPage) return statusBadgeFor(card);
+  if (page.basicStatus === "DONE") {
+    if (page.advancedCorrectCount != null) {
+      const at = page.advancedTotalCount;
+      return at > 0 && page.advancedCorrectCount >= at ? STATUS_BADGE.ADV_KING : STATUS_BADGE.ADV_DONE;
+    }
+    if (page.basicGrade === "KING") return STATUS_BADGE.KING;
+    if (page.basicGrade === "FRIEND") return STATUS_BADGE.FRIEND;
+    return STATUS_BADGE.RETRY_NEEDED;
+  }
+  return STATUS_BADGE.READING;
 }
 
 let cards = [];
@@ -192,6 +215,7 @@ function matchesSlot(card) {
 
 /* 최초 진입(또는 날짜 변경) 시 1회 조회 — 이후 갱신은 Firestore 구독으로 받는다 */
 async function loadLiveView() {
+  if (renderPaused) return;   // 멈춰 있는 동안은 서버 조회도 하지 않는다(콘솔 노이즈 방지)
   try {
     const view = await getJson(`/admin/monitor/live?date=${selectedDate()}`);
     cards = view.cards ?? [];
@@ -336,7 +360,29 @@ function startElapsedTicker() {
 
 /* ── 렌더링 ── */
 
+/* 화면 고정 스위치 (개발용, 2026-09-14).
+   카드 DOM은 15초 타이머·폴백 폴링·Firestore 스냅샷 세 경로로 수시로 통째 다시 그려진다.
+   개발자도구에서 카드를 직접 만지며 레이아웃을 잡을 때 방금 고친 DOM이 사라지는 걸 막으려고
+   잠시 멈춘다. 콘솔에서:
+       monitorPause()    렌더링 정지 (지금 화면 그대로 얼린다)
+       monitorResume()   재개 + 최신 데이터로 다시 그린다
+   멈춰 있는 동안에는 실제 상태가 바뀌어도 화면에 안 나타난다 — 확인이 끝나면 반드시
+   monitorResume()이나 새로고침으로 되돌릴 것. 새로고침하면 자동으로 풀린다(기본값 false). */
+let renderPaused = false;
+
+window.monitorPause = () => {
+  renderPaused = true;
+  console.info("[monitor] 렌더링 정지 — 되돌리려면 monitorResume()");
+};
+
+window.monitorResume = () => {
+  renderPaused = false;
+  console.info("[monitor] 렌더링 재개");
+  loadLiveView();
+};
+
 function render() {
+  if (renderPaused) return;
   const counts = computeCounts();
   renderFilters(counts);
   renderGrid();
@@ -444,6 +490,7 @@ function bookPages(card) {
     author: card.author,
     publisher: card.publisher,
     imageUrl: card.imageUrl,
+    hasWorksheet: card.hasWorksheet,
     readingTimeMinutes: card.readingTimeMinutes,
     elapsedMinutes: card.elapsedMinutes,
     basicCorrectCount: card.basicCorrectCount,
@@ -457,6 +504,9 @@ function bookPages(card) {
     badgeCount: card.badgeCount,
     badgeIds: card.badgeIds,
     latestBadgeName: card.latestBadgeName,
+    // 카드 레벨(books가 비었을 때)에는 스페셜 카드 정보가 없다 — 책을 아직 한 권도 추천받지
+    // 않은 상태라 지급 대상일 수도 없다.
+    specialCardReached: false,
   }];
 }
 
@@ -473,17 +523,17 @@ function currentPageIndex(card, pages) {
 
 function buildCardEl(card) {
   const el = document.createElement("div");
-  const badge = statusBadgeFor(card);
-  el.className = "monitor-card " + badge.cls;
 
   const notEntered = card.cardStatus === "NOT_ENTERED";
   const exited = card.sessionStatus === "EXITED";
   const pages = bookPages(card);
   const pageIndex = currentPageIndex(card, pages);
   const page = pages[pageIndex];
+  const isLatestPage = pageIndex === pages.length - 1;
 
-  // "혼자 읽기 어려워요!" 말풍선은 새싹 아이콘을 감싼 .name-flair-wrap 안에 넣는다(2026-09-02) —
-  // 예전엔 카드 기준 left 고정이라 이름/학년 길이가 바뀌면 새싹과 어긋났다. 이제 항상 새싹 바로 위에 붙는다.
+  const badge = statusBadgeForPage(card, page, isLatestPage);
+  el.className = "monitor-card " + badge.cls;
+
   const helpFlair = card.helpNeeded
     ? `<span class="name-flair-wrap"><i class="fa-solid fa-seedling name-flair"></i>` +
       `<span class="help-flag"><i class="fa-solid fa-seedling"></i> 혼자 읽기 어려워요!</span></span>`
@@ -498,7 +548,6 @@ function buildCardEl(card) {
     <div class="stat-row"></div>
     <div class="card-bottom">
       <span class="entered-at">${notEntered ? "미입실" : `${formatTime(card.enteredAt)} 입실`}</span>
-      <div class="book-dots-row"></div>
       ${notEntered ? "" : `
       <button type="button" class="btn outline small exit-btn" ${exited ? "disabled" : ""}>
         ${exited ? "퇴실 완료" : "퇴실 처리"}
@@ -506,8 +555,30 @@ function buildCardEl(card) {
     </div>
   `;
 
+  // 책이 2권 이상일 때만 좌우 화살표를 단다(2026-09-14, 기존 하단 도트 대체) — 카드 양 옆에
+  // 띄우므로 카드 높이를 먹지 않고, 몇 권째인지는 제목 앞 번호 배지가 대신 알려준다.
+  if (pages.length > 1) {
+    el.insertAdjacentHTML("beforeend", `
+      <button type="button" class="book-nav prev" title="이전 책" ${pageIndex === 0 ? "disabled" : ""}>
+        <i class="fa-solid fa-caret-left"></i>
+      </button>
+      <button type="button" class="book-nav next" title="다음 책" ${pageIndex === pages.length - 1 ? "disabled" : ""}>
+        <i class="fa-solid fa-caret-right"></i>
+      </button>
+    `);
+    el.querySelectorAll(".book-nav").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const step = btn.classList.contains("prev") ? -1 : 1;
+        const next = pageIndex + step;
+        if (next < 0 || next > pages.length - 1) return;
+        selectedBookPage[card.studentId] = next;
+        render();
+      });
+    });
+  }
+
   renderBookRow(el, card, pages, pageIndex);
-  renderStatRow(el, card, page);
+  renderStatRow(el, card, page, isLatestPage);
 
   if (!notEntered) {
     const exitBtn = el.querySelector(".exit-btn");
@@ -532,40 +603,52 @@ function renderBookRow(el, card, pages, pageIndex) {
   const page = pages[pageIndex];
   const notEntered = card.cardStatus === "NOT_ENTERED";
 
+  /* 아이콘 4개를 한 줄에 모은다(2026-09-14) — 출판사·저자 아래, 스페셜 카드 칩과 같은 줄
+     오른쪽 끝이다. 예전엔 표지 옆에 세로로 쌓다가(개수에 따라 카드 높이가 출렁임) 다시추천을
+     상태 배지 옆, 홀딩을 퇴실 버튼 앞으로 흩어놨었는데, 둘 다 "이 책에 대한 동작"이라 책 정보
+     옆에 모여 있는 편이 찾기 쉽다. 가로로 늘어놓으므로 개수가 0개든 4개든 줄 높이는 그대로다.
+     독서일지를 맨 오른쪽에 두는 이유: 유일하게 책이 아니라 학생에게 거는 동작이라 끝에 뗀다. */
+  const actions = [
+    canSwapBook(card, page)
+      ? `<button type="button" class="book-swap-btn" title="책이 없거나 훼손됨 — 다른 책으로 교체"><i class="fa-solid fa-rotate"></i></button>`
+      : "",
+    // 홀딩은 아이콘 하나로만 표시한다 — 몇 쪽까지 읽었는지는 카드에 적지 않고, 기록이 있으면
+    // 자물쇠에 색이 들어가(.filled) 홀딩된 책이라는 것만 알린다. 쪽수는 모달에서 보고 고친다.
+    canHoldBook(card, page)
+      ? `<button type="button" class="book-hold-btn${page.holdPage != null ? " filled" : ""}" title="다 못 읽은 책 — 몇 쪽까지 읽었는지 기록"><i class="fa-solid fa-lock"></i></button>`
+      : "",
+    page.hasWorksheet
+      ? `<button type="button" class="book-worksheet-btn" title="워크시트 출력"><i class="fa-solid fa-print"></i></button>`
+      : "",
+    notEntered
+      ? ""
+      : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`,
+  ].join("");
+
   const bookRow = el.querySelector(".book-row");
   bookRow.innerHTML = `
     <img class="book-cover" src="${page.imageUrl || "/images/book-sample.png"}" alt="" onerror="this.src='/images/book-sample.png'" />
     <div class="book-info">
-      <div class="book-title">${page.bookTitle ?? "추천 도서 없음"}</div>
+      <div class="book-title">${pages.length > 1 ? `<span class="book-seq">${pageIndex + 1}</span>` : ""}${page.bookTitle ?? "추천 도서 없음"}</div>
       <div class="book-sub">${[page.publisher, page.author].filter(Boolean).join(" | ")}</div>
-      ${page.holdPage != null ? `<div class="book-hold">${page.holdPage}쪽까지 읽음</div>` : ""}
-    </div>
-    <div class="book-actions">
-      ${notEntered ? "" : `<button type="button" class="log-open-btn${hasAttitude(card) ? " filled" : ""}" title="독서일지 등록"><i class="fa-regular fa-comment-dots"></i></button>`}
-      ${canHoldBook(card, page) ? `<button type="button" class="book-hold-btn${page.holdPage != null ? " filled" : ""}" title="다 못 읽은 책 — 몇 쪽까지 읽었는지 기록"><i class="fa-solid fa-lock"></i></button>` : ""}
-      ${canSwapBook(card, page) ? `<button type="button" class="book-swap-btn" title="책이 없거나 훼손됨 — 다른 책으로 교체"><i class="fa-solid fa-rotate"></i></button>` : ""}
+      <div class="book-meta-row">
+        <div class="book-special-card${page.specialCardReached ? "" : " is-empty"}"><i class="fa-solid fa-star"></i> 스페셜 카드 지급</div>
+        <div class="book-actions">${actions}</div>
+      </div>
     </div>
   `;
 
-  if (!notEntered) {
-    bookRow.querySelector(".log-open-btn").addEventListener("click", () => toggleReadingLogPanel(card));
-  }
+  const logBtn = bookRow.querySelector(".log-open-btn");
+  if (logBtn) logBtn.addEventListener("click", () => toggleReadingLogPanel(card));
+
   const swapBtn = bookRow.querySelector(".book-swap-btn");
   if (swapBtn) swapBtn.addEventListener("click", () => openBookSwapModal(card, page));
 
   const holdBtn = bookRow.querySelector(".book-hold-btn");
   if (holdBtn) holdBtn.addEventListener("click", () => openHoldModal(card, page));
 
-  const dotsRow = el.querySelector(".book-dots-row");
-  dotsRow.innerHTML = pages.length > 1
-    ? `<div class="book-dots">${pages.map((_, i) => `<span class="dot${i === pageIndex ? " active" : ""}" data-idx="${i}"></span>`).join("")}</div>`
-    : "";
-  dotsRow.querySelectorAll(".dot").forEach((dot) => {
-    dot.addEventListener("click", () => {
-      selectedBookPage[card.studentId] = Number(dot.dataset.idx);
-      render();
-    });
-  });
+  const worksheetBtn = bookRow.querySelector(".book-worksheet-btn");
+  if (worksheetBtn) worksheetBtn.addEventListener("click", () => printWorksheet(page));
 }
 
 /* ── 책 홀딩 / 자물쇠 (2026-09-03) ─────────────────────────────────────────────
@@ -646,6 +729,52 @@ async function saveHold(clear) {
   } finally {
     confirmBtn.disabled = false;
   }
+}
+
+/* ── 워크시트 출력 (2026-09-14) ───────────────────────────────────────────────
+   책마다 1장씩 등록해둔 출력용 이미지를 선생님이 카드에서 바로 뽑아 쓴다. 워크시트가 등록된
+   책에만 프린터 아이콘이 뜨고(page.hasWorksheet), 누르면 미리보기 없이 곧장 인쇄 대화상자가 뜬다.
+
+   [주소를 숨기는 이유] 이미지는 호스팅 원본 주소가 아니라 /admin/monitor/worksheet/{contentId}
+   프록시로 받는다. 원본 주소를 화면에 내려주면 로그인하지 않은 사람도 URL만 알면 워크시트를
+   통째로 받아갈 수 있다. 프록시는 로그인 세션이 있어야 열리고 응답에 no-store가 붙는다.
+   화면에 그림을 띄우지 않으니 우클릭/드래그로 집어갈 경로도 없다.
+
+   [복사 차단의 한계] 인쇄 대화상자의 PDF 저장은 브라우저/OS 기능이라 웹에서 막을 수 없다. */
+
+let worksheetPrinting = false;   // 연타로 인쇄 대화상자가 겹쳐 뜨는 것을 막는다
+
+function printWorksheet(page) {
+  if (page.contentId == null || worksheetPrinting) return;
+  worksheetPrinting = true;
+
+  const img = document.getElementById("worksheetImage");
+
+  const cleanup = () => {
+    document.body.classList.remove("worksheet-printing");
+    // 인쇄가 끝나면 비워둔다 — 남겨두면 다른 화면에서 Ctrl+P를 눌러도 이 워크시트가 딸려 나온다
+    img.removeAttribute("src");
+    worksheetPrinting = false;
+  };
+
+  // 이미지가 다 뜨기 전에 인쇄하면 빈 종이가 나온다 — 로드가 끝난 뒤에 대화상자를 연다
+  img.onload = () => {
+    img.onload = img.onerror = null;
+    window.addEventListener("afterprint", cleanup, { once: true });
+    document.body.classList.add("worksheet-printing");
+    window.print();
+    // afterprint를 안 쏘는 브라우저(구형 사파리 등)에 대비한 안전망 — 화면이 인쇄 모드로 굳지 않게
+    setTimeout(() => { if (worksheetPrinting) cleanup(); }, 1000);
+  };
+  img.onerror = () => {
+    img.onload = img.onerror = null;
+    cleanup();
+    alert("워크시트를 불러오지 못했습니다. 도서 정보에 워크시트가 등록되어 있는지 확인해 주세요.");
+  };
+
+  // 같은 책을 다시 눌렀을 때도 onload가 확실히 돌도록 먼저 비우고 넣는다
+  img.removeAttribute("src");
+  img.src = `/admin/monitor/worksheet/${page.contentId}`;
 }
 
 /* ── 추천 도서 교체 (2026-09-02) ────────────────────────────────────────────────
@@ -777,34 +906,29 @@ function resetResultMessage(bookTitle, result) {
 
 /* stat-row — 독서시간/기본문제/심화문제/획득뱃지 전부 선택된 책 페이지(content_id) 기준이다.
    뱃지도 예전엔 학생 전체 합산이라 A책 카드에 B책 뱃지가 같이 보이는 문제가 있었다(2026-07-29 수정) */
-function renderStatRow(el, card, page) {
-  // 처음 점수 → 최종 점수(재도전으로 갱신됐을 때만 화살표로 함께 표시), 2026-08-28
-  let basicText = "-";
-  if (page.basicTotalCount) {
-    basicText = `${page.basicCorrectCount ?? 0}/${page.basicTotalCount}`;
-    if (page.basicFinalCorrectCount != null && page.basicFinalCorrectCount !== page.basicCorrectCount) {
-      basicText += ` → ${page.basicFinalCorrectCount}/${page.basicTotalCount}`;
-    }
-  }
-  const advancedText = page.advancedTotalCount ? `${page.advancedCorrectCount ?? 0}/${page.advancedTotalCount}` : "-";
+/* 점수 한 칸 — 최종 점수만 보여준다(2026-09-14).
+   재도전으로 갱신된 처음 점수(7/12 → 10/12)를 같이 적으려면 칸 폭이 약 150px 필요한데, 카드가
+   한 줄에 5개라 칸 안쪽이 약 100px밖에 안 된다. 폰트를 줄여도 못 맞춘다. 처음 점수는 독서일지와
+   결과 화면에서 확인한다. 값 자체는 서버가 계속 내려주므로(basicCorrectCount) 되살리기는 쉽다. */
+function scoreHtml(first, final, total) {
+  return `${final ?? first}/${total}`;
+}
+
+function renderStatRow(el, card, page, isLatestPage) {
+  // 최종 점수(재도전 반영). 처음 점수는 칸 폭이 모자라 적지 않는다 — scoreHtml 주석 참고.
+  const basicText = page.basicTotalCount
+    ? scoreHtml(page.basicCorrectCount ?? 0, page.basicFinalCorrectCount, page.basicTotalCount)
+    : "-";
+  const advancedText = page.advancedTotalCount
+    ? scoreHtml(page.advancedCorrectCount ?? 0, null, page.advancedTotalCount)
+    : "-";
   // 문제풀이를 시작한 뒤로는 독서 시간이 더 흐르면 안 된다(서버가 이미 그 시점 값으로 얼려서 내려줌) —
   // READING/TIME_OVER(아직 순수 독서 중)일 때만 로컬로 초를 더 올려서 보여준다.
-  const stillReading = card.cardStatus === "READING" || card.cardStatus === "TIME_OVER";
+  // 과거 책 페이지는 이미 끝난 책이라 초를 올리면 안 된다 — 최신 책 페이지에서만 로컬로 흘린다.
+  const stillReading = isLatestPage && (card.cardStatus === "READING" || card.cardStatus === "TIME_OVER");
   const elapsed = stillReading ? liveElapsed(page.elapsedMinutes, card._syncedAt) : page.elapsedMinutes;
   const readingTimeText = elapsed != null ? `${elapsed}분` : "-";
-  const recommendedText = page.readingTimeMinutes != null ? `권장 ${page.readingTimeMinutes}분` : "";
   const isOverTime = page.readingTimeMinutes != null && elapsed != null && elapsed > page.readingTimeMinutes;
-
-  // 첫 제출 뒤 basicStatus는 항상 DONE — 합격 여부는 grade로 가른다(2026-08-28).
-  //   KING=만점 / FRIEND=통과 / grade 없음=재도전 필요
-  const basicPill = page.basicStatus === "DONE"
-    ? (page.basicGrade === "KING"
-        ? `<span class="stat-pill pill-pass">만점</span>`
-        : page.basicGrade === "FRIEND"
-          ? `<span class="stat-pill pill-pass">통과</span>`
-          : `<span class="stat-pill pill-retry">재도전</span>`)
-    : "";
-  const advancedPill = page.advancedCorrectCount != null ? `<span class="stat-pill pill-pass">완료</span>` : "";
 
   // 획득 뱃지 — 실제 뱃지 이미지(/images/icons/badge_<id>.png)를 획득순으로 나열한다(2026-09-02).
   // badgeIds가 없는 구버전 Firestore 문서는 예전처럼 방패 아이콘 하나로 폴백한다.
@@ -814,28 +938,28 @@ function renderStatRow(el, card, page) {
     ? badgeIds.map((id) => `<img class="badge-img" src="/images/icons/badge_${id}.png" alt="뱃지" onerror="this.remove()" />`).join("")
     : (page.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-");
 
+  /* 2×2 배치(2026-09-14) — 칸마다 라벨과 값 한 줄이 전부다.
+     값 아래에 붙이던 딸림줄(권장 시간, "정독왕"·"완독" 같은 뱃지 pill)은 뺐다 — 칸을 두 줄로
+     만들어 카드가 세로로 늘어나는 데 비해, 같은 정보가 이미 카드 테두리·상태 배지(합격 여부)와
+     획득 뱃지 칸(뱃지 종류)에 나와 있다. 권장 시간 초과는 계속 칸 테두리 깜빡임으로 알린다. */
   el.querySelector(".stat-row").innerHTML = `
     <div class="stat-cell${isOverTime ? " stat-cell--overtime" : ""}">
       <div class="stat-label">독서 시간</div>
       <div class="stat-value ${isOverTime ? "value-danger" : ""}">${readingTimeText}</div>
-      <div class="stat-sub">${recommendedText}</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">기본 문제</div>
       <div class="stat-value">${basicText}</div>
-      <div class="stat-sub">${basicPill}</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">심화 문제</div>
       <div class="stat-value">${advancedText}</div>
-      <div class="stat-sub">${advancedPill}</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">획득 뱃지</div>
       <div class="stat-value badge-value">${badgeIcons}</div>
     </div>
-  `;
-}
+  `;}
 
 function formatTime(isoString) {
   if (!isoString) return "-";

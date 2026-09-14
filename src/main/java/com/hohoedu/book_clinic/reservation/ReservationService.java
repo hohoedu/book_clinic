@@ -2,7 +2,6 @@ package com.hohoedu.book_clinic.reservation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -54,6 +53,9 @@ public class ReservationService {
     /** "월 = 4주"는 이 프로그램의 정책. 예약 오픈 기간도 여기 맞춘다 (28일) */
     private static final int BATCH_WEEKS = 4;
 
+    /** 4주 일괄 미리보기에서 "기간이 아직 정해지지 않은 이용권" 몫을 한데 묶어 세는 키 */
+    private static final LocalDate UNASSIGNED_CYCLE = LocalDate.MIN;
+
     private final ReservationRepository repository;
     private final StudentRepository studentRepository;
     private final PassService passService;
@@ -82,9 +84,20 @@ public class ReservationService {
         return repository.findOpenSlots(centerCode, from, to, studentId == null ? "" : studentId);
     }
 
+    /**
+     * 내 예약 목록. 각 건에 학생 채널의 취소 가능 여부(24시간 마감)를 함께 채워 내린다 —
+     * 앱이 취소 버튼을 비활성화할 수 있게 하려는 것이고, 실제 차단은 cancel()이 다시 한다.
+     */
     public List<ReservationRespDTO.ReservationItemDTO> findMyReservations(String studentId) {
         requireStudent(studentId);
-        return repository.findMyReservations(studentId, KstClock.today());
+        List<ReservationRespDTO.ReservationItemDTO> reservations =
+                repository.findMyReservations(studentId, KstClock.today());
+        LocalDateTime now = KstClock.now();
+        for (ReservationRespDTO.ReservationItemDTO r : reservations) {
+            r.setCancelable("RESERVED".equals(r.getStatus()) && r.getStartsAt() != null
+                    && !now.isAfter(r.getStartsAt().minusHours(CANCEL_DEADLINE_HOURS)));
+        }
+        return reservations;
     }
 
     /**
@@ -118,6 +131,13 @@ public class ReservationService {
 
     /** 입실 허용 시작 시각 = 회차 시작 시각의 이만큼 전부터(2026-08-20, 조기 도착 허용). 정책 확정 전 수치라 상수 하나로 뺐다 — 나중에 값만 바꾸면 된다 */
     private static final long EARLY_ENTRY_MINUTES = 10;
+
+    /**
+     * 학생/학부모의 취소·변경 마감 = 회차 시작 이만큼 전까지(2026-09-14). 예약이 곧 이용권 차감이
+     * 되면서 취소에 마감이 생겼다 — 직전 취소를 허용하면 그 자리를 다른 학생이 쓸 수 없는데도
+     * 횟수는 온전히 돌아가기 때문이다. 센터 직원의 대리 취소에는 적용하지 않는다.
+     */
+    private static final long CANCEL_DEADLINE_HOURS = 24;
 
     /**
      * 입실 시점에 그날 예약을 ATTENDED로 전환한다. {@code MonitorService.enterSession}이 부른다.
@@ -167,9 +187,23 @@ public class ReservationService {
         }
     }
 
-    /** 그 학생이 오늘 출석 확정(ATTENDED)한 회차 수 — 책 추천 총량(회차 수 × 2권) 계산에 쓴다(2026-08-28) */
-    public int countAttendedSlotsToday(String studentId) {
-        return repository.countAttendedSlotsByStudentAndDate(studentId, KstClock.today());
+    /**
+     * 그 학생이 {@code exitedAt}에 퇴실한 뒤 <b>새로 시작하는</b> 회차의 이용 시간대에 지금 들어와
+     * 있는지 (2026-09-14). "퇴실 = 그날 종료" 가드를 하루 여러 회차 학생에게 맞추는 판정이다 —
+     * 1회차에 왔다가 퇴실하고 2회차를 건너뛴 뒤 3회차에 다시 오는 흐름을 허용해야 한다.
+     *
+     * 시간대 판정은 {@code markAttended}와 같은 규칙([시작 - EARLY_ENTRY_MINUTES, 종료])이고,
+     * {@code startsAt}이 퇴실 시각보다 뒤인 회차만 본다 — 그래서 방금 퇴실한 그 회차 안에서 QR을
+     * 다시 찍는 건(같은 회차 재입실) 통과하지 않는다. 세션에 회차 정보가 없어서 "어느 회차를 썼는지"를
+     * 직접 물을 수 없기 때문에, 퇴실 시각을 회차 경계 대신 쓴다.
+     */
+    public boolean hasSlotWindowStartingAfter(String studentId, LocalDateTime exitedAt) {
+        if (exitedAt == null) return false;
+        LocalDateTime now = KstClock.now();
+        return repository.findActiveReservationsByStudentAndDate(studentId, KstClock.today()).stream()
+                .anyMatch(r -> r.getStartsAt().isAfter(exitedAt)
+                        && !now.isBefore(r.getStartsAt().minusMinutes(EARLY_ENTRY_MINUTES))
+                        && !now.isAfter(r.getEndsAt()));
     }
 
     /**
@@ -218,12 +252,20 @@ public class ReservationService {
         return reserveOne(student, slotInstanceId, adminUserId, "ADMIN");
     }
 
+    /**
+     * 학생/학부모 취소 — 회차 시작 24시간 전까지만 가능하다(2026-09-14).
+     * 예약 변경도 앱에서 "취소 후 재예약"으로 처리되므로 같은 마감을 탄다.
+     */
     @Transactional
     public void cancel(String studentId, Long reservationId, String reason) {
         cancelInternal(studentId, reservationId, reason, studentId, "STUDENT");
     }
 
-    /** 센터 직원 대리 취소 — 생성 로그와 마찬가지로 changed_by_role을 ADMIN으로 남긴다 */
+    /**
+     * 센터 직원 대리 취소 — 생성 로그와 마찬가지로 changed_by_role을 ADMIN으로 남긴다.
+     * 24시간 마감은 적용하지 않는다(2026-09-14) — 직원은 웹에서 당일에도 취소·변경할 수 있다.
+     * 현장에서 학생이 못 오게 된 사정을 처리할 수 있어야 해서, 이 예외를 정책으로 둔 것이다.
+     */
     @Transactional
     public void cancelByAdmin(String studentId, Long reservationId, String reason, String adminUserId) {
         cancelInternal(studentId, reservationId, reason, adminUserId, "ADMIN");
@@ -240,15 +282,43 @@ public class ReservationService {
             throw new Exception404("예약을 찾을 수 없습니다.");
         }
 
+        // 취소 마감(2026-09-14) — 학생/학부모 채널만 적용한다. 상태를 바꾸기 전에 먼저 막아야
+        // 이용권 복구까지 통째로 일어나지 않는다.
+        if (!"ADMIN".equals(changedByRole)) {
+            requireCancelableByStudent(reservationId);
+        }
+
         int updated = repository.cancelReservation(reservationId, studentId, reason);
         if (updated == 0) {
             throw new Exception400("이미 취소되었거나 처리할 수 없는 예약입니다.");
         }
 
         repository.decrementReservedCount(slotInstanceId);
+        // 이용권 복구(2026-09-14) — 예약 시 깎은 1회를 되돌린다. cancelReservation이 RESERVED만
+        // 전환하므로 여기 도달한 건은 아직 쓰지 않은 예약이다(ATTENDED/NOSHOW는 위에서 0행으로
+        // 걸러진다 — 출석했거나 노쇼로 소진된 횟수는 돌려주지 않는다는 정책).
+        passService.restoreForReservation(reservationId);
         repository.insertLog(reservationId, "RESERVED", "CANCELED", changedBy, changedByRole, reason);
 
         log.info("[예약] 취소 — reservationId={}, studentId={}, reason={}", reservationId, studentId, reason);
+    }
+
+    /**
+     * 학생 채널 취소·변경 마감 검사 — 회차 시작 {@value #CANCEL_DEADLINE_HOURS}시간 전까지만 허용한다.
+     * 예약을 못 찾으면(이미 지난 회차 등) 여기서 판단하지 않고 통과시킨다 — 취소 UPDATE가
+     * 0행으로 떨어져 "처리할 수 없는 예약"으로 안내되는 쪽이 메시지가 정확하다.
+     */
+    private void requireCancelableByStudent(Long reservationId) {
+        ReservationRespDTO.ReservationItemDTO reservation = repository.findReservationById(reservationId);
+        if (reservation == null || reservation.getStartsAt() == null) {
+            return;
+        }
+        LocalDateTime deadline = reservation.getStartsAt().minusHours(CANCEL_DEADLINE_HOURS);
+        if (KstClock.now().isAfter(deadline)) {
+            throw new Exception400(slotLabel(reservation.getServiceDate(), reservation.getSeq())
+                    + " — 이용 " + CANCEL_DEADLINE_HOURS + "시간 전까지만 취소·변경할 수 있습니다."
+                    + " 센터로 문의해주세요.");
+        }
     }
 
     // ── 4주 일괄 ─────────────────────────────────────────────────────────
@@ -272,14 +342,19 @@ public class ReservationService {
         Map<LocalDate, ReservationRespDTO.SlotOptionDTO> byDate = slots.stream()
                 .collect(Collectors.toMap(ReservationRespDTO.SlotOptionDTO::getServiceDate, s -> s));
 
-        // 예약 상한(2026-08-28)을 미리보기에도 반영한다. 이 배치의 여러 주차가 같은 이용 주기에
-        // 몰릴 수 있어, 주기마다 상한과 (DB상 기존 예약 + 이 배치에서 앞서 OPEN으로 잡힌 주차)를
-        // 누적 추적한다 — 상한을 넘기는 순간부터 남은 주차는 MONTH_FULL/NO_PASS로 표시한다.
+        // 이용권 잔여를 미리보기에도 반영한다. 이 배치의 여러 주차가 같은 이용 주기에 몰릴 수 있어,
+        // 주기마다 잔여와 "이 배치에서 앞서 OPEN으로 잡힌 주차 수"를 누적 추적한다 — 잔여를
+        // 넘기는 순간부터 남은 주차는 MONTH_FULL/NO_PASS로 표시한다.
         //
-        // 2026-09-07 자동결제 전환으로 단위가 달력 월에서 "결제일 기준 1개월 주기"로 바뀌었다.
-        // 주기 시작일을 캐시 키로 쓰되, 이용권이 없는 날짜는 주기 자체가 없으므로(cycleFrom=null)
-        // 그 날짜를 키로 삼는다 — 어차피 상한 0이라 서로 섞여도 판정이 달라지지 않는다.
-        Map<LocalDate, PassRespDTO.CycleDTO> cycleByKey = new HashMap<>();
+        // 2026-09-14 예약 시 차감 전환 이후 기준값은 총량(capacity)이 아니라 잔여(remaining)다 —
+        // DB에 이미 잡혀 있는 예약은 잔여에서 이미 빠져 있으므로, 예전처럼 기존 예약 건수를
+        // 따로 세면 같은 예약을 두 번 차감하게 된다.
+        //
+        // 주기 시작일을 캐시 키로 쓴다. 기간이 정해진 이용권이 없는 날짜(cycleFrom=null)는 —
+        // 아직 첫 예약이 없어 90일이 시작되지 않은 이용권만 있거나, 이용권이 아예 없는 경우다 —
+        // 날짜별로 키를 나누지 않고 한 바구니(UNASSIGNED_CYCLE)로 묶는다. 미배정 이용권의 잔여는
+        // 어느 날짜에나 같은 한 덩어리라서, 날짜마다 따로 세면 잔여 1회로 4주를 다 잡을 수 있다고
+        // 잘못 안내한다.
         Map<LocalDate, Integer> capByCycle = new HashMap<>();
         Map<LocalDate, Integer> usedByCycle = new HashMap<>();
 
@@ -291,11 +366,9 @@ public class ReservationService {
             item.setSeq(seq);
 
             PassRespDTO.CycleDTO cycle = passService.cycleOn(studentId, "BOOK", date);
-            LocalDate cycleKey = cycle.getCycleFrom() != null ? cycle.getCycleFrom() : date;
-            cycleByKey.putIfAbsent(cycleKey, cycle);
-            int cap = capByCycle.computeIfAbsent(cycleKey, k -> cycle.getCapacity());
-            int used = usedByCycle.computeIfAbsent(cycleKey, k -> cycle.getCycleFrom() == null ? 0
-                    : repository.countReservationsInMonth(studentId, cycle.getCycleFrom(), cycle.getCycleUntil()));
+            LocalDate cycleKey = cycle.getCycleFrom() != null ? cycle.getCycleFrom() : UNASSIGNED_CYCLE;
+            int cap = capByCycle.computeIfAbsent(cycleKey, k -> cycle.getRemaining());
+            int used = usedByCycle.computeIfAbsent(cycleKey, k -> 0);
 
             if (slot == null) {
                 item.setTargetStatus("NOT_OPEN");
@@ -315,7 +388,8 @@ public class ReservationService {
                     // 조합으로는 이 주차를 신청할 수 없다(reserveOne이 실제 확정 시점에도 다시 막는다)
                     item.setTargetStatus("DAY_CONFLICT");
                 } else if (used >= cap) {
-                    item.setTargetStatus(cap == 0 ? "NO_PASS" : "MONTH_FULL");
+                    // 이용권 자체가 없는 날짜(주기 없음)는 NO_PASS, 있지만 잔여를 다 쓴 경우는 MONTH_FULL
+                    item.setTargetStatus(cycle.getCycleFrom() == null ? "NO_PASS" : "MONTH_FULL");
                 } else {
                     item.setTargetStatus("OPEN");
                     usedByCycle.put(cycleKey, used + 1);
@@ -386,28 +460,6 @@ public class ReservationService {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 이미 종료된 회차입니다.");
         }
 
-        // 예약 상한 하드체크(2026-08-28) — "그 주기에 이미 잡아둔 비취소 예약 건수 ≥ 그 주기
-        // 이용권 total_count 합"이면 막는다. 슬롯의 service_date가 속한 주기를 기준으로 본다(오늘이
-        // 아니라) — 4주 일괄(reserveOne을 날짜별로 반복)이 주기 경계를 넘어도 각 슬롯이 자기 주기의
-        // 상한을 탄다. 단위가 달력 월에서 주기로 바뀐 배경은 PassService.cycleOn 참고(2026-09-07). 차감/홀드는 하지 않는다(예약 취소가 잦아 홀드 방식은 되돌림 비용이 큼) —
-        // 실제 이용권 차감은 입실 시점(MonitorService.enterSession)에 그날 회차 수만큼 일어난다.
-        // 그 달 이용권이 아직 없으면 상한 0 → 결제 전까지 그 달 예약 불가.
-        // 위 lockStudentForReservation이 같은 학생의 동시 예약 요청을 직렬화하므로, 이 SELECT 뒤
-        // INSERT까지 다른 요청이 끼어들어 상한을 넘기지 못한다.
-        PassRespDTO.CycleDTO cycle = passService.cycleOn(student.getStudentId(), "BOOK", slot.getServiceDate());
-        int cycleCap = cycle.getCapacity();
-        int reservedInCycle = cycle.getCycleFrom() == null ? 0
-                : repository.countReservationsInMonth(student.getStudentId(),
-                        cycle.getCycleFrom(), cycle.getCycleUntil());
-        if (reservedInCycle >= cycleCap) {
-            if (cycleCap == 0) {
-                throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
-                        + " — 해당 날짜에 쓸 수 있는 이용권이 없습니다. 결제 후 예약해주세요.");
-            }
-            throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
-                    + " — 이용 기간 내 예약 가능 횟수(" + cycleCap + "회)를 모두 채우셨습니다.");
-        }
-
         // 하루 2회차 상한 정책(2026-08-28, 기존 1 → 2) — 4주 일괄(reserveOne을 날짜별로 반복 호출)로
         // 들어와도 그대로 적용된다. 같은 슬롯 재예약 시도도 여기서 걸린다(2026-08-20 — 유니크 인덱스는
         // status='RESERVED'만 보므로 ATTENDED인 슬롯 재예약까지는 못 막았었다).
@@ -440,6 +492,23 @@ public class ReservationService {
             // 여기로는 안 온다.
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
                     + " — 이미 예약한 회차입니다.");
+        }
+
+        // 이용권 차감(2026-09-14 정책 변경) — 예약을 잡는 순간 1회 깎는다. 이전에는 예약 시점에
+        // "그 주기 예약 건수 ≥ 이용권 총량"만 검사하고 실제 차감은 입실(MonitorService.enterSession)에서
+        // 했는데, 그 방식은 노쇼가 횟수를 잃지 않아 자리를 잡아두기만 하는 예약을 막지 못했다.
+        // 이제 잔여가 곧 예약 가능 횟수라 별도의 상한 검사가 필요 없다(같은 값을 두 번 세면 이중차감).
+        //
+        // 예약 행을 먼저 넣고 차감하는 이유는 차감 이력(pass_use)이 reservation_id를 들고 있어야
+        // 취소 시 되돌릴 대상을 되짚을 수 있기 때문이다. 차감이 실패하면 여기서 예외를 던져
+        // @Transactional이 예약 INSERT와 슬롯 정원 증가까지 전부 롤백한다.
+        //
+        // 위 lockStudentForReservation이 같은 학생의 동시 예약 요청을 직렬화하므로, 잔여 1회를
+        // 두 요청이 동시에 깎아 마이너스로 내려가는 일은 없다(decrementRemain의 조건도 이중 방어).
+        if (!passService.consumeForReservation(student.getStudentId(), "BOOK",
+                command.getReservationId(), slot.getServiceDate())) {
+            throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
+                    + " — 해당 날짜에 쓸 수 있는 이용권이 없습니다. 결제 후 예약해주세요.");
         }
 
         repository.insertLog(command.getReservationId(), null, "RESERVED", changedBy, changedByRole, null);

@@ -43,9 +43,13 @@
     </delete>
 
     <!--
-      수집 카드 이미지 경로 (2026-09-02) — 책 1권당 1행(content_id가 PK)이라 MERGE로 upsert한다.
-      표지(content.image_url)와 다른 이미지이고, 도서 마스터를 건드리지 않으려고 테이블을 분리했다.
-      행이 없으면 카드 이미지가 없는 책 → 화면이 정적 리소스(/images/student_result/card.png)로 폴백한다.
+      도서 부가 이미지 경로 (2026-09-02 카드 / 2026-09-14 워크시트) — 책 1권당 1행(content_id가 PK)이라
+      MERGE로 upsert한다. 표지(content.image_url)와 다른 이미지이고, 도서 마스터를 건드리지 않으려고
+      테이블을 분리했다. 값이 NULL이면 그 이미지가 없는 책 → 카드는 정적 리소스
+      (/images/student_result/card.png)로 폴백하고, 워크시트는 모니터링에서 출력 아이콘이 안 뜬다.
+
+      카드와 워크시트가 한 행을 공유하므로 "지우기"는 DELETE가 아니라 해당 컬럼만 NULL로 만든다 —
+      DELETE로 행을 통째로 날리면 다른 쪽 이미지까지 같이 사라진다. 둘 다 비면 purgeEmptyPath가 치운다.
     -->
     <update id="upsertCardPath">
         MERGE erp_bookstore_card_path AS target
@@ -58,12 +62,38 @@
                               VALUES (source.content_id, #{cardUrl, jdbcType=VARCHAR}, #{registeredBy, jdbcType=VARCHAR});
     </update>
 
-    <delete id="deleteCardPath">
-        DELETE FROM erp_bookstore_card_path WHERE content_id = #{contentId}
+    <update id="upsertWorksheetPath">
+        MERGE erp_bookstore_card_path AS target
+        USING (SELECT #{contentId, jdbcType=INTEGER} AS content_id) AS source
+        ON target.content_id = source.content_id
+        WHEN MATCHED THEN UPDATE SET worksheet_url = #{worksheetUrl, jdbcType=VARCHAR},
+                                     registered_by = #{registeredBy, jdbcType=VARCHAR},
+                                     registered_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT (content_id, worksheet_url, registered_by)
+                              VALUES (source.content_id, #{worksheetUrl, jdbcType=VARCHAR}, #{registeredBy, jdbcType=VARCHAR});
+    </update>
+
+    <update id="clearCardPath">
+        UPDATE erp_bookstore_card_path SET card_url = NULL WHERE content_id = #{contentId}
+    </update>
+
+    <update id="clearWorksheetPath">
+        UPDATE erp_bookstore_card_path SET worksheet_url = NULL WHERE content_id = #{contentId}
+    </update>
+
+    <!-- 카드/워크시트가 둘 다 비워진 행 정리 — 빈 껍데기 행을 남겨두지 않는다 -->
+    <delete id="purgeEmptyPath">
+        DELETE FROM erp_bookstore_card_path
+        WHERE content_id = #{contentId} AND card_url IS NULL AND worksheet_url IS NULL
     </delete>
 
     <select id="findCardPath" resultType="java.lang.String">
         SELECT card_url FROM erp_bookstore_card_path WHERE content_id = #{contentId}
+    </select>
+
+    <!-- 워크시트 원본 호스팅 주소 — 프록시(/admin/monitor/worksheet/{contentId})만 쓰고 화면엔 안 내려간다 -->
+    <select id="findWorksheetPath" resultType="java.lang.String">
+        SELECT worksheet_url FROM erp_bookstore_card_path WHERE content_id = #{contentId}
     </select>
 
     <select id="deleteBook" statementType="CALLABLE">
@@ -157,6 +187,8 @@
                bc.image_url      AS imageUrl,
                bc.reading_time   AS readingTime,
                bc.difficulty     AS difficulty,
+               cp.card_url       AS cardUrl,
+               cp.worksheet_url  AS worksheetUrl,
                COALESCE(da.name, dr.name, dc.name) AS extraDetailName
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_code g ON g.gubun = 'G' AND g.code = bc.genre
@@ -165,6 +197,7 @@
         LEFT JOIN erp_bookstore_content_detail da ON da.content_id = bc.content_id AND da.gubun = 'A'
         LEFT JOIN erp_bookstore_content_detail dr ON dr.content_id = bc.content_id AND dr.gubun = 'R'
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
+        LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = bc.content_id
         <where>
             <if test="title != null and title != ''">AND bc.original_title LIKE '%' + #{title} + '%'</if>
             <if test="author != null and author != ''">AND bc.author LIKE '%' + #{author} + '%'</if>

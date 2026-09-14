@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.pass;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -26,18 +27,32 @@ public interface PassRepository {
                     @Param("validUntil") LocalDate validUntil, @Param("totalCount") int totalCount);
 
     /**
-     * 이 학생의 이 서비스 이용권 중 가장 늦은 valid_until — 다음 결제의 대상월을 정할 때 쓴다.
-     * 이미 지난 달이어도 상관없다(공백기 판단은 호출부가 한다), 살아있는(revoked_at NULL) 것만 본다.
+     * 유효기간 확정 — 아직 미배정(valid_from IS NULL)인 이용권에만 기간을 박는다(2026-09-14).
+     * 조건부 UPDATE라 두 요청이 동시에 들어와도 먼저 도착한 쪽만 1행을 받는다.
+     *
+     * @param startDate 첫 예약이 잡힌 회차의 날짜 (= valid_from)
+     * @param addDays   valid_until까지 더할 일수 (90일 정책이면 89)
      */
-    LocalDate findLatestValidUntil(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode);
+    int activatePass(@Param("passId") int passId, @Param("startDate") LocalDate startDate,
+                     @Param("addDays") int addDays);
 
     /**
-     * 지금 쓸 수 있는 이용권 1건 — 오래 전에 받은 것부터 소진시킨다.
-     * 이용권이 여러 장 겹칠 수 있어서(전월 잔여 + 이번 달분) 어느 것부터 깎을지 정해야 하는데,
-     * 먼저 받은 것부터 쓰는 편이 사용자에게 유리하고 환불 계산도 단순해진다.
+     * 유효기간 해제 — 첫 예약이 취소되어 한 번도 쓰지 않은 상태로 되돌아간 이용권을 다시
+     * 미배정으로 만든다. 살아있는 차감이 남아 있는 이용권에는 호출하지 않는다(호출부가 판단).
      */
-    PassRespDTO.PassDTO findUsablePass(@Param("studentId") String studentId,
-                                       @Param("serviceCode") String serviceCode);
+    int deactivatePass(@Param("passId") int passId);
+
+    /**
+     * {@code date}에 쓸 수 있는 이용권 1건 — 먼저 만료되는 것부터 소진시킨다.
+     * 이용권이 여러 장 겹칠 수 있어서(전 주기 잔여 + 이번 주기분) 어느 것부터 깎을지 정해야 하는데,
+     * 먼저 만료되는 것부터 쓰는 편이 사용자에게 유리하다.
+     *
+     * 기준이 "오늘"이 아니라 파라미터인 이유는 차감 시점이 입실에서 예약으로 옮겨졌기 때문이다
+     * (2026-09-14) — 9월 30일 회차를 9월 14일에 예약하면 9월 30일을 덮는 이용권에서 까야 한다.
+     */
+    PassRespDTO.PassDTO findUsablePassOn(@Param("studentId") String studentId,
+                                         @Param("serviceCode") String serviceCode,
+                                         @Param("date") LocalDate date);
 
     /**
      * 1회 차감. WHERE의 remain_count > 0 이 동시 요청에서 마이너스로 내려가는 것을 막는다
@@ -45,26 +60,39 @@ public interface PassRepository {
      */
     int decrementRemain(@Param("passId") int passId);
 
-    /** 차감 이력. student_id + used_date UNIQUE라 같은 날 두 번째 시도는 예외로 튄다 */
+    /** 차감 이력 1행 = 예약 1건 = remain_count 1 감소 (2026-09-14 예약 시 차감) */
     void insertUse(@Param("passId") int passId, @Param("studentId") String studentId,
-                   @Param("sessionId") Integer sessionId, @Param("usedDate") LocalDate usedDate);
+                   @Param("reservationId") Long reservationId, @Param("usedDate") LocalDate usedDate);
 
     /**
-     * 오늘 이미 차감한 횟수(pass_use 행 수) — "그날 회차 수만큼 차감"(2026-08-28) 정책에서
-     * 목표 차감수와 비교해 부족분만 채우는 데 쓴다. 재입실 시 이 값이 목표와 같거나 크면 추가 차감 없음.
+     * 그 예약으로 깐 살아있는(canceled_at IS NULL) 차감 이력 — 예약 취소 시 복구 대상.
+     * 정상적으로는 예약 1건에 1행이지만, 과거 데이터나 재시도로 여러 행이 있어도 전부 되돌린다.
      */
-    int countTodayUse(@Param("studentId") String studentId, @Param("usedDate") LocalDate usedDate);
+    List<PassRespDTO.UseDTO> findLiveUsesByReservation(@Param("reservationId") Long reservationId);
+
+    /**
+     * 1회 복구 — 예약 취소로 차감을 되돌린다. remain_count가 total_count를 넘지 않도록
+     * 조건을 걸어, 같은 예약에 복구가 두 번 들어와도 잔여가 부풀지 않는다.
+     * 이미 회수(환불)된 이용권은 복구하지 않는다 — 환불로 0이 된 잔여가 되살아나면 안 된다.
+     */
+    int incrementRemain(@Param("passId") int passId);
+
+    /** 차감 이력 무효화 — 복구된 행에 취소 시각을 찍는다. 이미 찍혀 있으면 0행(중복 복구 방지) */
+    int markUseCanceled(@Param("useId") int useId);
 
     /** 이 학생이 이 서비스에 쓸 수 있는 총 잔여 횟수 */
     int sumRemain(@Param("studentId") String studentId, @Param("serviceCode") String serviceCode);
 
     /**
-     * 그 날짜를 덮고 있는 살아있는 이용권들의 기간 합집합과 total_count 합 — 예약 상한 검사용.
+     * 그 날짜를 덮고 있는 살아있는 이용권들의 기간 합집합과 total_count / remain_count 합.
      *
      * 2026-09-07 자동결제 전환 전에는 달력 월과 겹치는 이용권을 합쳤는데(sumMonthlyTotalCount),
      * 주기가 결제일 기준 1개월이 되면서 한 달에 두 주기가 걸치게 됐다. 그대로 두면 그 달 상한이
      * 두 주기의 합이 되어 최대 두 배로 부풀어 오른다. 그래서 "그 달"이 아니라 "그 날짜가 속한
      * 주기"를 기준으로 바꾼다. 덮는 이용권이 없으면 capacity=0, 기간은 null이다.
+     *
+     * 2026-09-14 예약 시 차감 전환 이후 예약 가능 여부를 판정하는 값은 capacity(총량)가 아니라
+     * remaining(잔여)이다 — 예약이 곧 차감이라 이미 잡아둔 예약은 잔여에서 빠져 있다.
      */
     PassRespDTO.CycleDTO findCycleOn(@Param("studentId") String studentId,
                                      @Param("serviceCode") String serviceCode,
@@ -73,7 +101,7 @@ public interface PassRepository {
     /** 결제/청구 건으로 발급된 이용권 찾기 (환불 시 회수 대상) */
     PassRespDTO.PassDTO findByRef(@Param("source") String source, @Param("refNo") String refNo);
 
-    /** 이 이용권에서 실제로 차감된 횟수 — 환불 규정의 "몇 회 썼는가" */
+    /** 이 이용권에서 실제로 차감된 횟수 — 환불 규정의 "몇 회 썼는가". 취소로 되돌린 행은 세지 않는다 */
     int countUse(@Param("passId") int passId);
 
     /**

@@ -253,6 +253,41 @@
               <input type="text" id="bookInfoExtraDetail">
             </div>
 
+            <!--
+              부가 이미지 (2026-09-14) — 표지(도서 이미지)와 달리 erp_bookstore_card_path에 따로
+              저장되는 두 장이다. 책 1권당 각각 1장만 등록되며(content_id가 PK), 다시 올리면 교체된다.
+                워크시트 : 실시간 모니터링 카드의 프린터 아이콘으로 선생님이 뽑아 쓰는 출력물
+                수집 카드 : 완독 시 학생에게 지급되는 카드 그림
+              도서 정보 입력란과 성격이 달라 구분선으로 나눠 폼 아래쪽에 모아둔다.
+            -->
+            <div class="form-divider"></div>
+
+            <div class="form-row image-row">
+              <label>워크시트</label>
+              <div class="image-area">
+                <img id="bookWorksheetImage" alt="워크시트" hidden>
+                <span id="bookWorksheetEmpty" class="asset-empty">등록된<br>워크시트 없음</span>
+                <div class="image-actions">
+                  <input type="file" id="bookWorksheetInput" accept="image/*" hidden>
+                  <button type="button" id="btnWorksheetChange" class="btn outline small">워크시트 등록</button>
+                  <button type="button" id="btnWorksheetDelete" class="btn danger-outline small">워크시트 삭제</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row image-row">
+              <label>수집 카드</label>
+              <div class="image-area">
+                <img id="bookCardImage" alt="수집 카드" hidden>
+                <span id="bookCardEmpty" class="asset-empty">등록된<br>카드 없음</span>
+                <div class="image-actions">
+                  <input type="file" id="bookCardInput" accept="image/*" hidden>
+                  <button type="button" id="btnCardChange" class="btn outline small">카드 등록</button>
+                  <button type="button" id="btnCardDelete" class="btn danger-outline small">카드 삭제</button>
+                </div>
+              </div>
+            </div>
+
             <!-- 비본사(지점) 우리 센터 하위 도서 — 기본 숨김, 비본사 도서 선택 시 노출 -->
             <div class="branch-item-panel" id="branchItemPanel" hidden>
               <h3>하위도서</h3>

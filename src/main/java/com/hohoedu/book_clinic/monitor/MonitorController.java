@@ -3,10 +3,12 @@ package com.hohoedu.book_clinic.monitor;
 import java.time.LocalDate;
 import java.util.Map;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -42,6 +44,22 @@ public class MonitorController {
         LocalDate targetDate = date == null || date.isBlank() ? KstClock.today() : LocalDate.parse(date);
         String centerCode = centerAccessGuard.requireCenterCode(userDetails);
         return ResponseEntity.ok(ApiUtils.success(monitorService.getLiveView(targetDate, centerCode)));
+    }
+
+    /**
+     * 워크시트(출력용 이미지) 스트리밍 (2026-09-14) — 모니터링 카드의 출력 아이콘이 이 주소를 본다.
+     *
+     * 가비아 호스팅 주소를 그대로 화면에 내려주면 로그인하지 않은 사람도 URL만 알면 워크시트를
+     * 통째로 받아갈 수 있다. 그래서 주소는 서버 안에만 두고, 로그인한 직원에게만 바이트를 흘려준다.
+     * 브라우저 캐시에도 남기지 않는다(no-store) — 로그아웃 후 뒤로가기로 다시 뜨지 않게.
+     */
+    @GetMapping("/worksheet/{contentId}")
+    public ResponseEntity<byte[]> worksheet(@PathVariable Integer contentId) {
+        byte[] image = monitorService.readWorksheet(contentId);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, monitorService.worksheetContentType(contentId))
+                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
+                .body(image);
     }
 
     /**

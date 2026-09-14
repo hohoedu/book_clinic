@@ -38,19 +38,16 @@
       <!-- 상단 3단: 캐릭터/타이틀 · 문제풀이 결과 카드 · 신규 카드 -->
       <section class="result-top">
         <div class="hero">
-          <!-- 리본은 글자까지 그려진 이미지 한 장. 재도전 등급은 "정말 잘했어요!"가 맞지 않아
-               같은 자리에 텍스트 리본(#heroRibbonText)으로 대체한다 -->
-          <img class="ribbon-img" id="heroRibbon" th:src="@{/images/student_result/green.png}" alt="정말 잘했어요!" />
-          <span class="ribbon ribbon-green" id="heroRibbonText" hidden>조금만 더!</span>
           <!-- 달성 문구 이미지는 독서왕(ment.png)만 있어서, 나머지 등급은 같은 자리에
                텍스트 제목(#heroHeadlineText)으로 대체한다 (JS setHero) -->
           <div class="hero-headline">
             <img id="heroHeadline" data-grade="KING" th:src="@{/images/student_result/ment.png}" alt="독서왕 달성!" />
             <h1 class="hero-headline-text" id="heroHeadlineText" hidden>달성!</h1>
           </div>
-          <!-- 캐릭터는 아직 등급 구분 없이 한 종류(kidoc.png)만 있다 -->
+          <!-- 캐릭터는 등급(합격/불합격/만점)별 로티 애니메이션으로 교체된다 — JS(setHero)가
+               /lottie/basic_{fail|pass|perfect}_NN.json 중 하나를 골라 재생한다(2026-09-14) -->
           <div class="hero-character" id="heroCharacter" data-grade="KING">
-            <img th:src="@{/images/student_result/kidoc.png}" alt="호호책방 캐릭터" />
+            <div class="hero-character-anim" id="heroCharacterAnim"></div>
           </div>
         </div>
 
@@ -95,7 +92,6 @@
               <img id="newCardImg" th:src="@{/images/student_result/card.png}" alt="새로 획득한 카드" />
             </div>
           </div>
-          <p class="new-card-caption">신규 카드를 획득했어요!</p>
         </div>
       </section>
 
@@ -181,6 +177,7 @@
       </div>
     </main>
   </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>
   <script th:src="@{/js/student/student-main.js}"></script>
   <script th:src="@{/js/student/student-result.js}"></script>
 </body>

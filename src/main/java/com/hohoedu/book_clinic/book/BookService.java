@@ -73,6 +73,7 @@ public class BookService {
         bookRepository.registerContent(reqDTO);
         saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
         saveCardPath(reqDTO.getContentId(), reqDTO.getCardUrl(), registeredBy);
+        saveWorksheetPath(reqDTO.getContentId(), reqDTO.getWorksheetUrl(), registeredBy);
     }
 
     // ===================== 엑셀 일괄 등록 (2026-09-08) =====================
@@ -515,6 +516,7 @@ public class BookService {
             saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
         }
         saveCardPath(reqDTO.getContentId(), reqDTO.getCardUrl(), updatedBy);
+        saveWorksheetPath(reqDTO.getContentId(), reqDTO.getWorksheetUrl(), updatedBy);
     }
 
     /**
@@ -530,9 +532,30 @@ public class BookService {
     private void saveCardPath(Integer contentId, String cardUrl, String registeredBy) {
         if (contentId == null || cardUrl == null) return;
         if (cardUrl.isBlank()) {
-            bookRepository.deleteCardPath(contentId);
+            bookRepository.clearCardPath(contentId);
+            bookRepository.purgeEmptyPath(contentId);
         } else {
             bookRepository.upsertCardPath(contentId, cardUrl.trim(), registeredBy);
+        }
+    }
+
+    /**
+     * 워크시트(출력용) 이미지 경로 저장 (2026-09-14) — 실시간 모니터링에서 선생님이 뽑아 쓰는 그림.
+     * 카드와 같은 행(erp_bookstore_card_path.content_id)을 공유하므로 "지움"은 행 삭제가 아니라
+     * 컬럼만 NULL로 만든 뒤, 카드까지 비어 있으면 그때 빈 행을 정리한다.
+     *
+     * worksheetUrl의 세 가지 의미는 cardUrl과 동일하다.
+     *   null        → 이번 요청에서 워크시트는 건드리지 않는다 (부분 수정)
+     *   빈 문자열    → 워크시트 제거 (이후 모니터링에서 출력 아이콘이 사라진다)
+     *   값 있음      → 등록/교체
+     */
+    private void saveWorksheetPath(Integer contentId, String worksheetUrl, String registeredBy) {
+        if (contentId == null || worksheetUrl == null) return;
+        if (worksheetUrl.isBlank()) {
+            bookRepository.clearWorksheetPath(contentId);
+            bookRepository.purgeEmptyPath(contentId);
+        } else {
+            bookRepository.upsertWorksheetPath(contentId, worksheetUrl.trim(), registeredBy);
         }
     }
 
@@ -551,6 +574,15 @@ public class BookService {
                 bookRepository.deleteContentDetail(contentId, gubun);
             }
         }
+    }
+
+    /**
+     * 워크시트 원본 호스팅 주소 조회 (2026-09-14) — 등록 안 된 책이면 null.
+     * 이 값은 화면으로 내보내지 않는다. 모니터링 프록시(/admin/monitor/worksheet/{contentId})가
+     * 서버에서 그림을 받아 스트리밍하는 데에만 쓴다.
+     */
+    public String findWorksheetUrl(Integer contentId) {
+        return contentId == null ? null : bookRepository.findWorksheetPath(contentId);
     }
 
     /** 마스터 도서 삭제 - 저장 프로시저로 연결된 item, itempool까지 일괄 처리 */

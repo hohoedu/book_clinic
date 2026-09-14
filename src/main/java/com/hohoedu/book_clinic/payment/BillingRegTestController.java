@@ -37,7 +37,7 @@ public class BillingRegTestController {
     private final BillingRegViewController billingRegViewController;
 
     /**
-     * 예: /payment/billing/test?studentId=DAE001T01&productCode=BOOK_M8&firstBillingOn=2026-09-15
+     * 예: /payment/billing/test?studentId=DAE001T01&productCode=BOOK_12&firstBillingOn=2026-09-15
      *
      * 형제 합산을 테스트하려면 studentIds 를 반복해 넘긴다:
      *   /payment/billing/test?studentId=DAE001T01&studentIds=DAE001T01&studentIds=DAE001T02
@@ -45,7 +45,7 @@ public class BillingRegTestController {
      */
     @GetMapping("/payment/billing/test")
     public String testPage(@RequestParam("studentId") String studentId,
-                           @RequestParam(name = "productCode", defaultValue = "BOOK_M8") String productCode,
+                           @RequestParam(name = "productCode", defaultValue = "BOOK_12") String productCode,
                            @RequestParam(name = "firstBillingOn", required = false) String firstBillingOn,
                            @RequestParam(name = "studentIds", required = false) List<String> studentIds,
                            Model model) {

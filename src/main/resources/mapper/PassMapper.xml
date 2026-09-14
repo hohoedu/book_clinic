@@ -22,29 +22,53 @@
     </sql>
 
     <!--
-      먼저 만료되는 이용권부터 소진시킨다 (전월 잔여 + 이번 달분, 심지어 미리 산 다음 달분까지
-      겹칠 수 있음). 유효기간 밖(아직 시작 전이거나 이미 끝난 달)이면 remain_count가 남아 있어도
-      제외한다 — 이월 없이 월말 소멸이라는 정책이 여기서 실질적으로 집행된다.
+      먼저 만료되는 이용권부터 소진시킨다 (전 주기 잔여 + 이번 주기분, 심지어 미리 산 다음 주기분까지
+      겹칠 수 있음). 유효기간 밖이면 remain_count가 남아 있어도 제외한다 — 이월 없이 주기 종료와
+      함께 소멸한다는 정책이 여기서 실질적으로 집행된다.
+
+      기준일이 오늘이 아니라 파라미터인 이유는 차감 시점이 예약으로 옮겨졌기 때문이다(2026-09-14) —
+      예약한 회차 날짜(service_date)를 덮는 이용권에서 까야 한다. 오늘 유효한 이용권으로 미래
+      회차를 예약하면, 그 회차 날짜엔 이미 만료된 횟수를 쓰는 셈이 된다.
+
+      valid_from IS NULL은 "사두고 아직 첫 예약이 없는" 이용권이다(90일 만료 정책). 아무 날짜에나
+      쓸 수 있고, 이걸 처음 깎는 예약이 그 날짜로 기간을 확정한다(PassService.consumeForReservation).
+
+      순서가 중요하다 — 기간이 정해진 것을 먼저, 그중에서도 먼저 만료되는 것부터 소진시키고,
+      미배정 이용권은 가장 마지막에 꺼낸다. 미배정을 먼저 열어버리면 만료가 임박한 이용권이
+      안 쓰이고 남아서 그냥 소멸한다.
     -->
-    <select id="findUsablePass" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
+    <select id="findUsablePassOn" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
         SELECT TOP 1 <include refid="passColumns"/>
         FROM erp_bookstore_pass
         WHERE student_id   = #{studentId}
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
           AND remain_count > 0
-          AND valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
-          AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
-        ORDER BY valid_until ASC, granted_at ASC
+          AND (valid_from IS NULL
+               OR (valid_from &lt;= #{date} AND valid_until &gt;= #{date}))
+        ORDER BY CASE WHEN valid_from IS NULL THEN 1 ELSE 0 END,
+                 valid_until ASC,
+                 granted_at ASC
     </select>
 
-    <select id="findLatestValidUntil" resultType="java.time.LocalDate">
-        SELECT MAX(valid_until)
-        FROM erp_bookstore_pass
-        WHERE student_id   = #{studentId}
-          AND service_code = #{serviceCode}
+    <!-- 첫 예약이 그 이용권의 90일을 시작시킨다. 미배정(valid_from IS NULL)일 때만 박힌다 -->
+    <update id="activatePass">
+        UPDATE erp_bookstore_pass
+        SET valid_from  = #{startDate},
+            valid_until = DATEADD(DAY, #{addDays}, #{startDate})
+        WHERE pass_id = #{passId}
+          AND valid_from IS NULL
           AND revoked_at IS NULL
-    </select>
+    </update>
+
+    <!-- 첫 예약 취소로 한 번도 안 쓴 상태가 되면 기간을 풀어 다시 대기 상태로 되돌린다 -->
+    <update id="deactivatePass">
+        UPDATE erp_bookstore_pass
+        SET valid_from  = NULL,
+            valid_until = NULL
+        WHERE pass_id = #{passId}
+          AND revoked_at IS NULL
+    </update>
 
     <!-- remain_count > 0 조건이 동시 요청에서 잔여가 마이너스로 내려가는 것을 막는다 -->
     <update id="decrementRemain">
@@ -55,51 +79,90 @@
           AND revoked_at IS NULL
     </update>
 
+    <!-- 차감 1행 = 예약 1건(2026-09-14). used_date는 차감한 날이 아니라 예약한 회차의 날짜다 -->
     <insert id="insertUse">
         INSERT INTO erp_bookstore_pass_use
-            (pass_id, student_id, session_id, used_date, created_at)
+            (pass_id, student_id, reservation_id, used_date, created_at)
         VALUES
-            (#{passId}, #{studentId}, #{sessionId}, #{usedDate}, DATEADD(HOUR, 9, GETUTCDATE()))
+            (#{passId}, #{studentId}, #{reservationId}, #{usedDate}, DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
-    <!-- 그날 이미 차감한 횟수(행 수) — "그날 회차 수만큼 차감" 정책에서 목표치와 비교해 부족분만 채운다(2026-08-28) -->
-    <select id="countTodayUse" resultType="int">
-        SELECT COUNT(*)
+    <!-- 예약 취소 시 되돌릴 차감 — 이미 되돌린 행(canceled_at NOT NULL)은 제외한다 -->
+    <select id="findLiveUsesByReservation" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$UseDTO">
+        SELECT use_id        AS useId,
+               pass_id       AS passId,
+               student_id    AS studentId,
+               reservation_id AS reservationId,
+               used_date     AS usedDate
         FROM erp_bookstore_pass_use
-        WHERE student_id = #{studentId} AND used_date = #{usedDate}
+        WHERE reservation_id = #{reservationId}
+          AND canceled_at IS NULL
     </select>
 
-    <!-- 아직 시작 안 했거나 이미 끝난 달의 잔여는 "지금 쓸 수 있는 횟수"에 넣지 않는다 -->
+    <!--
+      복구(예약 취소). remain_count &lt; total_count 조건이 두 가지를 동시에 막는다 —
+      중복 복구로 잔여가 부풀어 오르는 것, 그리고 환불로 회수된(revoked) 이용권이 되살아나는 것.
+    -->
+    <update id="incrementRemain">
+        UPDATE erp_bookstore_pass
+        SET remain_count = remain_count + 1
+        WHERE pass_id = #{passId}
+          AND remain_count &lt; total_count
+          AND revoked_at IS NULL
+    </update>
+
+    <!-- 되돌린 차감 이력에 취소 시각을 찍는다. 이미 찍혀 있으면 0행이라 중복 복구가 드러난다 -->
+    <update id="markUseCanceled">
+        UPDATE erp_bookstore_pass_use
+        SET canceled_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE use_id = #{useId}
+          AND canceled_at IS NULL
+    </update>
+
+    <!--
+      "지금 쓸 수 있는 횟수" — 화면의 잔여 표시이자 자동 재결제 판정의 기준값이다.
+      이미 만료된 기간의 잔여는 제외하고(이월 없음), 아직 첫 예약이 없어 기간이 안 정해진
+      이용권(valid_from IS NULL)은 포함한다 — 사둔 횟수라 당장 예약에 쓸 수 있다(2026-09-14).
+    -->
     <select id="sumRemain" resultType="int">
         SELECT ISNULL(SUM(remain_count), 0)
         FROM erp_bookstore_pass
         WHERE student_id   = #{studentId}
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
-          AND valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
-          AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+          AND (valid_from IS NULL
+               OR (valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
+                   AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)))
     </select>
 
     <!--
       그 날짜가 속한 이용 주기(2026-09-07 자동결제 전환). 예약 상한 검사가 쓴다.
 
-      total_count를 합치는 이유는 그대로다 — 상한은 "그 기간에 몇 건 예약했나 vs 그 기간에 몇 건
-      살 수 있나"의 비교라, 입실 차감과 무관하게 원래 부여된 횟수와 견줘야 한다.
+      total_count(capacity)와 remain_count(remaining)를 함께 합친다. 2026-09-14 예약 시 차감
+      전환 이후 예약 가능 여부는 remaining으로 판정한다 — 예약이 곧 차감이라 이미 잡아둔 예약은
+      잔여에서 빠져 있고, 여기서 또 예약 건수를 세면 같은 예약을 두 번 깎는 셈이 된다.
+      capacity는 화면에 "이 주기에 총 몇 회"를 보여주는 용도로만 남는다.
+
+      미배정 이용권(valid_from IS NULL, 아직 첫 예약이 없음)도 합계에 넣는다 — 그 날짜에 실제로
+      쓸 수 있는 횟수라서다. 그 경우 MIN/MAX는 NULL을 무시하므로 기간은 기간이 정해진 이용권만으로
+      계산되고, 정해진 것이 하나도 없으면 기간이 NULL로 내려간다(호출부는 이 NULL을 "아직 기간이
+      없는 상태"로 읽는다 — remaining이 0인지와는 별개다).
 
       기간을 MIN/MAX로 뭉치는 것은 서당분과 앱 결제분이 겹쳐 있을 때를 위한 것이다. 두 주기가
       완전히 어긋나 있으면 합집합이 실제보다 넓어질 수 있지만, 그 경우도 capacity가 두 이용권의
       합이라 "넓은 기간에 그만큼 쓸 수 있다"는 뜻으로 앞뒤가 맞는다.
     -->
     <select id="findCycleOn" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$CycleDTO">
-        SELECT MIN(valid_from)              AS cycleFrom,
-               MAX(valid_until)             AS cycleUntil,
-               ISNULL(SUM(total_count), 0)  AS capacity
+        SELECT MIN(valid_from)               AS cycleFrom,
+               MAX(valid_until)              AS cycleUntil,
+               ISNULL(SUM(total_count), 0)   AS capacity,
+               ISNULL(SUM(remain_count), 0)  AS remaining
         FROM erp_bookstore_pass
         WHERE student_id   = #{studentId}
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
-          AND valid_from  &lt;= #{date}
-          AND valid_until &gt;= #{date}
+          AND (valid_from IS NULL
+               OR (valid_from &lt;= #{date} AND valid_until &gt;= #{date}))
     </select>
 
     <select id="findByRef" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
@@ -109,10 +172,12 @@
           AND ref_no = #{refNo}
     </select>
 
+    <!-- 예약 취소로 되돌린 차감은 "쓴 횟수"가 아니다 — 환불 규정 판정에서 제외한다(2026-09-14) -->
     <select id="countUse" resultType="int">
         SELECT COUNT(*)
         FROM erp_bookstore_pass_use
         WHERE pass_id = #{passId}
+          AND canceled_at IS NULL
     </select>
 
     <!--

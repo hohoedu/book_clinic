@@ -1,10 +1,16 @@
 package com.hohoedu.book_clinic.pass;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDate;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -12,16 +18,18 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import com.hohoedu.book_clinic._core.utils.KstClock;
+import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 
 /**
- * nextBillingYm() — 날짜 커트오프 없이 "이 학생이 가장 늦게까지 사둔 달"로 다음 결제 대상월을
- * 정하는 로직. 실제 오늘 날짜가 언제든 통과하도록 KstClock.today() 기준 상대 월로 검증한다.
+ * 예약 시 차감(2026-09-14)과 그에 딸린 90일 유효기간 확정/해제 로직.
+ *
+ * 이 두 가지가 이 서비스에서 조건부 UPDATE의 영향행수에 따라 분기하는 유일한 지점이라,
+ * 실제 DB 없이도 "언제 활성화하고 언제 해제하는가"는 목으로 고정해둘 가치가 있다.
  */
 @ExtendWith(MockitoExtension.class)
 class PassServiceTest {
 
-    private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyyMM");
+    private static final LocalDate SERVICE_DATE = LocalDate.of(2026, 9, 15);
 
     @Mock
     private PassRepository passRepository;
@@ -29,42 +37,84 @@ class PassServiceTest {
     @InjectMocks
     private PassService passService;
 
-    @Test
-    void nextBillingYm_기존_이용권이_없으면_이번_달() {
-        when(passRepository.findLatestValidUntil("S1", "BOOK")).thenReturn(null);
+    private PassRespDTO.PassDTO pass(int passId, LocalDate validFrom) {
+        PassRespDTO.PassDTO dto = new PassRespDTO.PassDTO();
+        dto.setPassId(passId);
+        dto.setValidFrom(validFrom);
+        return dto;
+    }
 
-        String result = passService.nextBillingYm("S1", "BOOK");
-
-        assertEquals(YearMonth.from(KstClock.today()).format(YM), result);
+    private PassRespDTO.UseDTO use(int useId, int passId) {
+        PassRespDTO.UseDTO dto = new PassRespDTO.UseDTO();
+        dto.setUseId(useId);
+        dto.setPassId(passId);
+        return dto;
     }
 
     @Test
-    void nextBillingYm_이미_이번달까지_샀으면_다음_달() {
-        YearMonth current = YearMonth.from(KstClock.today());
-        when(passRepository.findLatestValidUntil("S1", "BOOK")).thenReturn(current.atEndOfMonth());
+    void 첫_예약이면_그_회차_날짜부터_90일로_기간이_확정된다() {
+        when(passRepository.findUsablePassOn("S1", "BOOK", SERVICE_DATE)).thenReturn(pass(7, null));
+        when(passRepository.activatePass(7, SERVICE_DATE, 89)).thenReturn(1);
+        when(passRepository.decrementRemain(7)).thenReturn(1);
 
-        String result = passService.nextBillingYm("S1", "BOOK");
+        assertTrue(passService.consumeForReservation("S1", "BOOK", 100L, SERVICE_DATE));
 
-        assertEquals(current.plusMonths(1).format(YM), result);
+        verify(passRepository).activatePass(7, SERVICE_DATE, 89);
+        verify(passRepository).insertUse(7, "S1", 100L, SERVICE_DATE);
     }
 
     @Test
-    void nextBillingYm_이미_다음달까지_미리_사둔_상태에서_또_사면_그다음_달() {
-        YearMonth current = YearMonth.from(KstClock.today());
-        when(passRepository.findLatestValidUntil("S1", "BOOK")).thenReturn(current.plusMonths(1).atEndOfMonth());
+    void 이미_기간이_정해진_이용권은_기간을_다시_건드리지_않는다() {
+        when(passRepository.findUsablePassOn("S1", "BOOK", SERVICE_DATE))
+                .thenReturn(pass(7, LocalDate.of(2026, 9, 1)));
+        when(passRepository.decrementRemain(7)).thenReturn(1);
 
-        String result = passService.nextBillingYm("S1", "BOOK");
+        assertTrue(passService.consumeForReservation("S1", "BOOK", 100L, SERVICE_DATE));
 
-        assertEquals(current.plusMonths(2).format(YM), result);
+        verify(passRepository, never()).activatePass(anyInt(), any(), anyInt());
     }
 
     @Test
-    void nextBillingYm_가장_늦은_달이_이미_지났으면_공백기_무시하고_이번_달로_리셋() {
-        YearMonth current = YearMonth.from(KstClock.today());
-        when(passRepository.findLatestValidUntil("S1", "BOOK")).thenReturn(current.minusMonths(2).atEndOfMonth());
+    void 그_날짜에_쓸_이용권이_없으면_차감_실패() {
+        when(passRepository.findUsablePassOn("S1", "BOOK", SERVICE_DATE)).thenReturn(null);
 
-        String result = passService.nextBillingYm("S1", "BOOK");
+        assertFalse(passService.consumeForReservation("S1", "BOOK", 100L, SERVICE_DATE));
 
-        assertEquals(current.format(YM), result);
+        verify(passRepository, never()).decrementRemain(anyInt());
+        verify(passRepository, never()).insertUse(anyInt(), any(), any(), any());
+    }
+
+    @Test
+    void 첫_예약을_취소하면_확정된_기간도_다시_풀린다() {
+        when(passRepository.findLiveUsesByReservation(100L)).thenReturn(List.of(use(1, 7)));
+        when(passRepository.markUseCanceled(1)).thenReturn(1);
+        when(passRepository.incrementRemain(7)).thenReturn(1);
+        when(passRepository.countUse(7)).thenReturn(0);
+
+        passService.restoreForReservation(100L);
+
+        verify(passRepository).deactivatePass(7);
+    }
+
+    @Test
+    void 다른_예약이_아직_그_이용권을_쓰고_있으면_기간은_유지된다() {
+        when(passRepository.findLiveUsesByReservation(100L)).thenReturn(List.of(use(1, 7)));
+        when(passRepository.markUseCanceled(1)).thenReturn(1);
+        when(passRepository.incrementRemain(7)).thenReturn(1);
+        when(passRepository.countUse(7)).thenReturn(2);
+
+        passService.restoreForReservation(100L);
+
+        verify(passRepository, never()).deactivatePass(anyInt());
+    }
+
+    @Test
+    void 이미_복구된_차감은_두_번_되돌리지_않는다() {
+        when(passRepository.findLiveUsesByReservation(100L)).thenReturn(List.of(use(1, 7)));
+        when(passRepository.markUseCanceled(1)).thenReturn(0);
+
+        passService.restoreForReservation(100L);
+
+        verify(passRepository, never()).incrementRemain(eq(7));
     }
 }

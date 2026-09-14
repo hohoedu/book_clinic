@@ -37,6 +37,10 @@ public class MonitorRespDTO {
         private String author;
         private String publisher;
         private String imageUrl;
+        // 이 책에 워크시트(출력용 이미지)가 등록돼 있는지 (2026-09-14). 모니터링 카드의 출력 아이콘 노출
+        // 조건으로만 쓴다 — 호스팅 원본 주소(card_path.worksheet_url)는 일부러 안 내려보내고, 그림은
+        // /admin/monitor/worksheet/{contentId} 프록시가 로그인한 직원에게만 스트리밍한다.
+        private Boolean hasWorksheet;
         private String readingTimeText;      // content.reading_time 원문 (예: "20분")
         private LocalDateTime recommendedAt; // 이 책이 추천/대여 확정된 시각 = 독서 시작 기준
 
@@ -94,6 +98,7 @@ public class MonitorRespDTO {
         private String author;
         private String publisher;
         private String imageUrl;
+        private Boolean hasWorksheet;  // 워크시트 등록 여부 — CardDTO의 같은 이름 필드와 의미가 같다 (2026-09-14)
         private String readingTimeText;
         private LocalDateTime recommendedAt;
 
@@ -116,6 +121,12 @@ public class MonitorRespDTO {
         private Integer badgeCount;
         private String latestBadgeName;
         private String badgeIds;   // 이 책에서 딴 뱃지 id 콤마 목록(획득순) — 카드 뱃지 아이콘용 (2026-09-02)
+
+        // 이 책으로 받은 완독 카드가 10장 세트를 채웠는지(= 실물 스페셜 카드 지급 시점), 2026-09-14.
+        // 학생 결과 화면의 cardRewardReached와 같은 사건을 모니터링에서도 보게 하려는 값이다.
+        // 지급 자체는 ClinicService가 이미 처리하고, 여기서는 "선생님이 실물을 건네야 할 책"임을
+        // 카드에 표시만 한다(버튼 동작 없음).
+        private Boolean specialCardReached;
     }
 
     /** 문제풀이 기록 삭제 대상 1건 — 초기화 직전 recommend_log 스냅샷(삭제 이력에 그대로 남긴다) */

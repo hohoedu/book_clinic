@@ -5,8 +5,6 @@ import java.net.URI;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -51,6 +49,9 @@ import lombok.extern.slf4j.Slf4j;
 public class PaymentService {
 
     private static final DateTimeFormatter ORDER_NO_TIME = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
+    /** billing_ym(CHAR(6)) 포맷 — "구매한 달"을 기록하는 값이다(2026-09-14, 이용권 기간과 무관) */
+    private static final DateTimeFormatter BILLING_YM = DateTimeFormatter.ofPattern("yyyyMM");
     private static final String DEFAULT_CANCEL_REASON = "고객 환불 요청";
 
     private final PaymentRepository paymentRepository;
@@ -76,42 +77,35 @@ public class PaymentService {
         }
 
         String centerCode = clinicRepository.findCenterCode(reqDTO.getStudentId());
-        String billingYm = passService.nextBillingYm(reqDTO.getStudentId(), product.getServiceCode());
-        // 이 경로(수동 일시불)는 자동결제 전환 이전부터 있던 달력 월 상품이라 주기도 달력 월이다.
-        // 자동결제 건은 SubscriptionService가 결제일 기준 주기를 직접 넣는다(2026-09-07).
-        YearMonth cycleMonth = YearMonth.parse(billingYm, DateTimeFormatter.ofPattern("yyyyMM"));
+        // billing_ym은 "구매한 달"이다(2026-09-14). 예전에는 "몇 월치 이용권인지"를
+        // nextBillingYm()으로 계산해 넣었지만, 90일 만료로 바뀌면서 이용권에 월이라는 단위가
+        // 사라졌다. 정산 대조와 조회 필터로 계속 쓰이므로 컬럼 자체는 채운다.
+        String billingYm = YearMonth.from(KstClock.today()).format(BILLING_YM);
 
-        // 중복 결제 방지(2026-08-07) — 다른 기기에서 같은 학생·서비스·청구월로 이미 결제창을
-        // 열어뒀거나(READY) 결제를 끝냈으면(PAID), 새로 만들지 않고 그 주문을 그대로 재사용한다.
-        // A기기로 결제창을 열어두고 방치한 사이 B기기로 새로 결제하면 둘 다 정상 승인돼서 같은 달
-        // 결제가 이중으로 잡히는 사고를 막기 위함이다 — nextBillingYm()은 이미 발급된(승인 완료)
-        // 이용권만 보고 계산해서, 진행 중인 다른 결제 시도는 그 계산에 안 잡힌다.
-        PaymentRespDTO.PaymentDTO existing = paymentRepository.findActiveByStudentServiceBilling(
-                reqDTO.getStudentId(), product.getServiceCode(), billingYm);
+        // 중복 결제 방지(2026-08-07, 2026-09-14 완화) — 다른 기기에서 이미 결제창을 열어둔
+        // 상태(READY)면 새 주문을 만들지 않고 그 주문을 그대로 재사용한다. A기기로 결제창을
+        // 열어두고 방치한 사이 B기기로 새로 결제해서 같은 건이 두 번 승인되는 사고를 막는다.
+        //
+        // 완료된 결제(PAID)는 더 이상 막지 않는다 — 12회를 다 쓰면 같은 달에도 또 사야 하므로,
+        // "이번 달 이미 결제함"이 차단 사유가 될 수 없다(사용자 확정 정책). 아래 insertReady도
+        // cycle_from을 비워 넣어서 주기 유니크 인덱스(UX_payment_active_cycle)에 걸리지 않는다.
+        PaymentRespDTO.PaymentDTO existing = paymentRepository.findReadyByStudentService(
+                reqDTO.getStudentId(), product.getServiceCode());
         if (existing != null) {
-            if ("PAID".equals(existing.getStatus())) {
-                throw new Exception400("이미 이번 달 결제가 완료됐어요.");
-            }
             return new PaymentRespDTO.PrepareDTO(existing.getOrderNo(), props.getMid(), existing.getAmount(),
-                    existing.getProductName() + " (" + monthLabel(billingYm) + ")",
+                    existing.getProductName(),
                     props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
         }
 
         String orderNo = newOrderNo();
-        try {
-            paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
-                    product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
-                    cycleMonth.atDay(1), cycleMonth.atEndOfMonth(), null, product.getPrice());
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // 위 체크와 이 INSERT 사이의 아주 좁은 순간에 다른 기기가 먼저 같은 조합으로 INSERT
-            // 했을 때만 여기로 온다 — UX_payment_active_billing 유니크 인덱스가 막아준 것이다.
-            log.warn("[결제] 중복 결제 시도 차단(DB 유니크 인덱스) — studentId={}, serviceCode={}, billingYm={}",
-                    reqDTO.getStudentId(), product.getServiceCode(), billingYm, e);
-            throw new Exception400("이미 이번 달 결제가 진행 중이거나 완료됐어요. 새로고침 후 다시 시도해주세요.");
-        }
+        // cycle_from/cycle_until은 자동결제의 청구 주기 전용이라 일시불 구매에는 넣지 않는다.
+        // 이용권 유효기간은 첫 예약 때 정해지므로 결제 행이 기간을 들고 있을 이유도 없다.
+        paymentRepository.insertReady(orderNo, null, reqDTO.getStudentId(), centerCode,
+                product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
+                null, null, null, product.getPrice());
 
         return new PaymentRespDTO.PrepareDTO(orderNo, props.getMid(), product.getPrice(),
-                product.getProductName() + " (" + monthLabel(billingYm) + ")",
+                product.getProductName(),
                 props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
     }
 
@@ -136,55 +130,32 @@ public class PaymentService {
             throw new Exception404("판매 중인 상품이 아닙니다.");
         }
 
-        // 중복 결제 방지(2026-08-07) — 그룹 행을 만들기 전에 전원부터 검사한다. 검사와 INSERT를
-        // 섞으면 일부 학생만 만들어진 채로 막혀서 그룹 주문이 절반만 생기는 상태가 될 수 있다.
-        // 각자의 청구월도 여기서 같이 미리 구해 아래 INSERT 단계에서 재사용한다.
-        Map<String, String> billingYmByStudent = new LinkedHashMap<>();
+        // 중복 결제 방지(2026-08-07, 2026-09-14 완화) — 그룹 행을 만들기 전에 전원부터 검사한다.
+        // 검사와 INSERT를 섞으면 일부 학생만 만들어진 채로 막혀서 그룹 주문이 절반만 생기는
+        // 상태가 될 수 있다. 막는 대상은 "결제창을 열어둔 채(READY)인 학생"뿐이다 — 완료된
+        // 결제(PAID)는 재구매를 막지 않는다(90일 만료·12회권 정책, 사용자 확정).
         for (String studentId : studentIds) {
-            String billingYm = passService.nextBillingYm(studentId, product.getServiceCode());
-            billingYmByStudent.put(studentId, billingYm);
-
-            PaymentRespDTO.PaymentDTO existing = paymentRepository.findActiveByStudentServiceBilling(
-                    studentId, product.getServiceCode(), billingYm);
-            if (existing != null) {
-                throw new Exception400(("PAID".equals(existing.getStatus())
-                        ? "이미 이번 달 결제가 완료된 학생이 있어요: "
-                        : "이미 결제가 진행 중인 학생이 있어요: ") + studentId);
+            if (paymentRepository.findReadyByStudentService(studentId, product.getServiceCode()) != null) {
+                throw new Exception400("이미 결제가 진행 중인 학생이 있어요: " + studentId);
             }
         }
 
+        String billingYm = YearMonth.from(KstClock.today()).format(BILLING_YM);
         String groupOrderNo = newOrderNo();
         int totalAmount = 0;
-        // 형제라도 이미 커버된 달이 서로 다를 수 있다(한 명이 먼저 다음 달 걸 사둔 경우 등) —
-        // 그룹 전체에 한 달을 통일해서 정하지 않고 학생마다 각자의 nextBillingYm을 따로 구한다.
-        Set<String> billingYms = new LinkedHashSet<>();
-        try {
-            for (String studentId : studentIds) {
-                String centerCode = clinicRepository.findCenterCode(studentId);
-                String orderNo = newOrderNo();
-                String billingYm = billingYmByStudent.get(studentId);
-                billingYms.add(billingYm);
-                YearMonth cycleMonth = YearMonth.parse(billingYm, DateTimeFormatter.ofPattern("yyyyMM"));
-                paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
-                        product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
-                        cycleMonth.atDay(1), cycleMonth.atEndOfMonth(), null, product.getPrice());
-                totalAmount += product.getPrice();
-            }
-        } catch (org.springframework.dao.DataIntegrityViolationException e) {
-            // 위 사전 검사와 INSERT 사이의 아주 좁은 순간에 다른 기기가 먼저 같은 조합으로
-            // INSERT했을 때만 여기로 온다 — UX_payment_active_billing 유니크 인덱스가 막아준 것.
-            // 이미 만든 그룹원 행이 일부 있을 수 있지만 group_order_no가 새로 발급된 값이라
-            // 다른 정상 그룹과 섞이지 않고, 전부 READY로 방치되면 PaymentCleanupJob이 정리한다.
-            log.warn("[결제] 중복 결제 시도 차단(DB 유니크 인덱스, 그룹) — productCode={}", productCode, e);
-            throw new Exception400("이미 이번 달 결제가 진행 중이거나 완료된 학생이 있어요. 새로고침 후 다시 시도해주세요.");
+        for (String studentId : studentIds) {
+            String centerCode = clinicRepository.findCenterCode(studentId);
+            String orderNo = newOrderNo();
+            // 단건과 같은 이유로 청구 주기(cycle_from/until)는 비워 둔다 — 자동결제 전용 값이다.
+            paymentRepository.insertReady(orderNo, groupOrderNo, studentId, centerCode,
+                    product.getProductId(), product.getProductName(), product.getServiceCode(), billingYm,
+                    null, null, null, product.getPrice());
+            totalAmount += product.getPrice();
         }
 
-        // 그룹 전원의 대상월이 같으면 화면에 그 달을 보여주고, 갈리면(드문 경우) 잘못된 달을
-        // 하나로 뭉뚱그려 보여주는 것보다는 월 표시 자체를 생략하는 편이 안전하다.
-        String monthSuffix = billingYms.size() == 1 ? " (" + monthLabel(billingYms.iterator().next()) + ")" : "";
         String goodName = studentIds.size() > 1
-                ? product.getProductName() + monthSuffix + " 외 " + (studentIds.size() - 1) + "명"
-                : product.getProductName() + monthSuffix;
+                ? product.getProductName() + " 외 " + (studentIds.size() - 1) + "명"
+                : product.getProductName();
 
         return new PaymentRespDTO.PrepareGroupDTO(groupOrderNo, props.getMid(), totalAmount, goodName,
                 props.getReturnUrl(), props.getCloseUrl(), props.isTestMode());
@@ -911,11 +882,6 @@ public class PaymentService {
 
     private String nvl(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value;
-    }
-
-    /** "202609" → "9월" — 결제창에 몇 월치 이용권인지 보여줄 때 쓴다 */
-    private String monthLabel(String billingYm) {
-        return Integer.parseInt(billingYm.substring(4)) + "월";
     }
 
     /** 결제 행에는 product_id만 있어서 서비스 구분이 필요할 때 상품을 되짚는다 */

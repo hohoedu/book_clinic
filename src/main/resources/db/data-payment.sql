@@ -6,19 +6,25 @@
 -- 리셋 대상도 아니기 때문이다(data-books.sql, data-itempool.sql과 같은 취급).
 -- 개발 DB든 운영 DB든 처음 한 번만 실행한다. 재실행해도 중복 INSERT는 되지 않는다.
 --
--- [아래 값은 예시다] 실제 상품 가격·횟수와 환불 규정은 확정되면 이 파일을 고쳐
--- 다시 실행하거나 관리자 화면에서 수정한다.
+-- [재실행] 상품 가격·횟수가 바뀌면 이 파일을 고쳐 다시 실행한다. 판매를 내리는 UPDATE와
+-- 새 상품 INSERT 모두 여러 번 실행해도 결과가 같다.
 -- ════════════════════════════════════════════════════════════════════
 
 -- ── 상품 ────────────────────────────────────────────────────────────
 -- 책방(PG 결제)과 서당(일괄청구)이 같은 상품을 쓴다. 청구 방법만 다를 뿐 제공하는 이용권은 같다.
-IF NOT EXISTS (SELECT 1 FROM erp_bookstore_product WHERE product_code = 'BOOK_M8')
-    INSERT INTO erp_bookstore_product (product_code, product_name, service_code, total_count, price, is_active)
-    VALUES ('BOOK_M8', N'독서 클리닉 월 8회권', 'BOOK', 8, 50000, 1);
+--
+-- [2026-09-14 가격 정책 변경] 이용권 1회당 5,000원이고, 한 번 구매하면 12회를 한꺼번에 산다.
+-- 그래서 판매 상품은 12회권 한 종류뿐이다(60,000원). 가격을 상품 행에 그대로 적어 두는 이유는
+-- 결제 금액 검증이 이 값을 기준으로 하기 때문이다 — 단가 × 수량을 서버가 계산하는 구조가 아니다.
+--
+-- 기존 월 4회/8회권은 판매를 내린다(is_active=0). 과거 결제·이용권이 product_id로 이 행들을
+-- 참조하므로 삭제하지 않는다 — 삭제하면 지난 결제내역의 상품명이 사라진다.
+UPDATE erp_bookstore_product SET is_active = 0
+    WHERE product_code IN ('BOOK_M8', 'BOOK_M4') AND is_active = 1;
 
-IF NOT EXISTS (SELECT 1 FROM erp_bookstore_product WHERE product_code = 'BOOK_M4')
+IF NOT EXISTS (SELECT 1 FROM erp_bookstore_product WHERE product_code = 'BOOK_12')
     INSERT INTO erp_bookstore_product (product_code, product_name, service_code, total_count, price, is_active)
-    VALUES ('BOOK_M4', N'독서 클리닉 월 4회권', 'BOOK', 4, 30000, 1);
+    VALUES ('BOOK_12', N'독서 클리닉 12회권', 'BOOK', 12, 60000, 1);
 
 -- ── 환불 규정 ───────────────────────────────────────────────────────
 -- priority 오름차순으로 훑어 "사용 max_count 이하"에 처음 맞는 한 건만 적용한다.

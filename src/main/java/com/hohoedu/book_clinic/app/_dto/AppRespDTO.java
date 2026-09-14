@@ -36,6 +36,7 @@ public class AppRespDTO {
         // 이용권 (활성 pass: revoked 아님 + 유효기간 내, 가장 최근 부여분)
         private Integer passTotal;
         private Integer passRemain;
+        private String passValidUntil; // yyyy-MM-dd — 사용기한
 
         // 최근 독서 기록 이미지 (최신순 4개, 없으면 null)
         private String bookImg1;

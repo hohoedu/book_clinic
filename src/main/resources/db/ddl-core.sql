@@ -377,8 +377,8 @@ CREATE TABLE erp_bookstore_level (
 --   1 독서완료(기본 합격·불합격 공통) / 2 독서왕 / 3 심화완료 / 4 심화왕
 IF OBJECT_ID('erp_bookstore_badge', 'U') IS NULL
 CREATE TABLE erp_bookstore_badge (
-    badge_id    INT            PRIMARY KEY,      -- 1~4 고정 번호
-    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (독서완료 ...)
+    badge_id    INT            PRIMARY KEY,      -- 1~5 고정 번호
+    badge_name  NVARCHAR(50)   NOT NULL,         -- 뱃지 이름 (완독 ...)
     badge_desc  NVARCHAR(200),                   -- 특징/설명 문구 (화면 표시용)
     category    VARCHAR(20)    NOT NULL,         -- (레거시) 판정 유형 — 현재 미사용
     threshold   INT            NOT NULL,         -- (레거시) 달성 기준치 — 현재 미사용

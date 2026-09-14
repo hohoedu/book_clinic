@@ -178,10 +178,11 @@ INSERT INTO erp_bookstore_level (schoolyear, level_no, title) VALUES
 --   ADV_PASS      : 심화(02) 문제 합격(합격선 이상 회차 존재)
 --   ADV_PERFECT   : 심화(02) 문제 만점(전 문항 정답 회차 존재)
 INSERT INTO erp_bookstore_badge (badge_id, badge_name, badge_desc, category, threshold, param) VALUES
-(1, N'독서완료', N'책을 읽고 문제풀이를 완료',     'BASIC_PASS',    1, NULL),
-(2, N'독서왕',   N'책의 내용을 정확하게 이해',     'BASIC_PERFECT', 1, NULL),
-(3, N'심화완료', N'한 단계 깊은 사고 활동에 도전', 'ADV_PASS',      1, NULL),
-(4, N'심화왕',   N'어휘력과 문해력의 실력 증가',   'ADV_PERFECT',   1, NULL);
+(1, N'완독',         N'책을 끝까지 읽고 문제풀이를 완료',   'BASIC_FAIL',    1, NULL),
+(2, N'정독 완료',    N'책을 읽고 문제를 합격선 이상 해결',  'BASIC_PASS',    1, NULL),
+(3, N'정독왕',       N'책의 내용을 정확하게 이해',          'BASIC_PERFECT', 1, NULL),
+(4, N'문해력 챌린저', N'한 단계 깊은 사고 활동에 도전',      'ADV_PASS',      1, NULL),
+(5, N'문해력 챔피언', N'어휘력과 문해력의 실력 증가',        'ADV_PERFECT',   1, NULL);
 
 -- ────────────────────────────────────────────────────────
 -- 난이도 자동 부여 (2026-07-31) — 도서 시드(data-books.sql)가 difficulty를 넣지 않아 전 권이 비어

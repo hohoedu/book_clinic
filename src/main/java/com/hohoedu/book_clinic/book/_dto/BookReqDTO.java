@@ -35,6 +35,9 @@ public class BookReqDTO {
         // 완독 시 지급되는 수집 카드 이미지 URL — erp_bookstore_card_path에 별도 저장된다(표지와 다른 그림).
         // null/빈 값이면 카드 이미지가 없는 책으로 두고, 화면은 기본 카드로 폴백한다.
         private String cardUrl;
+        // 실시간 모니터링에서 뽑아 쓰는 워크시트(출력용) 이미지 URL — 카드와 같은 행에 저장된다.
+        // null/빈 값이면 워크시트가 없는 책으로 두고, 모니터링에서 출력 아이콘이 뜨지 않는다. (2026-09-14)
+        private String worksheetUrl;
     }
 
     /** 마스터 도서 수정 요청 */
@@ -60,6 +63,8 @@ public class BookReqDTO {
         // 수집 카드 이미지 URL. null이면 "이번 수정에서 카드는 건드리지 않는다"는 뜻이고(상태 토글 같은
         // 부분 수정이 기존 카드를 지우지 않도록), 빈 문자열이면 카드 이미지를 제거한다.
         private String cardUrl;
+        // 워크시트(출력용) 이미지 URL — cardUrl과 세 가지 의미(null=유지 / 빈 값=제거 / 값=교체)가 같다. (2026-09-14)
+        private String worksheetUrl;
     }
 
     /** 마스터 도서 삭제 요청 */

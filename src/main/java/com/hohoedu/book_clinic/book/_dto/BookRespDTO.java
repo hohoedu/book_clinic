@@ -26,6 +26,9 @@ public class BookRespDTO {
         private String imageUrl;      // 도서 이미지 경로
         private String readingTime;   // 독서 예상 시간
         private String difficulty;    // 난이도 (상/중/하)
+        // erp_bookstore_card_path에 따로 저장되는 부가 이미지 두 장 (표지와 다른 그림, 없으면 null)
+        private String cardUrl;       // 완독 시 지급되는 수집 카드 그림
+        private String worksheetUrl;  // 모니터링에서 뽑아 쓰는 워크시트(출력용) 그림 (2026-09-14)
         // 분류(contentType)에 딸린 부가 정보 (연계교과/추천기관명/수상명 중 해당 분류 값 하나, 도서당 최대 1행)
         private String extraDetailName;
     }
