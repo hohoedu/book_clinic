@@ -4,6 +4,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -11,12 +13,13 @@ import org.springframework.web.bind.annotation.RestController;
 import com.hohoedu.book_clinic._core.auth.CenterAccessGuard;
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic.student._dto.StudentReqDTO;
 
 import lombok.RequiredArgsConstructor;
 
 /**
- * "학생 정보(회원 현황)" 화면 조회 API (2026-08-26). 목록/상세/독서이력/예약현황 전부 읽기 전용이고,
- * 담당선생님/회비 같은 DB에 없는 필드는 여기서 내려주지 않는다(화면이 계속 목업으로 채운다).
+ * "학생 정보(회원 현황)" 화면 API (2026-08-26). 목록/상세/독서이력/예약현황은 읽기 전용이고,
+ * 수강 정보(bookstore-assign) 탭만 조회 + 저장을 함께 제공한다(2026-09-15).
  */
 @RestController
 @RequestMapping("/admin/students")
@@ -49,6 +52,24 @@ public class StudentAdminController {
                                     @AuthenticationPrincipal CustomUserDetails userDetails) {
         centerAccessGuard.requireStudentInMyCenter(userDetails, studentId);
         return ResponseEntity.ok(ApiUtils.success(studentService.getStudentDetail(studentId)));
+    }
+
+    /** 상세모달 수강 정보 탭 — 저장 전이면 화면용 기본값이 saved=false 로 내려온다 */
+    @GetMapping("/{studentId}/bookstore-assign")
+    public ResponseEntity<?> bookstoreAssign(@PathVariable("studentId") String studentId,
+                                             @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, studentId);
+        return ResponseEntity.ok(ApiUtils.success(studentService.getBookstoreAssign(studentId)));
+    }
+
+    /** 상세모달 수강 정보 탭 저장 (upsert) */
+    @PutMapping("/{studentId}/bookstore-assign")
+    public ResponseEntity<?> saveBookstoreAssign(@PathVariable("studentId") String studentId,
+                                                 @RequestBody StudentReqDTO.BookstoreAssignSaveDTO reqDTO,
+                                                 @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, studentId);
+        studentService.saveBookstoreAssign(studentId, reqDTO);
+        return ResponseEntity.ok(ApiUtils.success(studentService.getBookstoreAssign(studentId)));
     }
 
     /** 상세모달 독서이력 탭 */

@@ -114,13 +114,26 @@ public class AppRespDTO {
         private List<String> growthWords;
     }
 
-    /** 정독 결과 — 보상 4칸. 뱃지 마스터 4종을 항상 전부 내리고 그날 획득분만 earned=true. */
+    /** 정독 결과 — 보상 칸. 뱃지 마스터 5종을 항상 전부 내리고 그날 획득분만 earned=true. */
     @Data
     public static class ReportBadgeDTO {
         private Integer badgeId;
+
+        /**
+         * BASIC_FAIL / BASIC_PASS / BASIC_PERFECT / ADV_PASS / ADV_PERFECT.
+         *
+         * 앱이 뱃지 아이콘을 고르는 키다. badge_id 는 4종↔5종 재편으로 두 번 재번호된 전력이 있어
+         * (patch-erp_bookstore_badge-*.sql) 이미지 매핑에 쓰면 개편 때마다 그림이 어긋난다.
+         * category 는 그 두 번 모두 그대로였다.
+         */
+        private String category;
+
         private String badgeName;
         private String badgeDesc;
         private boolean earned;
+
+        /** 그날 이 뱃지를 획득한 횟수(책 단위). 못 받았으면 0 — 화면의 "N번 달성했어요". */
+        private int earnedCount;
     }
 
     /** 정독 결과 — 독서 성향. 문제 유형(erp_bookstore_code gubun='T')별 누적 정답률. */

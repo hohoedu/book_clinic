@@ -3,6 +3,7 @@ package com.hohoedu.book_clinic.student;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
@@ -35,6 +36,24 @@ public class StudentJoinService {
     private final StudentRepository studentRepository;
     private final ImageStorageService imageStorageService;
 
+    /**
+     * 가입 화면이 주는 학년은 클리닉 자체 코드(erp_bookstore_code gubun='S', 01~07)인데, erp_student 에는
+     * 학년 컬럼이 둘이고 코드 체계가 서로 다르다 — clinic_grade_key 는 이 S코드를 그대로 쓰지만
+     * grade_key 는 올패스와 공유하는 컬럼이라 erp_grade_code 코드(11~16/21~23)를 넣어야 한다.
+     * 예전엔 둘 다 S코드를 그대로 꽂아서, 책방에서 직접 가입한 학생만 erp_grade_code 조인이 빗나가
+     * 학년이 "-"로 뜨거나(01~04) 초5·초6·중등이 "5세·6세·7세"로 뒤집혀 보였다 (2026-09-15 수정).
+     * ClinicService.OLPASS_GRADE_TO_SCHOOLYEAR 의 역방향이다.
+     * 중등(07)은 클리닉이 중1~중3을 구분하지 않으므로 올패스 중1(21)로 보낸다.
+     */
+    private static final Map<String, String> SCHOOLYEAR_TO_OLPASS_GRADE = Map.of(
+            "01", "11",   // 초1
+            "02", "12",   // 초2
+            "03", "13",   // 초3
+            "04", "14",   // 초4
+            "05", "15",   // 초5
+            "06", "16",   // 초6
+            "07", "21");  // 중등 → 중1
+
     /** @return 채번된 studentId */
     @Transactional
     public String join(StudentJoinReqDTO dto) {
@@ -64,12 +83,27 @@ public class StudentJoinService {
             default -> log.warn("[입회] 알 수 없는 수업 과목: {}", dto.getSubject());
         }
 
+        String olpassGradeKey = toOlpassGradeKey(dto.getGradeKey());
+
         studentRepository.insertOnJoin(dto, studentId, birth, gender, appId, appPassword,
-                billingPhone, "ACTIVE", subHan, subBook, subHoho);
+                billingPhone, "ACTIVE", olpassGradeKey, subHan, subBook, subHoho);
         studentRepository.insertGuardianOnJoin(dto, studentId);
 
         log.info("[입회] 신규 학생 등록 studentId={}, center={}, appId={}", studentId, dto.getCenterCode(), appId);
         return studentId;
+    }
+
+    /**
+     * 클리닉 학년코드(01~07) → 올패스 학년코드(11~16/21). 매핑에 없는 값은 변환 없이 그대로 두고 경고만
+     * 남긴다 — erp_grade_code 조인이 빗나가 학년이 "-"로 보일 뿐, 가입 자체를 막지는 않는다.
+     */
+    private String toOlpassGradeKey(String clinicGradeKey) {
+        String olpass = SCHOOLYEAR_TO_OLPASS_GRADE.get(clinicGradeKey);
+        if (olpass == null) {
+            log.warn("[입회] 올패스 학년코드로 변환할 수 없는 학년: {}", clinicGradeKey);
+            return clinicGradeKey;
+        }
+        return olpass;
     }
 
     /** 가입 직후 서명 PNG 업로드 → 보호자 행에 URL 저장 */

@@ -1,6 +1,7 @@
 package com.hohoedu.book_clinic.student;
 
 import com.hohoedu.book_clinic.student._dto.StudentJoinReqDTO;
+import com.hohoedu.book_clinic.student._dto.StudentReqDTO;
 import com.hohoedu.book_clinic.student._dto.StudentRespDTO;
 import com.hohoedu.book_clinic.student.model.Student;
 import org.apache.ibatis.annotations.Mapper;
@@ -28,6 +29,7 @@ public interface StudentRepository {
             @Param("gender") boolean gender, @Param("appId") String appId,
             @Param("appPassword") String appPassword, @Param("billingPhone") String billingPhone,
             @Param("statusKey") String statusKey,
+            @Param("olpassGradeKey") String olpassGradeKey,
             @Param("subHan") boolean subHan, @Param("subBook") boolean subBook,
             @Param("subHoho") boolean subHoho);
 
@@ -58,6 +60,13 @@ public interface StudentRepository {
 
     /** "학생 정보" 상세모달 — 기본 정보 + 통계(레벨 제외, ClinicService에서 채운다) */
     StudentRespDTO.StudentDetailDTO findStudentDetail(@Param("studentId") String studentId);
+
+    /** "학생 정보" 상세모달 수강 정보 탭 — 없으면 null (아직 저장한 적 없는 학생) */
+    StudentRespDTO.BookstoreAssignDTO findBookstoreAssign(@Param("studentId") String studentId);
+
+    /** 수강 정보 저장 — 학생당 1행이라 UX_bookstore_assign_student 기준 upsert 한다 */
+    void saveBookstoreAssign(@Param("studentId") String studentId,
+            @Param("s") StudentReqDTO.BookstoreAssignSaveDTO dto, @Param("level") Integer level);
 
     /** "학생 정보" 상세모달 독서이력 탭 — 최근 읽은 순 */
     List<StudentRespDTO.ReadingHistoryRowDTO> findReadingHistory(@Param("studentId") String studentId);

@@ -75,12 +75,19 @@
         ) prvres
 
         -- 활성 이용권 (회수 안 됨 + 유효기간 내, 가장 최근 부여분)
+        --
+        -- valid_until IS NULL 을 함께 받는 이유(2026-09-15) — 만료일이 "첫 예약일부터 90일"로
+        -- 바뀌면서(2026-09-14) 결제 직후의 이용권은 기간이 아직 안 정해진 채(valid_from/until NULL)
+        -- 대기한다. NULL 비교는 참이 되지 않으므로 조건을 그대로 두면 방금 산 이용권이 통째로
+        -- 빠져서 앱 메인에 "이용권 없음/0회"로 보인다. PassMapper.sumRemain 은 같은 이유로 이미
+        -- valid_from IS NULL 을 포함하고 있다 — 그쪽과 기준을 맞춘다.
         OUTER APPLY (
             SELECT TOP 1 p.total_count, p.remain_count, p.valid_until
             FROM erp_bookstore_pass p
             WHERE p.student_id = s.student_id
               AND p.revoked_at IS NULL
-              AND p.valid_until &gt;= cast(getdate() AS date)
+              AND (p.valid_until IS NULL
+                   OR p.valid_until &gt;= cast(getdate() AS date))
             ORDER BY p.granted_at DESC
         ) pass
 
@@ -151,7 +158,7 @@
             JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
             LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
             WHERE d.student_id = s.student_id
-              AND d.record_date = #{recordDate}
+              AND d.record_date = #{recordDate,jdbcType=DATE}
         ) day
 
         -- 누적 완독 권수 — 그 날짜까지. 첫 제출(DONE) 기준이라 합격/불합격은 따지지 않는다.
@@ -161,7 +168,7 @@
             WHERE rl.student_id = s.student_id
               AND rl.status = 'DONE'
               AND rl.completed_at IS NOT NULL
-              AND cast(rl.completed_at AS date) &lt;= #{recordDate}
+              AND cast(rl.completed_at AS date) &lt;= #{recordDate,jdbcType=DATE}
         ) cum
 
         WHERE s.student_id = #{studentId}
@@ -216,9 +223,11 @@
     <select id="selectBookstoreReportBadges" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportBadgeDTO">
         SELECT
             b.badge_id   AS badgeId,
+            b.category   AS category,
             b.badge_name AS badgeName,
             b.badge_desc AS badgeDesc,
-            cast(CASE WHEN e.cnt &gt; 0 THEN 1 ELSE 0 END AS BIT) AS earned
+            cast(CASE WHEN e.cnt &gt; 0 THEN 1 ELSE 0 END AS BIT) AS earned,
+            isnull(e.cnt, 0) AS earnedCount
         FROM erp_bookstore_badge b
         OUTER APPLY (
             SELECT count(*) AS cnt

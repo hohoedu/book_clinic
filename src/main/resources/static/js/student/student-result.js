@@ -46,6 +46,7 @@
   const scoreStars = document.getElementById('scoreStars');
   const resultTitle = document.getElementById('resultTitle');
   const resultRetryText = document.getElementById('resultRetryText');
+  const rewardMedal = document.getElementById('rewardMedal');
   const rewardLevelNo = document.getElementById('rewardLevelNo');
   const rewardLevelName = document.getElementById('rewardLevelName');
   const rewardExpDesc = document.getElementById('rewardExpDesc');
@@ -62,6 +63,16 @@
   const rewardBadgeImg = document.getElementById('rewardBadgeImg');
   const rewardBadgeName = document.getElementById('rewardBadgeName');
   const rewardBadgeDesc = document.getElementById('rewardBadgeDesc');
+
+  /* 보상 패널 "레벨 성장!" 메달을 학년 메달(medal_1~6.png)로 바꾼다 — student-main 레벨 카드와 같은 그림이다.
+     메달에 학년 숫자가 박혀 있어 초1~초6(01~06)만 있고, 중등('07')/학년 미지정은 엉뚱한 숫자를 보여주느니
+     템플릿에 박아둔 기존 금색 메달을 그대로 둔다. (2026-09-15) */
+  function applyRewardMedal(schoolyear) {
+    if (!rewardMedal) return;
+    const n = Number(schoolyear);
+    if (!Number.isInteger(n) || n < 1 || n > 6) return;
+    rewardMedal.src = `/images/medal_sm/medal_${n}.png`;
+  }
   const stepReward = document.getElementById('stepReward');
   const rewardStepNow = document.getElementById('rewardStepNow');
   const rewardStepTotal = document.getElementById('rewardStepTotal');
@@ -150,6 +161,7 @@
     }
 
     heroSchoolyear = result.schoolyear ?? null;
+    applyRewardMedal(heroSchoolyear);
     renderScore(result);
 
     if (result.advanced) {

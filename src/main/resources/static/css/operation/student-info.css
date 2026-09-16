@@ -166,44 +166,21 @@
   color: #9aa5ab;
 }
 
-/* 현재 레벨 — 학년(단계)별 팔레트를 재사용해 어느 단계인지 색으로 구분 */
-.level-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 12px 3px 3px;
-  border-radius: 20px;
-  font-size: 14px;
+/* 현재 레벨 — 학년 메달(medal_1~6.png, 그림에 학년 숫자가 박혀 있다) + "Lv. n" 한 줄.
+   메달 이미지가 이미 색을 다 갖고 있어서 알약(pill) 배경은 두지 않고 글자는 검정 그대로 간다 (2026-09-15). */
+.col-level {
+  white-space: nowrap;
+  color: #000;
   font-weight: 800;
 }
 
-.level-icon {
+.level-medal {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
+  object-fit: contain;
+  vertical-align: middle;
+  margin-right: 6px;
 }
-
-.level-pill.grade-01 { color: #DD8200; background: #FFF9D0; }
-.level-pill.grade-01 .level-icon { background: #FEC336; }
-
-.level-pill.grade-02 { color: #DB6D01; background: #FFE9D9; }
-.level-pill.grade-02 .level-icon { background: #E69153; }
-
-.level-pill.grade-03 { color: #90A727; background: #E5F1AE; }
-.level-pill.grade-03 .level-icon { background: #A7BE3C; }
-
-.level-pill.grade-04 { color: #37AF9F; background: #CAF0EB; }
-.level-pill.grade-04 .level-icon { background: #90D9CF; }
-
-.level-pill.grade-05 { color: #338FCA; background: #C3E7FE; }
-.level-pill.grade-05 .level-icon { background: #6ABAEC; }
-
-.level-pill.grade-06 { color: #6A6DD9; background: #CDCEFF; }
-.level-pill.grade-06 .level-icon { background: #9091E2; }
 
 /* 상태 */
 .status {
@@ -331,7 +308,7 @@
   color: #333;
 }
 
-/* 기본정보 표 (기본정보 탭 / 회비 탭 공용) */
+/* 기본정보 표 (기본정보 탭 / 수강 정보 탭 공용) */
 .base-info-t {
   width: 100%;
   border-collapse: collapse;
@@ -365,7 +342,9 @@
 }
 
 .base-info-t input[type="text"],
-.base-info-t input[type="tel"] {
+.base-info-t input[type="tel"],
+.base-info-t input[type="date"],
+.base-info-t input[type="number"] {
   border: 1px solid #e9eaec;
   border-radius: 5px;
   padding: 7px 10px;
@@ -472,6 +451,28 @@
   background: #008b7a;
   color: #fff;
   border-color: #008b7a;
+}
+
+/* ---- 수강 정보 탭 (2026-09-15) ----
+ * 수강/미수강은 실제 radio 지만 모양은 기존 .btn-choose 토글 그대로다 — input 은 숨기고
+ * active 클래스만 JS(bindAssignTab)가 갈아끼운다. 미수강을 고르면 .assign-inactive-row 가 펼쳐진다. */
+.choose-group .btn-choose {
+  cursor: pointer;
+  gap: 0;
+}
+
+.choose-group .btn-choose input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* 아직 저장 전이라는 안내문 */
+.mock-note {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #8a9299;
 }
 
 .save-btn-frame {
@@ -692,6 +693,30 @@
   overflow-y: auto;
 }
 
+/* 예약/독서이력 등 목록이 비었을 때 — 카드/탭 영역 안에서 세로·가로 가운데 정렬 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  min-height: 140px;
+  color: #b6bfc4;
+  text-align: center;
+}
+
+.empty-state-tab {
+  min-height: 100%;
+}
+
+.empty-state-text {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #a7b0b6;
+}
+
 .basic-table {
   width: 100%;
   border-collapse: collapse;
@@ -739,7 +764,9 @@
 }
 
 .stat-icon {
-  font-size: 22px;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
 }
 
 .stat-label {
@@ -794,7 +821,7 @@
 .result-badge.result-king { color: #61A7D8; background: #C3E7FE; }
 .result-badge.result-retry { color: #C45C67; background: #F7DCDF; }
 
-/* ---- 회비 탭 (all_pass 수강과목/회비 표 그대로) ---- */
+/* ---- 수강 정보 탭 (표 골격은 all_pass 수강과목/회비 표 그대로) ---- */
 .dues-sum {
   font-size: 18px;
   font-weight: bold;

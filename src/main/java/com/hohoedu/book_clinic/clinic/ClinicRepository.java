@@ -140,6 +140,13 @@ public interface ClinicRepository {
     /** 단계(학년)+레벨의 칭호 (미시딩이면 null — 화면은 Lv.N만 표시) */
     String findLevelTitle(@Param("schoolyear") String schoolyear, @Param("levelNo") int levelNo);
 
+    /** erp_bookstore_level 전체(레벨 칭호표) — 참조 데이터라 통째로 읽어 메모리에서 찾는다(학생 목록 화면에서 학생 수만큼 쿼리하지 않으려고) */
+    List<ClinicRespDTO.LevelTitleRowDTO> findAllLevelTitles();
+
+    /** countDoneBooksByGrade의 배치 버전 — "학생 정보" 목록처럼 여러 학생의 완독 권수를 한 번에 구할 때 쓴다.
+     * 각 학생 자기 학년(clinic_grade_key) 도서 기준으로 세므로 studentId만 넘기면 된다 */
+    List<ClinicRespDTO.StudentDoneCountDTO> countDoneBooksByGradeBatch(@Param("studentIds") List<String> studentIds);
+
     /** 특정 책의 카드 정보(제목/저자/표지) — NORMAL 카드 지급 시 이름/이미지 조회용 (없으면 null) */
     ClinicRespDTO.CardDTO findCardByContent(@Param("contentId") Integer contentId);
 

@@ -122,6 +122,21 @@ public class ClinicService {
             "03", "/images/character03.png"
     );
 
+    /**
+     * 학년별 메달 이미지 — 메달 그림에 학년 숫자(1~6)가 그려져 있어 초1~초6만 존재한다.
+     * 중등(07)이나 학년 미지정은 null 을 내려 화면에서 메달 없이 "Lv. n" 만 노출한다
+     * (엉뚱한 숫자가 박힌 메달을 보여주는 것보다 낫다). medal_sm 은 표시용 축소본(104x104)이고
+     * 원본 /images/medal_N.png 는 1254x1254 라 아이콘 용도로는 쓰지 않는다 (2026-09-15).
+     */
+    private static final Map<String, String> MEDAL_IMG_BY_SCHOOLYEAR = Map.of(
+            "01", "/images/medal_sm/medal_1.png",
+            "02", "/images/medal_sm/medal_2.png",
+            "03", "/images/medal_sm/medal_3.png",
+            "04", "/images/medal_sm/medal_4.png",
+            "05", "/images/medal_sm/medal_5.png",
+            "06", "/images/medal_sm/medal_6.png"
+    );
+
     // student-main "이번 달에 읽은 책" 패널이 4칸 고정 레이아웃이라 서버에서도 4건으로 맞춘다
     private static final int MONTH_BOOKS_LIMIT = 4;
 
@@ -962,6 +977,7 @@ public class ClinicService {
 
         ClinicRespDTO.MainLevelInfoDTO result = new ClinicRespDTO.MainLevelInfoDTO();
         result.setCharacterImg(CHARACTER_IMG_BY_SCHOOLYEAR.get(schoolyear));
+        result.setMedalImg(MEDAL_IMG_BY_SCHOOLYEAR.get(schoolyear));
 
         if (rule == null) {
             result.setLevelNo(1);
@@ -987,6 +1003,48 @@ public class ClinicService {
         int inLevel = doneBooks % booksPerLevel;
         result.setProgressPercent((int) Math.round(inLevel * 100.0 / booksPerLevel));
         result.setBooksToNextLevel(booksPerLevel - inLevel);
+        return result;
+    }
+
+    /**
+     * getMainLevelInfo()의 배치 버전 — "학생 정보" 목록처럼 여러 학생의 레벨/칭호를 한 번에 구할 때 쓴다.
+     * 학생별로 3쿼리(학년조회·완독권수·칭호)씩 날리는 대신, 완독권수/칭호표를 통째로 한 번씩만 읽는다.
+     * clinicGradeKeyByStudentId 는 호출부가 이미 알고 있는 값(목록 쿼리가 같이 select 해둔 clinic_grade_key)을
+     * 넘기면 되고, 비어있는 학생만 기존 resolveSchoolyear()로 개별 조회해 lazy-init까지 그대로 탄다.
+     * progressPercent/booksToNextLevel/characterImg/medalImg는 목록 화면에 필요 없어 채우지 않는다(2026-09-15).
+     */
+    public Map<String, ClinicRespDTO.MainLevelInfoDTO> getMainLevelInfoBatch(Map<String, String> clinicGradeKeyByStudentId) {
+        if (clinicGradeKeyByStudentId.isEmpty()) {
+            return Map.of();
+        }
+
+        List<String> studentIds = new ArrayList<>(clinicGradeKeyByStudentId.keySet());
+        Map<String, Integer> doneBooksByStudent = clinicRepository.countDoneBooksByGradeBatch(studentIds).stream()
+                .collect(Collectors.toMap(ClinicRespDTO.StudentDoneCountDTO::getStudentId, ClinicRespDTO.StudentDoneCountDTO::getDoneBooks));
+        Map<String, String> titleByGradeLevel = clinicRepository.findAllLevelTitles().stream()
+                .collect(Collectors.toMap(t -> t.getSchoolyear() + "|" + t.getLevelNo(), ClinicRespDTO.LevelTitleRowDTO::getTitle));
+
+        Map<String, ClinicRespDTO.MainLevelInfoDTO> result = new java.util.HashMap<>();
+        for (String studentId : studentIds) {
+            String schoolyear = clinicGradeKeyByStudentId.get(studentId);
+            if (schoolyear == null || schoolyear.isBlank()) {
+                schoolyear = resolveSchoolyear(studentId);
+            }
+
+            ClinicRespDTO.MainLevelInfoDTO info = new ClinicRespDTO.MainLevelInfoDTO();
+            LevelRule rule = LEVEL_RULES.get(schoolyear);
+            if (rule == null) {
+                info.setLevelNo(1);
+                result.put(studentId, info);
+                continue;
+            }
+
+            int doneBooks = doneBooksByStudent.getOrDefault(studentId, 0);
+            int levelNo = levelFor(doneBooks, rule.booksPerLevel());
+            info.setLevelNo(levelNo);
+            info.setTitle(titleByGradeLevel.get(schoolyear + "|" + levelNo));
+            result.put(studentId, info);
+        }
         return result;
     }
 

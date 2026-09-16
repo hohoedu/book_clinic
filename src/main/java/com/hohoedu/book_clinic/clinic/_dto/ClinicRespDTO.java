@@ -91,6 +91,22 @@ public class ClinicRespDTO {
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0)
         private String characterImg;       // 학년별 캐릭터 이미지 경로 (초1~3만 전용 이미지, 나머지는 기본값)
+        private String medalImg;           // 학년별 메달 이미지 경로 (초1~6만 존재, 중등/미지정이면 null)
+    }
+
+    /** 학생 목록 화면 레벨 배치 계산용 — 학생별 "자기 학년 도서" 완독 권수 1행 */
+    @Data
+    public static class StudentDoneCountDTO {
+        private String studentId;
+        private Integer doneBooks;
+    }
+
+    /** erp_bookstore_level 1행(학년+레벨 → 칭호) — 학생 목록 화면에서 전체를 한 번에 읽어 메모리 매핑용으로 쓴다 */
+    @Data
+    public static class LevelTitleRowDTO {
+        private String schoolyear;
+        private Integer levelNo;
+        private String title;
     }
 
     /** student-main "이번 달에 읽은 책" 패널 1건 (완료 도서 + 현재 읽는 중인 도서 1건) */

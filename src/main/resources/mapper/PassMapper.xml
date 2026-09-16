@@ -7,13 +7,21 @@
 -->
 <mapper namespace="com.hohoedu.book_clinic.pass.PassRepository">
 
+    <!--
+      valid_from/valid_until에 jdbcType을 명시하는 이유(2026-09-15) — grantUnassigned로 발급되는
+      앱 결제분은 이 둘이 NULL이다(만료일은 첫 예약 때 정해진다). 타입을 안 적으면 mssql-jdbc가
+      타입 없는 NULL을 varbinary로 보내는데 varbinary→date는 암시적 변환이 안 돼서 INSERT가 깨진다
+      ("Implicit conversion from data type varbinary to date is not allowed", 오류 257).
+      PaymentMapper.insertReady의 cycle_from/until도 같은 이유로 타입을 적어 두었다.
+    -->
     <insert id="insertPass">
         INSERT INTO erp_bookstore_pass
             (student_id, center_code, product_id, service_code, source, ref_no, billing_ym,
              valid_from, valid_until, total_count, remain_count, granted_at)
         VALUES
             (#{studentId}, #{centerCode}, #{productId}, #{serviceCode}, #{source}, #{refNo}, #{billingYm},
-             #{validFrom}, #{validUntil}, #{totalCount}, #{totalCount}, DATEADD(HOUR, 9, GETUTCDATE()))
+             #{validFrom,jdbcType=DATE}, #{validUntil,jdbcType=DATE},
+             #{totalCount}, #{totalCount}, DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="passColumns">

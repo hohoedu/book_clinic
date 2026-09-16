@@ -62,7 +62,8 @@ public class SecurityConfig {
                                                                 "/app/**",
                                                                 "/pass/**",
                                                                 "/sso/callback",
-                                                                "/kiosk/register")
+                                                                "/kiosk/register",
+                                                                "/.well-known/**")
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .formLogin(form -> form

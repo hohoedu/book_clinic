@@ -128,7 +128,7 @@
     학생 상세정보 모달 — all_pass(자매 서비스)의 student-main-modal 구조를 그대로 가져왔다
     (탭바 .info-tab-btn, 본문 .modal-scroll, 표 .base-info-t 등 클래스 체계 동일, 색만 틸로 변경).
     다만 all_pass에는 없는 "독서이력/예약" 탭은 book_clinic 자체로 새로 만든 것.
-    전체/기본 정보/회비/독서이력/예약 5개 탭. 내용은 student-info.js가 채운다.
+    전체/기본 정보/수강 정보/독서이력/예약 5개 탭. 내용은 student-info.js가 채운다.
   -->
   <div class="modal-overlay" id="studentModal" hidden>
     <div class="stu-m-con">
@@ -143,7 +143,7 @@
         <div class="info-tab-btn" id="studentTabs">
           <button type="button" class="active" data-tab="all">전체</button>
           <button type="button" data-tab="basic">기본 정보</button>
-          <button type="button" data-tab="fee">회비</button>
+          <button type="button" data-tab="assign">수강 정보</button>
           <button type="button" data-tab="reading">독서이력</button>
           <button type="button" data-tab="reservation">예약</button>
         </div>

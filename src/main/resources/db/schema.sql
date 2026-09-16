@@ -1057,6 +1057,31 @@ CREATE TABLE erp_student_guardian (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_guardian_student' AND object_id = OBJECT_ID('erp_student_guardian'))
     CREATE INDEX IX_guardian_student ON erp_student_guardian (student_id);
 
+-- 책방 수강 배정 — "학생 정보" 상세모달 수강 정보 탭에서 등록/수정한다 (2026-09-15).
+-- all_pass 의 erp_teacher_assign 중 책방 몫만 떼어온 것. book_clinic 엔 교사배정/반배정 개념이
+-- 없어 담당교사·반 컬럼은 가져오지 않았다. student_id 는 위 guardian 과 같은 이유로 FK 없이 값 연결.
+IF OBJECT_ID('erp_bookstore_assign', 'U') IS NULL
+CREATE TABLE erp_bookstore_assign (
+    assign_id                 INT IDENTITY(1,1) PRIMARY KEY,
+    student_id                VARCHAR(100) NOT NULL,           -- erp_student.student_id
+    bookstore_state           BIT          NOT NULL DEFAULT 1, -- 1=수강 / 0=미수강
+    bookstore_edu_fee         INT,                             -- 교육비(원). 미입력이면 NULL
+    -- 저장 시점의 자동 계산 레벨 스냅샷(ClinicService.getMainLevelInfo().levelNo, 1~30).
+    -- 완독 권수가 늘어도 따라 오르지 않는다 — 화면에서도 읽기 전용이다.
+    bookstore_level           INT,
+    -- 화면 입력은 날짜(yyyy-MM-dd)뿐이지만 타입은 DATETIME2 다. 저장할 때
+    -- StudentMapper.saveBookstoreAssign 이 CONVERT(DATETIME2, ..., 23) 으로 명시 변환해 넣는다.
+    entry_bookstore_date      DATETIME2,                       -- 수강 시작일
+    inactive_bookstore_date   DATETIME2,                       -- 미수강 전환일 (수강중이면 NULL)
+    inactive_bookstore_reason VARCHAR(200),                    -- 미수강 사유 (수강중이면 NULL)
+    created_at                DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at                DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE())
+);
+
+-- 학생 1명당 수강 정보 1행. StudentMapper.saveBookstoreAssign 의 MERGE 가 이 유니크에 기댄다.
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_bookstore_assign_student' AND object_id = OBJECT_ID('erp_bookstore_assign'))
+    CREATE UNIQUE INDEX UX_bookstore_assign_student ON erp_bookstore_assign (student_id);
+
 -- 환불(취소) 내역 — 부분환불과 재시도가 있어 결제 1건에 N행이다. PG 결제분 전용이다.
 -- 이번 취소가 부분인지 전액인지는 cancel_amount와 payment.amount - payment.refund_amount 비교로 나오므로
 -- is_partial 같은 플래그를 두지 않는다.

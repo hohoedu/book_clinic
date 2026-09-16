@@ -110,12 +110,22 @@
       "학생 정보" 화면 목록 조회. 현재 레벨은 학년별로 레벨업 기준 권수가 달라
       학생 단위 SQL 한 방으로 못 뽑고 ClinicService.getMainLevelInfo()에서 Java로 계산하므로,
       여기서는 그 계산에 필요한 totalDoneBooks(전체 학년 누적 완독 권수)까지만 내려준다.
+
+      학년은 2종류이고 코드표도 서로 다르다 (2026-09-15).
+        - grade_key        = 진짜 학년(올패스 코드 05~07/11~16/21~23) → erp_grade_code 와 조인.
+                             목록의 "학년" 칸과 학년 필터가 이 값을 쓴다.
+        - clinic_grade_key = 독서 학년(클리닉 자체 코드 01~07)       → erp_bookstore_code gubun='S' 와 조인.
+                             레벨 앞 메달 이미지(medal_1~6.png)를 이 번호로 고른다.
+      둘을 섞어 조인하면 코드 체계가 안 맞아 통째로 빗나간다 — 실제로 예전엔 grade_key를
+      gubun='S'(01~07)에 물려놔서 학년이 "-"로 뜨고 학년 필터도 한 건도 안 걸렸다.
     -->
     <select id="findStudentByCenterCode" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$StudentInfoRowDTO">
         SELECT st.student_id                                  AS studentId,
                st.student_name                                AS studentName,
                st.grade_key                                   AS gradeKey,
-               cd.codeNm                                      AS gradeName,
+               gc.grade_name                                  AS gradeName,
+               st.clinic_grade_key                            AS clinicGradeKey,
+               cd.codeNm                                      AS clinicGradeName,
                st.billing_phone                                AS billingPhone,
                CONVERT(VARCHAR(10), st.created_at, 23)         AS registeredAt,
                (SELECT CONVERT(VARCHAR(10), MAX(cs.session_date), 23)
@@ -127,7 +137,8 @@
                    AND rl.status = 'DONE')                     AS totalDoneBooks,
                st.status_key                                   AS statusKey
         FROM erp_student st
-        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        LEFT JOIN erp_grade_code     gc ON gc.grade_key = st.grade_key
+        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.clinic_grade_key
         WHERE st.center_code = #{centerCode}
         <if test="gradeKey != null">AND st.grade_key = #{gradeKey}</if>
         <if test="statusKey != null">AND st.status_key = #{statusKey}</if>
@@ -138,11 +149,12 @@
         ORDER BY st.student_name ASC
     </select>
 
+    <!-- 학년 필터 드롭다운 — 목록의 "학년" 칸/필터와 같은 진짜 학년(grade_key) 기준이라 erp_grade_code 에서 읽는다.
+         grade_key 오름차순이 곧 5세→7세→초1→…→중3 순서다 (2026-09-15) -->
     <select id="findGradeOptions" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$GradeOptionDTO">
-        SELECT code AS code, codeNm AS codeNm
-        FROM erp_bookstore_code
-        WHERE gubun = 'S'
-        ORDER BY code ASC
+        SELECT grade_key AS code, grade_name AS codeNm
+        FROM erp_grade_code
+        ORDER BY grade_key ASC
     </select>
 
     <!-- "학생 정보" 상세모달 기본 정보 — kingCount/badgeCount는 전체 학년 누적(리워드 카드/뱃지 기획과 같은 기준) -->
@@ -150,7 +162,7 @@
         SELECT st.student_id                                   AS studentId,
                st.student_name                                 AS studentName,
                st.grade_key                                    AS gradeKey,
-               cd.codeNm                                        AS gradeName,
+               gc.grade_name                                    AS gradeName,
                st.status_key                                    AS statusKey,
                st.billing_phone                                 AS billingPhone,
                st.school                                        AS school,
@@ -174,7 +186,7 @@
                   FROM erp_bookstore_student_badge sb
                  WHERE sb.student_id = st.student_id)           AS badgeCount
         FROM erp_student st
-        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        LEFT JOIN erp_grade_code gc ON gc.grade_key = st.grade_key
         WHERE st.student_id = #{studentId}
     </select>
 
@@ -233,7 +245,9 @@
              created_at, updated_at)
         VALUES
             (#{studentId}, #{s.studentName}, #{birth}, #{gender}, #{s.school}, #{s.address}, #{s.addressDetail},
-             #{appId}, #{appPassword}, #{s.centerCode}, #{s.gradeKey}, #{s.gradeKey}, #{statusKey},
+             <!-- grade_key = 올패스 코드(erp_grade_code), clinic_grade_key = 클리닉 S코드(erp_bookstore_code).
+                  코드 체계가 달라 같은 값을 넣으면 안 된다 — StudentJoinService.toOlpassGradeKey 참고 (2026-09-15) -->
+             #{appId}, #{appPassword}, #{s.centerCode}, #{olpassGradeKey}, #{s.gradeKey}, #{statusKey},
              #{s.studentPrivacyAgree}, #{subHan}, #{subBook}, #{subHoho}, #{subHoho}, #{billingPhone},
              DATEADD(HOUR, 9, GETUTCDATE()), DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
@@ -270,5 +284,54 @@
                )
            )
     </select>
+
+    <!--
+      수강 정보 탭 (erp_bookstore_assign, 2026-09-15). 학생당 1행이며 행이 없으면 null 이 돌아온다
+      (서비스가 화면용 기본값을 대신 만들어 준다).
+    -->
+    <select id="findBookstoreAssign" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$BookstoreAssignDTO">
+        SELECT bookstore_state                                                AS state,
+               bookstore_edu_fee                                              AS eduFee,
+               bookstore_level                                                AS level,
+               CONVERT(VARCHAR(10), entry_bookstore_date, 23)                 AS entryDate,
+               CONVERT(VARCHAR(10), inactive_bookstore_date, 23)              AS inactiveDate,
+               inactive_bookstore_reason                                      AS inactiveReason,
+               CAST(1 AS BIT)                                                 AS saved
+        FROM erp_bookstore_assign
+        WHERE student_id = #{studentId}
+    </select>
+
+    <!--
+      수강 정보 저장 — 학생당 1행(UX_bookstore_assign_student)이라 MERGE 로 upsert 한다
+      (MonitorMapper.upsertDiary 와 같은 방식). 수강중이면 미수강 일자/사유는 서비스에서 null 로
+      비워 넘어오므로 여기서 그대로 덮어쓰면 된다.
+
+      날짜 두 개는 화면에서 "2026-09-15" 문자열로 올라오고 컬럼은 DATETIME2 라, CONVERT 로 명시
+      변환해 넣는다(스타일 23 = yyyy-MM-dd). null 이면 CONVERT 결과도 그대로 null 이다.
+      jdbcType 을 붙인 이유(2026-09-15): 값이 null 이면 MyBatis 가 타입을 모른 채 setNull(OTHER) 로
+      보내고, SQL Server 가 그걸 varbinary 로 추론해 "Implicit conversion from data type varbinary
+      to date is not allowed" 로 터진다.
+    -->
+    <update id="saveBookstoreAssign">
+        MERGE erp_bookstore_assign AS target
+        USING (SELECT #{studentId,jdbcType=VARCHAR} AS student_id) AS source
+        ON target.student_id = source.student_id
+        WHEN MATCHED THEN UPDATE SET
+            bookstore_state           = #{s.state,jdbcType=BIT},
+            bookstore_edu_fee         = #{s.eduFee,jdbcType=INTEGER},
+            bookstore_level           = #{level,jdbcType=INTEGER},
+            entry_bookstore_date      = CONVERT(DATETIME2, #{s.entryDate,jdbcType=VARCHAR}, 23),
+            inactive_bookstore_date   = CONVERT(DATETIME2, #{s.inactiveDate,jdbcType=VARCHAR}, 23),
+            inactive_bookstore_reason = #{s.inactiveReason,jdbcType=VARCHAR},
+            updated_at                = DATEADD(HOUR, 9, GETUTCDATE())
+        WHEN NOT MATCHED THEN INSERT
+            (student_id, bookstore_state, bookstore_edu_fee, bookstore_level,
+             entry_bookstore_date, inactive_bookstore_date, inactive_bookstore_reason)
+            VALUES (source.student_id, #{s.state,jdbcType=BIT}, #{s.eduFee,jdbcType=INTEGER},
+                    #{level,jdbcType=INTEGER},
+                    CONVERT(DATETIME2, #{s.entryDate,jdbcType=VARCHAR}, 23),
+                    CONVERT(DATETIME2, #{s.inactiveDate,jdbcType=VARCHAR}, 23),
+                    #{s.inactiveReason,jdbcType=VARCHAR});
+    </update>
 
 </mapper>

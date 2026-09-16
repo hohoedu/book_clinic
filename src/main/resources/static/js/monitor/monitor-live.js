@@ -79,6 +79,9 @@ const STATUS_BADGE = {
   EXITED: { text: "퇴실", icon: "fa-right-from-bracket", cls: "status-exited" },
 };
 
+// 획득 뱃지 이미지 hover 툴팁용 — erp_bookstore_badge 고정 1~5번과 이름을 맞춘다(ClinicService 상수 참고).
+const BADGE_NAME = { 1: "완독", 2: "정독완료", 3: "정독왕", 4: "문해력챌린저", 5: "문해력챔피언" };
+
 /* "문제 푸는 중" 배지에 회차/심화를 덧붙인다 — 기본 회차는 (지금까지 제출한 회차 + 1), 심화면 "심화" (2026-08-28) */
 function statusBadgeFor(card) {
   const badge = STATUS_BADGE[card.cardStatus] ?? STATUS_BADGE.READING;
@@ -452,6 +455,9 @@ function sortedCards(list) {
    순차 노출하던 방식보다 지금 누가 어느 상태인지 한눈에 파악하기 쉽다. filteredCards()가 이미
    같은 기준(rank)으로 정렬해 내려주므로 여기서는 그 순서 그대로 그룹만 나눈다. */
 function renderGrid() {
+  // 이전 렌더링의 점수 상자는 곧 버려진다 — 관찰을 끊지 않으면 15초마다 관찰 대상이 쌓인다
+  scoreFitObserver?.disconnect();
+
   const grouped = { entered: [], notEntered: [], exited: [] };
   filteredCards().forEach((card) => {
     if (card.sessionStatus === "EXITED") grouped.exited.push(card);
@@ -477,6 +483,11 @@ function renderSection(gridId, countId, list, emptyText) {
     return;
   }
   list.forEach((card) => grid.appendChild(buildCardEl(card)));
+  // 점수 칸은 DOM에 붙은 뒤에야 폭을 잴 수 있다
+  grid.querySelectorAll(".stat-value--score").forEach((scoreEl) => {
+    fitScoreValue(scoreEl);
+    scoreFitObserver?.observe(scoreEl);
+  });
 }
 
 /* 카드 캐러셀의 페이지 목록 — books가 있으면 그대로, 없으면(구버전 Firestore 문서·미입실 등)
@@ -599,6 +610,14 @@ function buildCardEl(card) {
 
 /* book-row(표지/책 정보/독서일지 버튼) + 책이 2권 이상이면 점 페이지네이션.
    점은 카드 맨 아래(card-bottom)의 입실 시간과 퇴실 버튼 사이에 놓인다(2026-09-02, 기존엔 book-row 바로 아래). */
+/* 워크시트를 뽑을 수 있는 책인지 (2026-09-15).
+   등록된 워크시트가 있어야 하고, 그 책의 문제풀이가 끝나 있어야 한다(basicStatus === "DONE").
+   읽는 중에 뽑아두면 학생이 아직 책을 붙들고 있는 단계라 쓸 데가 없다 — 그래서 독서 중에는
+   아이콘 자체를 띄우지 않는다. 다 푼 뒤(결과류·퇴실)에는 계속 보이므로 나중에도 뽑을 수 있다. */
+function canPrintWorksheet(card, page) {
+  return !!page.hasWorksheet && page.basicStatus === "DONE";
+}
+
 function renderBookRow(el, card, pages, pageIndex) {
   const page = pages[pageIndex];
   const notEntered = card.cardStatus === "NOT_ENTERED";
@@ -617,7 +636,7 @@ function renderBookRow(el, card, pages, pageIndex) {
     canHoldBook(card, page)
       ? `<button type="button" class="book-hold-btn${page.holdPage != null ? " filled" : ""}" title="다 못 읽은 책 — 몇 쪽까지 읽었는지 기록"><i class="fa-solid fa-lock"></i></button>`
       : "",
-    page.hasWorksheet
+    canPrintWorksheet(card, page)
       ? `<button type="button" class="book-worksheet-btn" title="워크시트 출력"><i class="fa-solid fa-print"></i></button>`
       : "",
     notEntered
@@ -906,16 +925,35 @@ function resetResultMessage(bookTitle, result) {
 
 /* stat-row — 독서시간/기본문제/심화문제/획득뱃지 전부 선택된 책 페이지(content_id) 기준이다.
    뱃지도 예전엔 학생 전체 합산이라 A책 카드에 B책 뱃지가 같이 보이는 문제가 있었다(2026-07-29 수정) */
-/* 점수 한 칸 — 최종 점수만 보여준다(2026-09-14).
-   재도전으로 갱신된 처음 점수(7/12 → 10/12)를 같이 적으려면 칸 폭이 약 150px 필요한데, 카드가
-   한 줄에 5개라 칸 안쪽이 약 100px밖에 안 된다. 폰트를 줄여도 못 맞춘다. 처음 점수는 독서일지와
-   결과 화면에서 확인한다. 값 자체는 서버가 계속 내려주므로(basicCorrectCount) 되살리기는 쉽다. */
+/* 점수 한 칸 — "처음 › 최종". 재도전으로 점수가 올라간 책만 두 개가 되고, 그 외에는 하나만 그린다.
+   화살표는 글자(→) 대신 아이콘을 쓴다 — 폰트마다 모양·폭이 제각각이라 칸 폭이 흔들린다.
+   카드가 한 줄에 5개라 칸 안쪽이 약 100px뿐이어서 두 점수가 한 줄에 다 안 들어갈 수 있다.
+   그때는 값이 칸 안에서 다음 줄로 접히고(그 카드만 조금 높아진다) 점수는 잘리지 않는다. */
 function scoreHtml(first, final, total) {
-  return `${final ?? first}/${total}`;
+  const head = `${first}/${total}`;
+  if (final == null || final === first) return `<span class="score-final">${head}</span>`;
+  return `<span class="score-prev">${head}</span>`
+       + `<i class="fa-solid fa-angle-right score-arrow"></i>`
+       + `<span class="score-final">${final}/${total}</span>`;
 }
 
+/* 점수가 칸 폭을 넘칠 참이면(= 그대로 두면 줄바꿈이 일어나면) 처음 점수와 화살표를 접고
+   최종 점수만 남긴다. 칸 폭은 창 크기뿐 아니라 사이드바·독서일지 패널이 열리고 닫힐 때도
+   달라지므로, 고정 px 기준(@media/@container)이 아니라 실제로 넘치는지를 그때그때 잰다.
+   .score-compact를 먼저 떼고 재는 이유: 폭이 다시 넓어졌을 때 두 점수로 되돌리기 위해서다. */
+function fitScoreValue(el) {
+  el.classList.remove("score-compact");
+  if (el.scrollWidth > el.clientWidth) el.classList.add("score-compact");
+}
+
+/* 칸 폭이 바뀌는 순간(패널 토글·창 크기 조절)마다 다시 재준다 — 리렌더링을 기다리지 않는다.
+   접기는 자식(처음 점수)만 숨기는 것이라 관찰 대상인 값 상자의 폭은 그대로여서 되먹임이 없다. */
+const scoreFitObserver = typeof ResizeObserver === "undefined"
+  ? null
+  : new ResizeObserver((entries) => entries.forEach((entry) => fitScoreValue(entry.target)));
+
 function renderStatRow(el, card, page, isLatestPage) {
-  // 최종 점수(재도전 반영). 처음 점수는 칸 폭이 모자라 적지 않는다 — scoreHtml 주석 참고.
+  // 처음 점수 › 최종 점수(재도전으로 갱신됐을 때만 둘 다), 2026-08-28
   const basicText = page.basicTotalCount
     ? scoreHtml(page.basicCorrectCount ?? 0, page.basicFinalCorrectCount, page.basicTotalCount)
     : "-";
@@ -934,8 +972,10 @@ function renderStatRow(el, card, page, isLatestPage) {
   // badgeIds가 없는 구버전 Firestore 문서는 예전처럼 방패 아이콘 하나로 폴백한다.
   // id는 파일 경로에 그대로 들어가므로 숫자만 통과시킨다.
   const badgeIds = String(page.badgeIds ?? "").split(",").map((s) => s.trim()).filter((s) => /^\d+$/.test(s));
+  // title(브라우저 기본 툴팁)은 뜨는 데 1초 넘게 걸려 느리다 — data-tooltip + CSS로 즉시 뜨는
+  // 커스텀 툴팁을 쓴다(2026-09-15).
   const badgeIcons = badgeIds.length > 0
-    ? badgeIds.map((id) => `<img class="badge-img" src="/images/icons/badge_${id}.png" alt="뱃지" onerror="this.remove()" />`).join("")
+    ? badgeIds.map((id) => `<span class="badge-chip" data-tooltip="${BADGE_NAME[id] ?? "뱃지"}"><img class="badge-img" src="/images/icons/badge_${id}.png" alt="뱃지" onerror="this.remove()" /></span>`).join("")
     : (page.badgeCount ? `<i class="fa-solid fa-shield-halved badge-icon"></i>` : "-");
 
   /* 2×2 배치(2026-09-14) — 칸마다 라벨과 값 한 줄이 전부다.
@@ -949,11 +989,11 @@ function renderStatRow(el, card, page, isLatestPage) {
     </div>
     <div class="stat-cell">
       <div class="stat-label">기본 문제</div>
-      <div class="stat-value">${basicText}</div>
+      <div class="stat-value stat-value--score">${basicText}</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">심화 문제</div>
-      <div class="stat-value">${advancedText}</div>
+      <div class="stat-value stat-value--score">${advancedText}</div>
     </div>
     <div class="stat-cell">
       <div class="stat-label">획득 뱃지</div>

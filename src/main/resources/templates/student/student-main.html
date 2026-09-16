@@ -114,7 +114,7 @@
 
             <button type="button" class="solve-btn" id="mainActionBtn">
               <span class="book-icon"><i class="fa-solid fa-book-open" aria-hidden="true"></i></span>
-              <span id="mainActionLabel">정독 확인 문제 풀기</span>
+              <span id="mainActionLabel">정독 문제 풀기</span>
             </button>
 
             <!-- 완독(KING/FRIEND/심화완료) 후 홈으로 왔을 때만 노출 — 문제 풀기 버튼 대신 남은 액션만
@@ -126,7 +126,7 @@
               <button type="button" class="solve-btn solve-btn--sub" id="completionWrongRetryBtn" hidden>
                 <i class="fa-solid fa-rotate-left" aria-hidden="true"></i>틀린 문제 다시 풀기</button>
               <button type="button" class="solve-btn solve-btn--advanced" id="completionAdvancedBtn" hidden>
-                <i class="fa-solid fa-book-open" aria-hidden="true"></i>심화 확장 문제 풀기</button>
+                <i class="fa-solid fa-book-open" aria-hidden="true"></i>문해력 문제 풀기</button>
               <!-- 여권 쓰러 가기(2026-09-03) — 결과 화면과 같은 버튼이고 동작은 로그아웃이다.
                    심화까지 끝난 책의 마지막 단계에서만 나온다. -->
               <button type="button" class="solve-btn solve-btn--advanced" id="completionPassportBtn" hidden>
@@ -145,9 +145,11 @@
             </div>
             <div class="level-name">
               <!-- 레벨은 메달 아이콘 + "Lv. n"을 한 줄로 (2026-09-02, 기존 보라색 알약 pill 대체).
-                   성장 단계(levelName) 문구는 노출하지 않는다. -->
+                   성장 단계(levelName) 문구는 노출하지 않는다.
+                   메달은 학년별(medal_1~6.png, 그림에 학년 숫자가 박혀 있다)이다 — 숫자가 없는 중등/학년
+                   미지정은 medalImg 가 null 이라 메달 없이 "Lv. n" 만 나온다 (2026-09-15). -->
               <p class="level-no">
-                <img class="level-medal" th:src="@{/images/student_result/medal.png}" alt="" aria-hidden="true" />
+                <img class="level-medal" th:if="${medalImg}" th:src="@{${medalImg}}" alt="" aria-hidden="true" />
                 <span th:text="|Lv. ${levelNo}|">Lv. 3</span>
               </p>
               <h3 class="level-title" th:text="${levelTitle}">이야기 친구</h3>

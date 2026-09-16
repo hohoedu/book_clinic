@@ -66,7 +66,7 @@
 
     <!--
       카드 1건 조립: 세션 + 학생 + "이 학생의 최신 추천 도서"(recommend_id DESC 1건) + 도서 정보 +
-      심화(qlevel=02) 최신 제출 배치 집계 + 획득 뱃지 수/최근 뱃지명 + 독서일지(있으면).
+      심화(qlevel=02) 확정 점수(diary_detail) + 획득 뱃지 수/최근 뱃지명 + 독서일지(있으면).
       OUTER/CROSS APPLY로 상관 서브쿼리를 묶어 세션당 1행으로 평탄화한다.
 
       elapsedMinutes는 Java의 LocalDateTime.now()가 아니라 DB 자체의 CURRENT_TIMESTAMP로 계산한다
@@ -120,8 +120,8 @@
                 DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
             ) AS elapsedMinutes,
 
-            adv.correctCount AS advancedCorrectCount,
-            adv.totalCount   AS advancedTotalCount,
+            frozen.advancedCorrectCount AS advancedCorrectCount,
+            frozen.advancedTotalCount   AS advancedTotalCount,
 
             badge.badgeCount      AS badgeCount,
             badge.badgeIds        AS badgeIds,
@@ -160,17 +160,6 @@
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
         LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
         OUTER APPLY (
-            SELECT
-                COUNT(*) AS totalCount,
-                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
-            FROM erp_bookstore_quiz_answer_log q
-            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
-              AND q.submitted_at = (
-                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
-                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
-              )
-        ) adv
-        OUTER APPLY (
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지를 세면 A책 카드에도
             -- B책에서 딴 뱃지가 같이 보이는 문제가 생긴다(2026-07-29 수정)
             SELECT
@@ -205,7 +194,13 @@
             ), 1, 1, '') AS attitudeCodes
         ) att
         OUTER APPLY (
-            SELECT TOP 1 read_minutes
+            -- 심화 점수도 여기서 함께 내려준다(2026-09-15) — quiz_answer_log를 회차 단위로 다시
+            -- 집계하면 "틀린 문제만 다시 풀기"처럼 일부 문항만 재제출된 회차가 전체 문항 수인 것처럼
+            -- 보인다(기본 문제가 recommend_log.correct_count/total_count라는 확정된 합계 컬럼을 쓰는 것과
+            -- 같은 이유로, 심화도 확정된 합계가 이미 diary_detail에 있으니 그걸 그대로 쓴다).
+            SELECT TOP 1 read_minutes,
+                   COALESCE(advanced_final_correct_cnt, advanced_correct_cnt) AS advancedCorrectCount,
+                   advanced_total_cnt AS advancedTotalCount
             FROM erp_bookstore_diary_detail
             WHERE diary_key = dia.diary_key AND content_id = rl.content_id
         ) frozen
@@ -266,8 +261,8 @@
                 DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
             ) AS elapsedMinutes,
 
-            adv.correctCount AS advancedCorrectCount,
-            adv.totalCount   AS advancedTotalCount,
+            frozen.advancedCorrectCount AS advancedCorrectCount,
+            frozen.advancedTotalCount   AS advancedTotalCount,
 
             badge.badgeCount      AS badgeCount,
             badge.badgeIds        AS badgeIds,
@@ -302,17 +297,6 @@
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
         LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
         OUTER APPLY (
-            SELECT
-                COUNT(*) AS totalCount,
-                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
-            FROM erp_bookstore_quiz_answer_log q
-            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
-              AND q.submitted_at = (
-                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
-                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
-              )
-        ) adv
-        OUTER APPLY (
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지가 아니다(2026-07-29 수정)
             SELECT
                 COUNT(*) AS badgeCount,
@@ -345,7 +329,13 @@
             ), 1, 1, '') AS attitudeCodes
         ) att
         OUTER APPLY (
-            SELECT TOP 1 read_minutes
+            -- 심화 점수도 여기서 함께 내려준다(2026-09-15) — quiz_answer_log를 회차 단위로 다시
+            -- 집계하면 "틀린 문제만 다시 풀기"처럼 일부 문항만 재제출된 회차가 전체 문항 수인 것처럼
+            -- 보인다(기본 문제가 recommend_log.correct_count/total_count라는 확정된 합계 컬럼을 쓰는 것과
+            -- 같은 이유로, 심화도 확정된 합계가 이미 diary_detail에 있으니 그걸 그대로 쓴다).
+            SELECT TOP 1 read_minutes,
+                   COALESCE(advanced_final_correct_cnt, advanced_correct_cnt) AS advancedCorrectCount,
+                   advanced_total_cnt AS advancedTotalCount
             FROM erp_bookstore_diary_detail
             WHERE diary_key = dia.diary_key AND content_id = rl.content_id
         ) frozen
@@ -404,8 +394,8 @@
                 frozen.read_minutes,
                 DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
             ) AS elapsedMinutes,
-            adv.correctCount AS advancedCorrectCount,
-            adv.totalCount   AS advancedTotalCount,
+            frozen.advancedCorrectCount AS advancedCorrectCount,
+            frozen.advancedTotalCount   AS advancedTotalCount,
             badge.badgeCount      AS badgeCount,
             badge.badgeIds        AS badgeIds,
             badge.latestBadgeName AS latestBadgeName,
@@ -413,17 +403,6 @@
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
         LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
-        OUTER APPLY (
-            SELECT
-                COUNT(*) AS totalCount,
-                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
-            FROM erp_bookstore_quiz_answer_log q
-            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
-              AND q.submitted_at = (
-                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
-                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
-              )
-        ) adv
         OUTER APPLY (
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계 — 카드 캐러셀에서 책마다 따로 보여줘야 한다
             SELECT
@@ -466,7 +445,11 @@
             ORDER BY session_id DESC
         ) cs
         OUTER APPLY (
-            SELECT TOP 1 dd.read_minutes
+            -- 심화 점수도 여기서 함께 내려준다(2026-09-15) — cardColumns의 frozen과 같은 이유로
+            -- quiz_answer_log 원본 재집계 대신 diary_detail의 확정된 합계를 그대로 쓴다.
+            SELECT TOP 1 dd.read_minutes,
+                   COALESCE(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt) AS advancedCorrectCount,
+                   dd.advanced_total_cnt AS advancedTotalCount
             FROM erp_bookstore_diary dia
             JOIN erp_bookstore_diary_detail dd ON dd.diary_key = dia.diary_key AND dd.content_id = rl.content_id
             WHERE dia.session_id = cs.session_id
@@ -501,8 +484,8 @@
                 frozen.read_minutes,
                 DATEDIFF(MINUTE, rl.recommended_at, COALESCE(cs.quiz_started_at, CURRENT_TIMESTAMP))
             ) AS elapsedMinutes,
-            adv.correctCount AS advancedCorrectCount,
-            adv.totalCount   AS advancedTotalCount,
+            frozen.advancedCorrectCount AS advancedCorrectCount,
+            frozen.advancedTotalCount   AS advancedTotalCount,
             badge.badgeCount      AS badgeCount,
             badge.badgeIds        AS badgeIds,
             badge.latestBadgeName AS latestBadgeName,
@@ -510,17 +493,6 @@
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
         LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
-        OUTER APPLY (
-            SELECT
-                COUNT(*) AS totalCount,
-                SUM(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
-            FROM erp_bookstore_quiz_answer_log q
-            WHERE q.recommend_id = rl.recommend_id AND q.qlevel = '02'
-              AND q.submitted_at = (
-                  SELECT MAX(q2.submitted_at) FROM erp_bookstore_quiz_answer_log q2
-                  WHERE q2.recommend_id = rl.recommend_id AND q2.qlevel = '02'
-              )
-        ) adv
         OUTER APPLY (
             SELECT
                 COUNT(*) AS badgeCount,
@@ -562,7 +534,11 @@
             ORDER BY session_id DESC
         ) cs
         OUTER APPLY (
-            SELECT TOP 1 dd.read_minutes
+            -- 심화 점수도 여기서 함께 내려준다(2026-09-15) — cardColumns의 frozen과 같은 이유로
+            -- quiz_answer_log 원본 재집계 대신 diary_detail의 확정된 합계를 그대로 쓴다.
+            SELECT TOP 1 dd.read_minutes,
+                   COALESCE(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt) AS advancedCorrectCount,
+                   dd.advanced_total_cnt AS advancedTotalCount
             FROM erp_bookstore_diary dia
             JOIN erp_bookstore_diary_detail dd ON dd.diary_key = dia.diary_key AND dd.content_id = rl.content_id
             WHERE dia.session_id = cs.session_id

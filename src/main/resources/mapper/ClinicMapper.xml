@@ -371,6 +371,25 @@
         WHERE schoolyear = #{schoolyear} AND level_no = #{levelNo}
     </select>
 
+    <select id="findAllLevelTitles" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LevelTitleRowDTO">
+        SELECT schoolyear AS schoolyear, level_no AS levelNo, title AS title
+        FROM erp_bookstore_level
+    </select>
+
+    <!-- countDoneBooksByGrade 배치 버전 — 학생마다 "자기 학년(clinic_grade_key) 도서"만 세야 해서
+         erp_student를 다시 조인해 그 학생의 학년을 기준으로 삼는다 -->
+    <select id="countDoneBooksByGradeBatch" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$StudentDoneCountDTO">
+        SELECT rl.student_id AS studentId, COUNT(*) AS doneBooks
+        FROM erp_bookstore_recommend_log rl
+        JOIN erp_bookstore_content c ON c.content_id = rl.content_id
+        JOIN erp_student st ON st.student_id = rl.student_id
+        WHERE rl.status = 'DONE'
+          AND c.schoolyear = st.clinic_grade_key
+          AND rl.student_id IN
+          <foreach collection="studentIds" item="id" open="(" separator="," close=")">#{id}</foreach>
+        GROUP BY rl.student_id
+    </select>
+
     <!-- "나의 책장" 모달 — 올해 추천받은 도서 전체(완독일/추천일 KST 기준). status는 화면 뱃지값으로 바로 매핑:
          PENDING→reading(읽는 중) / grade=KING→king / grade=FRIEND→complete / 그 외 DONE(RETRY·NULL)→retry -->
     <select id="findYearBooksForBookcase" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BookcaseItemDTO">

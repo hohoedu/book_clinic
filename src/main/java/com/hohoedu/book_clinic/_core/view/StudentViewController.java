@@ -262,6 +262,7 @@ public class StudentViewController {
         model.addAttribute("levelTitle", levelInfo.getTitle());
         model.addAttribute("feature", levelInfo.getFeature());
         model.addAttribute("characterImg", levelInfo.getCharacterImg());
+        model.addAttribute("medalImg", levelInfo.getMedalImg());
         model.addAttribute("booksToNextLevel", levelInfo.getBooksToNextLevel());
         model.addAttribute("progressPercent", levelInfo.getProgressPercent());
         model.addAttribute("monthBooks", clinicService.getMonthBooks(studentId));

@@ -274,7 +274,7 @@
       completionActions.hidden = true;
       recommendNextBtn.hidden = true;
 
-      actionLabel.textContent = '정독 확인 문제 풀기';
+      actionLabel.textContent = '정독 문제 풀기';
       actionBtn.onclick = () => {
         window.location.href = `/student/question?studentId=${encodeURIComponent(studentId)}&contentId=${book.contentId}`;
       };
@@ -365,7 +365,7 @@
         completionActions.hidden = true;
         recommendNextBtn.hidden = true;
         actionBtn.hidden = false;
-        actionLabel.textContent = '정독 확인 문제 풀기';
+        actionLabel.textContent = '정독 문제 풀기';
         actionBtn.onclick = () => goQuestion('01');
         showState('card');
         return;
