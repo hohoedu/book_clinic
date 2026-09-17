@@ -25,6 +25,12 @@ public interface MonitorRepository {
     /** 퇴실 처리 (status=EXITED, exited_at=now) */
     void updateSessionExit(@Param("sessionId") Integer sessionId);
 
+    /** 그날 마지막으로 퇴실한 세션 ID — 없으면 null(2026-09-17, 퇴실 복구 대상 조회) */
+    Integer findLastExitedSessionId(@Param("studentId") String studentId, @Param("date") LocalDate date);
+
+    /** 퇴실 복구 (status=ENTERED, exited_at=null) — 직원의 실수 퇴실 처리를 되돌린다 */
+    void updateSessionRestore(@Param("sessionId") Integer sessionId);
+
     /** 그날 마지막으로 퇴실한 시각 — 퇴실 뒤에 시작하는 회차가 있는지 따질 때 쓴다(2026-09-14). 퇴실 이력이 없으면 null */
     LocalDateTime findLastExitedAt(@Param("studentId") String studentId, @Param("date") LocalDate date);
 

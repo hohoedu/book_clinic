@@ -1063,3 +1063,75 @@ select {
   font-size: 12px;
   vertical-align: middle;
 }
+
+/* 문제 질문 서식 입력칸 (굵게/밑줄) — input 자리를 contenteditable로 대체한 것이라
+   테두리/높이를 기존 input과 같은 느낌으로 맞춘다 */
+.q-q-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 4px;
+  border: 1px solid #d8dde2;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.q-q-wrap:focus-within {
+  border-color: #00a08e;
+}
+
+.q-q-wrap.readonly {
+  background: #f5f7f8;
+  border-color: #eceff1;
+}
+
+.q-q-toolbar {
+  display: flex;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.q-q-toolbar[hidden] {
+  display: none;
+}
+
+.q-q-toolbar button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid #e3e7ea;
+  border-radius: 4px;
+  background: #fff;
+  color: #666;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.q-q-toolbar button.active {
+  background: #e5f5f2;
+  border-color: #00a08e;
+  color: #008b7a;
+}
+
+.q-q-editor {
+  flex: 1 1 auto;
+  min-height: 28px;
+  /* 툴바 버튼(28px) + wrap 여백/테두리와 합쳐 기존 input과 같은 38px 높이가 되도록 맞춘 값 */
+  padding: 3px 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+  outline: none;
+  word-break: break-word;
+}
+
+/* 비어 있을 때 placeholder — 값이 들어가면 :empty가 풀려 자동으로 사라진다 */
+.q-q-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #b7bec3;
+}
+
+.q-q-editor[contenteditable="false"] {
+  color: #666;
+}

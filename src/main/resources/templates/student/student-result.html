@@ -38,14 +38,9 @@
       <!-- 상단 3단: 캐릭터/타이틀 · 문제풀이 결과 카드 · 신규 카드 -->
       <section class="result-top">
         <div class="hero">
-          <!-- 달성 문구 이미지는 독서왕(ment.png)만 있어서, 나머지 등급은 같은 자리에
-               텍스트 제목(#heroHeadlineText)으로 대체한다 (JS setHero) -->
-          <div class="hero-headline">
-            <img id="heroHeadline" data-grade="KING" th:src="@{/images/student_result/ment.png}" alt="독서왕 달성!" />
-            <h1 class="hero-headline-text" id="heroHeadlineText" hidden>달성!</h1>
-          </div>
-          <!-- 캐릭터는 등급(합격/불합격/만점)별 로티 애니메이션으로 교체된다 — JS(setHero)가
-               /lottie/basic_{fail|pass|perfect}_NN.json 중 하나를 골라 재생한다(2026-09-14) -->
+          <!-- 새 로티 에셋은 달성 문구(리본/텍스트)까지 그림 안에 포함돼 있어서, 캐릭터 하나가
+               hero 전체를 차지한다 — 이미지 문구(ment.png)/텍스트 제목은 더 이상 쓰지 않는다
+               (2026-09-14 캐릭터 로티 도입, 2026-09-17 헤드라인 제거로 로티가 전체를 차지) -->
           <div class="hero-character" id="heroCharacter" data-grade="KING">
             <div class="hero-character-anim" id="heroCharacterAnim"></div>
           </div>

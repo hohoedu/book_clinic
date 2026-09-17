@@ -252,6 +252,12 @@ function setQuestionsReadonly() {
     .querySelectorAll(".question-editor input, .question-editor select, .question-editor textarea")
     .forEach((el) => (el.disabled = true));
   document.querySelectorAll(".btn-delete-question").forEach((b) => (b.hidden = true));
+  // contenteditable은 disabled 속성이 먹지 않아 따로 잠근다
+  document.querySelectorAll(".question-editor .q-q-editor").forEach((el) => {
+    el.setAttribute("contenteditable", "false");
+    el.closest(".q-q-wrap")?.classList.add("readonly");
+  });
+  document.querySelectorAll(".question-editor .q-q-toolbar").forEach((el) => (el.hidden = true));
   if (window.jQuery) {
     document.querySelectorAll(".question-editor .q-qex").forEach((el) => {
       if (window.jQuery(el).next(".note-editor").length) window.jQuery(el).summernote("disable");
@@ -1900,6 +1906,121 @@ function getQuestionsSnapshot() {
   return JSON.stringify(cards.map((card) => ({ qnum: card.dataset.qnum ?? "", ...collectCard(card) })));
 }
 
+/* ===== 문제 질문 서식 입력칸 (굵게/밑줄) =====
+   input은 서식을 담을 수 없어 contenteditable로 바꿨다. 저장값은 계속 hidden .q-q 하나에만 들어가므로
+   collectCard / getQuestionsSnapshot / 자동저장은 예전 인터페이스 그대로 동작한다. */
+
+/* 학생 앱이 q를 innerHTML로 찍기 때문에(student-question.js) 저장 전에 태그를 화이트리스트로 좁힌다 */
+const Q_ALLOWED_TAGS = new Set(["B", "STRONG", "U", "I", "EM"]);
+
+function sanitizeQHtml(html) {
+  const root = document.createElement("div");
+  root.innerHTML = html ?? "";
+  root.querySelectorAll("script, style").forEach((el) => el.remove());
+
+  const walk = (node) => {
+    [...node.childNodes].forEach((child) => {
+      if (child.nodeType === Node.TEXT_NODE) return;
+      if (child.nodeType !== Node.ELEMENT_NODE) return void child.remove();
+
+      walk(child);
+
+      if (Q_ALLOWED_TAGS.has(child.tagName)) {
+        [...child.attributes].forEach((attr) => child.removeAttribute(attr.name));
+      } else {
+        // 허용 밖 태그는 글자만 남기고 껍데기를 벗긴다 (한 줄 입력이라 br/div도 여기서 사라짐)
+        child.replaceWith(...child.childNodes);
+      }
+    });
+  };
+  walk(root);
+
+  return root.innerHTML;
+}
+
+/* 빈 칸 판정 — 브라우저가 <br>이나 &nbsp;만 남겨두는 경우가 있어 글자 기준으로 본다.
+   여기서 ""로 정규화해야 "미출제 문제" 검사와 빈 슬롯 저장 건너뛰기가 예전처럼 동작한다. */
+function qHtmlIsEmpty(html) {
+  const probe = document.createElement("div");
+  probe.innerHTML = html ?? "";
+  return !(probe.textContent ?? "").replace(/\u00a0/g, " ").trim();
+}
+
+function setQValue(card, html) {
+  const editor = card.querySelector(".q-q-editor");
+  const hidden = card.querySelector(".q-q");
+  if (!editor || !hidden) return;
+
+  const clean = sanitizeQHtml(html);
+  editor.innerHTML = clean;
+  hidden.value = qHtmlIsEmpty(clean) ? "" : clean;
+}
+
+function syncQValue(card) {
+  const editor = card.querySelector(".q-q-editor");
+  const hidden = card.querySelector(".q-q");
+  if (!editor || !hidden) return;
+
+  const clean = sanitizeQHtml(editor.innerHTML);
+  hidden.value = qHtmlIsEmpty(clean) ? "" : clean;
+}
+
+function initQField(card) {
+  const editor = card.querySelector(".q-q-editor");
+  const buttons = [...card.querySelectorAll(".q-q-toolbar button")];
+  if (!editor) return;
+
+  const syncToolbar = () => {
+    buttons.forEach((btn) => {
+      let on = false;
+      try {
+        on = document.queryCommandState(btn.dataset.cmd);
+      } catch (error) {
+        on = false;
+      }
+      btn.classList.toggle("active", on);
+    });
+  };
+
+  buttons.forEach((btn) => {
+    // click이 아니라 mousedown에서 막아야 드래그로 잡아둔 선택 영역이 풀리지 않는다
+    btn.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      editor.focus();
+      try {
+        document.execCommand("styleWithCSS", false, false); // span+style 대신 <b>/<u>로 남긴다
+      } catch (error) {
+        /* 미지원 브라우저는 기본 동작에 맡긴다 */
+      }
+      document.execCommand(btn.dataset.cmd, false, null);
+      syncQValue(card);
+      syncToolbar();
+    });
+  });
+
+  editor.addEventListener("input", () => {
+    syncQValue(card);
+    syncToolbar();
+  });
+  editor.addEventListener("keyup", syncToolbar);
+  editor.addEventListener("mouseup", syncToolbar);
+  editor.addEventListener("focus", syncToolbar);
+  editor.addEventListener("blur", () => buttons.forEach((b) => b.classList.remove("active")));
+
+  // 원래 input 한 줄짜리 자리라 줄바꿈은 막는다
+  editor.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") e.preventDefault();
+  });
+
+  // 외부에서 복사해온 서식이 통째로 들어오지 않도록 평문으로만 붙여넣는다
+  editor.addEventListener("paste", (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData ?? window.clipboardData).getData("text/plain");
+    document.execCommand("insertText", false, text.replace(/\s+/g, " "));
+    syncQValue(card);
+  });
+}
+
 /* 문제 카드 DOM 생성 — qnum은 학년별 고정 슬롯 번호(항상 존재), q는 그 슬롯에 저장된 문제(없으면 null) */
 function buildQuestionCard(q, qnum) {
   const uid = ++questionUid;
@@ -1940,7 +2061,15 @@ function buildQuestionCard(q, qnum) {
     </div>
     <div class="form-row full">
       <label>문제 질문</label>
-      <input type="text" class="q-q" />
+      <div class="q-q-wrap">
+        <div class="q-q-toolbar">
+          <button type="button" data-cmd="bold" title="굵게 (Ctrl+B)"><b>B</b></button>
+          <button type="button" data-cmd="underline" title="밑줄 (Ctrl+U)"><u>U</u></button>
+        </div>
+        <div class="q-q-editor" contenteditable="true" data-placeholder="문제 질문을 입력해 주세요."></div>
+        <!-- 실제 저장값(서식 포함 HTML). collectCard/스냅샷/자동저장은 예전처럼 .q-q 하나만 읽는다 -->
+        <input type="hidden" class="q-q">
+      </div>
     </div>
     <div class="form-row full q-qex-row">
       <label>지문 예시</label>
@@ -1969,7 +2098,7 @@ function buildQuestionCard(q, qnum) {
   if (q) {
     // 심화(02)는 영역이 번호로 고정이라(위 뱃지/hidden input에서 이미 세팅됨) 저장된 qtype으로 덮어쓰지 않는다
     if (activeLevel !== "02") card.querySelector(".q-qtype").value = q.qtype ?? "";
-    card.querySelector(".q-q").value = q.q ?? "";
+    setQValue(card, q.q ?? "");
     card.querySelector(".q-qex").value = q.qex ?? "";
     card.querySelector(".q-e1").value = q.e1 ?? "";
     card.querySelector(".q-e2").value = q.e2 ?? "";
@@ -2004,6 +2133,8 @@ function buildQuestionCard(q, qnum) {
   syncType();
 
   card.querySelector(".btn-delete-question").addEventListener("click", () => deleteQuestion(card));
+
+  initQField(card);
 
   return card;
 }
@@ -2206,7 +2337,7 @@ function initQuestionAutosave() {
   if (!editor) return;
 
   editor.addEventListener("focusout", (e) => {
-    const field = e.target.closest(".q-q, .q-e1, .q-e2, .q-e3, .q-e4, .q-ans, .q-qtype");
+    const field = e.target.closest(".q-q-editor, .q-e1, .q-e2, .q-e3, .q-e4, .q-ans, .q-qtype");
     if (!field) return;
 
     const card = field.closest(".question-card");

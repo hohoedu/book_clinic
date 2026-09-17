@@ -559,10 +559,9 @@ function buildCardEl(card) {
     <div class="stat-row"></div>
     <div class="card-bottom">
       <span class="entered-at">${notEntered ? "미입실" : `${formatTime(card.enteredAt)} 입실`}</span>
-      ${notEntered ? "" : `
-      <button type="button" class="btn outline small exit-btn" ${exited ? "disabled" : ""}>
-        ${exited ? "퇴실 완료" : "퇴실 처리"}
-      </button>`}
+      ${notEntered ? "" : exited
+        ? `<button type="button" class="btn outline small restore-btn">복구</button>`
+        : `<button type="button" class="btn outline small exit-btn">퇴실 처리</button>`}
     </div>
   `;
 
@@ -597,6 +596,17 @@ function buildCardEl(card) {
       exitBtn.addEventListener("click", async () => {
         try {
           await postJson("/admin/monitor/exit", { studentId: card.studentId });
+          await loadLiveView();
+        } catch (e) {
+          alert(e.message);
+        }
+      });
+    } else {
+      const restoreBtn = el.querySelector(".restore-btn");
+      restoreBtn.addEventListener("click", async () => {
+        if (!confirm("퇴실 처리를 취소하고 다시 입실 상태로 되돌릴까요?")) return;
+        try {
+          await postJson("/admin/monitor/restore", { studentId: card.studentId });
           await loadLiveView();
         } catch (e) {
           alert(e.message);

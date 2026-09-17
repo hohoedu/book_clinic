@@ -161,6 +161,25 @@ public class MonitorService {
     }
 
     /**
+     * 퇴실 복구 — 직원이 실수로 퇴실 처리했을 때 모니터링 카드에서 되돌린다(2026-09-17).
+     * 오늘 마지막으로 퇴실한 세션을 찾아 status만 ENTERED로 되돌리고 exited_at을 비운다.
+     * 퇴실 시 함께 처리됐던 책 반납/홀딩 전환/독서일지 out_time은 여기서 되돌리지 않는다 —
+     * 그 사이 다른 학생이 반납된 책을 이미 대여해 갔을 수 있어 되돌리면 재고가 꼬일 수 있고,
+     * 이어 읽기는 재입실과 동일하게 ClinicService의 ensureActiveLoan이 다시 대여해 처리한다.
+     * 오늘 퇴실 이력이 없으면 조용히 무시.
+     */
+    @Transactional
+    public void restoreSession(String studentId) {
+        Integer sessionId = monitorRepository.findLastExitedSessionId(studentId, KstClock.today());
+        if (sessionId == null) {
+            log.info("퇴실 복구 요청 무시 — 오늘 퇴실 이력 없음: studentId={}", studentId);
+            return;
+        }
+        monitorRepository.updateSessionRestore(sessionId);
+        syncSafely(sessionId);
+    }
+
+    /**
      * 책 홀딩(자물쇠, 2026-09-03) — 다 못 읽은 책에 "몇 쪽까지 읽었는지"를 기록한다.
      * holdPage가 null이면 기록을 지운다(자물쇠 끄기).
      *

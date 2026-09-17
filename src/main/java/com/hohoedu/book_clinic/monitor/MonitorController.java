@@ -75,6 +75,18 @@ public class MonitorController {
     }
 
     /**
+     * 퇴실 복구 — 직원이 실수로 퇴실 처리한 학생을 되돌린다(2026-09-17). exit과 같은 이유로
+     * 대상 학생이 내 센터 소속인지 대조한다.
+     */
+    @PostMapping("/restore")
+    public ResponseEntity<?> restore(@RequestBody @Valid MonitorReqDTO.ExitReqDTO reqDTO,
+                                     @AuthenticationPrincipal CustomUserDetails userDetails) {
+        centerAccessGuard.requireStudentInMyCenter(userDetails, reqDTO.getStudentId());
+        monitorService.restoreSession(reqDTO.getStudentId());
+        return ResponseEntity.ok(ApiUtils.success(null));
+    }
+
+    /**
      * 독서일지 저장(upsert) — exit과 같은 이유로 대상 학생의 센터를 대조한다.
      * sessionId가 정말 그 학생의 세션인지는 MonitorService.saveDiary가 한 번 더 확인한다
      * (내 센터 학생 이름표를 달고 남의 센터 세션에 일지를 쓰는 것을 막는다).

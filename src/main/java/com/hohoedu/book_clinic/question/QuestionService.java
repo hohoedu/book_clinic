@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import org.apache.poi.ss.usermodel.Cell;
@@ -44,14 +46,44 @@ public class QuestionService {
     private final QuestionRepository questionRepository;
     private final BookRepository bookRepository;
 
+    /**
+     * 문제 질문(q)에 허용하는 서식 태그 — 굵게/밑줄/기울임만.
+     * 학생 앱이 q를 innerHTML로 렌더링하므로(student-question.js) 저장 시점에 한 번 걸러둔다.
+     */
+    private static final Set<String> Q_ALLOWED_TAGS = Set.of("b", "strong", "u", "i", "em");
+    private static final Pattern Q_TAG = Pattern.compile("</?([a-zA-Z0-9]+)[^>]*>");
+    private static final Pattern Q_SCRIPT_BLOCK = Pattern.compile("(?is)<(script|style)[^>]*>.*?</\\1>");
+
+    /** 허용 태그는 속성을 모두 떼고 다시 쓰고, 나머지 태그는 글자만 남긴 채 제거한다 */
+    static String sanitizeQ(String html) {
+        if (html == null || html.isEmpty()) return html;
+
+        Matcher matcher = Q_TAG.matcher(Q_SCRIPT_BLOCK.matcher(html).replaceAll(""));
+        StringBuilder sb = new StringBuilder();
+
+        while (matcher.find()) {
+            String tag = matcher.group(1).toLowerCase();
+            String replacement = "";
+            if (Q_ALLOWED_TAGS.contains(tag)) {
+                replacement = matcher.group().startsWith("</") ? "</" + tag + ">" : "<" + tag + ">";
+            }
+            matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(sb);
+
+        return sb.toString();
+    }
+
     /** 문제 등록 */
     public void registerQuestion(QuestionReqDTO.RegisterReqDTO reqDTO) {
+        reqDTO.setQ(sanitizeQ(reqDTO.getQ()));
         questionRepository.registerQuestion(reqDTO);
     }
 
     /** 문제 수정 — 변경 전 스냅샷을 itempool_del에 UPDATE 로그로 남긴다 */
     @Transactional
     public void updateQuestion(QuestionReqDTO.UpdateReqDTO reqDTO, String updatedBy) {
+        reqDTO.setQ(sanitizeQ(reqDTO.getQ()));
         questionRepository.archiveQuestion(reqDTO.getContentId(), reqDTO.getQlevel(), reqDTO.getQnum(), updatedBy, "UPDATE");
         questionRepository.updateQuestion(reqDTO);
     }

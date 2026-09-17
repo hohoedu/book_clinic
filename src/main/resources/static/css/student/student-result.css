@@ -133,49 +133,24 @@
   margin-bottom: 50px; 
 }
 
-/* 왼쪽: 달성 문구 / 캐릭터 로티 — 둘 다 별도 에셋
-   리본 이미지를 걷어내면서(2026-09-14) 그 자리(리본 50px + gap 12px)만큼 위 여백으로 남겨둔다.
-   안 그러면 상단 3단 블록 높이가 그만큼 줄어 아래 보상 패널·버튼까지 전부 위로 딸려 올라간다. */
+/* 왼쪽: 캐릭터 로티 하나로 hero 전체를 채운다 — 리본/문구가 그림 안에 포함된 새 에셋이라
+   더 이상 문구 자리를 따로 둘 필요가 없다(2026-09-17).
+   min-height는 헤드라인이 있던 예전 hero 총높이(패딩62+헤드라인78+gap12+캐릭터233=385)와
+   맞춰뒀다 — 안 그러면 result-top 행 높이가 가운데 score-card(~320px) 기준으로 줄어들면서
+   아래 보상패널·버튼까지 전부 위로 딸려 올라간다. */
 .hero {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 12px;
-  padding-top: 62px;
+  min-height: 385px;
 }
 
-/* 달성 문구 자리(78px) 안에 문구 이미지(원본 277x62)를 비율대로 담는다 */
-.hero-headline {
-  width: 100%;
-  height: 78px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.hero-headline img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-/* 문구 이미지가 없는 등급(독서친구/재도전/심화)에서 같은 자리에 쓰는 텍스트 제목 */
-.hero-headline-text {
-  margin: 0;
-  font-size: 46px;
-  font-weight: 900;
-  letter-spacing: -1.6px;
-  color: var(--red);
-}
-
-/* 캐릭터 자리 — 문구를 뺀 남은 높이 전부.
-   로티 컨테이너는 height:100%라 고유 높이가 0이고 scale(3)도 레이아웃엔 영향이 없어서,
-   예전 캐릭터 이미지(원본 217x233)가 떠받치던 높이를 min-height로 직접 못박는다(2026-09-14). */
+/* 캐릭터 자리 — hero 전체. 로티 자체는 scale(1.4)로 작게 유지하고, 이 박스 안에서
+   가운데 정렬만 된다. */
 .hero-character {
   flex: 1;
   width: 100%;
-  min-height: 233px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -190,7 +165,7 @@
 .hero-character-anim {
   width: 100%;
   height: 100%;
-  transform: scale(3);
+  transform: scale(1.2);
 }
 
 .hero-character-anim svg {

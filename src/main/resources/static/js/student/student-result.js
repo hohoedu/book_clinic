@@ -2,15 +2,17 @@
   const page = document.getElementById('resultPage');
   const studentId = page ? page.getAttribute('data-student-id') : null;
 
-  const heroHeadline = document.getElementById('heroHeadline');
-  const heroHeadlineText = document.getElementById('heroHeadlineText');
-
-  // 달성 문구 이미지는 독서왕(ment.png)만 있고, 나머지 등급은 텍스트 제목으로 대체한다
-  const HERO_HEADLINE_IMG = { KING: '/images/student_result/ment.png' };
   const heroCharacter = document.getElementById('heroCharacter');
   const heroCharacterAnim = document.getElementById('heroCharacterAnim');
 
-  // 등급별 캐릭터 로티 종류 — 파일명은 /lottie/basic_{category}_NN.json
+  // 등급별 캐릭터 로티 종류 — 파일명은 /lottie/{basic|adv}_{category}_{캐릭터}.json
+  const HERO_LOTTIE_PREFIX = {
+    RETRY: 'basic',
+    FRIEND: 'basic',
+    KING: 'basic',
+    ADVANCED: 'adv',
+    ADVANCED_PERFECT: 'adv',
+  };
   const HERO_LOTTIE_CATEGORY = {
     RETRY: 'fail',
     FRIEND: 'pass',
@@ -18,16 +20,17 @@
     ADVANCED: 'pass',
     ADVANCED_PERFECT: 'perfect',
   };
-  // 학년(schoolyear) 코드 → 로티 변형 번호. 초1=01, 초2=02, 초3~중3(03~07)은 03을 그대로 쓴다(2026-09-14).
-  const HERO_LOTTIE_VARIANT_BY_SCHOOLYEAR = { '01': '01', '02': '02' };
-  const HERO_LOTTIE_DEFAULT_VARIANT = '03';
+  // 학년(schoolyear) 코드 → 캐릭터. 초1=frog, 초2=mouse, 초3~중3(03~07)은 parrot을 그대로 쓴다(2026-09-14).
+  const HERO_LOTTIE_CHARACTER_BY_SCHOOLYEAR = { '01': 'frog', '02': 'mouse' };
+  const HERO_LOTTIE_DEFAULT_CHARACTER = 'parrot';
   let heroAnim = null;
   let heroSchoolyear = null;
 
   function playHeroCharacter(grade) {
     if (!heroCharacterAnim || typeof lottie === 'undefined') return;
+    const prefix = HERO_LOTTIE_PREFIX[grade] ?? 'basic';
     const category = HERO_LOTTIE_CATEGORY[grade] ?? 'pass';
-    const variant = HERO_LOTTIE_VARIANT_BY_SCHOOLYEAR[heroSchoolyear] ?? HERO_LOTTIE_DEFAULT_VARIANT;
+    const character = HERO_LOTTIE_CHARACTER_BY_SCHOOLYEAR[heroSchoolyear] ?? HERO_LOTTIE_DEFAULT_CHARACTER;
 
     if (heroAnim) {
       heroAnim.destroy();
@@ -38,9 +41,16 @@
       renderer: 'svg',
       loop: true,
       autoplay: true,
-      path: `/lottie/basic_${category}_${variant}.json`,
+      path: `/lottie/${prefix}_${category}_${character}.json`,
     });
   }
+
+  // 데브툴 콘솔에서 등급/학년 조합을 바로 재생해보기 위한 헬퍼 — 예: previewHero('KING', '01')
+  window.previewHero = function (grade, schoolyear) {
+    heroSchoolyear = schoolyear ?? heroSchoolyear;
+    playHeroCharacter(grade);
+  };
+
   const scoreCorrectEl = document.getElementById('scoreCorrect');
   const scoreTotalEl = document.getElementById('scoreTotal');
   const scoreStars = document.getElementById('scoreStars');
@@ -269,7 +279,7 @@
     const correct = result.correctCount ?? 0;
     const perfect = total > 0 && correct >= total;   // 만점 = 심화왕
 
-    setHero(perfect ? 'ADVANCED_PERFECT' : 'ADVANCED', perfect ? '심화왕 달성!' : '심화문제 완료!');
+    setHero(perfect ? 'ADVANCED_PERFECT' : 'ADVANCED');
     resultTitle.textContent = perfect
       ? '정독 완료! 한 권을 완벽하게 끝냈어요.'
       : '더 어려운 문제까지 도전했어요.';
@@ -285,7 +295,7 @@
 
   // 3단계 — 독서왕(기본 만점). 더 맞힐 기본 문제가 없으니 심화만 남는다.
   function renderKingResult(result) {
-    setHero('KING', '독서왕 달성!');
+    setHero('KING');
     resultTitle.textContent = '더 어려운 문제에 도전해 보세요.';
     // "홈으로"를 누르면 완료 화면(같은 버튼 규칙)으로 간다 — 다시풀기(alreadyCompleted)
     // 재제출이어도 마찬가지다(2026-08-25, 예전엔 이때만 예외로 그냥 홈으로 보냈다)
@@ -297,7 +307,7 @@
 
   // 2단계 — 독서완료(합격선 이상 만점 미만)
   function renderFriendResult(result) {
-    setHero('FRIEND', '독서친구 달성!');
+    setHero('FRIEND');
     resultTitle.textContent = '틀린 문제를 다시 풀어보세요.';
     bookFinished = true;
 
@@ -309,7 +319,7 @@
   // 1단계 — 불합격(합격선 미달). 문제를 다시 푸는 게 아니라 책을 다시 읽으러 간다.
   // "다시 읽으러 가기"는 로그아웃이다 — 읽고 와서 QR로 다시 들어오면 홈에 "문제 풀러 가기"가 뜬다.
   function renderRetryResult(result) {
-    setHero('RETRY', '다시 도전!');
+    setHero('RETRY');
     resultTitle.textContent = '책을 다시 읽고 한 번 더 도전해 보세요.';
     bookFinished = false;
 
@@ -317,19 +327,8 @@
     readAgainBtn.hidden = false;
   }
 
-  // 달성 문구는 등급별 이미지가 있으면 이미지, 없으면 같은 자리에 텍스트로 표시한다.
-  // 캐릭터는 아직 한 종류(kidoc.png)뿐이라 data-grade만 남겨 둔다
-  function setHero(grade, headlineText) {
-    const src = HERO_HEADLINE_IMG[grade];
-    heroHeadline.hidden = !src;
-    heroHeadlineText.hidden = Boolean(src);
-    if (src) {
-      heroHeadline.src = src;
-      heroHeadline.alt = headlineText;
-    } else {
-      heroHeadlineText.textContent = headlineText;
-    }
-    heroHeadline.dataset.grade = grade;
+  // 등급별 캐릭터 로티를 재생한다 — 달성 문구는 로티 그림 안에 포함돼 있어 따로 표시하지 않는다(2026-09-17)
+  function setHero(grade) {
     heroCharacter.dataset.grade = grade;
     playHeroCharacter(grade);
   }

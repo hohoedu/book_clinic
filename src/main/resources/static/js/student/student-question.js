@@ -308,10 +308,10 @@
     }
     choiceScrollbar.hidden = false;
     const trackH = choiceScrollbar.clientHeight;
-    const thumbH = Math.max((clientHeight / scrollHeight) * trackH, 32);
+    const thumbH = Math.max((clientHeight / scrollHeight) * trackH * 0.2, 34);
     const thumbTop = (scrollTop / overflow) * (trackH - thumbH);
     choiceScrollThumb.style.height = `${thumbH}px`;
-    choiceScrollThumb.style.transform = `translateY(${thumbTop}px)`;
+    choiceScrollThumb.style.transform = `translate(-50%, ${thumbTop}px)`;
   }
 
   choiceList.addEventListener('scroll', syncChoiceScrollbar, { passive: true });

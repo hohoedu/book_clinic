@@ -348,8 +348,9 @@
                publisher                                       AS publisher,
                image_url                                       AS imageUrl
         FROM erp_bookstore_item
+        JOIN erp_bookstore_content c ON c.content_id = erp_bookstore_item.content_id
         WHERE center_code = #{centerCode}
-        ORDER BY registered_at DESC
+        ORDER BY c.content_num DESC 
     </select>
 
     <!-- 10: 삭제된 도서 목록 — content_id별 최신 로그 1건만 보고, 그게 DELETE이고 아직 복구 안 됐을 때만 표시
@@ -586,7 +587,7 @@
             <if test="hasStock == 'Y'.toString()">AND ISNULL(q.qty, 0) &gt; 0</if>
             <if test="hasStock == 'N'.toString()">AND ISNULL(q.qty, 0) = 0</if>
         </where>
-        ORDER BY bc.schoolyear, bc.original_title
+        ORDER BY bc.schoolyear, bc.content_num
     </select>
 
     <!-- (content + center) 보유수량 총합 (여러 bcode 판본에 걸쳐 있을 수 있음) -->

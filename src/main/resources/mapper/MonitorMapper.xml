@@ -38,6 +38,21 @@
         WHERE session_id = #{sessionId}
     </update>
 
+    <!-- 그날 마지막으로 퇴실한 세션 ID — 실수로 퇴실 처리된 학생을 복구할 때 되돌릴 대상을 찾는다(2026-09-17) -->
+    <select id="findLastExitedSessionId" resultType="java.lang.Integer">
+        SELECT TOP 1 session_id
+        FROM erp_bookstore_clinic_session
+        WHERE student_id = #{studentId} AND session_date = #{date} AND status = 'EXITED'
+        ORDER BY session_id DESC
+    </select>
+
+    <!-- 퇴실 복구 — updateSessionExit의 반대. exited_at도 비워 다시 "재실 중" 상태로 되돌린다 -->
+    <update id="updateSessionRestore">
+        UPDATE erp_bookstore_clinic_session
+        SET status = 'ENTERED', exited_at = NULL
+        WHERE session_id = #{sessionId}
+    </update>
+
     <update id="markQuizStarted">
         UPDATE erp_bookstore_clinic_session
         SET quiz_started_at = DATEADD(HOUR, 9, GETUTCDATE()),
