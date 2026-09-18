@@ -172,6 +172,7 @@
     <!-- 1~5: 제목 / 작가 / 장르 / 학년 / 키워드 / 유형 / 사용여부 복합 검색 -->
     <select id="searchContents" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$ContentRespDTO">
         SELECT bc.content_id     AS contentId,
+               bc.content_num    AS contentNum,
                bc.original_title AS originalTitle,
                bc.author         AS author,
                bc.genre          AS genre,

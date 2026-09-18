@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -83,13 +84,13 @@ public class BookService {
      * 파싱은 위치가 아닌 헤더명으로 하므로 순서가 바뀌어도 동작한다.
      */
     private static final String[] IMPORT_HEADERS = {
-            "content_id", "NO", "학년", "도서분류", "도서명", "연계교과/추천기관/수상명", "장르", "난이도", "출판사", "해시태그", "도서소개", "독서시간" };
+            "content_id", "NO", "학년", "도서분류", "도서명", "저자", "연계교과/추천기관/수상명", "장르", "난이도", "출판사", "해시태그", "도서소개", "독서시간" };
     private static final int[] IMPORT_WIDTHS = {
-            2800, 1800, 2600, 3400, 12000, 5800, 3200, 2400, 5200, 8000, 24000, 2800 };
+            2800, 1800, 2600, 3400, 12000, 4000, 5800, 3200, 2400, 5200, 8000, 24000, 2800 };
     // IMPORT_HEADERS 기준 드롭다운 열 인덱스
     private static final int COL_CONTENT_TYPE = 3;
-    private static final int COL_GENRE = 6;
-    private static final int COL_DIFFICULTY = 7;
+    private static final int COL_GENRE = 7;
+    private static final int COL_DIFFICULTY = 8;
 
     /** 엑셀 헤더명(공백 제거) → 필드. content_id가 있으면 그 행은 UPDATE, 비어 있으면 INSERT */
     private static final Map<String, String> HEADER_ALIASES = Map.ofEntries(
@@ -226,6 +227,7 @@ public class BookService {
     /** 템플릿이 실어온 값(빈 칸=null=그대로 두기)과 현재 DB 값을 비교해 하나라도 다르면 true */
     private boolean hasChange(BookReqDTO.RegisterReqDTO d, BookRespDTO.ContentRespDTO c) {
         return valueChanged(d.getTitle(), c.getOriginalTitle())
+                || valueChanged(d.getAuthor(), c.getAuthor())
                 || valueChanged(d.getSchoolYear(), c.getSchoolyear())
                 || valueChanged(d.getContentType(), c.getContentType())
                 || valueChanged(d.getGenre(), c.getGenre())
@@ -251,6 +253,8 @@ public class BookService {
      */
     public byte[] buildImportTemplateWorkbook() {
         List<BookRespDTO.ContentRespDTO> books = bookRepository.searchContents(null, null, null, null, null, null, null);
+        books.sort(Comparator.comparing(BookRespDTO.ContentRespDTO::getContentNum,
+                Comparator.nullsLast(Comparator.naturalOrder())));
         Map<String, List<BookRespDTO.ContentRespDTO>> byGradeCode = books.stream()
                 .collect(Collectors.groupingBy(b -> b.getSchoolyear() == null ? "" : b.getSchoolyear()));
 
@@ -347,26 +351,27 @@ public class BookService {
             cell.setCellStyle(headerStyle);
             sheet.setColumnWidth(c, IMPORT_WIDTHS[c]);
         }
+        sheet.setColumnHidden(0, true);
 
         int rowIdx = 2;
-        int no = 1;
         for (BookRespDTO.ContentRespDTO b : rows) {
             Row row = sheet.createRow(rowIdx++);
             row.setHeightInPoints(70f);
             Cell idCell = row.createCell(0);
             if (b.getContentId() != null) idCell.setCellValue(b.getContentId());
             idCell.setCellStyle(lockedStyle);
-            putCell(row, 1, String.valueOf(no++), bodyStyle);
+            putCell(row, 1, b.getContentNum() != null ? String.valueOf(b.getContentNum()) : "", bodyStyle);
             putCell(row, 2, nvl(b.getSchoolyearName()), bodyStyle);
             putCell(row, 3, nvl(b.getContentTypeName()), bodyStyle);
             putCell(row, 4, nvl(b.getOriginalTitle()), bodyStyle);
-            putCell(row, 5, nvl(b.getExtraDetailName()), bodyStyle);
-            putCell(row, 6, nvl(b.getGenreName()), bodyStyle);
-            putCell(row, 7, nvl(b.getDifficulty()), bodyStyle);
-            putCell(row, 8, nvl(b.getPublisher()), bodyStyle);
-            putCell(row, 9, nvl(b.getKeywords()), bodyStyle);
-            putCell(row, 10, nvl(b.getSummary()), wrapStyle);
-            putCell(row, 11, nvl(b.getReadingTime()), bodyStyle);
+            putCell(row, 5, nvl(b.getAuthor()), bodyStyle);
+            putCell(row, 6, nvl(b.getExtraDetailName()), bodyStyle);
+            putCell(row, 7, nvl(b.getGenreName()), bodyStyle);
+            putCell(row, 8, nvl(b.getDifficulty()), bodyStyle);
+            putCell(row, 9, nvl(b.getPublisher()), bodyStyle);
+            putCell(row, 10, nvl(b.getKeywords()), bodyStyle);
+            putCell(row, 11, nvl(b.getSummary()), wrapStyle);
+            putCell(row, 12, nvl(b.getReadingTime()), bodyStyle);
         }
 
         int lastRow = Math.max(rowIdx, 3) + 300; // 새로 추가할 행까지 드롭다운 적용

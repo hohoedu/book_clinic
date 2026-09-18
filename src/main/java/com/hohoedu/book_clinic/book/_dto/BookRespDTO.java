@@ -11,6 +11,7 @@ public class BookRespDTO {
     @Data
     public static class ContentRespDTO {
         private Integer contentId;
+        private Integer contentNum;
         private String originalTitle;
         private String author;
         private String genre;
