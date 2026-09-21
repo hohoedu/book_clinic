@@ -157,7 +157,6 @@
     const metaTagsEl = document.getElementById('bookMetaTags');
     const recommendNextBtn = document.getElementById('recommendNextBtn');
     const completionActions = document.getElementById('completionActions');
-    const completionRetryBtn = document.getElementById('completionRetryBtn');
     const completionWrongRetryBtn = document.getElementById('completionWrongRetryBtn');
     const completionAdvancedBtn = document.getElementById('completionAdvancedBtn');
     const completionPassportBtn = document.getElementById('completionPassportBtn');
@@ -282,22 +281,23 @@
       showState('card');
     }
 
-    /* ── 완료 화면 버튼 규칙 (2026-09-03 전면 재정리) ──────────────────────────
+    /* ── 완료 화면 버튼 규칙 (2026-09-21 재정리) ───────────────────────────────
        결과 화면(student-result.js)과 **똑같은** 규칙을 쓴다. 두 화면이 다르면 "홈으로"를
-       눌렀을 때 갑자기 다른 버튼이 나타나 학생이 흐름을 잃는다.
+       눌렀을 때 갑자기 다른 버튼이 나타나 학생이 흐름을 잃는다. 각 단계의 버튼은 하나뿐이다.
 
-         1. 재도전(기본 합격선 미달)     → 문제 풀러 가기 (책을 다시 읽고 온 상태)
-         2. 독서완료(합격선~만점 미만)   → 재도전 + 틀린 문제 다시 풀기
-            2-2. 틀린 문제를 다 맞히면   → 재도전 + 심화 문제 풀기
-         3. 독서왕(기본 만점)            → 심화 문제 풀기
-         4. 심화완료(심화 만점 아님)     → 재도전 + 틀린 문제 다시 풀기
-            4-2. 틀린 문제를 다 맞히면   → 재도전 + 여권 쓰러 가기
+         1. 완독(기본 합격선 미달)       → 정독 문제 풀기 (책을 다시 읽고 온 상태 = 재도전)
+         2. 정독 완료(합격선~만점 미만)  → 틀린 문제 다시 풀기
+            2-2. 틀린 문제를 다 맞히면   → 심화 문제 풀기
+         3. 정독 왕(기본 만점)           → 심화 문제 풀기
+         4. 심화완료(심화 만점 아님)     → 틀린 문제 다시 풀기       ※ 0/6이어도 동일
+            4-2. 틀린 문제를 다 맞히면   → 여권 쓰러 가기
          5. 심화왕(심화 만점)            → 여권 쓰러 가기            ※ 로그아웃
 
        단계는 서로 배타적이다 — 심화를 한 번이라도 풀었으면 4·5단계이고, 그 전이면 2·3단계다.
-       그래서 재도전/틀린 문제 버튼이 기본과 심화 중 어느 쪽을 여는지도 단계가 결정한다.
-       예전엔 "기본 재도전이냐 심화 재도전이냐"를 모달로 물어봤는데(retryTypeModal), 이제 물어볼
-       일이 없어 모달째로 없앴다. 기본·심화 오답을 한 번에 푸는 병합 모드도 같은 이유로 사라졌다. */
+       그래서 틀린 문제 버튼이 기본과 심화 중 어느 쪽을 여는지도 단계가 결정한다.
+       "재도전"(전체 다시 풀기)은 1단계에만 있고 그 자리는 actionBtn이 대신한다 — 예전엔 2·4단계에도
+       재도전 버튼이 있어서 "기본이냐 심화냐"를 모달(retryTypeModal)로 물었지만, 모달도 버튼도
+       모두 없앴다. 기본·심화 오답을 한 번에 푸는 병합 모드도 같은 이유로 사라졌다. */
     function renderCompletion(state) {
       // 완료 화면은 이미 다 읽은 책을 보여주는 자리라 교체 대상이 아니다 — 폴링을 멈춘다
       stopBookPoll();
@@ -350,12 +350,11 @@
       // 버튼을 전부 끈 뒤 이 단계에 필요한 것만 켠다
       actionBtn.hidden = true;
       completionActions.hidden = false;
-      completionRetryBtn.hidden = true;
       completionWrongRetryBtn.hidden = true;
       completionAdvancedBtn.hidden = true;
       completionPassportBtn.hidden = true;
 
-      const failed = !state.grade || state.grade === 'RETRY';   // 1단계 — 기본 합격선 미달
+      const failed = !state.grade || state.grade === 'RETRY';   // 1단계 — 완독(기본 합격선 미달)
       const advTried = state.advancedAttempted === true;        // 심화를 한 번이라도 풀었나
       const advKing = state.advancedKing === true;              // 심화 만점
 
@@ -379,16 +378,16 @@
         return;
       }
 
-      // 4단계 — 심화를 풀었고 아직 만점이 아니다. 재도전/틀린 문제는 모두 심화(02) 대상.
+      // 4단계 — 심화를 풀었고 아직 만점이 아니다(0/6 포함). 심화에는 재도전이 없고 틀린 문제만 남는다.
       if (advTried) {
-        renderRetryStage('02', state.advancedWrongQnums ?? [], completionPassportBtn, goQuestion);
+        renderWrongRetryStage('02', state.advancedWrongQnums ?? [], completionPassportBtn, goQuestion);
         // 심화가 아직 안 끝났으므로 다음 책은 내주지 않는다(심화 게이트와 같은 취지)
         recommendNextBtn.hidden = true;
         showState('card');
         return;
       }
 
-      // 3단계 — 독서왕(기본 만점). 심화만 남는다.
+      // 3단계 — 정독 왕(기본 만점). 심화만 남는다.
       if (state.grade === 'KING') {
         completionAdvancedBtn.hidden = state.advancedAvailable !== true;
         // 풀 심화 문항이 아예 없는 책이면 여기서 끝이라 다음 책을 받을 수 있다
@@ -398,22 +397,20 @@
         return;
       }
 
-      // 2단계 — 독서완료. 재도전/틀린 문제는 기본(01) 대상이고, 오답을 다 맞히면 심화가 열린다.
-      renderRetryStage('01', state.wrongQnums ?? [], completionAdvancedBtn, goQuestion);
+      // 2단계 — 정독 완료. 남은 오답을 기본(01)에서 다시 풀고, 다 맞히면 심화가 열린다(재도전 없음).
+      renderWrongRetryStage('01', state.wrongQnums ?? [], completionAdvancedBtn, goQuestion);
       recommendNextBtn.hidden = state.canRecommendNext === false || state.advancedAvailable === true;
       showState('card');
     }
 
     /**
-     * 2·4단계 공통 — 재도전은 항상 열고, 나머지 한 자리는 남은 오답 유무로 갈린다.
+     * 2·4단계 공통 — 남은 오답이 있으면 "틀린 문제 다시 풀기", 다 맞혔으면 다음 단계 버튼.
+     * 재도전(전체 다시 풀기)은 이 단계에 없다(2026-09-21) — 결과 화면과 같은 규칙이다.
      * @param level   이 단계에서 다시 풀 문제의 난이도 ('01' 기본 / '02' 심화)
      * @param wrong   아직 틀린 채로 남은 문항 번호
      * @param nextBtn 오답을 다 맞혔을 때 그 자리에 들어올 버튼(심화 문제 풀기 / 여권 쓰러 가기)
      */
-    function renderRetryStage(level, wrong, nextBtn, goQuestion) {
-      completionRetryBtn.hidden = false;
-      completionRetryBtn.onclick = () => goQuestion(level);
-
+    function renderWrongRetryStage(level, wrong, nextBtn, goQuestion) {
       if (wrong.length > 0) {
         completionWrongRetryBtn.hidden = false;
         completionWrongRetryBtn.onclick = () => {

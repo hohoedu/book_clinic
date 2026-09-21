@@ -31,20 +31,29 @@
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
 
-  // 문제 유형(erp_bookstore_code gubun='T') 코드별 아이콘 이미지/설명 — 서버 데이터에 없는 화면용 고정 문구
-  // img는 /images/icons/ 아래 PNG 파일명. 06 어휘는 심화(qlevel=02) 진입 시 advance_voca로 바꾼다.
+  // 문제 유형(erp_bookstore_code gubun='T') 코드별 아이콘 이미지/색.
+  // img는 /images/icons/ 아래 PNG 파일명.
   // color는 유형 이름(하단 h3)에 쓸 색 — 사용자 지정값. 배열이면 그라데이션(글자에 background-clip)
+  // name/desc는 서버(QuestionDTO.qtypeNm/qtypeDesc)가 내려주는 값을 쓰고, 여기 값은 서버가
+  // 아직 안 내려주거나 빈 값일 때만 쓰는 fallback이다.
   const QTYPE_INFO = {
-    '01': { name: '이해', img: 'comp.png', color: '#89EED3', desc: '이야기의 내용을 정확히 파악하고 기억하는 능력이에요. 등장인물과 사건을 잘 떠올려보세요!' },
-    '02': { name: '표현', img: 'expr.png', color: '#FDBB59', desc: '자신의 생각을 글이나 말로 표현하는 능력이에요. 이야기 속 표현을 참고해보세요!' },
-    '03': { name: '논리', img: 'logic.png', color: '#8FC7FD', desc: '이야기의 앞뒤 관계를 바탕으로 이유와 결과를 생각하는 능력이에요. 문제의 단서를 잘 살펴보세요!' },
-    '04': { name: '사고', img: 'think.png', color: '#FEE660', desc: '이야기를 깊이 생각하고 스스로 판단하는 능력이에요. 다양한 가능성을 떠올려보세요!' },
-    '05': { name: '감정', img: 'emo.png', color: '#FD9EC2', desc: '등장인물의 마음과 감정을 이해하는 능력이에요. 내가 그 상황이라면 어땠을지 생각해보세요!' },
-    '06': { name: '어휘', img: 'voca.png', color: '#C2AEFC', desc: '낱말의 뜻을 정확히 알고 활용하는 능력이에요. 문맥 속에서 낱말의 의미를 찾아보세요!' },
-    '07': { name: '지식', img: 'know.png', color: '#89E3FA', desc: '이야기와 관련된 배경지식을 아는 능력이에요. 알고 있는 내용을 잘 떠올려보세요!' },
-    '08': { name: '문법', img: 'advance_gram.png', color: ['#FFABE5', '#B797F9', '#8BCCFD'], desc: '문장을 바르게 이해하고 사용하는 능력이에요. 문장의 짜임을 잘 살펴보세요!' },
+    '01': { name: '이해', img: 'comp.png', color: '#89EED3', desc: '등장인물과 사건, 행동 등 중요한 내용을 정확하게 파악하는 능력이에요. 이야기 속 중요한 내용을 잘 떠올려 보세요!' },
+    '02': { name: '표현', img: 'expr.png', color: '#FDBB59', desc: '다양한 표현의 뜻과 쓰임을 알고, 그 속에 담긴 의미를 이해하는 능력이에요. 표현에 집중해 문제를 풀어 보세요!' },
+    '03': { name: '논리', img: 'logic.png', color: '#8FC7FD', desc: '이야기의 앞뒤 내용을 연결하여 원인과 결과, 사건의 관계를 파악하는 능력이에요. 문제의 단서를 연결해서 생각해 보세요!' },
+    '04': { name: '사고', img: 'think.png', color: '#FEE660', desc: '인물의 행동과 선택을 살펴보고, 이야기의 주제와 의미를 생각하는 능력이에요. 왜 그런지, 무엇을 말하고 있는지 생각해 보세요!' },
+    '05': { name: '감정', img: 'emo.png', color: '#FD9EC2', desc: '인물의 말과 행동을 통해 마음과 감정을 이해하는 능력이에요. 인물의 입장이 되어 마음을 헤아려 보세요.' },
+    '06': { name: '어휘', img: 'voca.png', color: '#C2AEFC', desc: '이야기에 나온 낱말의 뜻과 쓰임을 문맥에 맞게 이해하는 능력이에요. 앞뒤 내용을 살펴 낱말의 뜻을 생각해 보세요!' },
+    '07': { name: '지식', img: 'know.png', color: '#89E3FA', desc: '책에서 출발해 관련된 배경지식과 새로운 정보로 지식을 넓혀 가는 능력이에요. 새로운 지식을 발견해 배움의 폭을 넓혀요!' },
+    // 08/09는 심화(qlevel=02) 전용 유형 — 관리자 도서 데이터 화면(book-data.js QTYPE_CODES)이
+    // 심화 문항을 이 코드로 저장한다
+    '08': { name: '어휘심화', img: 'advance_voca.png', color: ['#FDA9A1', '#FECE83', '#A4F3CD'], desc: '핵심 어휘를 한자의 뜻과 함께 풀어보며 문맥 속 의미를 이해하는 능력이에요. 풍부한 어휘력으로 이야기를 더 깊이 이해해 보세요!' },
+    '09': { name: '문법심화', img: 'advance_gram.png', color: ['#FFABE5', '#B797F9', '#8BCCFD'], desc: '책 속 낱말과 문장을 이해하고, 국어문법과 다양한 표현을 알맞게 활용하는 능력이에요. 문제를 풀며 국어 실력을 키워 보세요!' },
   };
-  const ADVANCED_VOCA_COLOR = ['#FDA9A1', '#FECE83', '#A4F3CD'];
+  // 심화(qlevel=02) 전용 덮어쓰기 — 같은 코드라도 심화에서는 이름/설명/색이 달라진다.
+  // 06 어휘를 심화로 쓰던 예전 데이터 호환용. 서버가 qtypeNm/qtypeDesc를 내려주면 그 값이 우선이다.
+  const QTYPE_ADVANCED_INFO = {
+    '06': { name: '어휘심화', img: 'advance_voca.png', color: ['#FDA9A1', '#FECE83', '#A4F3CD'], desc: '핵심 어휘를 한자의 뜻과 함께 풀어보며 문맥 속 의미를 이해하는 능력이에요. 풍부한 어휘력으로 이야기를 더 깊이 이해해 보세요!' },
+  };
 
   // 유형 이름 h3에 단색 또는 그라데이션 색을 입힌다
   function applyNameColor(el, color) {
@@ -64,8 +73,8 @@
   // 유형 아이콘 PNG(100~300KB)를 미리 받아둔다 — 안 하면 유형이 바뀌는 문제로 넘어갈 때마다
   // 이미지가 뒤늦게 뜨는 팝인이 생긴다
   function preloadQtypeIcons() {
-    const files = Object.values(QTYPE_INFO).map((v) => v.img);
-    files.push('advance_voca.png');
+    const files = Object.values(QTYPE_INFO).map((v) => v.img)
+      .concat(Object.values(QTYPE_ADVANCED_INFO).map((v) => v.img));
     files.forEach((f) => {
       const img = new Image();
       img.src = `/images/icons/${f}`;
@@ -75,7 +84,8 @@
   let questions = [];
   let current = 0;
   let answered = [];
-  // "틀린 문제 다시 풀기"로 진입했는지 — 채점 제출 시 mode=WRONG_ONLY로 보내 점수/등급을 고정한다.
+  // "틀린 문제 다시 풀기"로 진입했는지 — 채점 제출 시 mode=WRONG_ONLY로 보낸다. 서버는 이 모드의
+  // 1회차만 최종 점수/등급/뱃지에 반영하고(2026-09-21), 2회차부터는 고정한다(즉시 채점 회차라서).
   // (일반 재도전은 mode=RETRY로 보내 최종 점수/등급이 갱신된다. 첫 시도 여부는 서버가 판단한다.)
   let wrongOnlyMode = false;
   // "틀린 문제 다시 풀기"(완료화면)에서 기본+심화 오답을 한 번에 푸는 모드 — 문항마다 q.__qlevel을
@@ -369,16 +379,23 @@
     }
   }
 
+  // 문항 하나에 쓸 유형 표시 정보 — 심화(qlevel=02) 전용 정의가 있으면 그걸 덮어쓴다.
+  // 병합 모드(기본+심화 오답 한 번에 풀기)에서는 문항별 난이도로 판단한다.
+  function qtypeInfoOf(q) {
+    const base = QTYPE_INFO[q.qtype] ?? QTYPE_INFO['03'];
+    const adv = levelOf(q) === '02' ? QTYPE_ADVANCED_INFO[q.qtype] : null;
+    return adv ? { ...base, ...adv } : base;
+  }
+
   function renderQtype(q) {
-    const qtype = q.qtype;
-    const info = QTYPE_INFO[qtype] ?? QTYPE_INFO['03'];
-    // 심화(qlevel=02)에서 어휘 유형은 심화 어휘 아이콘으로 교체 — 병합 모드는 문항별 난이도로 판단
-    const advVoca = levelOf(q) === '02' && qtype === '06';
-    const imgFile = advVoca ? 'advance_voca.png' : info.img;
-    qtypeIcon.innerHTML = `<img src="/images/icons/${imgFile}" alt="${info.name} 유형" />`;
-    qtypeName.textContent = info.name;
-    applyNameColor(qtypeName, advVoca ? ADVANCED_VOCA_COLOR : info.color);
-    qtypeDesc.textContent = info.desc;
+    const info = qtypeInfoOf(q);
+    // 이름/설명은 서버가 내려준 값이 우선 — 없거나 비어 있으면 화면 상수로 대체한다
+    const name = q.qtypeNm || info.name;
+    const desc = q.qtypeDesc || info.desc;
+    qtypeIcon.innerHTML = `<img src="/images/icons/${info.img}" alt="${name} 유형" />`;
+    qtypeName.textContent = name;
+    applyNameColor(qtypeName, info.color);
+    qtypeDesc.textContent = desc;
   }
 
   // 문항별 정답 확인 없이 선택만 기록하고 다음으로 넘어간다 — 정답 여부는 마지막 결과에서만 보여준다
@@ -531,8 +548,9 @@
     window.location.href = `/student/result?studentId=${encodeURIComponent(studentId)}&contentId=${encodeURIComponent(contentId)}&qlevel=${encodeURIComponent(qlevel)}`;
   }
 
-  // 완료화면 "틀린 문제 다시 풀기"(기본+심화 병합) 채점 — 다시 푼 난이도만 각각 WRONG_ONLY로 제출하고
-  // (점수/등급/뱃지는 서버가 바꾸지 않음), 화면에는 기본+심화 성적을 합산해 한 번에 보여준다(2026-09-02).
+  // 완료화면 "틀린 문제 다시 풀기"(기본+심화 병합) 채점 — 다시 푼 난이도만 각각 WRONG_ONLY로 제출하고,
+  // 화면에는 기본+심화 성적을 합산해 한 번에 보여준다(2026-09-02). 1회차 반영 여부는 난이도별로
+  // 따로 판정되므로(qlevel 단위 countWrongOnlyRounds) 서버 응답을 그대로 이어받으면 된다.
   async function showMergedResult() {
     const byLevel = { '01': [], '02': [] };
     answered.filter((a) => a).forEach((a) => {
@@ -551,7 +569,8 @@
     // 난이도별 "전체 기준" 정답/문항 수 — 합산해서 화면 헤드라인 점수로 쓴다
     const part = {};
 
-    // 등급·레벨·뱃지 등 화면 표시값은 기본 문제 결과를 이어받는다(WRONG_ONLY라 변동 없음)
+    // 등급·레벨·뱃지 등 화면 표시값은 기본 문제 결과를 이어받는다 — 1회차면 서버가 이미 갱신된
+    // 등급/최종 점수를 내려주므로 그대로 쓰면 된다(2026-09-21)
     const carryBasic = (src) => {
       merged.grade = src.grade;
       merged.passed = src.passed;

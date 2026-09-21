@@ -244,11 +244,15 @@
         WHERE recommend_id = #{recommendId}
     </update>
 
-    <!-- 재도전(mode=RETRY) — 최종 점수·등급을 갱신(둘 다 "올라가기만"; max/higherGrade는 호출부 계산).
-         처음 점수·status는 첫 시도 결과로 고정 (2026-08-28) -->
+    <!-- 재제출(재도전 / "틀린 문제 다시 풀기" 1회차) — 점수·등급을 갱신한다.
+         2026-09-21: "처음 점수"(correct_count)도 같이 올린다. 재제출 결과가 곧 그 학생의 점수이고,
+         모니터링·독서일지·앱 어디에서도 "3/12 → 9/12"처럼 지난 점수가 보이면 안 되기 때문이다.
+         두 컬럼을 같은 값으로 유지하면 "처음 ≠ 최종일 때만 화살표"인 화면 로직이 그대로 단일 표시가 된다.
+         셋 다 "올라가기만" 한다 — max/higherGrade는 호출부(ClinicService)가 계산한다. status는 DONE 고정. -->
     <update id="updateRetryResult">
         UPDATE erp_bookstore_recommend_log
-        SET final_correct_count = #{finalCorrectCount},
+        SET correct_count       = #{finalCorrectCount},
+            final_correct_count = #{finalCorrectCount},
             grade               = #{grade}
         WHERE recommend_id = #{recommendId}
     </update>
@@ -485,11 +489,22 @@
         WHERE student_id = #{studentId} AND content_id = #{contentId} AND qlevel = #{qlevel}
     </select>
 
-    <!-- submitted_at이 같으면 같은 제출 회차라서(ddl-core.sql 주석 참고) DISTINCT로 회차 수를 센다 -->
+    <!-- submitted_at이 같으면 같은 제출 회차라서(ddl-core.sql 주석 참고) DISTINCT로 회차 수를 센다.
+         여기엔 "틀린 문제 다시 풀기"도 포함된다 — 이 값은 "첫 제출인가"를 가리는 데 쓰기 때문이다. -->
     <select id="countPriorAttemptRounds" resultType="int">
         SELECT COUNT(DISTINCT submitted_at)
         FROM erp_bookstore_quiz_answer_log
         WHERE recommend_id = #{recommendId} AND qlevel = #{qlevel}
+    </select>
+
+    <!-- "재도전" 회차 수 — 위와 달리 "틀린 문제 다시 풀기"(WRONG_ONLY)는 빼고 센다(2026-09-21).
+         틀린 문제 다시 풀기는 점수에는 반영돼도 재도전 횟수는 올리지 않는 게 정책이다.
+         submit_mode가 NULL인 기록은 patch-260903-quiz-mode.sql 이전 것이라 재도전으로 본다. -->
+    <select id="countRetryRounds" resultType="int">
+        SELECT COUNT(DISTINCT submitted_at)
+        FROM erp_bookstore_quiz_answer_log
+        WHERE recommend_id = #{recommendId} AND qlevel = #{qlevel}
+          AND (submit_mode IS NULL OR submit_mode &lt;&gt; 'WRONG_ONLY')
     </select>
 
     <!-- 문항(qnum)별 가장 최근 제출의 정답 여부 — answer_id가 클수록 최신 제출이다 -->

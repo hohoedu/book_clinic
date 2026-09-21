@@ -154,9 +154,6 @@
       <div class="result-actions">
         <a class="btn-home" th:href="@{/student/main(studentId=${studentId})}">홈으로</a>
         <div class="result-actions-right">
-          <a class="btn-retry" id="retryBtn" hidden
-            th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
-            <i class="fa-solid fa-rotate-right" aria-hidden="true"></i>재도전</a>
           <a class="btn-retry" id="wrongRetryBtn" hidden
             th:href="@{/student/question(studentId=${studentId},contentId=${contentId},qlevel='01')}">
             틀린 문제 다시 풀기</a>

@@ -86,7 +86,6 @@
   const stepReward = document.getElementById('stepReward');
   const rewardStepNow = document.getElementById('rewardStepNow');
   const rewardStepTotal = document.getElementById('rewardStepTotal');
-  const retryBtn = document.getElementById('retryBtn');
   const wrongRetryBtn = document.getElementById('wrongRetryBtn');
   const advancedBtn = document.getElementById('advancedBtn');
   // "다시 읽으러 가기"(불합격) / "여권 쓰러 가기"(심화 마무리) — 이름만 다르고 동작은 둘 다
@@ -223,26 +222,27 @@
     resultRetryText.textContent = attemptNo > 1 ? `${attemptNo - 1}번째` : '없음';
   }
 
-  /* ── 결과 화면 버튼 규칙 (2026-09-03 전면 재정리) ────────────────────────────
-     학생이 한 책을 두고 지나가는 단계는 아래 다섯뿐이고, 각 단계에서 보이는 버튼은 최대 2개다.
+  /* ── 결과 화면 버튼 규칙 (2026-09-21 재정리) ─────────────────────────────────
+     학생이 한 책을 두고 지나가는 단계는 아래 다섯뿐이고, 각 단계의 버튼은 딱 하나다.
      홈의 완료 화면(student-main.js renderCompletion)도 똑같은 규칙을 쓴다 — 두 화면이 다르게
      보이면 "홈으로"를 눌렀을 때 갑자기 다른 버튼이 나타나 흐름이 끊긴다.
 
-       1. 재도전(기본 합격선 미달)     → 다시 읽으러 가기            ※ 로그아웃
-       2. 독서완료(합격선~만점 미만)   → 재도전 + 틀린 문제 다시 풀기
-          2-2. 틀린 문제를 다 맞히면   → 재도전 + 심화 문제 풀기
-       3. 독서왕(기본 만점)            → 심화 문제 풀기
-       4. 심화완료(심화 만점 아님)     → 재도전 + 틀린 문제 다시 풀기
-          4-2. 틀린 문제를 다 맞히면   → 재도전 + 여권 쓰러 가기
+       1. 완독(기본 합격선 미달)       → 다시 읽으러 가기            ※ 로그아웃 = 재도전 경로
+       2. 정독 완료(합격선~만점 미만)  → 틀린 문제 다시 풀기
+          2-2. 틀린 문제를 다 맞히면   → 심화 문제 풀기
+       3. 정독 왕(기본 만점)           → 심화 문제 풀기
+       4. 심화완료(심화 만점 아님)     → 틀린 문제 다시 풀기          ※ 0/6이어도 동일
+          4-2. 틀린 문제를 다 맞히면   → 여권 쓰러 가기
        5. 심화왕(심화 만점)            → 여권 쓰러 가기              ※ 로그아웃
 
-     재도전으로 만점을 치면(2-1 / 4-1) 등급이 독서왕·심화왕으로 올라가므로 다음 화면부터는
+     재도전(전체 다시 풀기)은 1번 단계에만 있다 — 책을 다시 읽고 QR로 들어오면 홈에 "정독 문제
+     풀기"가 뜨는 그 경로다. 2·4번에는 재도전이 없고, 심화에는 재도전 개념 자체가 없다.
+     "틀린 문제 다시 풀기" 1회차로 만점을 치면 등급이 정독왕·심화왕으로 올라가므로 다음 화면부터는
      자연히 3번·5번 규칙으로 그려진다 — 처음부터 만점이었던 것과 같은 상태가 된다.
      심화왕은 기본 오답이 남아 있어도 더 붙잡지 않는다(여권으로 끝낸다). */
 
   /** 버튼을 전부 끈다 — 각 단계는 이 위에 필요한 것만 켠다 */
   function resetActionButtons() {
-    retryBtn.hidden = true;
     wrongRetryBtn.hidden = true;
     advancedBtn.hidden = true;
     readAgainBtn.hidden = true;
@@ -255,15 +255,13 @@
   }
 
   /**
-   * 2·4단계 공통 — 재도전은 항상 열고, 나머지 한 자리는 남은 오답 유무로 갈린다.
+   * 2·4단계 공통 — 남은 오답이 있으면 "틀린 문제 다시 풀기", 다 맞혔으면 다음 단계 버튼.
+   * 재도전(전체 다시 풀기)은 이 단계에 없다(2026-09-21).
    * @param level   이 단계에서 다시 풀 문제의 난이도 ('01' 기본 / '02' 심화)
    * @param wrong   아직 틀린 채로 남은 문항 번호
    * @param nextBtn 오답을 다 맞혔을 때 그 자리에 들어올 버튼(심화 문제 풀기 / 여권 쓰러 가기)
    */
-  function renderRetryStage(level, wrong, nextBtn) {
-    retryBtn.hidden = false;
-    retryBtn.setAttribute('href', questionHref(level));
-
+  function renderWrongRetryStage(level, wrong, nextBtn) {
     if (wrong.length > 0) {
       wrongRetryBtn.hidden = false;
       wrongRetryBtn.setAttribute('href', questionHref(level));
@@ -290,7 +288,7 @@
       passportBtn.hidden = false;                                  // 5단계
       return;
     }
-    renderRetryStage('02', result.wrongQnums ?? [], passportBtn);   // 4단계
+    renderWrongRetryStage('02', result.wrongQnums ?? [], passportBtn);   // 4단계
   }
 
   // 3단계 — 독서왕(기본 만점). 더 맞힐 기본 문제가 없으니 심화만 남는다.
@@ -313,10 +311,10 @@
 
     resetActionButtons();
     // 오답이 남았으면 "틀린 문제 다시 풀기", 다 맞혔으면 그 자리에 "심화 문제 풀기"
-    renderRetryStage('01', result.wrongQnums ?? [], advancedBtn);
+    renderWrongRetryStage('01', result.wrongQnums ?? [], advancedBtn);
   }
 
-  // 1단계 — 불합격(합격선 미달). 문제를 다시 푸는 게 아니라 책을 다시 읽으러 간다.
+  // 1단계 — 완독(합격선 미달). 문제를 다시 푸는 게 아니라 책을 다시 읽으러 간다(= 재도전 경로).
   // "다시 읽으러 가기"는 로그아웃이다 — 읽고 와서 QR로 다시 들어오면 홈에 "문제 풀러 가기"가 뜬다.
   function renderRetryResult(result) {
     setHero('RETRY');

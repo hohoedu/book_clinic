@@ -53,6 +53,21 @@ CREATE TABLE erp_bookstore_code (
         ) ON [PRIMARY])
     ON [PRIMARY];
 
+-- 문제 유형 설명 마스터 — 학생 문제풀이 화면(student-question.js)에서 유형 이름 아래 보여주는 안내 문구.
+-- 유형 이름은 erp_bookstore_code(gubun='T')에 그대로 두고, 여기에는 설명만 둔다.
+-- (문구가 70자 안팎이라 codeNm VARCHAR(20)에 들어가지 않고, 설명이 필요한 구분은 'T' 하나뿐이라
+--  erp_bookstore_code에 컬럼을 붙이면 나머지 구분 행이 전부 NULL이 된다 — 2026-09-21 분리)
+-- qtype은 erp_bookstore_code(gubun='T')의 code를 가리키지만 그쪽 PK가 (gubun, code) 복합키라 FK는 걸지 않는다.
+IF OBJECT_ID('erp_bookstore_qtype_desc', 'U') IS NULL
+CREATE TABLE erp_bookstore_qtype_desc (
+    qtype         VARCHAR(2)    NOT NULL PRIMARY KEY,  -- 문제 유형 코드 (erp_bookstore_code gubun='T')
+    qtype_desc    VARCHAR(200)  NOT NULL,              -- 유형 안내 문구 (화면 qtypeDesc)
+    use_yn        BIT           NOT NULL DEFAULT 1,    -- 사용여부
+    created_at    DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at    DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_by    VARCHAR(50)                          -- 수정한 사람
+);
+
 -- 도서(콘텐츠) 마스터 — 본사(HQ_CENTER_CODE)만 편집 가능한 표준 도서 정보
 IF OBJECT_ID('erp_bookstore_content', 'U') IS NULL
 CREATE TABLE erp_bookstore_content (
@@ -306,9 +321,11 @@ CREATE TABLE erp_bookstore_recommend_log (
     item_id         INT           NOT NULL,  -- 실제로 대여 확정된 실물 판본 (erp_bookstore_item.item_id)
     recommended_at  DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 추천일시(KST)
     status              VARCHAR(20)   NOT NULL DEFAULT 'PENDING',  -- PENDING(추천됨, 첫 제출 전) / HOLD(다 못 읽고 넘어감, 2026-09-03) / DONE(첫 제출 완료 — 합격/불합격 무관, 2026-08-28)
-    correct_count       INT,      -- "처음 점수" — 기본(qlevel=01) 최초 제출 정답 수에서 고정
+    correct_count       INT,      -- 기본(qlevel=01) 정답 수. 2026-09-21부터 final_correct_count와 항상 같은 값
+                                  --   ("처음 점수" 개념 폐지 — 재제출 결과가 곧 그 학생의 점수다. patch-260921-score-unify.sql)
     total_count         INT,      -- 기본 문제풀이 총 문항 수
-    final_correct_count INT,      -- "최종 점수" — 재도전(mode=RETRY)에서 더 잘한 경우에만 올라간다(max) (2026-08-28)
+    final_correct_count INT,      -- 재제출(재도전 / "틀린 문제 다시 풀기" 1회차)에서 더 잘한 경우에만 올라간다(max)
+                                  --   컬럼을 합치지 않고 같은 값으로 두는 이유는 ClinicMapper.updateRetryResult 주석 참고
     grade               VARCHAR(20),   -- KING / FRIEND / NULL(불합격) — 재도전으로 "올라가기만"(null→FRIEND→KING). 오르면 기본 뱃지도 상위 교체 (2026-08-28)
     completed_at        DATETIME2,     -- 첫 제출(DONE) 처리 시각
     -- 책 홀딩(2026-09-03) — patch-260903-hold.sql 참고. 홀딩은 책을 잠그는 게 아니라 "다 못 읽고
@@ -480,10 +497,10 @@ CREATE TABLE erp_bookstore_diary_detail (
     book_name            VARCHAR(255),   -- 도서명 (작성 시점 스냅샷)
     book_img             VARCHAR(100),   -- 표지 이미지 URL (작성 시점 스냅샷)
     read_minutes         INT,            -- 실제 독서 시간(분)
-    basic_correct_cnt    INT,            -- 기본(qlevel='01') 정답 수 스냅샷
+    basic_correct_cnt    INT,            -- 기본(qlevel='01') 정답 수 스냅샷 — 재제출로 점수가 오르면 같이 갱신(2026-09-21)
     basic_total_cnt      INT,            -- 기본 총 문항 수 스냅샷
-    advanced_correct_cnt INT,            -- 심화(qlevel='02') "처음 점수" — 최초 제출값 고정
-    advanced_final_correct_cnt INT,      -- 심화 "최종 점수" — 재도전에서 더 잘하면 갱신(max). 첫 제출 시 advanced_correct_cnt와 동일 (2026-08-31)
+    advanced_correct_cnt INT,            -- 심화(qlevel='02') 정답 수. 2026-09-21부터 아래 final과 항상 같은 값
+    advanced_final_correct_cnt INT,      -- 심화 재제출에서 더 잘하면 갱신(max). advanced_correct_cnt와 항상 동일
     advanced_total_cnt   INT,            -- 심화 총 문항 수 스냅샷
     CONSTRAINT UQ_erp_bookstore_diary_detail_book UNIQUE (diary_key, content_id),
     FOREIGN KEY (diary_key)    REFERENCES erp_bookstore_diary(diary_key),

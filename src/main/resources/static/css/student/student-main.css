@@ -53,59 +53,6 @@
   box-shadow: inset 0 -4px 0 var(--red-dark, #b6301f);
 }
 
-/* 재도전 유형 선택 모달 — 기본 문제=완료화면 재도전 버튼과 같은 초록, 심화 문제=빨강(문제 풀기 톤) 유지 */
-#retryTypeBasicBtn {
-  background: #1aa864;
-  color: #fff;
-  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .15);
-}
-
-/* 재도전 유형 선택 모달 — 하단 "닫기" 링크 대신 오른쪽 위 X를 쓰고, 선택지 두 개가
-   충분히 커 보이도록 박스를 조금 키운다(2026-09-02). 다른 모달(로그아웃/추천 실패)은 그대로 둔다. */
-#retryTypeModal .modal-box {
-  position: relative;
-  width: 480px;
-  padding: 40px 36px 36px;
-}
-
-#retryTypeModal .modal-msg {
-  font-size: 24px;
-  margin-bottom: 32px;
-}
-
-#retryTypeModal .modal-actions {
-  gap: 16px;
-}
-
-#retryTypeModal .modal-btn {
-  min-height: 66px;
-  font-size: 22px;
-}
-
-/* 모달 오른쪽 위 닫기 X */
-.modal-close {
-  position: absolute;
-  top: 16px;
-  right: 18px;
-  width: 36px;
-  height: 36px;
-  border: none;
-  border-radius: 50%;
-  background: none;
-  color: var(--muted, #8c8c8c);
-  font-size: 22px;
-  line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .15s ease, color .15s ease;
-}
-.modal-close:hover {
-  background: var(--cream, #f4efe6);
-  color: var(--text, #333);
-}
-
 /* 나의 책장 / 카드 컬렉션 모달 — student-bookcase.html 을 iframe 으로 띄운다.
    딤 배경은 iframe 안 .stage 가 그리므로 여기선 자리만 잡는다. */
 .bookcase-modal {
@@ -463,16 +410,9 @@
   font-size: 17px;
   gap: 8px;
 }
-.completion-actions .solve-btn--sub .fa-rotate-right,
 .completion-actions .solve-btn--sub .fa-rotate-left { font-size: 18px; }
 
-/* 재도전 + (틀린 문제 다시 풀기 | 심화 확장 문제 풀기) 두 버튼이 폭을 2:3으로 나눠 갖는다.
-   - 예전엔 재도전이 글자 길이만큼(flex:0 1 auto)만 차지해 심화 버튼 옆에서 너무 좁아 보였다.
-   - 이제 틀린 문제 다시 풀기는 심화와 함께 뜨지 않으므로(재도전과만 공존) 오른쪽 버튼은 항상 하나뿐. (2026-09-08) */
-.completion-actions #completionRetryBtn {
-  flex: 2;
-  font-size: 19px;
-}
+/* 완료 화면 버튼은 단계마다 하나뿐이라(2026-09-21 재도전 폐지) 남는 폭을 그 버튼이 전부 갖는다. */
 .completion-actions .solve-btn--advanced,
 .completion-actions #completionWrongRetryBtn {
   flex: 3;
@@ -487,7 +427,7 @@
 }
 .completion-actions #completionWrongRetryBtn .fa-rotate-left { font-size: 22px; }
 
-/* 재도전 / 틀린 문제 다시 풀기 — 결과 화면의 .btn-retry와 같은 초록 톤(2026-09-02, 기존 파랑에서 변경) */
+/* 틀린 문제 다시 풀기 — 결과 화면의 .btn-retry와 같은 초록 톤(2026-09-02, 기존 파랑에서 변경) */
 .solve-btn--sub {
   --btn-shade: #12764a;
   font-size: 19px;

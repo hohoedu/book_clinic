@@ -180,16 +180,12 @@
             coalesce(dd.book_name, c.original_title) AS title,
             coalesce(dd.book_img,  c.image_url)      AS imageUrl,
 
-            -- 기본은 재도전해도 diary_detail 스냅샷(basic_correct_cnt)이 처음 점수로 고정된다.
-            -- "최종 점수"는 recommend_log.final_correct_count 쪽만 max로 오르므로 그걸 우선한다.
+            -- recommend_log 쪽이 재제출까지 반영된 점수다(2026-09-21부터 처음/최종이 같은 값).
+            -- diary_detail 스냅샷은 그 책 기록이 없을 때만 쓰는 대비책이다.
             isnull(coalesce(rl.final_correct_count, dd.basic_correct_cnt), 0) AS basicCorrect,
             isnull(dd.basic_total_cnt,   0) AS basicTotal,
             isnull(coalesce(dd.advanced_final_correct_cnt, dd.advanced_correct_cnt), 0) AS advancedCorrect,
             isnull(dd.advanced_total_cnt, 0) AS advancedTotal,
-
-            -- "처음 점수" — 재도전 배지를 그리려면 최종점수와 별개로 최초 제출값이 필요하다
-            rl.correct_count AS firstBasicCorrect,
-            rl.total_count   AS firstBasicTotal,
 
             CASE WHEN retry.rounds &gt; 0 THEN retry.rounds - 1 ELSE 0 END AS retryCount,
 
@@ -206,12 +202,15 @@
         LEFT JOIN erp_bookstore_content c ON c.content_id = dd.content_id
         LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
 
-        -- 제출 회차 수 (submitted_at 이 같으면 같은 회차). 기본 문제만 재도전 대상이다.
+        -- 재도전 회차 수 (submitted_at 이 같으면 같은 회차). 기본 문제만 재도전 대상이다.
+        -- "틀린 문제 다시 풀기"(WRONG_ONLY)는 점수에는 반영돼도 재도전 횟수는 올리지 않는다(2026-09-21).
+        -- submit_mode가 NULL인 기록은 patch-260903-quiz-mode.sql 이전 것이라 재도전으로 본다.
         OUTER APPLY (
             SELECT count(DISTINCT q.submitted_at) AS rounds
             FROM erp_bookstore_quiz_answer_log q
             WHERE q.recommend_id = dd.recommend_id
               AND q.qlevel = '01'
+              AND (q.submit_mode IS NULL OR q.submit_mode &lt;&gt; 'WRONG_ONLY')
         ) retry
 
         WHERE d.student_id = #{studentId}
@@ -247,28 +246,68 @@
     </select>
 
     <!--
-      독서 성향 — 문제 유형(gubun='T')별 누적 정답률. 하루치만 보면 유형당 표본이 한두 문항이라
-      버블이 0%/100%로 튄다. 그래서 "그 날짜까지" 누적으로 내고, 표본 수(answerCount)도 같이
-      보내 앱이 신뢰도를 판단할 수 있게 한다.
-      문법('08')까지 내려가지만 앱 버블 팔레트에 없는 유형은 앱에서 버린다.
+      독서 성향 — 그날 읽은 책(일지 기준)의 문제 유형(gubun='T')별 점수.
+
+      점수는 정답률이 아니라 "기본 50% + 맞힌 비율만큼의 나머지 50%"다 — 다 틀려도 0%가 아니라
+      50%에서 시작한다. 2문항이면 0/1/2개 정답이 50/75/100%, 3문항이면 50/66.7/83.3/100%.
+
+      범위는 selectBookstoreReportBooks 와 같다 — record_date 가 그 날인 일지의 책들(recommend_id).
+      "그 날짜까지 누적"이 아니라 "그 날의 성향"이다(2026-09-21): 9월 21일 탭은 21일에 읽은 책만,
+      28일 탭은 28일에 읽은 책만 본다.
+
+      어떤 제출을 셀지는 책 점수(recommend_log.final_correct_count)와 똑같이 맞춘다 —
+      ClinicService.submitQuiz 의 scoringResubmit 규칙이다. 첫 제출(FIRST)·재도전(RETRY)과
+      "틀린 문제 다시 풀기" 1회차까지만 세고, 2회차부터는 버린다. 2회차는 보기를 고르는 즉시
+      정답을 알려주는 연습 모드라 점수에 반영되지 않는데(getWrongRetryMode), 이걸 성향만 세면
+      책 카드는 10/12인데 버블은 전부 100%가 된다.
+
+      그 안에서 "최종 결과"는 회차(submitted_at)가 아니라 문항(qnum)별 최신 답으로 고른다 —
+      ClinicMapper.findLatestAnswersByRecommend 와 같은 규칙이다. 재제출은 그때 실제로 제출된
+      문항만 적재하므로(submitQuiz), 회차 단위로 최신만 보면 그 부분 제출에 없던 문항이 통째로
+      사라져 유형이 한두 개만 남는다.
+
+      기본(01)만 센다 — 심화(02)의 유형 코드(심화 어휘/문법)는 앱 버블 팔레트에 없다.
     -->
     <select id="selectBookstoreReportTendencies" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportTendencyDTO">
+        WITH scored AS (
+            SELECT q.recommend_id, q.qlevel, q.qnum, q.qtype, q.is_correct, q.answer_id
+            FROM erp_bookstore_diary d
+            JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+            JOIN erp_bookstore_quiz_answer_log q ON q.recommend_id = dd.recommend_id
+            WHERE d.student_id = #{studentId}
+              AND d.record_date = #{recordDate}
+              AND q.qlevel = '01'
+              AND (
+                    q.submit_mode IS NULL
+                 OR q.submit_mode &lt;&gt; 'WRONG_ONLY'
+                 OR q.submitted_at = (
+                        SELECT min(w.submitted_at)
+                        FROM erp_bookstore_quiz_answer_log w
+                        WHERE w.recommend_id = q.recommend_id
+                          AND w.qlevel      = q.qlevel
+                          AND w.submit_mode = 'WRONG_ONLY'
+                    )
+              )
+        ),
+        latest AS (
+            SELECT s.qtype, s.is_correct
+            FROM scored s
+            WHERE s.answer_id = (
+                SELECT max(s2.answer_id)
+                FROM scored s2
+                WHERE s2.recommend_id = s.recommend_id
+                  AND s2.qlevel       = s.qlevel
+                  AND s2.qnum         = s.qnum
+            )
+        )
         SELECT
             cd.code   AS typeCode,
             cd.codeNm AS typeName,
-            cast(round(100.0 * sum(CASE WHEN q.is_correct = 1 THEN 1 ELSE 0 END) / count(*), 1) AS float) AS rate,
+            cast(round(50.0 + 50.0 * sum(CASE WHEN l.is_correct = 1 THEN 1 ELSE 0 END) / count(*), 1) AS float) AS rate,
             count(*)  AS answerCount
         FROM erp_bookstore_code cd
-        JOIN erp_bookstore_quiz_answer_log q ON q.qtype = cd.code
+        JOIN latest l ON l.qtype = cd.code
         WHERE cd.gubun = 'T'
-          AND q.student_id = #{studentId}
-          AND cast(q.submitted_at AS date) &lt;= #{recordDate}
-          AND q.submitted_at = (
-              SELECT max(q2.submitted_at)
-              FROM erp_bookstore_quiz_answer_log q2
-              WHERE q2.recommend_id = q.recommend_id
-                AND q2.qlevel = q.qlevel
-          )
         GROUP BY cd.code, cd.codeNm
         ORDER BY cd.code
     </select>

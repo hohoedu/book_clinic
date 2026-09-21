@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>정독 달력</title>
+  <link rel="stylesheet" href="/css/calendar.css" />
+</head>
+<body>
+
+<main class="calendar-page">
+
+  <div class="month-switch" id="monthSwitch"></div>
+
+  <div class="calendar-weekdays">
+    <div class="sun">일</div>
+    <div>월</div>
+    <div>화</div>
+    <div>수</div>
+    <div>목</div>
+    <div>금</div>
+    <div class="sat">토</div>
+  </div>
+
+  <div class="calendar-grid" id="calendarGrid"></div>
+
+  <div class="legend">
+    <span class="legend-item"><i class="dot complete"></i>예약 완료</span>
+    <span class="legend-item"><i class="dot available"></i>예약 가능</span>
+    <span class="legend-item"><i class="dot closed"></i>예약 마감</span>
+  </div>
+
+  <div class="schedule-box" id="scheduleBox"></div>
+
+</main>
+
+<script src="/js/calendar.js"></script>
+</body>
+</html>

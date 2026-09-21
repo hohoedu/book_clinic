@@ -123,17 +123,25 @@
 
 /* 순번 · 학생정보 · 책목록 · 독서태도 · 기타전달사항 · 전송 6개 영역 */
 .diary-row {
-  display: grid;
-  grid-template-columns: 0.25fr 1fr 2fr 1.5fr 1.5fr 1fr;
+  display: flex;
   align-items: center;
-  gap: 30px;
+  gap: 20px;
   background: #fff;
   border: 1px solid #e8ecef;
   border-radius: 12px;
   padding: 20px;
 }
 
+/* 6개 칸의 가로 비율 0.25 : 1 : 2 : 1.5 : 1.5 : 0.5 (합 6.75)를 100% 기준 폭으로 환산해
+   아래 각 칸의 규칙에 width로 넣었다. 폭은 padding을 포함하고(box-sizing),
+   gap(20px×5)만큼은 각 칸이 폭에 비례해 줄어들며 흡수한다(flex-shrink 기본값 1). */
+.diary-row > * {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
 .diary-row-no {
+  width: 2.5%;
   font-size: 13px;
   color: #8a9297;
   text-align: center;
@@ -148,9 +156,11 @@
 }
 
 .diary-student {
+  width: 15%;
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   gap: 8px;
 }
 
@@ -271,6 +281,7 @@ input.time_input[type="text"]:focus::placeholder {
 }
 
 .diary-books {
+  width: 30%;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -371,9 +382,9 @@ input.time_input[type="text"]:focus::placeholder {
   color: #c8353a;
 }
 
-/* 독서태도·기타전달사항은 행 높이를 꽉 채워서 두 영역의 제목이 같은 높이에서 시작하게 한다
-   (.diary-row가 align-items:center라 stretch로 덮어써야 함) */
+
 .diary-attitude {
+  width: 25%;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -442,6 +453,7 @@ input.time_input[type="text"]:focus::placeholder {
 }
 
 .diary-note {
+  width: 25%;
   min-width: 0;
   align-self: stretch;
   display: flex;
@@ -459,6 +471,7 @@ input.time_input[type="text"]:focus::placeholder {
 }
 
 .diary-send {
+  width: 2.5%;
   display: flex;
   align-items: center;
   justify-content: center;

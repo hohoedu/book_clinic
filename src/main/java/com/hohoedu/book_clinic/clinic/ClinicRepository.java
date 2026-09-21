@@ -108,10 +108,11 @@ public interface ClinicRepository {
                                 @Param("status") String status);
 
     /**
-     * "재도전"(mode=RETRY) 결과 반영 (2026-08-28) — final_correct_count(최종 점수)와 grade를 갱신한다.
-     * 두 값 모두 "올라가기만" 한다 — finalCorrectCount는 max(이번 점수, 기존 최종), grade는 higherGrade(기존, 이번)
-     * 를 호출부에서 계산해서 넘긴다. correct_count(처음 점수)·status는 첫 시도 결과로 고정.
-     * "틀린 문제 다시 풀기"는 아예 호출하지 않는다.
+     * 재제출 결과 반영 — 재도전(mode=RETRY)과 "틀린 문제 다시 풀기" 1회차가 여기로 온다(2026-09-21).
+     * correct_count(처음 점수)·final_correct_count(최종 점수)·grade를 갱신하며, 셋 다 "올라가기만"
+     * 한다 — finalCorrectCount는 max(이번 점수, 기존 최종), grade는 higherGrade(기존, 이번)를 호출부에서
+     * 계산해서 넘긴다. 처음 점수를 최종과 같은 값으로 맞추는 이유는 ClinicMapper 주석 참고. status는 DONE 고정.
+     * "틀린 문제 다시 풀기" 2회차 이상(즉시 채점 회차)은 아예 호출하지 않는다.
      */
     void updateRetryResult(@Param("recommendId") Integer recommendId,
                             @Param("finalCorrectCount") Integer finalCorrectCount,
@@ -211,6 +212,13 @@ public interface ClinicRepository {
     /** 해당 추천(도전)+난이도의 기존 제출 "회차" 수(submitted_at 단위) — 몇 번째 시도인지 화면에 보여줄 때 쓴다 */
     int countPriorAttemptRounds(@Param("recommendId") Integer recommendId,
                                 @Param("qlevel") String qlevel);
+
+    /**
+     * "재도전" 회차 수 — countPriorAttemptRounds와 달리 "틀린 문제 다시 풀기"는 빼고 센다(2026-09-21).
+     * 결과 화면의 "재도전 N번째" 표시에 쓴다. 첫 제출 여부 판정에는 countPriorAttemptRounds를 써야 한다.
+     */
+    int countRetryRounds(@Param("recommendId") Integer recommendId,
+                         @Param("qlevel") String qlevel);
 
     /** recommend_id+qlevel의 문항(qnum)별 "가장 최근 제출"의 정답 여부 — 부분 재제출(틀린 문제만
      *  다시 풀기) 시, 이번에 다시 제출하지 않은 문항의 정답 여부를 이어받는 데 쓴다(2026-08-25) */

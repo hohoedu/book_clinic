@@ -45,6 +45,7 @@ public class SecurityConfig {
                                                                 "/manifest.json", "/sw.js",
                                                                 "/launch",
                                                                 "/temp-upload.html",
+                                                                "/calendar",
                                                                 "/question/upload/template",
                                                                 "/question/upload",
                                                                 "/question/search",

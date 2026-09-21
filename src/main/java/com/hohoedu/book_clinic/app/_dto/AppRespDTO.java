@@ -97,11 +97,13 @@ public class AppRespDTO {
         private int advancedCorrect;  // 문해력(심화) 최종 정답 수
         private int advancedTotal;
 
-        /** 기본 "처음 점수" — 재도전 전 최초 제출값. 재도전이 없으면 basicCorrect 와 같다. */
-        private Integer firstBasicCorrect;
-        private Integer firstBasicTotal;
+        // "처음 점수"(firstBasicCorrect/firstBasicTotal)는 2026-09-21에 제거했다 — 재제출 결과가 곧
+        // 그 학생의 점수가 되면서 basicCorrect와 항상 같은 값이 됐고, 지난 점수는 노출하지 않는다.
 
-        /** 기본 문제 재도전 횟수 (제출 회차 - 1). 첫 제출만 했으면 0. */
+        /**
+         * 기본 문제 재도전 횟수 (재도전 회차 - 1). 첫 제출만 했으면 0.
+         * "틀린 문제 다시 풀기"는 점수에는 반영돼도 이 값을 올리지 않는다(2026-09-21).
+         */
         private int retryCount;
 
         /** 정답률(%) — 기본+심화 합산. 푼 문제가 없으면 null. */
@@ -141,7 +143,7 @@ public class AppRespDTO {
     public static class ReportTendencyDTO {
         private String typeCode;   // '01' ...
         private String typeName;   // 이해 / 표현 / 어휘 ...
-        private Double rate;       // 정답률(%)
+        private Double rate;       // 점수(%) — 기본 50% + 맞힌 비율만큼의 나머지 50%
         private int answerCount;   // 표본 수 — 앱에서 신뢰도 판단용
     }
 

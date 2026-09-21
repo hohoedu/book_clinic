@@ -123,9 +123,11 @@
             rl.grade               AS basicGrade,
             rl.hold_page           AS holdPage,
             cs.quiz_qlevel         AS quizQlevel,
-            -- 기본(qlevel='01') 문제 제출 회차 수(distinct submitted_at) — "문제 푸는 중" 라벨의 회차 계산에 쓴다(2026-08-28)
+            -- 기본(qlevel='01') 재도전 회차 수(distinct submitted_at) — "문제 푸는 중 N회차" 라벨에 쓴다(2026-08-28).
+            -- "틀린 문제 다시 풀기"는 재도전 횟수를 올리지 않으므로 제외한다(2026-09-21)
             (SELECT COUNT(DISTINCT qr.submitted_at) FROM erp_bookstore_quiz_answer_log qr
-             WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01') AS basicAttemptRounds,
+             WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01'
+               AND (qr.submit_mode IS NULL OR qr.submit_mode &lt;&gt; 'WRONG_ONLY')) AS basicAttemptRounds,
             -- 독서 시간은 문제풀이 시작 전까지만 흐른다: 이미 제출해서 얼어붙은 값(frozen.read_minutes)이
             -- 있으면 그 값을 그대로 쓰고(재도전해도 최초 제출 시점 값으로 고정), 아직 한 번도 제출 안
             -- 했으면 문제풀이 화면에 들어간 순간(quiz_started_at)까지만 세고 그 이후로는 안 늘어난다.
@@ -269,7 +271,8 @@
             rl.hold_page           AS holdPage,
             cs.quiz_qlevel         AS quizQlevel,
             (SELECT COUNT(DISTINCT qr.submitted_at) FROM erp_bookstore_quiz_answer_log qr
-             WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01') AS basicAttemptRounds,
+             WHERE qr.recommend_id = rl.recommend_id AND qr.qlevel = '01'
+               AND (qr.submit_mode IS NULL OR qr.submit_mode &lt;&gt; 'WRONG_ONLY')) AS basicAttemptRounds,
             -- cardColumns와 같은 규칙(독서 시간은 문제풀이 시작 전까지만 흐름) — 상세 설명은 그쪽 주석 참고
             COALESCE(
                 frozen.read_minutes,
@@ -808,9 +811,13 @@
             recommend_id         = #{recommendId},
             basic_correct_cnt    = CASE WHEN #{qlevel} = '01' THEN #{correctCount} ELSE target.basic_correct_cnt END,
             basic_total_cnt      = CASE WHEN #{qlevel} = '01' THEN #{totalCount}   ELSE target.basic_total_cnt END,
-            -- 심화 "처음 점수"는 최초 1회만 채우고 이후엔 그대로 둔다(재도전이 덮어쓰지 않음)
-            advanced_correct_cnt = CASE WHEN #{qlevel} = '02' THEN COALESCE(target.advanced_correct_cnt, #{correctCount}) ELSE target.advanced_correct_cnt END,
-            -- 심화 "최종 점수"는 재도전에서 더 잘한 경우에만 올린다(max)
+            -- 심화 점수는 처음/최종을 같은 값으로 유지한다(2026-09-21) — 재제출 결과가 곧 그 학생의
+            -- 점수라 독서일지에 "지난 점수 → 최종"이 보이면 안 된다. 둘 다 더 잘한 경우에만 올린다(max).
+            advanced_correct_cnt = CASE WHEN #{qlevel} = '02'
+                THEN CASE WHEN target.advanced_correct_cnt IS NULL OR target.advanced_correct_cnt &lt; #{correctCount}
+                          THEN #{correctCount} ELSE target.advanced_correct_cnt END
+                ELSE target.advanced_correct_cnt END,
+            -- 심화 "최종 점수"도 같은 규칙(max) — 위와 항상 같은 값이 된다
             advanced_final_correct_cnt = CASE WHEN #{qlevel} = '02'
                 THEN CASE WHEN target.advanced_final_correct_cnt IS NULL OR target.advanced_final_correct_cnt &lt; #{correctCount}
                           THEN #{correctCount} ELSE target.advanced_final_correct_cnt END

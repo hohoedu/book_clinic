@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.app;
 
+import java.time.YearMonth;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,6 +14,7 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.app._dto.AppReqDTO;
 import com.hohoedu.book_clinic.app._dto.AppRespDTO;
+import com.hohoedu.book_clinic.reservation.ReservationService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -35,6 +37,7 @@ public class AppController {
     private static final String SESSION_STUDENT_ID = "studentId";
 
     private final AppRepository appRepository;
+    private final ReservationService reservationService;
 
     /** 책방 메인 화면 — 다음 예약 / 이용권 잔여 / 직전 이용 / 최근 독서기록. */
     @PostMapping("/bookstore/main")
@@ -60,10 +63,9 @@ public class AppController {
         String studentId = requireStudentId(request);
 
         List<String> dates = appRepository.selectBookstoreReportDates(studentId);
-        Collections.reverse(dates); // 최신순 조회 → 탭은 왼쪽이 과거
+        Collections.reverse(dates);
 
         String requested = reqDTO == null ? null : trimToNull(reqDTO.getRecordDate());
-        // 요청 날짜가 없으면 마지막(가장 최근) 탭. 탭 목록에 없는 날짜가 와도 그대로 조회한다.
         String recordDate = requested != null ? requested
                 : (dates.isEmpty() ? null : dates.get(dates.size() - 1));
 
@@ -73,7 +75,6 @@ public class AppController {
         res.setRecordDate(recordDate);
 
         if (recordDate == null) {
-            // 정독 기록이 아예 없는 학생 — 조회할 날짜가 없으니 나머지는 빈 리스트로 채운다
             res.setBooks(Collections.emptyList());
             res.setBadges(Collections.emptyList());
             res.setTendencies(Collections.emptyList());
@@ -91,6 +92,24 @@ public class AppController {
         res.setMonthly(monthly);
 
         return ResponseEntity.ok(ApiUtils.success(res));
+    }
+
+    /**
+     * 달력 화면(/calendar) 데이터 — 그 달 한 달치 회차 목록.
+     *
+     * 예약하기 화면과 같은 조회({@link ReservationService#findOpenSlots})를 기간만 그 달로 바꿔
+     * 그대로 쓴다. 날짜별 색(예약완료/가능/마감)은 화면이 회차들을 모아 판단한다 — 앱 예약 달력
+     * (BookstoreReservationData.dayStatuses)이 쓰는 규칙과 같아야 두 화면이 어긋나지 않는다.
+     *
+     * 응답이 회차 단위인 건 일부러다. 여기서 날짜별로 미리 접어 내리면 같은 데이터에 대한 판단
+     * 기준이 서버와 앱 두 곳으로 갈라진다.
+     */
+    @PostMapping("/calendar")
+    public ResponseEntity<?> calendar(@RequestBody AppReqDTO.CalendarDTO reqDTO, HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        YearMonth ym = YearMonth.of(Integer.parseInt(reqDTO.getYear()), Integer.parseInt(reqDTO.getMonth()));
+        return ResponseEntity.ok(ApiUtils.success(
+                reservationService.findOpenSlots(studentId, ym.atDay(1), ym.atEndOfMonth())));
     }
 
     private static String trimToNull(String v) {

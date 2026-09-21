@@ -19,4 +19,16 @@ public class AppReqDTO {
     public static class BookstoreReportDTO {
         private String recordDate; // yyyy-MM-dd, nullable
     }
+
+    /**
+     * 달력 화면 조회 — 그 달의 회차(슬롯)를 통째로 받아 날짜별 상태를 칠한다.
+     *
+     * 센터는 세션의 학생에서 찾으므로 받지 않는다. "예약 완료"를 칠하려면 어차피 학생이 특정돼야
+     * 하고, centerCode 를 본문으로 받으면 남의 센터 일정을 들여다보는 경로가 열린다.
+     */
+    @Data
+    public static class CalendarDTO {
+        private String year;  // yyyy
+        private String month; // MM (0 패딩)
+    }
 }

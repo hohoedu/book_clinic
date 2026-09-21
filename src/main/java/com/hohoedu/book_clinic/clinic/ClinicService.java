@@ -303,7 +303,8 @@ public class ClinicService {
         List<String> wrongQnums = findWrongQnums(logStatus.getRecommendId(), resolvedQlevel);
 
         ClinicRespDTO.QuizSubmitRespDTO resp = new ClinicRespDTO.QuizSubmitRespDTO();
-        resp.setAttemptNo(clinicRepository.countPriorAttemptRounds(logStatus.getRecommendId(), resolvedQlevel));
+        // "재도전 N번째" 표시용이라 틀린 문제 다시 풀기는 빼고 센다(2026-09-21)
+        resp.setAttemptNo(clinicRepository.countRetryRounds(logStatus.getRecommendId(), resolvedQlevel));
         // 처음/최종 점수를 함께 내려준다(2026-08-28). 화면 표시용 correctCount는 최종 점수 우선.
         Integer first = logStatus.getCorrectCount();
         Integer last = logStatus.getFinalCorrectCount() != null ? logStatus.getFinalCorrectCount() : first;
@@ -361,7 +362,8 @@ public class ClinicService {
         int advancedAttempts = clinicRepository.countPriorAttempts(studentId, contentId, "02");
         boolean advancedAvailable = hasAdvancedQuestions && advancedAttempts == 0;
 
-        // 심화 재도전/틀린문제 버튼(2026-08-31) — 심화를 한 번이라도 풀었고 아직 심화왕(만점)이 아니면 노출.
+        // 심화 "틀린 문제 다시 풀기" 버튼 — 심화를 한 번이라도 풀었고 아직 심화왕(만점)이 아니면 노출.
+        // 심화는 점수와 무관하게(0/6이어도) 틀린 문제 다시 풀기만 열린다 — 재도전은 없다(2026-09-21).
         Integer advBadgeId = clinicRepository.findAdvancedBadgeId(studentId, contentId);
         boolean advancedKing = advBadgeId != null && advBadgeId == BADGE_ADV_KING;
         boolean advancedRetryAvailable = hasAdvancedQuestions && advancedAttempts > 0 && !advancedKing;
@@ -377,7 +379,8 @@ public class ClinicService {
         resp.setAdvancedRetryAvailable(advancedRetryAvailable);
         resp.setAdvancedKing(advancedKing);
         resp.setAdvancedWrongQnums(advancedWrongQnums);
-        // 버튼 분기용(2026-08-28): KING=심화만 / FRIEND=재도전·틀린문제·심화 / RETRY(불합격)=재도전만.
+        // 버튼 분기용(2026-09-21): KING(정독왕)=심화만 / FRIEND(정독완료)=틀린문제만 /
+        // RETRY(완독)=재도전만(다시 읽고 와서 전체 다시 풀기). 각 단계의 버튼은 하나뿐이다.
         resp.setGrade(logStatus != null ? logStatus.getGrade() : null);
 
         // "책 추천받기" 노출 여부 — recommendBook과 같은 규칙이다. 권수 상한이 사라졌으므로
@@ -619,7 +622,8 @@ public class ClinicService {
                                                         String mode, List<ClinicReqDTO.AnswerDTO> answers) {
         String resolvedQlevel = "02".equals(qlevel) ? "02" : "01";
         boolean advanced = "02".equals(resolvedQlevel);
-        boolean wrongOnly = "WRONG_ONLY".equalsIgnoreCase(mode);  // "틀린 문제 다시 풀기" — 점수/등급/뱃지 불변
+        // "틀린 문제 다시 풀기" — 1회차만 점수/등급/뱃지에 반영한다(wrongOnlyScoring, 아래 참고)
+        boolean wrongOnly = "WRONG_ONLY".equalsIgnoreCase(mode);
 
         List<QuestionRespDTO.QuestionDTO> questions = questionRepository.searchQuestions(contentId, resolvedQlevel, null, "S");
         if (questions.isEmpty()) throw new Exception404("문제를 찾을 수 없습니다: contentId=" + contentId);
@@ -631,6 +635,15 @@ public class ClinicService {
         // 같은 도전(recommend_id)+난이도의 기존 제출 회차 수로 첫 시도 여부/이번이 몇 번째 시도인지를 판단한다.
         int priorAttemptRounds = clinicRepository.countPriorAttemptRounds(logStatus.getRecommendId(), resolvedQlevel);
         boolean firstAttempt = priorAttemptRounds == 0;
+
+        // "틀린 문제 다시 풀기" 1회차는 재도전과 똑같이 최종 점수/등급/뱃지에 반영한다(2026-09-21).
+        // 1회차는 아직 답을 알려주지 않고 스스로 푸는 회차라서다 — 2회차부터는 보기를 고르는 즉시
+        // 정답/오답을 보여주므로(getWrongRetryMode) 반영하지 않는다. 반영은 하되 "재도전 횟수"에는
+        // 포함되지 않는다 — 이번 제출도 submit_mode='WRONG_ONLY'로 남기기 때문이다.
+        boolean wrongOnlyScoring = wrongOnly
+                && clinicRepository.countWrongOnlyRounds(logStatus.getRecommendId(), resolvedQlevel) == 0;
+        // 최종 점수/등급/뱃지를 갱신하는 재제출 — 재도전이거나, "틀린 문제 다시 풀기" 1회차
+        boolean scoringResubmit = !firstAttempt && (!wrongOnly || wrongOnlyScoring);
 
         Map<String, Integer> submittedByQnum = answers.stream()
                 .collect(Collectors.toMap(ClinicReqDTO.AnswerDTO::getQnum, ClinicReqDTO.AnswerDTO::getSelected, (a, b) -> b));
@@ -682,7 +695,10 @@ public class ClinicService {
         }
 
         ClinicRespDTO.QuizSubmitRespDTO resp = new ClinicRespDTO.QuizSubmitRespDTO();
-        resp.setAttemptNo(priorAttemptRounds + 1);
+        // 결과 화면의 "재도전 N번째"(attemptNo - 1) — "틀린 문제 다시 풀기"는 점수에는 반영돼도
+        // 재도전 횟수는 올리지 않으므로(2026-09-21) 이번 제출이 WRONG_ONLY면 회차를 그대로 둔다.
+        int priorRetryRounds = clinicRepository.countRetryRounds(logStatus.getRecommendId(), resolvedQlevel);
+        resp.setAttemptNo(wrongOnly ? Math.max(priorRetryRounds, 1) : priorRetryRounds + 1);
         // 합격선은 기본(01) 전용이다 — 심화(02)에는 합격선이 없다(풀기만 하면 심화완료, 2026-09-02).
         // 심화 응답에도 값이 실려 나가지만 아무도 읽지 않는다(참고용).
         int passLine = (int) Math.ceil(totalCount * QUIZ_PASS_RATIO);
@@ -704,12 +720,13 @@ public class ClinicService {
         }
 
         // 심화문제는 완독/등급/레벨 개념이 없다 — 이력 기록/채점 결과에 더해 뱃지(심화완료/심화왕)만 판정.
-        // 기본 문제와 같은 방식으로(2026-08-31) 만점이 아니면 재도전(RETRY)과 틀린 문제 다시 풀기(WRONG_ONLY)를
-        // 열어준다. "처음 점수"(diary.advanced_correct_cnt)는 고정, "최종 점수"(advanced_final_correct_cnt)는
-        // 재도전에서 더 잘하면 올라간다. 뱃지도 재도전으로 "올라가기만" 한다(심화완료→심화왕). 내려가지 않음.
+        // 심화에는 재도전이 없다(2026-09-21) — 만점(심화왕)이 아니면 점수와 무관하게(0/6이어도)
+        // "틀린 문제 다시 풀기"만 열어준다. "처음 점수"(diary.advanced_correct_cnt)는 고정, "최종
+        // 점수"(advanced_final_correct_cnt)는 틀린 문제 다시 풀기 1회차에서 더 잘하면 올라간다.
+        // 뱃지도 "올라가기만" 한다(심화완료→심화왕). 내려가지 않음.
         // 심화에는 합격선이 없다(2026-09-02) — 풀기만 하면 심화완료라 passed는 항상 true다.
         if (advanced) {
-            boolean advRetry = !firstAttempt && !wrongOnly;   // "심화 재도전" — 최종 점수 + (오를 때만) 뱃지 갱신
+            boolean advRetry = scoringResubmit;   // 틀린 문제 다시 풀기 1회차 — 최종 점수 + (오를 때만) 뱃지 갱신
             resp.setPassed(true);
             resp.setGrade(null);
 
@@ -718,10 +735,10 @@ public class ClinicService {
                 recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
             } else if (advRetry) {
                 resp.setNewBadges(upgradeAdvancedBadge(studentId, contentId, correctCount, totalCount));
-                // 최종 점수만 max로 갱신한다(upsertDiaryDetail이 처음 점수는 COALESCE로 보존)
+                // upsertDiaryDetail이 심화 처음/최종 점수를 같은 값으로 max 갱신한다
                 recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, correctCount, totalCount);
             } else {
-                // 틀린 문제만 다시 풀기 — 점수/뱃지 어떤 것도 바꾸지 않는다
+                // 틀린 문제 다시 풀기 2회차 이상 — 즉시 채점으로 답을 알려주는 회차라 점수/뱃지 불변
                 resp.setNewBadges(List.of());
             }
 
@@ -754,25 +771,32 @@ public class ClinicService {
         // ── 기본(qlevel=01) — 2026-08-28 결과 프로세스 재확정 ──
         // 첫 제출이면 합격/불합격 무관하게 status=DONE. 불합격이어도 다음 입실 시 다음 책을 받고,
         // 재도전은 결과화면/완료화면 버튼에서만 이어서 한다. 점수는 처음/최종으로 분리 보관한다.
-        //   correct_count(처음 점수)  — 최초 제출값에서 고정
-        //   final_correct_count(최종) — 재도전(mode=RETRY)에서 "더 잘한 경우에만" 갱신(max).
-        //   grade + 뱃지               — 재도전으로 "올라가기만" 한다(null→FRIEND→KING). 독서친구→재도전 불합격
+        //   correct_count(처음 점수) / final_correct_count(최종) — 2026-09-21부터 **항상 같은 값**이다.
+        //     재제출 결과가 곧 그 학생의 점수이고, 모니터링·독서일지·앱 어디에도 "3/12 → 9/12"처럼
+        //     지난 점수가 남으면 안 된다. 둘 다 "더 잘한 경우에만" 갱신(max) — 등급과 같은 방향이다.
+        //     컬럼을 합치지 않고 같은 값으로 유지하는 이유: "처음 ≠ 최종일 때만 화살표"로 그리는
+        //     화면(monitor-live.js scoreHtml, diary.js quizHtml)이 손대지 않아도 단일 표시가 된다.
+        //   grade + 뱃지               — 재제출로 "올라가기만" 한다(null→FRIEND→KING). 독서친구→재도전 불합격
         //                                처럼 내려가는 방향은 반영 안 함. 등급이 오르면 기본 뱃지(1~3)도 상위로 교체 —
         //                                그래야 grade·뱃지·"독서왕 횟수"가 항상 일치한다(2026-08-28).
-        //   "틀린 문제 다시 풀기"(WRONG_ONLY) — 점수/등급/뱃지 어떤 것도 바꾸지 않는다.
+        // 여기서 "재제출"(scoringResubmit)은 재도전(mode=RETRY)과 "틀린 문제 다시 풀기" 1회차를 함께
+        // 가리킨다(2026-09-21) — 예컨대 9/12에서 틀린 3문제 중 2개를 맞히면 최종 11/12가 되고, 12/12가
+        // 되면 정독왕으로 승급해 심화가 열린다. 틀린 문제 다시 풀기 2회차 이상은 답을 알려주는
+        // 회차라 점수/등급/뱃지 어떤 것도 바꾸지 않는다.
         boolean passed = correctCount >= passLine;
         // 불합격도 grade를 "RETRY"로 남긴다(2026-09-02) — 예전엔 null이었다. "완독 성공"(레벨/완료화면
         // 분기 등)은 grade != null이 아니라 isPassGrade(=KING/FRIEND)로 판정한다.
         String freshGrade = !passed ? "RETRY" : (correctCount == totalCount ? "KING" : "FRIEND");
-        boolean retry = !firstAttempt && !wrongOnly;   // "재도전" — 최종 점수 + (오를 때만) 등급/뱃지 갱신
+        boolean retry = scoringResubmit;   // 최종 점수 + (오를 때만) 등급/뱃지 갱신
 
         Integer frozenFirst = logStatus.getCorrectCount();
         Integer frozenFinal = logStatus.getFinalCorrectCount() != null ? logStatus.getFinalCorrectCount() : frozenFirst;
         String oldGrade = logStatus.getGrade();
-        // 재도전은 등급을 올리기만 한다. 첫 제출은 이번 결과 그대로.
+        // 재제출은 등급을 올리기만 한다. 첫 제출은 이번 결과 그대로.
         String effectiveGrade = firstAttempt ? freshGrade
                 : (retry ? higherGrade(oldGrade, freshGrade) : oldGrade);
         boolean gradeUpgraded = retry && gradeRank(effectiveGrade) > gradeRank(oldGrade);
+        Integer resubmitScore = null;   // 재제출로 확정된 점수 — 독서일지 스냅샷에도 그대로 쓴다
 
         if (firstAttempt) {
             // 처음 점수 = 최종 점수 = 이번 값, grade = 이번 결과, status = DONE(불합격이어도)
@@ -782,16 +806,18 @@ public class ClinicService {
             resp.setFirstCorrectCount(correctCount);
             resp.setFinalCorrectCount(correctCount);
         } else if (retry) {
-            // 재도전 — 최종 점수는 기존보다 높을 때만 올리고(못 풀었으면 그대로), 등급도 오를 때만 갱신.
+            // 재도전 / 틀린 문제 다시 풀기 1회차 — 점수는 기존보다 높을 때만 올리고(못 풀었으면
+            // 그대로), 등급도 오를 때만 갱신. updateRetryResult가 처음 점수까지 같은 값으로 맞춘다.
             int prevFinal = frozenFinal != null ? frozenFinal : (frozenFirst != null ? frozenFirst : correctCount);
             int bestFinal = Math.max(correctCount, prevFinal);
             clinicRepository.updateRetryResult(logStatus.getRecommendId(), bestFinal, effectiveGrade);
+            resubmitScore = bestFinal;
             resp.setPassed(isPassGrade(effectiveGrade));
             resp.setGrade(effectiveGrade);
-            resp.setFirstCorrectCount(frozenFirst);
+            resp.setFirstCorrectCount(bestFinal);
             resp.setFinalCorrectCount(bestFinal);
         } else {
-            // 틀린 문제 다시 풀기 — 점수/등급 어떤 것도 바꾸지 않는다. 화면은 원래(고정) 등급으로 보여주되,
+            // 틀린 문제 다시 풀기 2회차 이상 — 점수/등급 어떤 것도 바꾸지 않는다. 화면은 원래(고정) 등급으로 보여주되,
             // "이번에 몇 개 맞혔는지"(correctCount, 위에서 병합 계산)와 남은 오답(wrongQnums)만 갱신해
             // "틀린 문제" 진행 상황을 보여준다.
             resp.setPassed(isPassGrade(oldGrade));
@@ -876,9 +902,12 @@ public class ClinicService {
         // 재도전·틀린문제 재제출이라 newBadges가 비어도 결과화면 보상 칸이 비지 않게 한다(2026-09-01).
         resp.setBookBadge(clinicRepository.findBookBadge(studentId, contentId, false));
 
-        // 독서일지 — "처음 점수"만 스냅샷으로 남긴다(그날 기록). 재도전/틀린문제 재제출은 basic_correct_cnt를
-        // 바꾸지 않는다 — "최종 점수"는 recommend_log.final_correct_count에서 조회해 함께 보여준다.
-        int diaryCorrect = firstAttempt ? correctCount : (frozenFirst != null ? frozenFirst : correctCount);
+        // 독서일지 스냅샷 — 재제출로 점수가 올라갔으면 그 값으로 갱신한다(2026-09-21). 예전엔 처음
+        // 점수로 고정해서 독서일지에 "3 → 9 / 12"처럼 지난 점수가 남았다. 반영되지 않는 재제출
+        // (틀린 문제 다시 풀기 2회차 이상)은 기존 스냅샷을 그대로 둔다.
+        int diaryCorrect = firstAttempt ? correctCount
+                : (resubmitScore != null ? resubmitScore
+                : (frozenFirst != null ? frozenFirst : correctCount));
         recordDiarySafely(studentId, contentId, logStatus.getRecommendId(), resolvedQlevel, diaryCorrect, totalCount);
         syncMonitorSafely(studentId);
 
