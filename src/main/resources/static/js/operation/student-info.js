@@ -253,21 +253,47 @@ function closeStudentModal() {
 /* ===================== QR 카드 출력 ===================== */
 
 /*
- * 학생증 QR 카드 출력 — 카드 디자인(밴드/로고/문구)은 이미 선인쇄된 세로형 PVC 원판(54 x 86mm)이고,
- * 여기서는 그 위에 겹쳐 찍을 가변 정보 3가지 — QR · 지점명 · ID — 만 레이어로 인쇄한다.
- * 인쇄 창 상단 토글로 용지 방식을 고른다:
- *   - A4 시트: A4(세로) 한 장에 여러 장 + 점선 재단선 (일반 프린터로 정렬 테스트)
- *   - 카드 낱장: 카드 1장 = 페이지 1장 @page 54x86mm 세로 (카드 프린터 원판 위에 오버프린트)
- * QR/지점명/ID 좌표는 인쇄 doc 안 .qr/.center-name/.serial 규칙에서 원판에 맞춰 조정.
+ * 학생증 QR 카드 출력 — 앞면/뒷면 양면 지원.
  *
+ * 카드 디자인은 디자이너가 준 PSD를 PNG로 변환해 아래 두 경로에 놓으면 그대로 배경으로 깔린다.
+ *   앞면: /images/card/front.png
+ *   뒷면: /images/card/back.png
+ * 변환은 docs/tools/psd2card.sh 참고 (macOS sips 기반, 600dpi = 1275 x 2022px 로 리샘플).
+ * 파일이 없으면 배경 없이(= 예전처럼 선인쇄 원판 오버프린트용으로) 그대로 동작한다.
+ *
+ * 인쇄 창 상단 토글 4가지:
+ *   - 용지   : A4 시트(2x5 = 10장/장, 점선 재단선) / 카드 낱장(@page 86x54mm 가로)
+ *   - 면     : 앞면만 / 뒷면만 / 양면
+ *   - 디자인 : 포함(백지 PVC·일반 용지에 전면 인쇄) / 제외(선인쇄 원판에 가변정보만 오버프린트)
+ *   - 뒷면   : 그대로 / 180° 회전
+ *
+ * 양면 인쇄는 프린터에 따라 두 갈래다:
+ *   - 양면 모듈 있는 카드 프린터(IDP SMART-51D 등): 드라이버를 "Both sides"로 두고 "카드 낱장 +
+ *     양면"으로 보내면 1페이지=앞, 2페이지=뒤로 알아서 뒤집어 찍는다.
+ *   - 단면 프린터(51S 등): 자동이 안 되므로 "앞면만" 출력 → 카드를 뒤집어 재투입 → "뒷면만" 출력의
+ *     수동 2패스로 간다. 뒤집는 방향 때문에 뒷면이 거꾸로 나오면 "뒷면 180° 회전"을 켠다.
+ * A4 + 양면이면 앞면 페이지 전부 → 뒷면 페이지가 뒤따르고, 뒷면은 각 행을 좌우 반전해 배치한다
+ * (출력물을 좌우로 뒤집어 재급지했을 때 앞뒷면이 맞아떨어지도록).
+ * 카드 낱장 + 양면이면 앞1 → 뒤1 → 앞2 → 뒤2 … 순서로 페이지가 나간다(카드 프린터 양면 급지 순서).
+ *
+ * 가변정보(QR·지점명·ID) 좌표는 인쇄 doc 안 .qr / .center-name / .serial 규칙에서 조정한다.
+ * 현재 값은 디자인 시안(앞면 PNG)과 완성 목업에서 실측해 카드 크기 비율로 환산한 것이다 —
+ * QR은 시안의 흰 둥근박스 정중앙, 지점명은 좌하단 연녹색 박스 안, ID는 우측 중앙.
  * QR 원문은 시리얼 넘버 원문 그대로다 — 학생 로그인/스캔이 app_id 또는 serial_num 어느 쪽으로도
  * 학생을 찾으므로(StudentMapper.findByAppId 참고), 실물 카드에는 임의 발급한 시리얼 넘버를 싣는다.
  *
- * 아래 QR_CARD_SERIALS는 지금은 테스트용 고정 배치다(요청: 100260002 ~ 100260009 8장).
+ * 아래 QR_CARD_SERIALS는 지금은 테스트용 고정 배치다. 지금은 100260001 ~ 100260005 5장을 뽑는다 —
+ * 장수가 달라지면 범위만 바꾸면 된다.
  * 실제 발급 플로우(임의 시리얼 생성 → 학생 등록)를 붙일 땐 이 배열을 그 결과로 바꾸면 된다.
  */
-const QR_CARD_SERIALS = serialRange(100260002, 100260009);
+const QR_CARD_SERIALS = serialRange(100260001, 100260005);
 const QR_CARD_CENTER_NAME = "부산 센텀점";
+
+// 디자이너 PSD → PNG 변환 결과를 놓는 자리. 없으면 배경 없이 인쇄된다.
+const QR_CARD_DESIGN = {
+  front: "/images/card/front.png",
+  back: "/images/card/back.png",
+};
 
 function serialRange(from, to) {
   const list = [];
@@ -287,27 +313,42 @@ function makeQrDataUrl(text) {
   return dataUrl;
 }
 
+function designUrl(path) {
+  const url = new URL(path, window.location.origin);
+  url.searchParams.set("v", Date.now());
+  return url.href;
+}
+
 function printQrCards() {
   if (typeof QRCode !== "function") {
     alert("QR 생성 모듈을 불러오지 못했습니다. 네트워크 상태를 확인한 뒤 다시 시도해주세요.");
     return;
   }
 
-  const cards = QR_CARD_SERIALS.map((serial) => {
-    const dataUrl = makeQrDataUrl(serial);
-    return `
-      <div class="card">
-        <img class="qr" src="${dataUrl}" alt="QR ${escapeHtml(serial)}">
-        <span class="center-name">${escapeHtml(QR_CARD_CENTER_NAME)}</span>
-        <span class="serial">ID : ${escapeHtml(serial)}</span>
-      </div>`;
-  }).join("");
+  // 카드 데이터(시리얼 + QR 이미지)는 여기서 만들어 인쇄 창 스크립트에 넘긴다.
+  // 인쇄 창은 토글을 누를 때마다 이 배열로 DOM을 다시 그린다(면/용지 조합마다 페이지 구성이 달라서).
+  const cardData = QR_CARD_SERIALS.map((serial) => ({
+    serial,
+    qr: makeQrDataUrl(serial),
+  }));
 
-  const win = window.open("", "_blank", "width=920,height=760");
+  const win = window.open("", "_blank", "width=960,height=800");
   if (!win) {
     alert("팝업이 차단되어 있습니다. 팝업 허용 후 다시 시도해주세요.");
     return;
   }
+
+  const payload = {
+    cards: cardData,
+    centerName: QR_CARD_CENTER_NAME,
+    // sw.js가 /images/ 를 cache-first로 잡고 있어 디자인을 교체해도 옛 응답(없던 시절의 실패 포함)을
+    // 계속 물 수 있다. 인쇄 창을 열 때마다 쿼리를 새로 붙여 캐시를 우회한다.
+    design: {
+      front: designUrl(QR_CARD_DESIGN.front),
+      back: designUrl(QR_CARD_DESIGN.back),
+    },
+  };
+
   win.document.write(`<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -321,114 +362,407 @@ function printQrCards() {
   /* 상단 컨트롤 바 — 인쇄 시에는 숨김 */
   .toolbar {
     position: sticky; top: 0; z-index: 10;
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
     padding: 10px 14px; background: #fff; border-bottom: 1px solid #ddd;
   }
+  .toolbar .group { display: flex; align-items: center; gap: 4px; }
+  .toolbar .group + .group { margin-left: 10px; padding-left: 10px; border-left: 1px solid #e3e3e3; }
+  .toolbar .label { font-size: 12px; color: #666; margin-right: 2px; }
   .toolbar button {
-    padding: 6px 13px; font-size: 13px; font-weight: 600;
+    padding: 6px 12px; font-size: 13px; font-weight: 600;
     border: 1px solid #1c3aa1; border-radius: 6px;
     background: #fff; color: #1c3aa1; cursor: pointer;
   }
   .toolbar button.active { background: #1c3aa1; color: #fff; }
   .toolbar .spacer { flex: 1; }
-  .toolbar .hint { font-size: 12px; color: #888; font-weight: 400; }
+  .toolbar .hint { font-size: 12px; color: #888; font-weight: 400; flex-basis: 100%; }
+  .toolbar .warn { color: #c0392b; }
   .toolbar .print-btn { background: #1c3aa1; color: #fff; }
+  .toolbar .adjust label { font-size: 12px; color: #555; }
+  .toolbar .adjust input {
+    width: 52px; padding: 4px 5px; margin: 0 1px;
+    font-size: 12px; border: 1px solid #ccc; border-radius: 4px;
+  }
+  .toolbar .adjust button { padding: 4px 8px; font-size: 12px; }
 
-  .sheet { display: flex; flex-wrap: wrap; }
+  /* 한 페이지 = .page. A4 모드에선 카드 9장(3x3), 카드 낱장 모드에선 1장. */
+  .page { page-break-after: always; }
+  .page:last-child { page-break-after: auto; }
 
-  /* A4 시트 모드 — 한 장에 여러 카드 + 점선 재단선 */
-  body.mode-a4 .sheet { padding: 16px; gap: 4px; justify-content: flex-start; }
+  body.mode-a4 .page { display: flex; flex-wrap: wrap; align-content: flex-start; padding: 16px; }
   body.mode-a4 .card { outline: 0.2mm dashed #b0b0b0; }
 
-  /* 카드 낱장 모드 — 카드 1장 = 페이지 1장 (flex 대신 block: 카드 프린터에서 page-break가 더 확실) */
-  body.mode-card .sheet { display: block; padding: 16px; }
-  body.mode-card .card { margin: 0 auto 16px; page-break-after: always; }
-  body.mode-card .card:last-child { page-break-after: auto; }
+  body.mode-card .page { padding: 16px; }
+  body.mode-card .card { margin: 0 auto; }
 
   @media screen {
     .card { box-shadow: 0 1px 6px rgba(0, 0, 0, .18); }
+    .page { background: #fff; margin: 0 auto 18px; width: max-content; }
   }
   @media print {
     body { background: #fff; }
     .toolbar { display: none; }
-    body.mode-a4 .sheet { padding: 0; gap: 0; }
-    body.mode-card .sheet { padding: 0; }
-    body.mode-card .card { margin: 0; }
+    .page { padding: 0 !important; margin: 0; background: none; width: auto; }
     .card { box-shadow: none; }
   }
 
   /*
-   * 세로형 카드. 카드 원판(디자인·로고·밴드 전부 선인쇄된 PVC)에 겹쳐 찍는 레이어라 배경은 투명.
-   * QR / 지점명 / ID 3가지만 올린다. ▼ 아래 좌표(mm)를 실제 원판에 맞춰 조정하세요.
+   * 가로형 카드. CR-80(ISO ID-1) 가로 = 85.60 x 53.98mm — IDP SMART-51 카드 크기와 정확히 맞춰야 함.
+   * .card-bg = 디자이너가 준 앞/뒷면 디자인 PNG(디자인 제외 모드에서는 숨김).
+   *   object-fit: fill — 시안 비율이 카드 비율(1.5858)과 미세하게 달라도 좌표가 밀리지 않도록
+   *   잘라내지 않고 늘려 채운다. 시안을 정확한 비율로 받으면 왜곡 없이 그대로 맞는다.
+   * 가변정보는 그 위 레이어. 좌표는 전부 "요소 중심"이라 translate(-50%, -50%)로 잡는다.
+   * ▼ 시안이 바뀌면 아래 mm 값만 고치면 된다.
    */
   .card {
     position: relative;
-    /* CR-80(ISO ID-1) 세로 = 53.98 x 85.60mm. IDP SMART-51 카드 크기와 정확히 맞춰야 함 */
-    width: 53.98mm; height: 85.6mm;
+    width: 85.6mm; height: 53.98mm;
     background: transparent;
     overflow: hidden;
   }
-  .qr {
-    position: absolute; left: 50%; top: 19mm;
-    transform: translateX(-50%);
-    width: 22mm; height: 22mm;
-    image-rendering: pixelated;
+  /* 카드 내용 전체(배경 + 가변정보)를 감싸는 레이어. 프린터마다 인쇄 시작점이 조금씩 달라
+     결과물이 밀리거나 작게 나오는데, 여기에 오프셋(mm)과 배율(%)을 걸어 실물을 보며 맞춘다.
+     --ox/--oy/--sc 는 툴바에서 주입한다. */
+  .card-inner {
+    position: absolute; inset: 0;
+    transform: translate(var(--ox, 0mm), var(--oy, 0mm)) scale(var(--sc, 1));
+    transform-origin: center center;
   }
-  .center-name {
-    position: absolute; left: 50%; top: 50mm;
-    transform: translateX(-50%);
-    font-size: 3.2mm; color: #000000;
-    white-space: nowrap;
+  /* 카드 프린터는 헤드가 카드 끝까지 닿지 않아 가장자리에 흰 테두리가 남는다(풀블리드 불가).
+     배경만 살짝 키워 카드 밖으로 넘기면(.card 의 overflow:hidden 이 잘라냄) 테두리가 사라진다.
+     가변정보(QR·지점명·ID)는 확대 대상이 아니라서 좌표가 그대로 유지된다. */
+  .card-bg {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: fill;
+    transform: scale(var(--bgsc, 1));
+    transform-origin: center center;
   }
-  .serial {
-    position: absolute; left: 50%; top: 66mm;
-    transform: translateX(-50%);
-    font-size: 3.2mm; color: #000000;
+  body.design-off .card-bg { display: none; }
+  /* 단면 카드 프린터로 수동 2패스 양면을 찍을 때, 카드를 뒤집어 재투입하는 방향에 따라
+     뒷면이 거꾸로 나오는 경우가 있다. 그때 이 토글로 뒷면만 180° 돌려 내보낸다. */
+  body.flip-180 .card.back { transform: rotate(180deg); }
+
+  /* 보정용 눈금 — 카드 테두리, 5mm 간격 눈금, 중앙 십자. 위치 보정값을 잡을 때만 켠다.
+     .card-inner 안에 있으므로 보정값을 바꾸면 눈금도 같이 움직인다(= 실제 인쇄 위치를 그대로 보여줌). */
+  .guide { display: none; }
+  body.guide-on .guide { display: block; }
+  .guide-frame {
+    position: absolute; inset: 0;
+    border: 0.3mm solid #e01b24;
+  }
+  .guide-cross-h, .guide-cross-v {
+    position: absolute; background: #e01b24;
+  }
+  .guide-cross-h { left: 0; right: 0; top: 50%; height: 0.2mm; }
+  .guide-cross-v { top: 0; bottom: 0; left: 50%; width: 0.2mm; }
+  .guide-tick {
+    position: absolute; background: #e01b24;
+  }
+  .guide-tick.h { top: 0; width: 0.2mm; height: 2mm; }
+  .guide-tick.v { left: 0; height: 0.2mm; width: 2mm; }
+  .guide-label {
+    position: absolute; font-size: 2.2mm; color: #e01b24;
+    top: 2.4mm; transform: translateX(-50%);
   }
 
-  /* 화면 미리보기에서만 원판 위치 감을 잡도록 옅은 상단 밴드 표시 (인쇄 안 됨) */
+  .bg-error {
+    position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+    text-align: center; font-size: 3mm; color: #c0392b;
+  }
+
+  /* QR — 앞면 시안 좌상단 흰 둥근박스의 정중앙. 박스가 이미 quiet zone이라 흰 배경을 덧대지 않는다. */
+  .qr {
+    position: absolute; left: 25.6mm; top: 21.4mm;
+    transform: translate(-50%, -50%);
+    width: 23mm; height: 23mm;
+    image-rendering: pixelated;
+  }
+  /* 지점명 — 좌하단 연녹색 박스 안 중앙 */
+  .center-name {
+    position: absolute; left: 24.9mm; top: 41.7mm;
+    transform: translate(-50%, -50%);
+    font-size: 4mm; font-weight: 700; color: #000000;
+    white-space: nowrap;
+  }
+  /* ID — 우측 중앙, 캐릭터 띠 아래 */
+  .serial {
+    position: absolute; left: 64.5mm; top: 32.8mm;
+    transform: translate(-50%, -50%);
+    font-size: 3.4mm; color: #000000;
+    white-space: nowrap;
+  }
+
+  /* 디자인 PNG가 아직 없을 때만, 화면에서 위치 감을 잡도록 옅은 상단 밴드 표시 (인쇄 안 됨) */
   @media screen {
-    .card { background: #fff; }
-    .card::before {
-      content: ""; position: absolute; left: 0; right: 0; top: 0; height: 16mm;
-      background: #1c3aa1; opacity: .12;
+    body.design-missing .card { background: #fff; }
+    body.design-missing .card::before {
+      content: ""; position: absolute; left: 0; right: 0; top: 0; height: 26.5mm;
+      background: #79bc43; opacity: .18;
     }
   }
 </style>
 </head>
-<body class="mode-a4">
+<body class="mode-a4 side-front design-on">
   <div class="toolbar">
-    <button type="button" data-mode="a4" class="active">A4 시트</button>
-    <button type="button" data-mode="card">카드 낱장</button>
-    <span class="hint" id="modeHint"></span>
+    <div class="group">
+      <span class="label">용지</span>
+      <button type="button" data-mode="a4" class="active">A4 시트</button>
+      <button type="button" data-mode="card">카드 낱장</button>
+    </div>
+    <div class="group">
+      <span class="label">면</span>
+      <button type="button" data-side="front" class="active">앞면만</button>
+      <button type="button" data-side="back">뒷면만</button>
+      <button type="button" data-side="both">양면</button>
+    </div>
+    <div class="group">
+      <span class="label">디자인</span>
+      <button type="button" data-design="on" class="active">포함</button>
+      <button type="button" data-design="off">제외(오버프린트)</button>
+    </div>
+    <div class="group">
+      <span class="label">뒷면</span>
+      <button type="button" data-flip="0" class="active">그대로</button>
+      <button type="button" data-flip="180">180° 회전</button>
+    </div>
+    <div class="group adjust">
+      <span class="label">위치 보정</span>
+      <label>X <input type="number" id="adjX" step="0.1" value="0">mm</label>
+      <label>Y <input type="number" id="adjY" step="0.1" value="0">mm</label>
+      <label>배율 <input type="number" id="adjS" step="0.5" value="100">%</label>
+      <label>배경확대 <input type="number" id="adjB" step="0.5" value="100">%</label>
+      <button type="button" id="btnAdjReset">초기화</button>
+      <button type="button" id="btnGuide">눈금 표시</button>
+    </div>
     <span class="spacer"></span>
     <button type="button" class="print-btn" id="btnDoPrint">인쇄하기</button>
+    <span class="hint" id="modeHint"></span>
   </div>
-  <div class="sheet">${cards}</div>
+  <div id="sheets"></div>
   <script>
     (function () {
-      var HINTS = {
-        a4: "A4 용지에 여러 장 배치(점선 따라 재단). 일반 프린터용.",
-        card: "카드 1장 = 페이지 1장 (54 x 86mm 세로). 카드 프린터/인쇄소용."
-      };
-      function setMode(m) {
-        document.body.className = "mode-" + m;
-        document.querySelectorAll(".toolbar [data-mode]").forEach(function (b) {
-          b.classList.toggle("active", b.dataset.mode === m);
-        });
-        document.getElementById("pageRule").textContent = m === "a4"
-          ? "@page { size: A4 portrait; margin: 8mm; }"
-          : "@page { size: 53.98mm 85.6mm; margin: 0; }";
-        document.getElementById("modeHint").textContent = HINTS[m];
+      var DATA = ${JSON.stringify(payload)};
+      var PER_ROW = 2;   // A4(210mm, 여백 8mm) 가로 2장 = 171.2mm
+      var PER_PAGE = 10; // 세로 5장 = 269.9mm
+
+      var state = { mode: "a4", side: "front", design: "on", flip: "0", guide: false };
+      // 위치 보정값은 프린터마다 한 번 맞추면 계속 쓰는 값이라 보관해둔다.
+      // 인쇄 창은 about:blank라 자체 저장소가 없어 부모 창(opener)의 localStorage를 빌려 쓴다.
+      var ADJ_KEY = "qrCardAdjust";
+      var adj = { x: 0, y: 0, s: 100, b: 100 };
+
+      function loadAdjust() {
+        try {
+          var raw = window.opener && window.opener.localStorage.getItem(ADJ_KEY);
+          if (raw) {
+            var v = JSON.parse(raw);
+            adj = { x: Number(v.x) || 0, y: Number(v.y) || 0, s: Number(v.s) || 100, b: Number(v.b) || 100 };
+          }
+        } catch (e) { /* 저장소를 못 쓰는 환경이면 기본값으로 간다 */ }
       }
-      document.querySelectorAll(".toolbar [data-mode]").forEach(function (b) {
-        b.addEventListener("click", function () { setMode(b.dataset.mode); });
+
+      function saveAdjust() {
+        try {
+          if (window.opener) window.opener.localStorage.setItem(ADJ_KEY, JSON.stringify(adj));
+        } catch (e) { /* 무시 */ }
+      }
+
+      function applyAdjust() {
+        var root = document.body.style;
+        root.setProperty("--ox", adj.x + "mm");
+        root.setProperty("--oy", adj.y + "mm");
+        root.setProperty("--sc", (adj.s / 100));
+        root.setProperty("--bgsc", (adj.b / 100));
+      }
+      var designReady = { front: false, back: false };
+
+      // 디자인 PNG 존재 여부를 먼저 확인한다 — 없으면 "디자인 포함"을 끄고 안내만 띄운다.
+      function probe(key, url, done) {
+        var img = new Image();
+        img.onload = function () { designReady[key] = true; done(); };
+        img.onerror = function () { designReady[key] = false; done(); };
+        img.src = url;
+      }
+
+      // 보정용 눈금 마크업 — 카드 테두리 + 가로/세로 5mm 눈금(10mm마다 숫자) + 중앙 십자.
+      function guideHtml() {
+        var h = '<div class="guide"><div class="guide-frame"></div>'
+          + '<div class="guide-cross-h"></div><div class="guide-cross-v"></div>';
+        for (var x = 5; x < 86; x += 5) {
+          h += '<span class="guide-tick h" style="left:' + x + 'mm"></span>';
+          if (x % 10 === 0) h += '<span class="guide-label" style="left:' + x + 'mm">' + x + "</span>";
+        }
+        for (var y = 5; y < 54; y += 5) {
+          h += '<span class="guide-tick v" style="top:' + y + 'mm"></span>';
+        }
+        return h + "</div>";
+      }
+
+      function cardHtml(card, face) {
+        var bgUrl = face === "back" ? DATA.design.back : DATA.design.front;
+        var bg = designReady[face] ? '<img class="card-bg" src="' + bgUrl + '" alt="">' : "";
+        // 뒷면에는 가변정보를 올리지 않는다(안내문구는 디자인에 선인쇄). 필요해지면 여기에 추가.
+        if (face === "back") {
+          return '<div class="card back"><div class="card-inner">' + bg + guideHtml() + "</div></div>";
+        }
+        return '<div class="card"><div class="card-inner">' + bg
+          + '<img class="qr" src="' + card.qr + '" alt="QR ' + card.serial + '">'
+          + '<span class="center-name">' + DATA.centerName + "</span>"
+          + '<span class="serial">ID : ' + card.serial + "</span>"
+          + guideHtml()
+          + "</div></div>";
+      }
+
+      // A4 뒷면 시트 — 출력물을 좌우로 뒤집어 재급지하므로 각 행의 순서를 반전한다.
+      function mirrorRows(list) {
+        var out = [];
+        for (var i = 0; i < list.length; i += PER_ROW) {
+          out = out.concat(list.slice(i, i + PER_ROW).reverse());
+        }
+        return out;
+      }
+
+      function pagesForA4(face) {
+        var html = "";
+        for (var i = 0; i < DATA.cards.length; i += PER_PAGE) {
+          var chunk = DATA.cards.slice(i, i + PER_PAGE);
+          if (face === "back") chunk = mirrorRows(chunk);
+          html += '<div class="page">'
+            + chunk.map(function (c) { return cardHtml(c, face); }).join("")
+            + "</div>";
+        }
+        return html;
+      }
+
+      function render() {
+        var html = "";
+        if (state.mode === "a4") {
+          if (state.side === "front" || state.side === "both") html += pagesForA4("front");
+          if (state.side === "back" || state.side === "both") html += pagesForA4("back");
+        } else {
+          DATA.cards.forEach(function (c) {
+            if (state.side === "front" || state.side === "both") {
+              html += '<div class="page">' + cardHtml(c, "front") + "</div>";
+            }
+            if (state.side === "back" || state.side === "both") {
+              html += '<div class="page">' + cardHtml(c, "back") + "</div>";
+            }
+          });
+        }
+        document.getElementById("sheets").innerHTML = html;
+
+        // 배경 로드 실패를 엑박 대신 안내로 바꾼다(어느 면의 어떤 경로가 실패했는지 화면에 남긴다).
+        document.querySelectorAll(".card-bg").forEach(function (img) {
+          img.addEventListener("error", function () {
+            var card = img.closest(".card");
+            img.remove();
+            if (card && !card.querySelector(".bg-error")) {
+              var msg = document.createElement("span");
+              msg.className = "bg-error";
+              msg.textContent = "디자인 이미지를 불러오지 못했습니다";
+              card.appendChild(msg);
+            }
+          });
+        });
+      }
+
+      function syncBody() {
+        var cls = ["mode-" + state.mode, "side-" + state.side, "design-" + state.design];
+        if (state.flip === "180") cls.push("flip-180");
+        if (state.guide) cls.push("guide-on");
+        var need = state.side === "back" ? ["back"] : state.side === "front" ? ["front"] : ["front", "back"];
+        var missing = need.filter(function (k) { return !designReady[k]; });
+        if (missing.length) cls.push("design-missing");
+        document.body.className = cls.join(" ");
+
+        var hint = state.mode === "a4"
+          ? "A4 용지에 10장(2x5) 배치, 점선 따라 재단. 일반 프린터용."
+          : "카드 1장 = 페이지 1장 (86 x 54mm 가로). 카드 프린터/인쇄소용.";
+        if (state.side !== "both" && state.mode === "card") {
+          hint += " 단면 프린터는 앞면만 → 뒤집어 재투입 → 뒷면만 순서로 2패스.";
+        }
+        if (state.side === "both") {
+          hint += state.mode === "a4"
+            ? " 앞면 페이지 → 뒷면 페이지 순서, 뒷면은 좌우 반전 배치(뒤집어 재급지)."
+            : " 앞1 → 뒤1 → 앞2 → 뒤2 … 순서.";
+        }
+        if (state.design === "on" && missing.length) {
+          hint += " ⚠ 디자인 파일 없음(" + missing.join(", ") + ") — /images/card/front.png, back.png 를 넣어주세요.";
+        }
+        var hintEl = document.getElementById("modeHint");
+        hintEl.textContent = hint;
+        hintEl.className = "hint" + (state.design === "on" && missing.length ? " warn" : "");
+
+        document.getElementById("pageRule").textContent = state.mode === "a4"
+          ? "@page { size: A4 portrait; margin: 8mm; }"
+          : "@page { size: 85.6mm 53.98mm; margin: 0; }";
+      }
+
+      function apply() { syncBody(); render(); }
+
+      function bind(attr, key) {
+        document.querySelectorAll(".toolbar [data-" + attr + "]").forEach(function (b) {
+          b.addEventListener("click", function () {
+            state[key] = b.dataset[attr];
+            document.querySelectorAll(".toolbar [data-" + attr + "]").forEach(function (x) {
+              x.classList.toggle("active", x === b);
+            });
+            apply();
+          });
+        });
+      }
+      bind("mode", "mode");
+      bind("side", "side");
+      bind("design", "design");
+      bind("flip", "flip");
+
+      // 위치 보정 입력 — 값이 바뀔 때마다 즉시 화면에 반영하고 저장한다(다시 열어도 유지).
+      var adjInputs = {
+        x: document.getElementById("adjX"),
+        y: document.getElementById("adjY"),
+        s: document.getElementById("adjS"),
+        b: document.getElementById("adjB"),
+      };
+      function syncAdjInputs() {
+        adjInputs.x.value = adj.x;
+        adjInputs.y.value = adj.y;
+        adjInputs.s.value = adj.s;
+        adjInputs.b.value = adj.b;
+      }
+      Object.keys(adjInputs).forEach(function (k) {
+        adjInputs[k].addEventListener("input", function () {
+          var v = parseFloat(adjInputs[k].value);
+          adj[k] = isNaN(v) ? (k === "s" || k === "b" ? 100 : 0) : v;
+          applyAdjust();
+          saveAdjust();
+        });
       });
+      document.getElementById("btnGuide").addEventListener("click", function () {
+        state.guide = !state.guide;
+        this.classList.toggle("active", state.guide);
+        syncBody();
+      });
+      document.getElementById("btnAdjReset").addEventListener("click", function () {
+        adj = { x: 0, y: 0, s: 100, b: 100 };
+        syncAdjInputs();
+        applyAdjust();
+        saveAdjust();
+      });
+
       document.getElementById("btnDoPrint").addEventListener("click", function () {
         window.focus();
         window.print();
       });
-      setMode("a4");
+
+      loadAdjust();
+      syncAdjInputs();
+      applyAdjust();
+
+      var pending = 2;
+      function afterProbe() { pending -= 1; if (pending === 0) apply(); }
+      probe("front", DATA.design.front, afterProbe);
+      probe("back", DATA.design.back, afterProbe);
     })();
   <\/script>
 </body>

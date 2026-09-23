@@ -43,7 +43,7 @@ public class ScheduleMaterializer {
      * 예약을 미리 열어두는 기간(일). 오늘부터 이만큼의 슬롯을 항상 실체화해둔다.
      * 값을 늘리면 더 먼 날짜까지 예약을 받을 수 있지만, 규칙을 바꿀 때 다시 찍어야 할 날짜도 늘어난다.
      */
-    public static final int RESERVATION_OPEN_DAYS = 28;
+    public static final int RESERVATION_OPEN_DAYS = 30; 
 
     /** 템플릿에 정원이 비어 있는 회차에 쓸 최소 기본값 */
     private static final int CAPACITY_FALLBACK = 10;

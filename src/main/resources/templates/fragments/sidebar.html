@@ -41,7 +41,7 @@
     <div class="sub-menu active" data-sub="data">
       <a th:href="@{/admin/book-data}">도서 데이터 관리</a>
       <a th:href="@{/admin/book-priority}">권장도서 순위</a>
-      <a href="level-badge.html">레벨/뱃지 관리</a>
+      <a th:href="@{/admin/level-badge}">레벨/뱃지 관리</a>
     </div>
 
     <div class="sub-menu" data-sub="operation">
@@ -59,8 +59,8 @@
 
     <div class="sub-menu" data-sub="growth">
       <a th:href="@{/admin/growth/diary}">독서일지</a>
-      <a href="student-growth.html">학생 성장 분석</a>
-      <a href="reward.html">앱 발송</a>
+      <a th:href="@{/admin/growth/student-growth}">학생 성장 분석</a>
+      <a th:href="@{/admin/growth/app-send}">독서 결과 발송</a>
     </div>
 
   </div>

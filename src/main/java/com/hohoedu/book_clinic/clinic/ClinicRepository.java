@@ -28,9 +28,6 @@ public interface ClinicRepository {
     /** 클리닉 추천 기준 학년 최초 채움/조정 */
     void updateClinicGradeKey(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
 
-    /** 직전 추천 도서의 분류/장르 (추천 이력이 없으면 null) */
-    ClinicRespDTO.LastRecommendDTO findLastRecommend(@Param("studentId") String studentId);
-
     /** 심화 게이트 판정용 — 가장 최근 완독(DONE) 추천의 content_id + 완독일(KST). 완독 이력이 없으면 null */
     ClinicRespDTO.AdvancedGateDTO findLastDoneForGate(@Param("studentId") String studentId);
 
@@ -38,12 +35,9 @@ public interface ClinicRepository {
      * 우선순위 순으로 조건을 모두 만족하는 첫 item(실물 판본) 1건 선택 (없으면 null) — 2026-07-30, item 기준 추천
      *   - 이 학생에게 이 item이 아직 추천된 적 없을 것 (같은 content라도 item이 다르면 재추천 가능)
      *   - 그 item에 대여 가능한 실물 재고가 있을 것 (재고만큼 여러 학생에게 동시에 추천 가능)
-     *   - applyDedup=true일 때만: 직전 추천 도서와 분류·장르가 모두 같으면 제외
      */
     ClinicRespDTO.PickedItemDTO pickNextItem(@Param("studentId") String studentId, @Param("centerCode") String centerCode,
                                @Param("year") String year, @Param("schoolyear") String schoolyear,
-                               @Param("lastType") String lastType, @Param("lastGenre") String lastGenre,
-                               @Param("applyDedup") boolean applyDedup,
                                @Param("excludeItemIds") java.util.Collection<Integer> excludeItemIds);
 
     /**

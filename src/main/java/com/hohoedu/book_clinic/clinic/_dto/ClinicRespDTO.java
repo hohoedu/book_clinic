@@ -37,13 +37,6 @@ public class ClinicRespDTO {
         private Integer holdPage;
     }
 
-    /** 직전 추천 도서의 분류/장르 (연속 추천 시 중복 배제 판정 기준) */
-    @Data
-    public static class LastRecommendDTO {
-        private String contentType;
-        private String genre;
-    }
-
     /**
      * 심화 게이트 판정용 (2026-08-31) — 가장 최근에 완독(DONE)한 추천의 도서와 완독 날짜(KST).
      * "책 추천받기"로 다음 책을 받으려면 이 책의 심화(qlevel=02)를 1회 이상 풀었어야 한다.

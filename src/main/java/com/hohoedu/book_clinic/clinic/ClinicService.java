@@ -38,9 +38,9 @@ import lombok.extern.slf4j.Slf4j;
  *      순위표가 정한다. 순위표는 학년별로 나뉘고, 그 안에서 난이도 하→중→상, 같은 난이도 안에서는
  *      분류가 연달아 나오지 않게 섞은 순서다(정렬 규칙은 db/data.sql의 priority 시드 주석 참고).
  *   2) 현재 센터에 대여 가능한 실물 재고가 있는 책만 추천
- *   3) 직전 추천 도서와 분류·장르가 모두 같으면 제외 (dedup)
- *   4) 3의 조건에 걸려 후보가 없으면, 처음으로 돌아가 dedup 없이 우선순위 순으로 다시 추천
- *   5) 그래도 후보가 없으면(=해당 학년 책을 모두 추천받음) 한 단계 위 학년부터 순차적으로 추천
+ *   3) 분류·장르 dedup은 두지 않는다(2026-09-22) — 순위표 자체가 이미 분류가 연달아 나오지 않게
+ *      섞여 있으므로, 직전 추천 도서와 무관하게 우선순위 순서를 그대로 따라간다.
+ *   4) 후보가 없으면(=해당 학년 책을 모두 추천받음) 한 단계 위 학년부터 순차적으로 추천
  * 추천이 확정되면 즉시 실물 재고 하나를 대여 처리하고(item_loan), 추천 이력(recommend_log)을 남긴다.
  */
 @Slf4j
@@ -568,37 +568,24 @@ public class ClinicService {
     }
 
     /**
-     * 규칙 3(dedup) → 규칙 4(dedup 해제) → 규칙 5(윗학년 순차) 순서로 후보를 찾는다 — item(실물 판본) 단위 선택.
+     * 규칙 3(현재 학년 우선순위 순) → 규칙 4(윗학년 순차) 순서로 후보를 찾는다 — item(실물 판본) 단위 선택.
      * excludeItemIds: 고른 뒤 원자적 재고 확보에 실패한(그 사이 마지막 한 권이 나간) item들 — 이번 추천에서 건너뛴다.
      */
     private ClinicRespDTO.PickedItemDTO pickWithFallback(String studentId, String centerCode, String year, String schoolyear,
                                                          java.util.Collection<Integer> excludeItemIds) {
         log.info("학생 {}에게 추천할 도서를 찾습니다: centerCode={}, year={}, schoolyear={}, 제외 item={}",
                 studentId, centerCode, year, schoolyear, excludeItemIds);
-        ClinicRespDTO.LastRecommendDTO last = clinicRepository.findLastRecommend(studentId);
-        log.info("학생 {}의 직전 추천 도서: {}", studentId, last);
-        String lastType = last == null ? null : last.getContentType();
-        log.info("학생 {}의 직전 추천 도서 content_type: {}", studentId, lastType);
-        String lastGenre = last == null ? null : last.getGenre();
-        log.info("학생 {}의 직전 추천 도서 genre: {}", studentId, lastGenre);
 
         ClinicRespDTO.PickedItemDTO picked = clinicRepository.pickNextItem(
-                studentId, centerCode, year, schoolyear, lastType, lastGenre, true, excludeItemIds);
+                studentId, centerCode, year, schoolyear, excludeItemIds);
         if (picked != null) return picked;
-        log.info("학생 {}에게 추천할 도서 후보가 없습니다 — dedup 조건 해제 후 다시 시도합니다", studentId);
+        log.info("학생 {}에게 추천할 도서 후보가 없습니다 — 한 단계 위 학년부터 순차적으로 시도합니다", studentId);
 
-        // 규칙 4: 처음으로 돌아가 dedup 조건 없이 다시 추천
-        picked = clinicRepository.pickNextItem(
-                studentId, centerCode, year, schoolyear, null, null, false, excludeItemIds);
-        if (picked != null) return picked;
-        log.info("학생 {}에게 추천할 도서 후보가 여전히 없습니다 — 한 단계 위 학년부터 순차적으로 시도합니다", studentId);
-
-        // 규칙 5: 현재 학년 책을 모두 추천받았다면 한 단계 위 학년부터 순차적으로 시도
+        // 규칙 4: 현재 학년 책을 모두 추천받았다면 한 단계 위 학년부터 순차적으로 시도
         int current = parseSchoolyear(schoolyear);
         for (int sy = current + 1; sy <= MAX_SCHOOLYEAR; sy++) {
             String candidate = String.format("%02d", sy);
-            picked = clinicRepository.pickNextItem(
-                    studentId, centerCode, year, candidate, null, null, false, excludeItemIds);
+            picked = clinicRepository.pickNextItem(studentId, centerCode, year, candidate, excludeItemIds);
             if (picked != null) return picked;
             log.info("학생 {}에게 추천할 도서 후보가 없습니다 — 학년 {}까지 시도했으나 모두 실패", studentId, candidate);
         }

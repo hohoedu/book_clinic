@@ -27,4 +27,11 @@ public class DataViewController {
     public String bookPriority() {
         return "data/book-priority";
     }
+
+    /** 레벨/뱃지 관리 — 미구현이라 준비 중 안내만 띄운다 */
+    @GetMapping("/admin/level-badge")
+    public String levelBadge(Model model) {
+        model.addAttribute("pageTitle", "레벨/뱃지 관리");
+        return "common/coming-soon";
+    }
 }

@@ -29,16 +29,6 @@
         WHERE student_id = #{studentId}
     </update>
 
-    <select id="findLastRecommend" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$LastRecommendDTO">
-        SELECT TOP 1
-               bc.content_type AS contentType,
-               bc.genre        AS genre
-        FROM erp_bookstore_recommend_log rl
-        JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
-        WHERE rl.student_id = #{studentId}
-        ORDER BY rl.recommend_id DESC
-    </select>
-
     <!-- 심화 게이트(2026-08-31) — 가장 최근 완독(DONE)한 추천의 도서 + 완독일(KST 날짜). completed_at은
          첫 제출 시 채워진다(updateRecommendResult). 완독 이력이 없으면 결과 없음(null). -->
     <select id="findLastDoneForGate" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$AdvancedGateDTO">
@@ -58,7 +48,8 @@
            다른 판본으로 다시 추천됐다(문제는 content 기준이라 같은 문제를 다시 푸는 꼴).
         2) 그 item에 대여 가능한 실물 재고(qty - loaned_qty - lost_qty > 0)가 있을 것 — 재고만큼
            여러 학생에게 동시에 같은 item이 추천될 수 있다
-        3) applyDedup=true일 때만: 직전 추천 도서와 분류·장르가 모두 같으면 제외(분류/장르는 content 속성)
+      분류/장르 dedup은 두지 않는다 — 권장도서 순위 자체가 이미 분류가 연달아 나오지 않게 섞여
+      있으므로(2026-09-22), 순위표를 그대로 따라가면 충분하다.
       우선순위(p.sort_order)는 content 기준이라, 같은 content에 재고 있는 item이 여러 개면 item_id
       오름차순으로 하나를 정한다(어느 판본이든 문제는 동일하므로 순서 자체는 중요하지 않음).
     -->
@@ -81,12 +72,6 @@
                    이 학생에게 안 나오면 "나중에 처음부터 다시 읽는다"는 규칙이 성립하지 않는다. -->
               AND NOT (rl.status = 'HOLD' AND rl.hold_use = 'N')
         )
-        <if test="applyDedup">
-        AND NOT (
-            #{lastType} IS NOT NULL AND #{lastGenre} IS NOT NULL
-            AND c.content_type = #{lastType} AND c.genre = #{lastGenre}
-        )
-        </if>
         <!-- 고른 뒤 원자적 재고 확보(reserveItemById)에 실패한 item은 이번 추천에서 건너뛴다
              (그 사이 다른 학생이 마지막 한 권을 채간 경우 — 에러 대신 다음 후보로 넘어가려고, 2026-08-28) -->
         <if test="excludeItemIds != null and excludeItemIds.size() > 0">

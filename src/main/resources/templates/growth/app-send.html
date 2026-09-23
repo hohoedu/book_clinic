@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>독서 결과 발송</title>
+
+  <link rel="stylesheet" th:href="@{/css/common.css}" />
+  <link rel="stylesheet" th:href="@{/css/sidebar.css}" />
+  <link rel="stylesheet" th:href="@{/css/growth/app-send.css}" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <script th:src="@{/js/common.js}"></script>
+  <script th:src="@{/js/sidebar.js}"></script>
+</head>
+
+<body>
+
+  <div class="admin-layout">
+
+    <div id="sidebarArea" th:replace="~{fragments/sidebar :: sidebar}"></div>
+
+    <main class="content send-content">
+
+      <header class="page-header">
+        <h1>독서 결과 발송</h1>
+        <div class="page-header-actions">
+          <button type="button" class="guide-btn">
+            <i class="fa-regular fa-circle-question"></i>
+            사용 가이드
+          </button>
+        </div>
+      </header>
+
+      <section class="send-toolbar">
+        <div class="monitor-date-picker">
+          <span class="monitor-date-display" id="sendDateDisplay">2026. 07. 14</span>
+          <div class="monitor-date-trigger">
+            <i class="fa-regular fa-calendar"></i>
+            <input type="date" id="sendDate" />
+          </div>
+        </div>
+
+        <!-- 독서일지와 같은 이유로 회차 목록은 고정할 수 없다 — 조회된 행에서 뽑아 채운다 -->
+        <label class="send-slot-picker">
+          <span>타임 선택</span>
+          <select id="sendSlot"></select>
+        </label>
+
+        <div class="send-search-box">
+          <input type="text" id="sendStudentKeyword" placeholder="학생명" />
+          <i class="fa-solid fa-magnifying-glass"></i>
+        </div>
+
+        <button type="button" class="btn primary" id="btnSearchSend">조회</button>
+
+        <!-- 학생-직원을 잇는 담당 컬럼이 DB에 없어 아직 거를 수 없다 — 컬럼이 생기면 푼다 (2026-09-22) -->
+        <label class="send-my-student-toggle is-disabled" title="담당 학생 정보가 아직 없습니다">
+          <input type="checkbox" id="myStudentOnly" disabled />
+          내 담당 학생만 보기
+        </label>
+
+        <div class="send-toolbar-actions">
+          <button type="button" class="btn outline" id="btnSendAll">전체 발송</button>
+          <button type="button" class="btn primary" id="btnSendSelected">발송</button>
+        </div>
+      </section>
+
+      <section class="send-body">
+
+        <div class="send-card send-list-card">
+          <div class="send-card-header">
+            <h2>발송 목록</h2>
+            <span class="send-card-divider"></span>
+            <span class="send-count" id="sendCount">미발송 <b>0</b>/0명</span>
+          </div>
+
+          <div class="send-table-wrap">
+            <table class="send-table">
+              <thead>
+                <tr>
+                  <th class="col-check"><input type="checkbox" id="checkAll" /></th>
+                  <th class="col-no">No</th>
+                  <th class="col-slot">타임</th>
+                  <th class="col-student">학생</th>
+                  <th class="col-grade">학년</th>
+                  <th class="col-books">읽은 책</th>
+                  <th class="col-status">상태</th>
+                  <th class="col-sent-at">발송일시</th>
+                  <th class="col-action"></th>
+                </tr>
+              </thead>
+              <tbody id="sendTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 앱 미리보기 — 목록에서 고른 학생의 발송 카드를 그대로 그린다.
+             내부 구성은 학생마다 달라(읽은 책 수, 달성 항목 수) JS가 통째로 렌더링한다 (2026-09-22) -->
+        <aside class="send-card send-preview-card">
+          <div class="send-card-header">
+            <h2>발송 내용 미리보기</h2>
+          </div>
+          <div class="send-preview-body" id="sendPreview">
+            <div class="send-preview-empty">
+              <p>학생을 선택하면 발송 내용이 표시됩니다.</p>
+            </div>
+          </div>
+        </aside>
+
+      </section>
+
+    </main>
+
+  </div>
+
+  <script th:src="@{/js/growth/app-send.js}"></script>
+</body>
+
+</html>

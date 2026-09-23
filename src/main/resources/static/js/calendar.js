@@ -52,11 +52,11 @@ function renderTabs() {
 }
 
 async function renderCalendar(monthKey) {
-    calendarGrid.innerHTML = "";
-
+    // 다 만든 뒤 한 번에 갈아끼운다 — 먼저 비우면 응답을 기다리는 동안 달력이 빈 화면으로 깜빡인다.
     const slots = await fetchMonthSlots(monthKey);
     dayStatus = toDayStatus(slots);
 
+    const grid = document.createDocumentFragment();
     const [year, month] = monthKey.split("-").map(Number);
     const firstDay = new Date(year, month - 1, 1).getDay();
     const lastDate = new Date(year, month, 0).getDate();
@@ -64,19 +64,20 @@ async function renderCalendar(monthKey) {
     // 앞쪽: 이전 달 꼬리 — 날짜만 흐리게 채운다(주 단위 칸을 맞추기 위한 것)
     for (let i = firstDay; i > 0; i--) {
         const overflowDate = new Date(year, month - 1, 1 - i);
-        calendarGrid.appendChild(createDayCell(overflowDate, true));
+        grid.appendChild(createDayCell(overflowDate, true));
     }
 
     for (let day = 1; day <= lastDate; day++) {
-        calendarGrid.appendChild(createDayCell(new Date(year, month - 1, day), false));
+        grid.appendChild(createDayCell(new Date(year, month - 1, day), false));
     }
 
     // 뒤쪽: 다음 달 머리
     const trailingCount = (7 - ((firstDay + lastDate) % 7)) % 7;
     for (let i = 1; i <= trailingCount; i++) {
-        calendarGrid.appendChild(createDayCell(new Date(year, month, i), true));
+        grid.appendChild(createDayCell(new Date(year, month, i), true));
     }
 
+    calendarGrid.replaceChildren(grid);
     renderSummary(monthKey, lastDate);
 }
 

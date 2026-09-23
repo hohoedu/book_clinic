@@ -1,0 +1,741 @@
+.send-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── 상단 툴바 ──────────────────────────────────────── */
+
+.send-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 28px 0;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid #e8ecef;
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.monitor-date-picker {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+  padding: 8px 12px;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  color: #555;
+  flex-shrink: 0;
+}
+
+.monitor-date-display {
+  font-size: 13px;
+  color: #555;
+}
+
+.monitor-date-trigger {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8a9297;
+  cursor: pointer;
+}
+
+.monitor-date-trigger input[type="date"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 라벨과 셀렉트를 세로선 하나로 나눠 한 박스에 담는다 (독서일지와 같은 형태) */
+.send-slot-picker {
+  display: inline-flex;
+  align-items: center;
+  height: 38px;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  font-size: 13px;
+  color: #8a9297;
+  background: #fff;
+  overflow: hidden;
+}
+
+.send-slot-picker > span {
+  padding: 0 12px;
+  border-right: 1px solid #e0e4e7;
+  line-height: 36px;
+}
+
+.send-slot-picker select {
+  /* "전체"만 남았을 때 셀렉트가 쪼그라들지 않게, 회차 라벨("1교시(14:00 ~ 15:00)") 기준으로
+     너비를 고정한다 — 조회할 때마다 툴바 폭이 들썩이면 옆 요소까지 밀린다 */
+  min-width: 176px;
+  height: auto;
+  border: none;
+  padding: 0 12px;
+  font-size: 14px;
+  color: #333;
+}
+
+.send-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.send-search-box i {
+  position: absolute;
+  right: 12px;
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.send-search-box input[type="text"] {
+  width: 220px;
+  padding-right: 34px;
+}
+
+.send-my-student-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+}
+
+.send-toolbar-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ── 본문 2단 (목록 | 미리보기) ─────────────────────── */
+
+.send-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 420px;
+  gap: 20px;
+  padding: 20px 28px 28px;
+}
+
+.send-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #fff;
+  border: 1px solid #e8ecef;
+  border-radius: 12px;
+}
+
+.send-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px 16px;
+}
+
+.send-card-header h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.send-card-divider {
+  width: 1px;
+  height: 14px;
+  background: #dfe4e7;
+}
+
+.send-count {
+  font-size: 14px;
+  color: #8a9297;
+}
+
+.send-count b {
+  color: #e0566f;
+}
+
+/* ── 표 ─────────────────────────────────────────────── */
+
+.send-table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 24px 24px;
+}
+
+.send-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.send-table th,
+.send-table td {
+  padding: 14px 10px;
+  text-align: center;
+  border-bottom: 1px solid #f0f3f5;
+}
+
+.send-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 16px 10px;
+  background: #f7f9fa;
+  border-bottom: 1px solid #e6eaee;
+  color: #555;
+  font-weight: 700;
+}
+
+.send-table thead tr th:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.send-table thead tr th:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.send-table tbody tr {
+  cursor: pointer;
+}
+
+.send-table tbody tr:hover {
+  background: #fafcfc;
+}
+
+.send-table tbody tr.selected {
+  background: #f2f9f7;
+}
+
+.col-check { width: 44px; }
+.col-no { width: 52px; }
+.col-slot { width: 160px; }
+.col-student { width: 90px; }
+.col-grade { width: 70px; }
+.col-status { width: 110px; }
+.col-sent-at { width: 160px; }
+.col-action { width: 84px; }
+
+.send-table td.col-no {
+  color: #9aa5ab;
+  font-size: 13px;
+}
+
+.send-table td.col-student {
+  font-weight: 700;
+  color: #222;
+}
+
+.send-table td.col-sent-at {
+  color: #666;
+  font-size: 13px;
+}
+
+.send-table td.col-books {
+  color: #333;
+}
+
+.empty-row td {
+  padding: 60px 0;
+  color: #9aa5ab;
+}
+
+/* ── 상태 뱃지 ──────────────────────────────────────── */
+
+.send-badge {
+  display: inline-block;
+  min-width: 78px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  border: 1px solid transparent;
+}
+
+.send-badge.status-sent {
+  background: #eef7db;
+  border-color: #d3e7a6;
+  color: #5e7d2a;
+}
+
+.send-badge.status-none {
+  background: #fdeaef;
+  border-color: #f6c6d2;
+  color: #c0395c;
+}
+
+/* 앱 미가입 — 직원이 손쓸 수 없는 상태라 회색으로 한 단계 내린다(미발송의 붉은색은
+   "아직 안 보냈으니 보내라"는 뜻인데, 이쪽은 보낼 방법 자체가 없다) */
+.send-badge.status-noapp {
+  background: #f1f3f4;
+  border-color: #dfe3e6;
+  color: #7b868c;
+}
+
+.btn.view-btn {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid #dde2e6;
+  border-radius: 6px;
+  background: #fff;
+  color: #555;
+  font-size: 13px;
+}
+
+/* ── 미리보기 = 앱 "정독 결과" 화면을 그대로 축소해 보여준다 ──
+   (앱에서 학부모가 볼 화면과 같은 구성이어야 발송 전에 확인하는 의미가 있다) */
+
+.send-preview-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 16px 20px;
+  background: #fff;
+  border-radius: 0 0 12px 12px;
+}
+
+.send-preview-empty {
+  height: 100%;
+  min-height: 240px;
+  border: 1px dashed #dfe4e7;
+  border-radius: 10px;
+  background: #f4f6f7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.send-preview-empty p {
+  margin: 0;
+  font-size: 14px;
+  color: #a5adb2;
+}
+
+/* 앱 화면 — 발송되는 내용만 담는다(앱바·일자 탭은 앱에만 있는 껍데기라 뺐다) */
+.app-report {
+  border-radius: 14px;
+  background: #e9f4ec;
+  padding: 4px 0 18px;
+  overflow: hidden;
+}
+
+/* ── 요약 ───────────────────────────────────────────── */
+
+.app-summary {
+  padding: 18px 16px 4px;
+  text-align: center;
+}
+
+.app-summary-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #222;
+}
+
+.app-summary-title b {
+  color: #1f9d76;
+}
+
+.app-summary-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #dfeee4;
+  font-size: 11px;
+  color: #5f6c66;
+}
+
+.app-summary-stats span + span::before {
+  content: "·";
+  margin-right: 8px;
+  color: #a9bdb2;
+}
+
+.app-summary-comment {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  font-weight: 600;
+  color: #333;
+}
+
+.app-summary-comment em {
+  font-style: normal;
+  color: #e0566f;
+}
+
+/* ── 카드 공통 ──────────────────────────────────────── */
+
+.app-card {
+  margin: 14px 12px 0;
+  padding: 16px 14px;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.app-card-title {
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #333;
+}
+
+.app-card-title.center {
+  text-align: center;
+  font-size: 15px;
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.app-card-title.center b {
+  color: #e0566f;
+}
+
+.app-card-divider {
+  height: 1px;
+  margin: 20px 0 16px;
+  background: #eef1f3;
+}
+
+/* ── 읽은 책 문제 풀이 결과 ─────────────────────────── */
+
+.app-book-tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.app-book-tab {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: #f1f4f5;
+  color: #9aa5ab;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.app-book-tab.active {
+  background: #1f9d76;
+  color: #fff;
+}
+
+.app-book {
+  display: flex;
+  gap: 12px;
+}
+
+.app-book-cover {
+  position: relative;
+  flex-shrink: 0;
+  width: 70px;
+  height: 90px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f1f4f5;
+}
+
+.app-book-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 표지 클릭 = 원본 크게 보기.
+   앱과 같은 3겹 원이다 — 흰 원(바깥) / 회색 원(안) / 흰 돋보기.
+   바깥 흰 원이 테두리 역할을 해서 어두운 표지 위에서도 회색 원이 묻히지 않는다. */
+.app-book-zoom {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  cursor: pointer;
+}
+
+.app-book-zoom-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #9aa5ab;
+  color: #fff;
+  font-size: 9px;
+}
+
+.app-book-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-book-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #222;
+}
+
+.app-book-retry {
+  margin: 3px 0 0;
+  font-size: 10px;
+  color: #9aa5ab;
+}
+
+.app-score-row {
+  display: flex;
+  margin-top: 10px;
+}
+
+.app-score {
+  flex: 1;
+  text-align: center;
+}
+
+.app-score + .app-score {
+  border-left: 1px solid #eef1f3;
+}
+
+.app-score-label {
+  font-size: 10px;
+  color: #8a9297;
+}
+
+.app-score-value {
+  margin-top: 2px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #2f7ad0;
+}
+
+.app-score-value small {
+  font-size: 11px;
+  font-weight: 700;
+  color: #9aa5ab;
+}
+
+.app-score.score-rate .app-score-value {
+  color: #1f9d76;
+}
+
+.app-growth-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e08a1e;
+}
+
+.app-growth-head img {
+  width: 17px;
+  height: 17px;
+  object-fit: contain;
+}
+
+.app-growth-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #555;
+}
+
+/* ── 이번 독서 활동에서는 (2×2) ─────────────────────── */
+
+.app-achievements {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.app-achievement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  background: #f5f7f8;
+}
+
+.app-achievement img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-achievement p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #555;
+}
+
+.app-achievement b {
+  color: #2f7ad0;
+}
+
+/* 미획득 뱃지 — 자리는 지키되 한 단계 뒤로 물린다(앱과 같다).
+   아이콘은 grayscale 로 색만 빼서, 어떤 뱃지인지는 그대로 알아볼 수 있게 남긴다. */
+.app-achievement.is-locked {
+  background: #f8f9fa;
+}
+
+.app-achievement.is-locked img {
+  filter: grayscale(1);
+  opacity: 0.45;
+}
+
+.app-achievement.is-locked p,
+.app-achievement.is-locked b {
+  color: #b3bcc1;
+}
+
+/* ── 6개 영역 이해 분포 (버블) ──────────────────────────
+   색은 영역 고정이고, 크기·위치는 정답률 순위로 배치한다. 파스텔이라 색만으로는
+   구분이 안 되므로 영역명과 값을 버블 안에 항상 같이 찍는다. */
+
+/* 80% 로 줄여 가운데 둔다 (2026-09-23) — 카드 폭을 꽉 채우면 버블이 지나치게 커서
+   위아래 카드보다 이 영역만 튀어 보인다. 안쪽 글자까지 같은 비율로 줄어든다. */
+.app-bubbles {
+  width: 80%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.app-bubble-label {
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* ── 독서 성향 ──────────────────────────────────────── */
+
+/* 왼쪽 그림 1.5 : 오른쪽 문구 2 (2026-09-23).
+   min-width: 0 을 둘 다 주는 건 flex 항목의 기본 최소 너비가 콘텐츠 크기라,
+   문구가 길어지면 비율을 무시하고 오른쪽이 밀고 들어오기 때문이다. */
+.app-tendency {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.app-tendency-venn {
+  flex: 1.5;
+  min-width: 0;
+  height: auto;
+}
+
+.app-tendency-list {
+  flex: 2;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* 벤 안쪽 영역명 — 원보다 위에 오도록 SVG 순서로 보장하고, 마우스는 통과시킨다 */
+.app-venn-label {
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.app-tendency-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: #f2f4f5;
+  font-size: 12px;
+  color: #444;
+}
+
+.app-tendency-item i {
+  color: #8a9297;
+  font-size: 12px;
+}
+
+/* ── 월별 독서량 ────────────────────────────────────── */
+
+.app-monthly-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.app-monthly-foot {
+  margin: 14px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f2f4f5;
+  text-align: center;
+  font-size: 12px;
+  color: #555;
+}
+
+.app-monthly-foot b {
+  color: #222;
+}
+
+/* ── 표지 원본 보기 ─────────────────────────────────── */
+
+.preview-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer; /* 어디를 눌러도 닫힌다는 걸 알린다 */
+}
+
+.preview-zoom-overlay img {
+  max-width: 70vw;
+  max-height: 80vh;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.send-my-student-toggle.is-disabled {
+  color: #b3bcc1;
+  cursor: not-allowed;
+}

@@ -1,7 +1,6 @@
 package com.hohoedu.book_clinic.app;
 
 import java.time.YearMonth;
-import java.util.Collections;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
@@ -37,6 +36,7 @@ public class AppController {
     private static final String SESSION_STUDENT_ID = "studentId";
 
     private final AppRepository appRepository;
+    private final AppReportService appReportService;
     private final ReservationService reservationService;
 
     /** 책방 메인 화면 — 다음 예약 / 이용권 잔여 / 직전 이용 / 최근 독서기록. */
@@ -50,48 +50,19 @@ public class AppController {
     /**
      * 정독 결과 화면 — 상단 일자 탭 1개 = 응답 1개.
      *
-     * recordDate 가 비어 있으면(첫 진입) 가장 최근 정독 일자를 고른다. 일지가 한 건도 없으면
-     * 빈 리포트(dates=[] , recordDate=null)를 200 으로 내려준다 — 기록이 없는 건 오류가 아니라
-     * 화면의 빈 상태이고, 앱이 에러 분기와 빈 상태 분기를 둘 다 들고 있을 이유가 없다.
+     * recordDate 가 비어 있으면(첫 진입) 가장 최근 정독 일자를 고른다. 조립은
+     * {@link AppReportService} 가 하고, 여기서는 세션의 studentId 만 실어 보낸다.
      *
-     * 쿼리가 여섯 개로 나뉘는 건 카디널리티가 서로 달라서다(요약 1행 / 책 N행 / 뱃지 4행 /
-     * 성향 유형별 / 월별). 여기서는 이어붙이기만 하고 계산은 전부 SQL 이 한다.
+     * sentOnly=true — 직원이 발송하지 않은 일지는 앱에 보이지 않는다(2026-09-23). 발송 전
+     * 결과가 학부모에게 먼저 보이면 직원이 검토·보정할 틈이 없어진다.
      */
     @PostMapping("/bookstore/report")
     public ResponseEntity<?> bookstoreReport(@RequestBody(required = false) AppReqDTO.BookstoreReportDTO reqDTO,
                                              HttpServletRequest request) {
         String studentId = requireStudentId(request);
-
-        List<String> dates = appRepository.selectBookstoreReportDates(studentId);
-        Collections.reverse(dates);
-
-        String requested = reqDTO == null ? null : trimToNull(reqDTO.getRecordDate());
-        String recordDate = requested != null ? requested
-                : (dates.isEmpty() ? null : dates.get(dates.size() - 1));
-
-        AppRespDTO.BookstoreReportDTO res = appRepository.selectBookstoreReportSummary(studentId, recordDate);
-        if (res == null) res = new AppRespDTO.BookstoreReportDTO();
-        res.setDates(dates);
-        res.setRecordDate(recordDate);
-
-        if (recordDate == null) {
-            res.setBooks(Collections.emptyList());
-            res.setBadges(Collections.emptyList());
-            res.setTendencies(Collections.emptyList());
-            res.setMonthly(Collections.emptyList());
-            return ResponseEntity.ok(ApiUtils.success(res));
-        }
-
-        res.setBooks(appRepository.selectBookstoreReportBooks(studentId, recordDate));
-        res.setBadges(appRepository.selectBookstoreReportBadges(studentId, recordDate));
-        res.setTendencies(appRepository.selectBookstoreReportTendencies(studentId, recordDate));
-
-        List<AppRespDTO.ReportMonthlyDTO> monthly =
-                appRepository.selectBookstoreReportMonthly(studentId, recordDate);
-        Collections.reverse(monthly); // 그래프는 과거 → 현재 순서로 그린다
-        res.setMonthly(monthly);
-
-        return ResponseEntity.ok(ApiUtils.success(res));
+        String recordDate = reqDTO == null ? null : reqDTO.getRecordDate();
+        return ResponseEntity.ok(ApiUtils.success(
+                appReportService.getReport(studentId, recordDate, true)));
     }
 
     /**
@@ -110,12 +81,6 @@ public class AppController {
         YearMonth ym = YearMonth.of(Integer.parseInt(reqDTO.getYear()), Integer.parseInt(reqDTO.getMonth()));
         return ResponseEntity.ok(ApiUtils.success(
                 reservationService.findOpenSlots(studentId, ym.atDay(1), ym.atEndOfMonth())));
-    }
-
-    private static String trimToNull(String v) {
-        if (v == null) return null;
-        String t = v.trim();
-        return t.isEmpty() ? null : t;
     }
 
     private String requireStudentId(HttpServletRequest request) {

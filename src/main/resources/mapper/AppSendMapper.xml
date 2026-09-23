@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.hohoedu.book_clinic.appsend.AppSendRepository">
+
+    <!--
+      회차 목록 — 그날 그 센터에 생성된 회차(slot_instance) 전체.
+      예약이 한 건도 없는 회차도 내려온다. 화면의 "타임 선택"은 회차가 있는지를 보여주는
+      드롭다운이지, 학생이 있는지를 보여주는 드롭다운이 아니다(2026-09-22).
+      108 = hh:mi:ss → VARCHAR(5)면 "HH:mm".
+    -->
+    <select id="findSendSlots" resultType="com.hohoedu.book_clinic.appsend._dto.AppSendRespDTO$SlotDTO">
+        SELECT
+            si.seq AS seq,
+            CAST(si.seq AS VARCHAR(2)) + '교시('
+                + CONVERT(VARCHAR(5), si.starts_at, 108) + ' ~ '
+                + CONVERT(VARCHAR(5), si.ends_at, 108) + ')' AS label
+        FROM erp_bookstore_slot_instance si
+        WHERE si.service_date = #{date}
+          AND si.center_code = #{centerCode}
+        ORDER BY si.seq ASC
+    </select>
+
+    <!--
+      미리보기 권한 확인 — 발송 목록은 센터로 스코핑되는데 리포트 조회는 studentId 하나만
+      받으므로, 다른 센터 학생 리포트를 열 수 있는 구멍이 생긴다. 그래서 먼저 소속을 본다.
+    -->
+    <select id="existsStudentInCenter" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+            SELECT 1 FROM erp_student st
+            WHERE st.student_id = #{studentId}
+              AND st.center_code = #{centerCode}
+        ) THEN 1 ELSE 0 END
+    </select>
+
+    <!--
+      발송 목록 — 독서일지(DiaryMapper.findDiaryRows)와 같은 "예약을 깔고 일지로 덮는" 구조다.
+        · 예약만 있고 세션이 없으면(미입실) 세션/일지 컬럼이 전부 NULL — 미발송으로 나온다.
+        · 세션은 그 학생·그 날짜의 최신 1건만 붙인다(재입실로 여러 건 생겨도 최신 1건).
+      발송 상태(is_send/send_at)는 일지 헤더 값 그대로다. 일지가 아직 없으면 is_send는 NULL이라
+      화면에서 미발송으로 그린다.
+      회차는 일지의 record_time(직원 보정값)이 있으면 그쪽이 이긴다 — 독서일지와 같은 규칙.
+    -->
+    <select id="findSendRows" resultType="com.hohoedu.book_clinic.appsend._dto.AppSendRespDTO$RowDTO">
+        SELECT
+            r.reservation_id AS reservationId,
+            r.student_id     AS studentId,
+            st.student_name  AS studentName,
+            cd.codeNm        AS gradeName,
+
+            COALESCE(TRY_CAST(dia.record_time AS INT), si.seq) AS slotSeq,
+            CAST(COALESCE(TRY_CAST(dia.record_time AS INT), si.seq) AS VARCHAR(2)) + '교시('
+                + CONVERT(VARCHAR(5), si.starts_at, 108) + ' ~ '
+                + CONVERT(VARCHAR(5), si.ends_at, 108) + ')' AS slotLabel,
+
+            cs.session_id    AS sessionId,
+            dia.diary_key    AS diaryKey,
+
+            dia.is_send      AS isSend,
+            -- 120 = yyyy-mm-dd hh:mi:ss → VARCHAR(16)이면 "yyyy-MM-dd HH:mm"
+            CONVERT(VARCHAR(16), dia.send_at, 120) AS sendAt,
+
+            -- 앱 미가입(토큰 없음/빈 문자열)이면 발송 자체가 불가하다 — 토큰 원본은 내리지 않는다
+            CAST(CASE WHEN NULLIF(st.app_token, '') IS NULL THEN 0 ELSE 1 END AS BIT) AS hasAppToken
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        JOIN erp_student st ON st.student_id = r.student_id
+        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.grade_key
+        OUTER APPLY (
+            SELECT TOP 1 session_id
+            FROM erp_bookstore_clinic_session
+            WHERE student_id = r.student_id AND session_date = si.service_date
+            ORDER BY session_id DESC
+        ) cs
+        LEFT JOIN erp_bookstore_diary dia ON dia.session_id = cs.session_id
+        WHERE si.service_date = #{date}
+          AND si.center_code = #{centerCode}
+          AND r.status &lt;&gt; 'CANCELED'
+        <if test="slotSeq != null">
+          AND COALESCE(TRY_CAST(dia.record_time AS INT), si.seq) = #{slotSeq}
+        </if>
+        <if test="keyword != null and keyword != ''">
+          AND st.student_name LIKE '%' + #{keyword} + '%'
+        </if>
+        ORDER BY COALESCE(TRY_CAST(dia.record_time AS INT), si.seq) ASC, st.student_name ASC
+    </select>
+
+    <!--
+      발송 대상 확정 — 갱신 전에 뽑는다. 갱신 후에 뽑으면 이미 발송돼 있던 건까지 섞여
+      푸시가 두 번 나간다. 스코핑 조건은 아래 updateSendFlag 와 같아야 한다.
+    -->
+    <select id="findSendTargets" resultType="com.hohoedu.book_clinic.appsend._dto.AppSendRespDTO$SendTargetDTO">
+        SELECT
+            dia.diary_key   AS diaryKey,
+            dia.student_id  AS studentId,
+            st.student_name AS studentName
+        FROM erp_bookstore_diary dia
+        JOIN erp_student st ON st.student_id = dia.student_id
+        WHERE st.center_code = #{centerCode}
+          AND dia.is_send = 0
+          AND dia.diary_key IN
+          <foreach collection="diaryKeys" item="key" open="(" separator="," close=")">#{key}</foreach>
+    </select>
+
+    <!--
+      발송 처리 — 일지 헤더의 is_send 를 1 로 올리고 그 시각을 send_at 에 남긴다.
+
+      is_send = 0 조건이 붙은 건 두 번 눌렀을 때 send_at 이 덮이지 않게 하려는 것이다 —
+      send_at 은 "처음 발송한 시각" 스냅샷이다(schema.sql 주석).
+
+      센터 조인은 목록과 같은 스코핑이다. diary_key 는 화면이 준 값이라 그대로 믿으면
+      다른 센터 학생 일지도 발송할 수 있다.
+
+      시각은 KST 로 넣는다 — GETDATE() 는 서버 타임존을 타므로 쓰지 않는다.
+    -->
+    <update id="updateSendFlag">
+        UPDATE dia
+           SET dia.is_send = 1,
+               dia.send_at = DATEADD(HOUR, 9, GETUTCDATE())
+        FROM erp_bookstore_diary dia
+        JOIN erp_student st ON st.student_id = dia.student_id
+        WHERE st.center_code = #{centerCode}
+          AND dia.is_send = 0
+          AND dia.diary_key IN
+          <foreach collection="diaryKeys" item="key" open="(" separator="," close=")">#{key}</foreach>
+    </update>
+
+</mapper>

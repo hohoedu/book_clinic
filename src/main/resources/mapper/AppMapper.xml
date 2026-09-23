@@ -92,6 +92,8 @@
         ) pass
 
         -- 최근 독서 기록 이미지 4개 (최신순)
+        -- is_send = 1 — 직원이 발송한 일지만 센다(2026-09-23). 정독 결과 화면과 같은 규칙이다.
+        -- 결과는 아직 안 보이는데 표지만 먼저 뜨면 학부모는 "기록은 있는데 왜 안 열리냐"가 된다.
         OUTER APPLY (
             SELECT
                 max(CASE WHEN rn = 1 THEN book_img END) AS img1,
@@ -107,6 +109,7 @@
                 JOIN erp_bookstore_diary_detail ebdd ON ebdd.diary_key = ebd2.diary_key
                 WHERE ebd2.student_id = s.student_id
                   AND ebd2.record_date &lt;= cast(getdate() AS date)
+                  AND ebd2.is_send = 1
                   AND ebdd.book_img IS NOT NULL
                   AND ebdd.book_img &lt;&gt; ''
             ) t
@@ -123,6 +126,14 @@
          quiz_answer_log 는 submitted_at 이 같으면 같은 제출 회차라서(ddl-core.sql 주석),
          (recommend_id, qlevel) 별 MAX(submitted_at) 행만 보면 마지막 제출 결과가 된다.
          재도전으로 점수가 오른 학생이 옛 오답까지 성향에 끌고 가지 않게 하려는 것이다.
+
+         sentOnly — 일지(erp_bookstore_diary.is_send)가 발송된 것만 볼지. 앱은 항상 true 다.
+         누적 완독 권수와 월별 그래프는 일지가 아니라 완독 이력(recommend_log) 기준이지만,
+         미발송 일지에 달린 책이 그쪽에만 먼저 반영되면 "결과는 안 보이는데 권수는 올라간"
+         상태가 된다. 그래서 둘도 같은 기준을 탄다 (2026-09-23).
+         직원이 발송 버튼을 누르기 전의 결과가 학부모에게 먼저 보이면 안 되기 때문이다.
+         관리자 발송 미리보기(AppSendController.report)만 false 로 부른다 — 발송 전 내용을
+         확인하는 화면이라 미발송이어야 볼 이유가 있다 (2026-09-23).
     -->
 
     <select id="selectBookstoreReportDates" resultType="java.lang.String">
@@ -130,6 +141,7 @@
         FROM erp_bookstore_diary d
         WHERE d.student_id = #{studentId}
           AND d.record_date &lt;= cast(dateadd(hour, 9, getutcdate()) AS date)
+          <if test="sentOnly"> AND d.is_send = 1 </if>
         ORDER BY d.record_date DESC
     </select>
 
@@ -159,6 +171,7 @@
             LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
             WHERE d.student_id = s.student_id
               AND d.record_date = #{recordDate,jdbcType=DATE}
+              <if test="sentOnly"> AND d.is_send = 1 </if>
         ) day
 
         -- 누적 완독 권수 — 그 날짜까지. 첫 제출(DONE) 기준이라 합격/불합격은 따지지 않는다.
@@ -169,6 +182,23 @@
               AND rl.status = 'DONE'
               AND rl.completed_at IS NOT NULL
               AND cast(rl.completed_at AS date) &lt;= #{recordDate,jdbcType=DATE}
+              -- 발송 대기 중인 일지에 달린 책은 아직 세지 않는다 (2026-09-23).
+              -- "일지에 달렸는데 미발송"만 빼는 형태인 것은 일부러다 — 일지 상세는 세션이 없으면
+              -- 적재되지 않고(MonitorService.recordDiaryDetail) 실패해도 조용히 넘어가는데,
+              -- "발송된 일지에 달린 책만" 세면 그런 책은 영영 누적에서 사라진다(되살릴 일지가
+              -- 없으니 발송할 방법도 없다). 빼는 건 곧 발송될 것이 확실한 건만으로 한정한다.
+              --
+              -- 미리보기(sentOnly=false)는 지금 보고 있는 날짜만 예외로 센다 — 발송 버튼을 누르면
+              -- 그날 일지가 is_send=1 이 되므로, 그 한 건을 빼 버리면 미리보기 숫자가 정작 학부모가
+              -- 보게 될 숫자보다 낮아진다. 미리보기는 "보내고 난 뒤의 앱"이어야 한다 (2026-09-23).
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM erp_bookstore_diary_detail dd2
+                  JOIN erp_bookstore_diary d2 ON d2.diary_key = dd2.diary_key
+                  WHERE dd2.recommend_id = rl.recommend_id
+                    AND d2.is_send = 0
+                    <if test="!sentOnly"> AND d2.record_date &lt;&gt; #{recordDate,jdbcType=DATE} </if>
+              )
         ) cum
 
         WHERE s.student_id = #{studentId}
@@ -215,6 +245,7 @@
 
         WHERE d.student_id = #{studentId}
           AND d.record_date = #{recordDate}
+          <if test="sentOnly"> AND d.is_send = 1 </if>
         ORDER BY dd.id
     </select>
 
@@ -240,6 +271,7 @@
                   WHERE d.student_id = #{studentId}
                     AND d.record_date = #{recordDate}
                     AND dd.content_id = sb.content_id
+                    <if test="sentOnly"> AND d.is_send = 1 </if>
               )
         ) e
         ORDER BY b.badge_id
@@ -277,6 +309,7 @@
             WHERE d.student_id = #{studentId}
               AND d.record_date = #{recordDate}
               AND q.qlevel = '01'
+              <if test="sentOnly"> AND d.is_send = 1 </if>
               AND (
                     q.submit_mode IS NULL
                  OR q.submit_mode &lt;&gt; 'WRONG_ONLY'
@@ -312,19 +345,85 @@
         ORDER BY cd.code
     </select>
 
-    <!-- 독서량 그래프 — 최근 6개월. 앱 ReportGraphData 가 문자열을 받으므로 문자열로 낸다. -->
+    <!--
+      독서량 그래프 — 입회월(또는 그 해 1월)부터 기준일의 달까지, 한 달도 빠짐없이.
+
+      달력에서 달을 만들고 완독 이력을 붙이는 구조다(이력을 GROUP BY 하지 않는다). 이력만
+      묶으면 한 권도 안 읽은 달은 행 자체가 없어서 그래프에서 통째로 사라진다 — 4월 8권,
+      5·6월 0권, 7월 3권인 학생이 "4월에서 7월로 완만히 내려온" 곡선으로 보인다.
+      독서량 그래프에서 0권인 달이야말로 보여줘야 할 값이다 (2026-09-23).
+
+      시작 달은 "그 해 1월"과 "입회월(erp_bookstore_assign.entry_bookstore_date)" 중 늦은 쪽이다. 8월에 들어온
+      학생에게 1~7월 빈 구간을 보여 줄 이유가 없고(다니지도 않은 달이다), 그렇다고 입회월을
+      해 넘어까지 끌면 2년 전 입회한 학생은 가로축이 스무 칸을 넘는다. 해가 바뀌면 1월부터
+      다시 센다 — "2026년 1월부터 9월까지"처럼 제목이 한 해 안에서 닫혀야 읽힌다.
+
+      "최근 N개월"로 잡지 않는 것도 같은 이유다. 해가 바뀔 때 작년 11·12월이 올해 1·2월
+      옆에 붙어, 가로축 숫자만 보면 11 12 1 2 가 이어진다.
+
+      앱 ReportGraphData 가 문자열을 받으므로 문자열로 낸다. 오름차순(시작월 → 기준월)이라
+      화면에서 뒤집지 않는다.
+    -->
     <select id="selectBookstoreReportMonthly" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportMonthlyDTO">
-        SELECT TOP 6
-            convert(varchar(4), year(rl.completed_at)) AS year,
-            right('0' + convert(varchar(2), month(rl.completed_at)), 2) AS month,
-            convert(varchar(10), count(*)) AS count
-        FROM erp_bookstore_recommend_log rl
-        WHERE rl.student_id = #{studentId}
-          AND rl.status = 'DONE'
-          AND rl.completed_at IS NOT NULL
-          AND cast(rl.completed_at AS date) &lt;= #{recordDate}
-        GROUP BY year(rl.completed_at), month(rl.completed_at)
-        ORDER BY year(rl.completed_at) DESC, month(rl.completed_at) DESC
+        SELECT
+            convert(varchar(4), base.yr) AS year,
+            right('0' + convert(varchar(2), mo.m), 2) AS month,
+            convert(varchar(10), isnull(c.cnt, 0)) AS count
+        FROM (
+            SELECT
+                d.yr,
+                d.mn,
+                -- 입회가 올해면 그 달부터, 작년 이전이거나 입회일이 없으면 1월부터.
+                -- 기준월보다 뒤에 들어온 경우(지난 날짜 리포트를 열었을 때)는 기준월로 당겨
+                -- 최소 한 칸은 남긴다 — 구간이 비면 그래프가 통째로 사라진다.
+                CASE
+                    WHEN year(a.entryDate) = d.yr AND month(a.entryDate) &lt;= d.mn THEN month(a.entryDate)
+                    WHEN year(a.entryDate) = d.yr THEN d.mn
+                    ELSE 1
+                END AS startM
+            FROM (
+                SELECT year(cast(#{recordDate} AS date))  AS yr,
+                       month(cast(#{recordDate} AS date)) AS mn
+            ) d
+            -- 수강 정보는 학생당 1행이지만(StudentMapper 주석), 행이 없을 수도 있어
+            -- OUTER APPLY 로 붙인다 — 없으면 entryDate 가 NULL 이라 1월부터가 된다
+            OUTER APPLY (
+                SELECT TOP 1 entry_bookstore_date AS entryDate
+                FROM erp_bookstore_assign
+                WHERE student_id = #{studentId}
+                ORDER BY assign_id DESC
+            ) a
+        ) base
+        CROSS JOIN (VALUES (1),(2),(3),(4),(5),(6),(7),(8),(9),(10),(11),(12)) AS mo(m)
+        OUTER APPLY (
+            SELECT count(*) AS cnt
+            FROM erp_bookstore_recommend_log rl
+            WHERE rl.student_id = #{studentId}
+              AND rl.status = 'DONE'
+              AND rl.completed_at IS NOT NULL
+              AND cast(rl.completed_at AS date) &lt;= #{recordDate}
+              AND year(rl.completed_at)  = base.yr
+              AND month(rl.completed_at) = mo.m
+              -- 발송 대기 중인 일지에 달린 책은 아직 세지 않는다 (2026-09-23).
+              -- "일지에 달렸는데 미발송"만 빼는 형태인 것은 일부러다 — 일지 상세는 세션이 없으면
+              -- 적재되지 않고(MonitorService.recordDiaryDetail) 실패해도 조용히 넘어가는데,
+              -- "발송된 일지에 달린 책만" 세면 그런 책은 영영 누적에서 사라진다(되살릴 일지가
+              -- 없으니 발송할 방법도 없다). 빼는 건 곧 발송될 것이 확실한 건만으로 한정한다.
+              --
+              -- 미리보기(sentOnly=false)는 지금 보고 있는 날짜만 예외로 센다 — 발송 버튼을 누르면
+              -- 그날 일지가 is_send=1 이 되므로, 그 한 건을 빼 버리면 미리보기 숫자가 정작 학부모가
+              -- 보게 될 숫자보다 낮아진다. 미리보기는 "보내고 난 뒤의 앱"이어야 한다 (2026-09-23).
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM erp_bookstore_diary_detail dd2
+                  JOIN erp_bookstore_diary d2 ON d2.diary_key = dd2.diary_key
+                  WHERE dd2.recommend_id = rl.recommend_id
+                    AND d2.is_send = 0
+                    <if test="!sentOnly"> AND d2.record_date &lt;&gt; #{recordDate} </if>
+              )
+        ) c
+        WHERE mo.m BETWEEN base.startM AND base.mn
+        ORDER BY mo.m ASC
     </select>
 
 </mapper>

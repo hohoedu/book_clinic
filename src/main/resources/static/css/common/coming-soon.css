@@ -1,0 +1,36 @@
+/* 미구현 화면 안내 — 화면명만 바꿔 여러 메뉴가 함께 쓴다 */
+.coming-soon {
+  position: relative;
+  height: calc(100vh - 56px);
+  overflow: hidden;
+}
+
+.coming-soon-img {
+  /* 일러스트(16:9)가 콘텐츠 영역을 꽉 채우도록. 비율이 안 맞는 화면에서는
+     가장자리가 잘리는데, 여백이 생기는 쪽보다 이게 낫다고 보고 cover로 둔다 */
+  width: 100%;
+  height: 90%;
+  display: block;
+}
+
+.coming-soon-text {
+  /* 일러스트 위에 겹쳐 놓는다. 배경이 연한 베이지라 진한 글자로도 충분히 읽힌다 */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 28px;
+  text-align: center;
+  color: #6b5744;
+}
+
+.coming-soon-title {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #5a4632;
+}
+
+.coming-soon-desc {
+  margin: 0;
+  font-size: 14px;
+}
