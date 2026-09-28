@@ -4,13 +4,12 @@ import java.time.LocalDate;
 import java.util.List;
 
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.monitor.MonitorService;
@@ -40,17 +39,18 @@ public class ReservationController {
     private final MonitorService monitorService;
 
     /** 예약 가능한 슬롯 목록. fromDate/toDate 생략 시 오늘부터 4주 */
-    @GetMapping("/slots")
-    public ResponseEntity<?> slots(@RequestParam(value = "fromDate", required = false) String fromDate,
-                                   @RequestParam(value = "toDate", required = false) String toDate,
+    @PostMapping("/slots")
+    public ResponseEntity<?> slots(@RequestBody(required = false) ReservationReqDTO.SlotsReqDTO reqDTO,
                                    HttpServletRequest request) {
         String studentId = requireStudentId(request);
+        String fromDate = reqDTO == null ? null : reqDTO.getFromDate();
+        String toDate = reqDTO == null ? null : reqDTO.getToDate();
         return ResponseEntity.ok(ApiUtils.success(
                 reservationService.findOpenSlots(studentId, parseDate(fromDate), parseDate(toDate))));
     }
 
     /** 내 예약 목록(RESERVED, 오늘 이후) */
-    @GetMapping("/my")
+    @PostMapping("/my")
     public ResponseEntity<?> my(HttpServletRequest request) {
         String studentId = requireStudentId(request);
         return ResponseEntity.ok(ApiUtils.success(reservationService.findMyReservations(studentId)));
@@ -78,12 +78,15 @@ public class ReservationController {
     }
 
     /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차로 가장 가까운 4개 날짜의 슬롯 상태를 알려준다 */
-    @GetMapping("/batch-preview")
-    public ResponseEntity<?> batchPreview(@RequestParam("dayOfWeek") Integer dayOfWeek,
-                                          @RequestParam("seq") Integer seq,
+    @PostMapping("/batch-preview")
+    public ResponseEntity<?> batchPreview(@RequestBody ReservationReqDTO.BatchPreviewReqDTO reqDTO,
                                           HttpServletRequest request) {
         String studentId = requireStudentId(request);
-        return ResponseEntity.ok(ApiUtils.success(reservationService.previewBatch(studentId, dayOfWeek, seq)));
+        if (reqDTO.getDayOfWeek() == null || reqDTO.getSeq() == null) {
+            throw new Exception400("요일과 회차를 선택해 주세요.");
+        }
+        return ResponseEntity.ok(ApiUtils.success(
+                reservationService.previewBatch(studentId, reqDTO.getDayOfWeek(), reqDTO.getSeq())));
     }
 
     /** 4주 일괄 확정 — 미리보기에서 확인한 슬롯 id 목록을 그대로 보낸다 */

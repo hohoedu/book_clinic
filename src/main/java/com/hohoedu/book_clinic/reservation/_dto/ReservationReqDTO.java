@@ -10,6 +10,20 @@ public class ReservationReqDTO {
 
     // ── 학생 앱 ──────────────────────────────────────────────────────────
 
+    /** 슬롯 조회 — fromDate/toDate(yyyy-MM-dd) 생략 시 오늘부터 4주 */
+    @Data
+    public static class SlotsReqDTO {
+        private String fromDate;
+        private String toDate;
+    }
+
+    /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차 */
+    @Data
+    public static class BatchPreviewReqDTO {
+        private Integer dayOfWeek;
+        private Integer seq;
+    }
+
     @Data
     public static class ReserveReqDTO {
         private Long slotInstanceId;

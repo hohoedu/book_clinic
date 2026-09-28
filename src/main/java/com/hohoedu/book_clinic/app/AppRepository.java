@@ -19,6 +19,17 @@ public interface AppRepository {
 
     AppRespDTO.BookstoreMainDTO selectBookstoreMain(@Param("studentId") String studentId);
 
+    /**
+     * 보유 이용권 목록 — 결제 건별. 결제 행과 묶어야 상품명·금액·결제일이 나오므로 앱 결제분
+     * (source='PG', ref_no = payment.order_no)만 잡힌다. 서당 일괄청구분은 이 시스템에 결제 행이
+     * 아예 없고(PassService 클래스 주석), 환불도 이니시스 결제 건에만 있는 동작이라 범위가 맞는다.
+     *
+     * 형제 묶음결제도 학생별로 결제 행이 따로 생기므로(group_order_no 만 공유) 세션 학생 조건
+     * 하나로 본인 몫만 걸러진다.
+     */
+    List<AppRespDTO.PassListDTO> selectPassList(@Param("studentId") String studentId,
+                                               @Param("serviceCode") String serviceCode);
+
     // ── 정독 결과 화면 ──
 
     /**

@@ -35,6 +35,9 @@ public class AppController {
 
     private static final String SESSION_STUDENT_ID = "studentId";
 
+    /** 이용권 목록의 기본 서비스 — 지금 앱에 이용권 화면이 있는 서비스는 책방뿐이다 */
+    private static final String SERVICE_BOOK = "BOOK";
+
     private final AppRepository appRepository;
     private final AppReportService appReportService;
     private final ReservationService reservationService;
@@ -45,6 +48,26 @@ public class AppController {
         String studentId = requireStudentId(request);
         AppRespDTO.BookstoreMainDTO res = appRepository.selectBookstoreMain(studentId);
         return ResponseEntity.ok(ApiUtils.success(res));
+    }
+
+    /**
+     * 보유 이용권 목록 — 결제 건별 잔여.
+     *
+     * 메인 화면(/app/bookstore/main)의 passRemain 은 이용 중인 한 장의 잔여라, 건별로
+     * 환불할 건을 고르는 화면의 단위가 되지 못한다. 이용권은 결제 건마다 따로 발급·회수되므로
+     * 이 화면은 보유한 건을 전부 한 줄씩 낸다. 메인 화면 쪽은 표시용으로 그대로 둔다.
+     *
+     * 환불 실행·확정 금액은 기존 결제 API(/payment/refund, /payment/refund/quote)가 담당한다 —
+     * 여기서 내려주는 refundableAmount 는 비례 계산한 어림값이다(AppRespDTO.PassListDTO 주석).
+     */
+    @PostMapping("/pass/list")
+    public ResponseEntity<?> passList(@RequestBody(required = false) AppReqDTO.PassListDTO reqDTO,
+                                      HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        String serviceCode = (reqDTO == null || reqDTO.getServiceCode() == null || reqDTO.getServiceCode().isBlank())
+                ? SERVICE_BOOK
+                : reqDTO.getServiceCode();
+        return ResponseEntity.ok(ApiUtils.success(appRepository.selectPassList(studentId, serviceCode)));
     }
 
     /**

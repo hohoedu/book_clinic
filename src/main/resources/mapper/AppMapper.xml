@@ -74,21 +74,27 @@
             ORDER BY ebsi.starts_at DESC
         ) prvres
 
-        -- 활성 이용권 (회수 안 됨 + 유효기간 내, 가장 최근 부여분)
+        -- 이용 중인 이용권 1장 — 다음 예약이 차감될 이용권이다(2026-09-28)
         --
-        -- valid_until IS NULL 을 함께 받는 이유(2026-09-15) — 만료일이 "첫 예약일부터 90일"로
-        -- 바뀌면서(2026-09-14) 결제 직후의 이용권은 기간이 아직 안 정해진 채(valid_from/until NULL)
-        -- 대기한다. NULL 비교는 참이 되지 않으므로 조건을 그대로 두면 방금 산 이용권이 통째로
-        -- 빠져서 앱 메인에 "이용권 없음/0회"로 보인다. PassMapper.sumRemain 은 같은 이유로 이미
-        -- valid_from IS NULL 을 포함하고 있다 — 그쪽과 기준을 맞춘다.
+        -- 가장 최근 부여분을 보던 것을 바꿨다. 쓰던 이용권이 남은 채로 새로 결제하면 새 이용권
+        -- (미사용, 12/12)이 잡혀서 실제로 차감 중인 쪽이 화면에서 사라졌다. 정렬은 차감 순서
+        -- (PassMapper.findUsablePassOn)와 같다 — 기간이 정해진 것 먼저, 먼저 만료되는 것 먼저,
+        -- 미배정(valid_from IS NULL)은 마지막.
+        -- 차감과 달리 remain_count > 0 을 거르지 않고 정렬 맨 앞으로만 뺀다 — 다 쓴 이용권만
+        -- 남았을 때 화면이 "이용권 없음"이 아니라 "0회 남음"을 보여주게 하려는 것이다.
         OUTER APPLY (
             SELECT TOP 1 p.total_count, p.remain_count, p.valid_until
             FROM erp_bookstore_pass p
             WHERE p.student_id = s.student_id
+              AND p.service_code = 'BOOK'
               AND p.revoked_at IS NULL
-              AND (p.valid_until IS NULL
-                   OR p.valid_until &gt;= cast(getdate() AS date))
-            ORDER BY p.granted_at DESC
+              AND (p.valid_from IS NULL
+                   OR (p.valid_from &lt;= cast(dateadd(HOUR, 9, getutcdate()) AS date)
+                       AND p.valid_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date)))
+            ORDER BY CASE WHEN p.remain_count &gt; 0 THEN 0 ELSE 1 END,
+                     CASE WHEN p.valid_from IS NULL THEN 1 ELSE 0 END,
+                     p.valid_until ASC,
+                     p.granted_at ASC
         ) pass
 
         -- 최근 독서 기록 이미지 4개 (최신순)
@@ -118,6 +124,60 @@
 
         WHERE s.student_id = #{studentId}
     </select>
+
+    <!--
+      보유 이용권 목록 — 결제 건별. 이용권 1행이 곧 결제 1건이라(앱 결제분은 ref_no = order_no)
+      별도 집계 없이 JOIN 한 번으로 끝난다. 메인 화면의 passRemain 이 "가장 최근 부여분" 한 장인
+      것과 달리 여기는 보유한 건을 전부 낸다 — 건별 환불을 고를 단위가 필요하다.
+
+      status = 'PAID' 만 — READY/FAILED/CLOSED 는 이용권이 발급되지 않았고, CANCELED(전액환불)는
+      이용권이 회수돼 revoked_at 으로도 이미 걸러진다. 부분환불 건도 회수 대상이라 마찬가지다.
+
+      remain_count > 0 — 다 쓴 건과 환불로 회수된 건은 "보유"가 아니므로 뺀다.
+
+      만료일이 지난 건은 남긴다 — 잔여가 남아 있으면 예약에는 못 쓰지만 환불 대상으로는 화면에
+      보여야 한다. 메인 화면 조회가 유효기간으로 거르는 것과 목적이 다르다.
+
+      refundableAmount 는 여기서 낸다 — 화면이 amount/total_count 를 다시 나누면 서버와 앱의 버림
+      처리가 어긋날 수 있다. int 나눗셈이라 1회 단가에서 원 단위가 버려진다(요청 스펙). total_count
+      가 0인 옛 데이터에서 0으로 나누지 않도록 nullif 로 막는다.
+
+      granted_at 이 비어 있으면 결제일로 메운다 — 앱 결제는 승인 직후 발급이라 사실상 같은 값이고,
+      화면에 등록일이 빈 칸으로 뜨는 것보다 낫다.
+
+      정렬은 먼저 만료되는 것부터다 — PassMapper.findUsablePassOn 이 소진시키는 순서와 같게 두면
+      목록 맨 위가 "지금 쓰이고 있는 이용권"이 된다. 기간 미배정분은 맨 뒤로 보낸다.
+    -->
+    <select id="selectPassList" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$PassListDTO">
+        SELECT
+            ps.pass_id      AS passId,
+            p.payment_id    AS paymentId,
+            p.product_name  AS productName,
+            ps.total_count  AS totalCount,
+            ps.remain_count AS remainCount,
+            p.amount        AS amount,
+            isnull(p.amount / nullif(ps.total_count, 0) * ps.remain_count, 0) AS refundableAmount,
+            convert(varchar(16), p.paid_at, 120) AS paidAt,
+            convert(varchar(16), coalesce(ps.granted_at, p.paid_at), 120) AS registeredAt,
+            convert(varchar(10), ps.valid_until, 23) AS validUntil
+
+        FROM erp_bookstore_pass ps
+        JOIN erp_bookstore_payment p
+          ON p.order_no   = ps.ref_no
+         AND p.student_id = ps.student_id
+
+        WHERE ps.student_id   = #{studentId}
+          AND ps.service_code = #{serviceCode}
+          AND ps.source       = 'PG'
+          AND ps.revoked_at IS NULL
+          AND ps.remain_count &gt; 0
+          AND p.status = 'PAID'
+
+        ORDER BY CASE WHEN ps.valid_until IS NULL THEN 1 ELSE 0 END,
+                 ps.valid_until ASC,
+                 ps.granted_at ASC
+    </select>
+
 
     <!-- ══════════════ 정독 결과(리포트) 화면 ══════════════
          상단 일자 탭 = 조회 단위. 아래 쿼리들은 전부 그 하루(또는 "그 날짜까지")로 잘려 있다.

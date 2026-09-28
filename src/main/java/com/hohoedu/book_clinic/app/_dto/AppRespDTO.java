@@ -33,7 +33,7 @@ public class AppRespDTO {
         private String checkIn;          // HH:mm
         private String checkOut;         // HH:mm
 
-        // 이용권 (활성 pass: revoked 아님 + 유효기간 내, 가장 최근 부여분)
+        // 이용권 (이용 중인 1장 — 다음 예약이 차감될 이용권, PassMapper.findUsablePassOn 과 같은 순서)
         private Integer passTotal;
         private Integer passRemain;
         private String passValidUntil; // yyyy-MM-dd — 사용기한
@@ -43,6 +43,41 @@ public class AppRespDTO {
         private String bookImg2;
         private String bookImg3;
         private String bookImg4;
+    }
+
+    /**
+     * 보유 이용권 목록의 한 줄 = 결제 1건. 단일 쿼리(AppMapper.xml#selectPassList) 한 행이다.
+     *
+     * 메인 화면({@link BookstoreMainDTO})의 passRemain 은 이용 중인 한 장의 잔여라
+     * 건별 환불을 고를 단위가 되지 못한다. 이용권은 결제 건마다 따로 발급·회수되므로
+     * (erp_bookstore_pass 1행 = 결제 1건) 이 화면은 건별로 내려준다.
+     *
+     * remainCount 는 집계가 아니라 이용권 행의 remain_count 그대로다 — 예약 시 차감/취소 시 복구가
+     * 그 컬럼을 조건부 UPDATE 로 관리하고 있어(2026-09-14), 차감 이력을 여기서 다시 세면 취소된
+     * 행을 빼는 규칙이 두 곳으로 갈라진다.
+     *
+     * validUntil 은 아직 첫 예약이 없는 이용권이면 null 이다 — 만료일은 첫 예약 때 정해진다
+     * (PassService.consumeForReservation). 화면은 "사용기한 미정"으로 보여주면 된다.
+     */
+    @Data
+    public static class PassListDTO {
+        private Integer passId;
+        private Integer paymentId;
+        private String productName;
+        private Integer totalCount;
+        private Integer remainCount;
+        /** 이 건의 결제 금액 */
+        private Integer amount;
+        /**
+         * 남은 횟수만큼의 비례 환불 금액 = amount / totalCount * remainCount (원 단위 버림).
+         * 화면에 "환불하면 대략 얼마"를 보여주는 값이다. 실제 환불액은 환불 규정(경과일수·사용
+         * 횟수별 환불율)이 적용되므로 확정 금액은 /payment/refund/quote 가 낸다.
+         */
+        private Integer refundableAmount;
+        private String paidAt;      // yyyy-MM-dd HH:mm
+        /** 이용권 등록일. PG 결제는 승인 직후 발급되므로 결제일과 사실상 같다 */
+        private String registeredAt; // yyyy-MM-dd HH:mm
+        private String validUntil;   // yyyy-MM-dd — 사용기한, 미정이면 null
     }
 
     /**

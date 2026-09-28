@@ -15,7 +15,7 @@
   <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap"
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap"
     rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
   <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
@@ -35,120 +35,88 @@
         </div>
       </header>
 
-      <!-- 상단 3단: 캐릭터/타이틀 · 문제풀이 결과 카드 · 신규 카드 -->
-      <section class="result-top">
+      <!-- 결과 패널(2026-09-28 시안 개편) — 한 장의 패널 안에 캐릭터 · 문제풀이 결과 · 획득 보상 2x2.
+           예전의 별/트로피/재도전 횟수/신규 카드 칸/독서탐험 칸은 시안에서 빠졌다. -->
+      <section class="card result-panel">
+        <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/purple.png}" alt="문제풀이 결과" />
+
         <div class="hero">
-          <!-- 새 로티 에셋은 달성 문구(리본/텍스트)까지 그림 안에 포함돼 있어서, 캐릭터 하나가
-               hero 전체를 차지한다 — 이미지 문구(ment.png)/텍스트 제목은 더 이상 쓰지 않는다
-               (2026-09-14 캐릭터 로티 도입, 2026-09-17 헤드라인 제거로 로티가 전체를 차지) -->
+          <!-- 로티 에셋에 달성 문구(리본/텍스트)까지 그려져 있어 캐릭터 하나가 hero 전체를 차지한다
+               (2026-09-14 캐릭터 로티 도입, 2026-09-17 헤드라인 제거) -->
+          <!-- 로티 2겹(2026-09-28) — 폭죽(firework.json)을 뒤에, 캐릭터를 앞에 같은 크기로 겹친다.
+               인트로 때 이 칸(heroCharacter)이 통째로 가운데로 나왔다 돌아가므로 두 로티가 함께 움직인다. -->
           <div class="hero-character" id="heroCharacter" data-grade="KING">
+            <div class="hero-fireworks-anim" id="heroFireworksAnim" aria-hidden="true"></div>
             <div class="hero-character-anim" id="heroCharacterAnim"></div>
           </div>
         </div>
 
-        <article class="card score-card">
-          <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/purple.png}" alt="문제풀이 결과" />
-
-          <div class="score-main">
-            <p class="score-num">
-              <strong id="scoreCorrect">12</strong>
-              <span class="score-slash">/</span>
-              <span class="score-total" id="scoreTotal">12</span>
-            </p>
-            <!-- 별 5개는 각각 이미지로 들어간다 — 정답률만큼 JS가 is-on을 붙이고,
-                 CSS 변수(--star-on/--star-off)에 이미지 경로만 넣으면 켜짐/꺼짐이 교체된다 -->
-            <div class="score-stars" id="scoreStars" aria-hidden="true">
-              <span class="star"></span>
-              <span class="star"></span>
-              <span class="star"></span>
-              <span class="star"></span>
-              <span class="star"></span>
-            </div>
-            <div class="score-trophy">
-              <img th:src="@{/images/student_result/trophy.png}" alt="트로피" />
-            </div>
-          </div>
-
-          <div class="score-notes">
-            <p class="score-note" id="resultTitle">문제를 다 풀었어요!</p>
-            <div class="score-retry">
-              <span>재도전 횟수</span>
-              <strong id="resultRetryText">없음</strong>
-            </div>
+        <article class="score-card">
+          <p class="score-label" id="scoreLabel">정독문제 풀이 결과</p>
+          <p class="score-num">
+            <strong id="scoreCorrect">12</strong><span class="score-total">/<span id="scoreTotal">12</span></span>
+          </p>
+          <!-- 문항 번호 동그라미 — 맞힌 문항은 초록, 틀린 문항(wrongQnums)은 빨강. JS가 totalCount만큼 채운다 -->
+          <ol class="score-dots" id="scoreDots" aria-label="문항별 결과"></ol>
+          <div class="score-guide">
+            <p class="score-guide-msg" id="resultTitle">문제를 다 풀었어요!</p>
+            <p class="score-guide-next" id="resultNext" hidden>
+              <em id="resultNextLabel"></em>를 진행해 주세요.</p>
           </div>
         </article>
 
-        <!-- 이번 제출로 카드를 새로 받은 경우에만 노출 — 카드 이미지는 서버가 내려준 cardImageUrl
-             (erp_bookstore_card_path.card_url, 미등록 책은 기본 카드로 폴백된 값)로 채운다 -->
-        <div class="new-card" id="newCard" hidden>
-          <div class="new-card-frame">
-            <img class="new-flag" th:src="@{/images/student_result/new.png}" alt="NEW" />
-            <div class="new-card-slot">
-              <img id="newCardImg" th:src="@{/images/student_result/card.png}" alt="새로 획득한 카드" />
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 획득한 보상 4종 — 도장은 아직 미구현이라 자리와 문구만 잡아둔다.
-           탐험(rewardStepNow/Total)은 올해 완독 권수/학년별 목표 권수로 2026-08-25 연동됨 -->
-      <section class="card reward-panel">
-        <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/yellow.png}" alt="획득한 보상" />
-        <div class="reward-list">
+        <!-- 획득한 보상 2x2 — 이번 결과에 해당하지 않는 칸은 숨긴다 -->
+        <section class="reward-panel">
           <div class="reward-item">
+            <p class="reward-title orange">경험치 획득!</p>
             <div class="reward-icon">
-              <!-- 학년별 메달(medal_1~6.png)로 student-result.js 가 갈아끼운다. 학년을 알기 전(=응답 도착 전)
-                   과 숫자 메달이 없는 중등/미지정에는 기존 금색 메달을 그대로 쓴다 (2026-09-15). -->
+              <!-- 학년별 메달(medal_1~6.png)로 student-result.js 가 갈아끼운다. 숫자 메달이 없는
+                   중등/미지정은 기본 금색 메달을 그대로 쓴다 (2026-09-15). -->
               <img id="rewardMedal" th:src="@{/images/student_result/medal.png}" alt="레벨 메달" />
             </div>
-            <div class="reward-body">
-              <p class="reward-title orange">레벨 성장!</p>
-              <p class="reward-value"><span class="reward-lv" id="rewardLevelNo">Lv. 2</span> <span
-                  id="rewardLevelName">독서 새싹</span></p>
-              <div class="reward-progress">
-                <div class="reward-progress-bar" id="rewardProgressBar"></div>
-              </div>
-              <p class="reward-desc" id="rewardExpDesc">다음 레벨까지 2권 남았어요!</p>
+            <div class="reward-progress">
+              <div class="reward-progress-bar" id="rewardProgressBar"></div>
             </div>
+            <p class="reward-desc" id="rewardExpDesc">다음 레벨까지 2권 남았어요!</p>
           </div>
 
-          <div class="reward-item" id="cardReward" hidden>
+          <!-- 이번 제출로 도서 카드를 새로 받은 경우에만 노출 — 이미지는 서버가 내려준 cardImageUrl
+               (erp_bookstore_card_path.card_url, 미등록 책은 기본 카드로 폴백된 값) -->
+          <div class="reward-item" id="newCard" hidden>
+            <p class="reward-title pink">도서 카드 획득!</p>
             <div class="reward-icon">
-              <img class="rare-flag" id="rareFlag" th:src="@{/images/student_result/rare.png}" alt="RARE" hidden />
-              <img class="reward-card-img" id="rewardCardImg" th:src="@{/images/student_result/treasure.png}" alt="획득한 카드" />
+              <img class="reward-card-img" id="newCardImg" th:src="@{/images/student_result/card.png}" alt="새로 획득한 카드" />
             </div>
-            <div class="reward-body">
-              <p class="reward-title pink">스페셜 카드 획득!</p>
-              <p class="reward-value" id="rewardCardName">별빛 랜턴</p>
-              <p class="reward-desc" id="rewardCardDesc">이 책의 카드를 모았어요.</p>
-            </div>
+            <p class="reward-desc">컬렉션에 추가됐어요!</p>
           </div>
 
-          <!-- 독서여권 도장 칸 — 이번 제출로 새로 받은 뱃지를 이미지로 보여준다(2026-09-01).
-               뱃지가 없으면(재제출 등) 칸 자체를 숨긴다. -->
+          <!-- 뱃지 스티커 — 이번 제출로 받은 뱃지(없으면 그 책에서 보유 중인 뱃지) -->
           <div class="reward-item" id="badgeReward" hidden>
+            <p class="reward-title blue">뱃지 스티커 획득!</p>
             <div class="reward-icon">
               <img id="rewardBadgeImg" th:src="@{/images/student_result/passport.png}" alt="획득한 뱃지" />
             </div>
-            <div class="reward-body">
-              <p class="reward-title blue">독서여권 도장!</p>
-              <p class="reward-value" id="rewardBadgeName">뱃지 획득!</p>
-              <p class="reward-desc" id="rewardBadgeDesc">읽은 책을 여권에 기록해 주세요.</p>
-            </div>
+            <p class="reward-desc"><strong id="rewardBadgeName">정독왕</strong> 스티커를 획득했어요!</p>
           </div>
 
-          <div class="reward-item" id="stepReward" hidden>
+          <!-- 숨겨진 보물 — 완독 카드 10장을 채운 순간(스페셜 카드 지급)에만 노출 -->
+          <div class="reward-item" id="cardReward" hidden>
+            <p class="reward-title violet">숨겨진 보물 발견!</p>
             <div class="reward-icon">
-              <img th:src="@{/images/student_result/map.png}" alt="독서탐험 지도" />
+              <img class="reward-card-img" id="specialCardImg" th:src="@{/images/student_result/treasure.png}" alt="스페셜 카드" />
             </div>
-            <div class="reward-body">
-              <p class="reward-title blue">독서탐험 한칸 더!</p>
-              <p class="reward-value"><strong id="rewardStepNow">35</strong> <span class="reward-step-total">/ <span
-                    id="rewardStepTotal">96</span>칸</span></p>
-              <p class="reward-desc">독서탐험이 한 단계 성장했어요!</p>
-            </div>
+            <p class="reward-desc">선생님께 카드를 받아요!</p>
           </div>
-        </div>
+
+          <!-- 스페셜 카드를 못 받았을 때 그 자리 — 10장 세트까지 남은 권수(칸)를 보여준다 -->
+          <div class="reward-item" id="treasureProgress" hidden>
+            <p class="reward-title violet">보물 발견까지 <span class="js-treasure-left">3</span>칸!</p>
+            <div class="reward-icon">
+              <img id="mysteryCardImg" th:src="@{/images/student_result/mystery_card.svg}" alt="아직 발견하지 못한 보물 카드" />
+            </div>
+            <p class="reward-desc">보물 발견까지 <span class="js-treasure-left">3</span>칸 남았어요!</p>
+          </div>
+        </section>
       </section>
 
       <div class="result-actions">
@@ -169,6 +137,21 @@
             <i class="fa-solid fa-passport" aria-hidden="true"></i>여권 작성하기</button>
         </div>
       </div>
+
+      <!-- 카드 획득 연출(2026-09-28) — 도서 카드 → 스페셜 카드 순서로 한 장씩 띄우고, 화면을 누르면 닫힌다.
+           후광이 돌고 카드가 세로축으로 빙글빙글 돈다. 문구/이미지는 JS가 장마다 채운다. -->
+      <div class="card-reveal" id="cardReveal" hidden aria-live="polite">
+        <p class="card-reveal-title" id="cardRevealTitle">도서 카드 획득!</p>
+        <p class="card-reveal-desc" id="cardRevealDesc">컬렉션에 추가됐어요!</p>
+        <div class="card-reveal-stage">
+          <div class="card-reveal-rays" aria-hidden="true"></div>
+          <div class="card-reveal-card" id="cardRevealCard">
+            <img class="card-reveal-face" id="cardRevealFront" alt="" />
+            <img class="card-reveal-face card-reveal-back" id="cardRevealBack" alt="" aria-hidden="true" />
+          </div>
+        </div>
+      </div>
+
     </main>
   </div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.12.2/lottie.min.js"></script>

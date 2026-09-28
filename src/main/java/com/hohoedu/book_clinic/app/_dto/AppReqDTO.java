@@ -21,6 +21,17 @@ public class AppReqDTO {
     }
 
     /**
+     * 보유 이용권 목록 조회.
+     *
+     * serviceCode 가 비어 있으면 컨트롤러가 BOOK 으로 본다 — 지금 앱에 이용권 화면이 있는 서비스는
+     * 책방뿐이라 앱이 값을 안 실어도 동작해야 한다(PROGRAM 은 판매 상품이 아직 없다).
+     */
+    @Data
+    public static class PassListDTO {
+        private String serviceCode; // BOOK / PROGRAM, nullable
+    }
+
+    /**
      * 달력 화면 조회 — 그 달의 회차(슬롯)를 통째로 받아 날짜별 상태를 칠한다.
      *
      * 센터는 세션의 학생에서 찾으므로 받지 않는다. "예약 완료"를 칠하려면 어차피 학생이 특정돼야

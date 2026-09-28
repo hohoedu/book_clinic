@@ -179,6 +179,7 @@ public class ClinicRespDTO {
         private boolean passed;        // 이번 제출이 합격선(2/3) 이상인지 (재도전이면 이번 재도전 기준)
         private String grade;          // 이번 제출 기준 KING / FRIEND / null — recommend_log.grade도 이 값으로 갱신됨(재도전)
         private int attemptNo;         // 이번 제출이 몇 번째 시도인지(1=첫 시도, 2=재도전 1회차...)
+        private boolean firstAttempt;  // 이 책·난이도의 첫 제출인지(기본/심화 각각) — 결과 화면 캐릭터 인트로 여부(2026-09-28)
         private int correctCount;      // 이번 제출 정답 수 (화면 표시용)
         private Integer firstCorrectCount;  // "처음 점수" — 최초 제출값 (2026-08-28, 재도전 화면에서 처음/최종 비교용)
         private Integer finalCorrectCount;  // "최종 점수" — 재도전 반영 최신값 (2026-08-28)
@@ -192,6 +193,7 @@ public class ClinicRespDTO {
         private Integer levelNo;           // 이번 완독 반영 후 현재 레벨 (합격 시에만, 아니면 null)
         private String levelTitle;         // 현재 레벨 칭호 (합격 시에만, 미시딩이면 null)
         private boolean leveledUp;         // 이번 완독으로 레벨이 올랐는지
+        private boolean levelGained;       // 이번 제출로 완독 1권이 올라갔는지(=기본 첫 제출) — 결과 화면 경험치 연출 여부(2026-09-28)
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100, 합격 시에만)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0, 합격 시에만)
         private List<BadgeDTO> newBadges;  // 이번 제출로 새로 획득한 뱃지 (결과 화면 팝업용, 없으면 빈 목록)

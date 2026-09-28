@@ -108,334 +108,317 @@
   font-size: 14px;
 }
 
-/* 리본 — 글자까지 그려진 이미지 한 장을 원본 크기 그대로 쓴다
-   (green 215x50 / purple·yellow 207x48) */
+/* 리본 — 글자까지 그려진 이미지 한 장(purple 207x48). 시안에서 패널 위 리본이 커져 폭만 키운다 */
 .ribbon-img {
   display: block;
-  width: auto;
+  width: 260px;
   height: auto;
 }
 
-/* 카드 위쪽 테두리에 걸치는 리본 */
+/* 패널 위쪽 테두리에 걸치는 리본 */
 .card-ribbon {
   position: absolute;
   left: 50%;
   top: 0;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -45%);
   z-index: 2;
 }
 
-/* 상단 3단 — 캐릭터 / 문제풀이 결과 / 신규 카드 */
-.result-top {
+/* 결과 패널(2026-09-28 시안) — 캐릭터 / 문제풀이 결과 / 획득 보상 2x2 를 한 장에 담는다 */
+.result-panel {
+  position: relative;
+  height: 606px;
+  margin-bottom: 20px;
+  padding: 66px 24px 24px 36px; 
   display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  gap: 36px;
-  margin-bottom: 50px; 
+  grid-template-columns: 1fr 1fr 1fr;
+  /* 행을 패널 높이에 못박는다 — auto면 카드·뱃지 원본 이미지 크기만큼 늘어나 패널 밖으로 넘친다 */
+  grid-template-rows: minmax(0, 1fr);
+  gap: 40px;
+  background: #fffdf6;
 }
 
-/* 왼쪽: 캐릭터 로티 하나로 hero 전체를 채운다 — 리본/문구가 그림 안에 포함된 새 에셋이라
-   더 이상 문구 자리를 따로 둘 필요가 없다(2026-09-17).
-   min-height는 헤드라인이 있던 예전 hero 총높이(패딩62+헤드라인78+gap12+캐릭터233=385)와
-   맞춰뒀다 — 안 그러면 result-top 행 높이가 가운데 score-card(~320px) 기준으로 줄어들면서
-   아래 보상패널·버튼까지 전부 위로 딸려 올라간다. */
+/* 왼쪽: 캐릭터 로티 — 달성 문구가 그림 안에 포함돼 있다 */
+/* 로티 뒤에 책더미(bookpile.png, 1254 정사각·투명배경)를 바닥에 깔아 캐릭터가 책 위에 선 것처럼 보이게 한다 */
 .hero {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  min-height: 385px;
-}
-
-/* 캐릭터 자리 — hero 전체. 로티 자체는 scale(1.4)로 작게 유지하고, 이 박스 안에서
-   가운데 정렬만 된다. */
-.hero-character {
-  flex: 1;
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 0;
+  background: url("/images/student_result/bookpile.png") center bottom / 100% auto no-repeat;
 }
 
-.hero-character img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-.hero-character-anim {
+.hero-character {
+  position: relative;
   width: 100%;
   height: 100%;
-  transform: scale(1.2);
 }
 
+/* 폭죽(뒤)·캐릭터(앞) 로티를 같은 자리·크기로 겹친다 — 둘 다 900x900 원본 */
+.hero-fireworks-anim,
+.hero-character-anim {
+  position: absolute;
+  inset: 0;
+  transform: scale(1.5);
+}
+
+.hero-fireworks-anim { z-index: 0; }
+.hero-character-anim { z-index: 1; }
+
+.hero-fireworks-anim svg,
 .hero-character-anim svg {
   display: block;
 }
 
-/* 가운데: 문제풀이 결과 카드 — 결과 화면의 주인공이라 다른 패널보다 그림자를 깊게 줘서 띄운다
-   (넓게 퍼지는 그림자 + 바닥에 닿는 짧은 그림자 + 안쪽 위 하이라이트) */
+/* 캐릭터 인트로(2026-09-28) — 결과 화면에 들어오자마자 캐릭터 칸이 화면 가운데에 크게 나와 머물고,
+   탭하면 제자리로 돌아와 붙는다. student-result.js playHeroIntro가 --fly-dx/dy(.page 좌표 기준 가운데까지
+   거리)·--fly-scale을 넣고 appear → (탭) → return 순으로 클래스를 바꾼다. 로티는 복제하면 멈춘 그림이
+   되므로 복제본 없이 실제 칸을 움직인다. 다른 패널 위로 올라오도록 인트로 동안만 z-index를 올린다. */
+.hero-character.hero-intro-appear,
+.hero-character.hero-intro-return {
+  z-index: 60;
+}
+
+/* both — 등장이 끝나도 가운데 큰 상태로 머문다(탭 대기) */
+.hero-character.hero-intro-appear {
+  animation: hero-intro-appear .55s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+
+.hero-character.hero-intro-return {
+  animation: hero-intro-return .9s both;
+}
+
+@keyframes hero-intro-appear {
+  from {
+    opacity: 0;
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(calc(var(--fly-scale) * .6));
+  }
+  to {
+    opacity: 1;
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+  }
+}
+
+@keyframes hero-intro-return {
+  0% {
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+    animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+  }
+  68% {
+    transform: translate(0, 0) scale(.94);
+    animation-timing-function: ease-out;
+  }
+  84% {
+    transform: translate(0, 0) scale(1.05);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+
+/* 가운데: 문제풀이 결과 카드 */
 .score-card {
-  position: relative;
-  padding: 42px 30px 26px;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  gap: 20px;
+  min-height: 0;
+  padding: 44px 24px 0;   /* 아래 여백은 0 — 안내 문구가 구분선~카드 바닥 사이 정가운데에 오도록 */
+  border: 1px solid #efece3;
+  border-radius: 16px;
   background: #fff;
-  border: 1px solid rgba(160, 107, 214, .16);
-  box-shadow:
-    14px 16px 28px rgba(93, 75, 36, .18),
-    6px 6px 10px rgba(93, 75, 36, .10);
-}
-
-.score-main {
-  display: grid;
-  grid-template-columns: 1fr 150px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 20px;
 }
 
-.score-num {
+.score-label {
   margin: 0;
+  padding: 7px 18px;
+  border-radius: 999px;
+  background: #1fa652;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+/* 점수는 주아체(student-question.css와 같은 로드 방식) — 주아는 굵기가 하나뿐이라 400으로 둔다.
+   900을 주면 브라우저가 가짜 볼드를 덧그려 글자가 뭉개진다. */
+.score-num {
+  margin: 30px 0 0;
   display: flex;
   align-items: baseline;
-  justify-content: center;
-  gap: 10px;
   line-height: 1;
-  font-weight: 900;
-  color: #6b6b6b;
-  font-size: 56px;
+  font-family: 'Jua', 'Noto Sans KR', sans-serif;
+  font-weight: 400;
 }
 
 .score-num strong {
-  font-size: 76px;
-  color: var(--purple);
+  font-weight: 400;   /* strong 기본 bold → 주아 가짜 볼드 방지 */
+  font-size: 88px;
+  color: #1fa652;
+  letter-spacing: -2px;
 }
 
-.score-slash { color: #cfcfcf; }
+.score-total {
+  font-size: 64px;
+  color: #3a3a3a;
+}
 
-/* 별 5개 — 정답률만큼 JS가 is-on을 붙여 금색/회색 별 이미지를 교체한다
-   (두 이미지 모두 배경 투명 64x64로 맞춰둠) */
-.score-stars {
-  grid-column: 1;
-  grid-row: 2;
-  --star-on: url("/images/student_result/star.png");
-  --star-off: url("/images/student_result/gray_star.png");
-  display: flex;
+/* 문항 번호 — 한 줄 6개, 맞힘 연두 / 틀림 빨강 */
+.score-dots {
+  list-style: none;
+  margin: 34px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(6, 30px);
+  gap: 12px 13px;
   justify-content: center;
-  gap: 8px;
-  margin-top: 14px;
 }
 
-.score-stars .star {
-  width: 34px;
-  height: 34px;
-  background: var(--star-off) center / contain no-repeat;
-}
-
-.score-stars .star.is-on {
-  background-image: var(--star-on);
-}
-
-/* 트로피 자리(150px) 안에 이미지(원본 112x132)를 비율대로 담는다 */
-.score-trophy {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  height: 150px;
+.score-dots li {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #9dd24a;
+  color: #fff;
+  font-family: 'Jua', 'Noto Sans KR', sans-serif;   /* 점수와 같은 주아체 — 굵기 하나뿐이라 400 */
+  font-size: 15px;
+  font-weight: 400;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.score-trophy img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
+.score-dots li.is-wrong {
+  background: #e8392a;
 }
 
-.score-notes {
-  display: grid;
-  grid-template-columns: 1fr 150px;
-  gap: 14px;
-}
-
-.score-note,
-.score-retry {
-  margin: 0;
-  min-height: 82px;
-  padding: 14px 16px;
-  border: 1px solid #ece9f3;
-  border-radius: 12px;
-  background: #fff;
+/* margin-top:auto로 카드 바닥에 붙는다 — 이 칸의 높이(구분선 위 여백 + 문구 2줄)가 곧 구분선 위치다 */
+/* 구분선(위 테두리)은 번호 아래 40px에 두고, 그 아래 남은 공간을 전부 차지해 문구를 위아래 가운데에 놓는다 */
+.score-guide {
+  margin-top: 40px;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  gap: 6px;
+  width: 100%;
+  border-top: 1px solid #e6e3da;
   text-align: center;
-  font-size: 15px;
-  font-weight: 700;
-  color: #555;
-  line-height: 1.5;
+  font-size: 16px;
+  font-weight: 500;   /* 본문은 보통 굵기로 두어 아래 “버튼 이름” 강조가 확실히 두드러지게 한다 */
+  color: #333;
+  line-height: 1.7;
   word-break: keep-all;
 }
 
-.score-retry span {
-  color: #8c8c8c;
-  font-size: 14px;
-  font-weight: 700;
+.score-guide p { margin: 0; }
+
+.score-card .score-guide-next {
+ white-space:nowrap;  
 }
 
-.score-retry strong {
-  font-size: 16px;
+.score-guide-next em {
+  font-style: normal;
   font-weight: 900;
-  color: var(--red);
+  font-size: 17px;
+  color: #e8392a;
 }
 
-/* 오른쪽: 새로 획득한 카드 */
-.new-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.new-card-frame {
-  position: relative;
-  flex: 1;
-  width: 100%;
+/* 오른쪽: 획득한 보상 2x2 */
+.reward-panel {
+  padding: 22px;
+  border-radius: 12px;
+  background: #fff6d6;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  gap: 20px;
   min-height: 0;
 }
 
-/* 카드 자리(영역 크기 고정) 안에 카드 이미지(원본 285x371)를 비율대로 맞춰 담는다 */
-.new-card-slot {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.new-card-slot img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-}
-
-/* NEW 말풍선(원본 92x55) — 카드 왼쪽 위 모서리에 겹치는 오버레이 */
-.new-flag {
-  position: absolute;
-  left: 0px;
-  top: 0px;
-  z-index: 2;
-  width: 84px;
-  height: auto;
-  display: block;
-}
-
-.new-card-caption {
-  margin: -26px 0 0;
-  font-size: 14px;
-  font-weight: 800;
-  color: #01423A;
-}
-
-/* 획득한 보상 패널 */
-.reward-panel {
-  position: relative;
-  height: 200px;
-  padding: 40px 22px 22px;
-  margin-bottom: 16px;
-}
-
-/* cardReward는 새 카드를 획득했을 때만 보인다 — 평소엔 3칸만 채워지는데, grid는 빈 4번째 칸을
-   그대로 두어 3개가 왼쪽으로 쏠려 보인다. flex + justify-content: center로 항목 개수와 무관하게
-   패널 안에서 가운데로 모이게 한다(2026-08-25). */
-.reward-list {
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  gap: 16px;
-}
-
 .reward-item {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid #eceae2;
-  border-radius: 14px;
+  padding: 18px 12px 16px;
+  border-radius: 10px;
   background: #fff;
-  flex: 0 1 calc(25% - 12px); /* 4칸 기준 폭(gap 16px*3 분배)을 유지해 4개 다 찼을 때는 기존 grid와 동일하게 보인다 */
-}
-
-/* 보상 아이콘 칸(76x84) — 아이콘 원본 크기가 제각각이라(medal 76x78 / passport 87x85 /
-   map 83x74 / treasure 964x1337) 칸을 못박고 그 안에 비율대로 맞춰 담는다 */
-.reward-icon {
-  position: relative;
-  height: 84px;
+  box-shadow: 0 2px 6px rgba(93, 75, 36, .08);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  text-align: center;
+  min-height: 0;
 }
 
-.reward-icon img {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
+/* 연출 대기 중인 칸 — 흰 칸만 남기고 내용을 비워 둔다(자리는 유지). 착지하면 JS가 풀고 fx-slot-landed로
+   살짝 튕긴다(student-result.js markPendingSlots / revealSlot) */
+.reward-item.fx-slot-pending > * {
+  visibility: hidden;
 }
 
-.reward-card-img {
-  border-radius: 6px;
+.reward-item.fx-slot-landed {
+  animation: fx-slot-land .45s cubic-bezier(.34, 1.56, .64, 1);
 }
 
-/* RARE 라벨(원본 91x55)은 카드 이미지 위에 겹치는 오버레이 */
-.rare-flag {
-  position: absolute;
-  left: -10px;
-  top: -8px;
-  z-index: 2;
-  width: 52px;
-  max-width: none;
+/* 제목·문구만 페이드인 — 아이콘·바는 복제본이 사라지는 순간 그대로 이어받아야 깜빡이지 않는다 */
+.reward-item.fx-slot-landed > :not(.reward-icon):not(.reward-progress) {
+  animation: reveal-fade-in .3s ease-out both;
 }
 
-.reward-body { min-width: 0; }
+@keyframes fx-slot-land {
+  0% { transform: scale(.94); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+/* 카드 칸 — 누르면 획득 연출을 다시 보여준다 */
+.reward-item.is-replayable {
+  cursor: pointer;
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+
+.reward-item.is-replayable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(93, 75, 36, .14);
+}
+
+.reward-item.is-replayable:active {
+  transform: translateY(1px) scale(.98);
+}
 
 .reward-title {
-  margin: 0 0 6px;
-  font-size: 14px;
-  font-weight: 900;
-}
-
-.reward-title.orange { color: var(--orange); }
-.reward-title.pink { color: #e957a8; }
-.reward-title.blue { color: #0a7fc8; }
-
-.reward-value {
   margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: #444;
+  font-size: 17px;
+  font-weight: 800;
 }
 
-.reward-value strong {
-  font-size: 26px;
-  color: #0a7fc8;
+.reward-title.orange { color: #f07c12; }
+.reward-title.pink { color: #d9387e; }
+.reward-title.blue { color: #2b73d6; }
+.reward-title.violet { color: #8e4cc2; }
+
+/* 아이콘 칸 — 원본 크기가 제각각이라 칸을 못박고 비율대로 담는다 */
+.reward-icon {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  margin: 10px 0;
 }
 
-.reward-step-total {
-  font-size: 15px;
-  color: #8c8c8c;
+/* 칸 높이가 flex로 정해지므로 max-height:%가 안 먹는다 — 칸에 절대배치로 채우고 비율 유지 */
+.reward-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
-.reward-lv {
-  color: var(--orange);
-}
+
 
 .reward-progress {
-  margin: 8px 0 6px;
+  width: 136px;
   height: 8px;
+  margin: 0 0 12px;
   border-radius: 99px;
-  background: #eee9dc;
+  background: #ebebeb;
   overflow: hidden;
 }
 
@@ -443,16 +426,22 @@
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--orange);
+  background: #f07c12;
 }
 
 .reward-desc {
   margin: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: #8c8c8c;
+  font-size: 14px;
+  font-weight: 500;
+  color: #333;
   line-height: 1.4;
   word-break: keep-all;
+  white-space: nowrap;
+}
+
+.reward-desc strong {
+  font-weight: 800;
+  color: #2b73d6;
 }
 
 /* 하단 버튼 줄 */
@@ -576,3 +565,206 @@
   background: var(--blue, #0988d8);
   color: #fff;
 }
+
+/* ── 카드 획득 연출(2026-09-28) ─────────────────────────────────────────────
+   어두운 막 위에 제목/문구 + 후광 + 세로축으로 도는 카드. 누르면 JS가 is-leaving을 붙여 퇴장. */
+.card-reveal {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 34px;
+  background: rgba(20, 20, 20, .62);
+  cursor: pointer;   /* 누르면 닫힌다 */
+  animation: reveal-fade-in .3s ease-out both;
+}
+
+.card-reveal.is-leaving {
+  animation: reveal-fade-out .4s ease-in both;
+}
+
+.card-reveal-title {
+  margin: 0;
+  font-size: 50px;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: -1px;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, .25), 0 0 18px rgba(0, 0, 0, .3);
+  animation: reveal-pop .45s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+
+.card-reveal-desc {
+  margin: 6px 0 0;
+  font-size: 19px;
+  font-weight: 600;
+  color: #fff;
+  animation: reveal-fade-in .4s .15s ease-out both;
+}
+
+.card-reveal-stage {
+  position: relative;
+  margin-top: 18px;
+  width: 430px;
+  height: 572px;
+  perspective: 1400px;
+}
+
+/* 후광 — 원뿔 그라데이션 빛줄기를 가장자리로 흐리게 지우고 천천히 돌린다 */
+.card-reveal-rays {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1000px;
+  height: 1000px;
+  margin: -500px 0 0 -500px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(255, 244, 170, .75) 0%, rgba(255, 236, 140, .25) 30%, transparent 60%),
+    repeating-conic-gradient(rgba(255, 240, 160, .5) 0deg 9deg, transparent 9deg 24deg);
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  mask-image: radial-gradient(circle, #000 18%, transparent 62%);
+  animation:
+    reveal-rays-in .5s ease-out both,
+    reveal-rays-spin 9s linear infinite;
+}
+
+/* 카드 — 앞/뒷면 두 장을 겹쳐 돌 때 뒤집힌(좌우반전) 그림 대신 같은 그림이 보이게 한다.
+   등장하며 커지고, 세 바퀴 돈 뒤 앞면에서 천천히 멈춘다. */
+.card-reveal-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: reveal-card-spin 2.4s cubic-bezier(.2, .7, .3, 1) both;
+}
+
+.card-reveal-face {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  filter: drop-shadow(0 10px 24px rgba(0, 0, 0, .35));
+}
+
+.card-reveal-back {
+  transform: rotateY(180deg);
+}
+
+@keyframes reveal-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes reveal-fade-out { from { opacity: 1; } to { opacity: 0; } }
+
+@keyframes reveal-pop {
+  from { opacity: 0; transform: scale(.6); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes reveal-rays-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes reveal-rays-spin {
+  to { rotate: 360deg; }
+}
+
+@keyframes reveal-card-spin {
+  0% { opacity: 0; transform: scale(.3) rotateY(0deg); }
+  12% { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) rotateY(1080deg); }
+}
+
+/* ── 경험치 연출(2026-09-28) — 메달·바 복제본은 아래 공용 fly- 클래스로 움직인다 ── */
+/* 복제본 바가 차오르는 속도 — 보상 칸의 원본 바에는 붙지 않는다 */
+.exp-fill-anim {
+  transition: width .9s cubic-bezier(.22, 1, .36, 1);
+  box-shadow: 0 0 8px rgba(255, 170, 60, .9);
+}
+
+/* ── 제자리 안착 연출 공용(2026-09-28) ───────────────────────────────────────
+   student-result.js가 원본(뱃지 img / 경험치 메달·바)을 복제해 body에 붙인다. 복제본은 원본 자리·크기에
+   겹쳐 놓이고, --fly-dx/dy(가운데까지 거리)·--fly-scale(가운데에서의 배율)로 시작해 제자리
+   (translate 0, scale 1)로 돌아온다. 기존 클래스와 섞이지 않게 fly- 접두사로 분리한다.
+
+   안착 배율은 원본 대비 0.87 → 1.19 → 0.92 → 1
+   (기획서 0.45→0.62→0.48→0.52 를 0.52=1 기준으로 환산) — 살짝 튕긴 뒤 "착" 붙는다. */
+.fly-origin-hidden {
+  visibility: hidden;   /* 자리(레이아웃)는 그대로 두고 그림만 잠깐 숨긴다 */
+}
+
+.fly-clone {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  pointer-events: none;
+  transform-origin: center center;
+  will-change: transform, opacity;
+}
+
+img.fly-clone {
+  object-fit: contain;
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .25));
+}
+
+/* 연출 중 화면 전체를 덮는 투명 막 — 탭을 받아 "바로 제자리로"를 트리거하고, 탭이 아래 버튼으로
+   새지 않게 막는다(student-result.js openTapCatcher). 복제본(1000)보다 아래, 페이지보다 위. */
+.fx-tap-catcher {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  cursor: pointer;
+  background: transparent;
+}
+
+/* 가운데로 떠오르기(경험치·뱃지) */
+.fly-clone.fly-appear {
+  animation: fly-appear .4s ease-out both;
+}
+
+/* 가운데에 머무르기(경험치 바가 차는 동안) */
+.fly-clone.fly-hold {
+  transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+}
+
+/* 가운데 → 제자리(경험치·뱃지) */
+.fly-clone.fly-return {
+  animation: fly-return .9s both;
+}
+
+@keyframes fly-appear {
+  from {
+    opacity: 0;
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(calc(var(--fly-scale) * .6));
+  }
+  to {
+    opacity: 1;
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+  }
+}
+
+@keyframes fly-return {
+  0% {
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+    animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+  }
+  70% {
+    transform: translate(0, 0) scale(.87);
+    animation-timing-function: ease-out;
+  }
+  82% {
+    transform: translate(0, 0) scale(1.19);
+    animation-timing-function: ease-in-out;
+  }
+  92% {
+    transform: translate(0, 0) scale(.92);
+    animation-timing-function: ease-out;
+  }
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+}
+

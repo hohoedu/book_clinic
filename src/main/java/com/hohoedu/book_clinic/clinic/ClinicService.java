@@ -682,6 +682,8 @@ public class ClinicService {
         }
 
         ClinicRespDTO.QuizSubmitRespDTO resp = new ClinicRespDTO.QuizSubmitRespDTO();
+        // attemptNo는 "틀린 문제 다시 풀기" 1회차에도 1이라 첫 제출을 가려내지 못해 따로 내려준다
+        resp.setFirstAttempt(firstAttempt);
         // 결과 화면의 "재도전 N번째"(attemptNo - 1) — "틀린 문제 다시 풀기"는 점수에는 반영돼도
         // 재도전 횟수는 올리지 않으므로(2026-09-21) 이번 제출이 WRONG_ONLY면 회차를 그대로 둔다.
         int priorRetryRounds = clinicRepository.countRetryRounds(logStatus.getRecommendId(), resolvedQlevel);
@@ -822,6 +824,9 @@ public class ClinicService {
         int doneNow = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
         applyLevelStatus(resp, schoolyear, doneNow);
         applyStepStatus(resp, studentId, schoolyear);
+        // 완독 권수는 첫 제출에서만 오른다 — 재도전·틀린문제 재제출은 합격 여부와 무관하게 권수가 그대로다.
+        // alreadyCompleted(합격했던 책의 재제출)만으로는 "불합격 후 재도전"을 걸러내지 못해 따로 내려준다.
+        resp.setLevelGained(firstAttempt);
 
         if (firstAttempt) {
             // 완독(또는 첫 제출)해도 여기서 책을 반납하지 않는다(2026-07-31, 재도전 대비) — 반납은
