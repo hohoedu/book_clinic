@@ -344,7 +344,8 @@
         }
         localStorage.clear();
         sessionStorage.clear();
-        window.location.replace('/student');
+        // 바로 QR 화면으로 가지 않고 로그아웃 안내 화면을 거친다(2026-09-30)
+        window.location.replace('/student/goodbye?type=passport');
       };
 
       // 버튼을 전부 끈 뒤 이 단계에 필요한 것만 켠다

@@ -37,7 +37,9 @@
 
       <!-- 결과 패널(2026-09-28 시안 개편) — 한 장의 패널 안에 캐릭터 · 문제풀이 결과 · 획득 보상 2x2.
            예전의 별/트로피/재도전 횟수/신규 카드 칸/독서탐험 칸은 시안에서 빠졌다. -->
-      <section class="card result-panel">
+      <!-- is-loading — 결과를 받아 다 채울 때까지 점수·보상 칸을 숨긴다(2026-09-30). 예시 값(12/12 등)이
+           잠깐 보였다가 바뀌는 깜빡임을 없애려고 아래 값들도 전부 비워 둔다. student-result.js init이 뗀다. -->
+      <section class="card result-panel is-loading" id="resultPanel">
         <img class="ribbon-img card-ribbon" th:src="@{/images/student_result/purple.png}" alt="문제풀이 결과" />
 
         <div class="hero">
@@ -52,14 +54,14 @@
         </div>
 
         <article class="score-card">
-          <p class="score-label" id="scoreLabel">정독문제 풀이 결과</p>
+          <p class="score-label" id="scoreLabel"></p>
           <p class="score-num">
-            <strong id="scoreCorrect">12</strong><span class="score-total">/<span id="scoreTotal">12</span></span>
+            <strong id="scoreCorrect"></strong><span class="score-total">/<span id="scoreTotal"></span></span>
           </p>
           <!-- 문항 번호 동그라미 — 맞힌 문항은 초록, 틀린 문항(wrongQnums)은 빨강. JS가 totalCount만큼 채운다 -->
           <ol class="score-dots" id="scoreDots" aria-label="문항별 결과"></ol>
           <div class="score-guide">
-            <p class="score-guide-msg" id="resultTitle">문제를 다 풀었어요!</p>
+            <p class="score-guide-msg" id="resultTitle"></p>
             <p class="score-guide-next" id="resultNext" hidden>
               <em id="resultNextLabel"></em>를 진행해 주세요.</p>
           </div>
@@ -70,14 +72,14 @@
           <div class="reward-item">
             <p class="reward-title orange">경험치 획득!</p>
             <div class="reward-icon">
-              <!-- 학년별 메달(medal_1~6.png)로 student-result.js 가 갈아끼운다. 숫자 메달이 없는
-                   중등/미지정은 기본 금색 메달을 그대로 쓴다 (2026-09-15). -->
-              <img id="rewardMedal" th:src="@{/images/student_result/medal.png}" alt="레벨 메달" />
+              <!-- 레벨 메달(medal_{레벨}.png)을 student-result.js 가 넣는다. 그 레벨 이미지가 아직 없으면
+                   기본 금색 메달. 기본 메달을 src로 박아두면 레벨 메달로 바뀌며 깜빡여서 비워 둔다 (2026-09-30). -->
+              <img id="rewardMedal" alt="레벨 메달" />
             </div>
             <div class="reward-progress">
               <div class="reward-progress-bar" id="rewardProgressBar"></div>
             </div>
-            <p class="reward-desc" id="rewardExpDesc">다음 레벨까지 2권 남았어요!</p>
+            <p class="reward-desc" id="rewardExpDesc"></p>
           </div>
 
           <!-- 이번 제출로 도서 카드를 새로 받은 경우에만 노출 — 이미지는 서버가 내려준 cardImageUrl
@@ -96,7 +98,7 @@
             <div class="reward-icon">
               <img id="rewardBadgeImg" th:src="@{/images/student_result/passport.png}" alt="획득한 뱃지" />
             </div>
-            <p class="reward-desc"><strong id="rewardBadgeName">정독왕</strong> 스티커를 획득했어요!</p>
+            <p class="reward-desc"><strong id="rewardBadgeName"></strong> 스티커를 획득했어요!</p>
           </div>
 
           <!-- 숨겨진 보물 — 완독 카드 10장을 채운 순간(스페셜 카드 지급)에만 노출 -->
@@ -110,11 +112,11 @@
 
           <!-- 스페셜 카드를 못 받았을 때 그 자리 — 10장 세트까지 남은 권수(칸)를 보여준다 -->
           <div class="reward-item" id="treasureProgress" hidden>
-            <p class="reward-title violet">보물 발견까지 <span class="js-treasure-left">3</span>칸!</p>
+            <p class="reward-title violet">보물 발견까지 <span class="js-treasure-left"></span>칸!</p>
             <div class="reward-icon">
               <img id="mysteryCardImg" th:src="@{/images/student_result/mystery_card.svg}" alt="아직 발견하지 못한 보물 카드" />
             </div>
-            <p class="reward-desc">보물 발견까지 <span class="js-treasure-left">3</span>칸 남았어요!</p>
+            <p class="reward-desc">보물 발견까지 <span class="js-treasure-left"></span>칸 남았어요!</p>
           </div>
         </section>
       </section>

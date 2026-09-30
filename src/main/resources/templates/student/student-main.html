@@ -144,8 +144,8 @@
             <div class="level-name">
               <!-- 레벨은 메달 아이콘 + "Lv. n"을 한 줄로 (2026-09-02, 기존 보라색 알약 pill 대체).
                    성장 단계(levelName) 문구는 노출하지 않는다.
-                   메달은 학년별(medal_1~6.png, 그림에 학년 숫자가 박혀 있다)이다 — 숫자가 없는 중등/학년
-                   미지정은 medalImg 가 null 이라 메달 없이 "Lv. n" 만 나온다 (2026-09-15). -->
+                   메달은 레벨별(medal_{레벨}.png, 그림에 "Lv. n"이 박혀 있다)이다 — 그 레벨 이미지가 아직
+                   없으면 medalImg 가 null 이라 메달 없이 "Lv. n" 만 나온다 (2026-09-30). -->
               <p class="level-no">
                 <img class="level-medal" th:if="${medalImg}" th:src="@{${medalImg}}" alt="" aria-hidden="true" />
                 <span th:text="|Lv. ${levelNo}|">Lv. 3</span>

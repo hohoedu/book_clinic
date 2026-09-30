@@ -580,6 +580,8 @@
       merged.attemptNo = src.attemptNo;
       merged.levelNo = src.levelNo;
       merged.levelTitle = src.levelTitle;
+      merged.medalImg = src.medalImg;
+      merged.prevMedalImg = src.prevMedalImg;
       merged.progressPercent = src.progressPercent;
       merged.booksToNextLevel = src.booksToNextLevel;
       merged.stepNow = src.stepNow;

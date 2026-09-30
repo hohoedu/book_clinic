@@ -125,6 +125,12 @@
 }
 
 /* 결과 패널(2026-09-28 시안) — 캐릭터 / 문제풀이 결과 / 획득 보상 2x2 를 한 장에 담는다 */
+/* 결과를 받아 채우기 전(is-loading)엔 점수·보상 칸을 숨긴다 — 자리(레이아웃)는 유지(2026-09-30) */
+.result-panel.is-loading .score-card,
+.result-panel.is-loading .reward-panel {
+  visibility: hidden;
+}
+
 .result-panel {
   position: relative;
   height: 606px;
@@ -145,7 +151,8 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  background: url("/images/student_result/bookpile.png") center bottom / 100% auto no-repeat;
+  /* 바닥에서 살짝 띄워 캐릭터 발과 맞춘다 — 올리려면 bottom 뒤 값을 키운다 */
+  background: url("/images/student_result/bookpile.png") center bottom 40px / 100% auto no-repeat;
 }
 
 .hero-character {
@@ -685,6 +692,121 @@
   box-shadow: 0 0 8px rgba(255, 170, 60, .9);
 }
 
+/* ── 레벨업 연출(2026-09-30) — student-result.js createLevelUp ─────────────────
+   메달 복제본(z 1000)을 사이에 두고 뒤(.levelup-fx, 999)에 충격파·별가루, 앞(.levelup-text, 1001)에
+   "LEVEL UP!" 글자를 붙인다. 크기는 가운데 메달 높이(--medal-size) 기준이라 화면 크기와 무관하게 맞는다.
+   빛줄기는 넣지 않는다(2026-09-30 요청). */
+.levelup-fx {
+  position: fixed;
+  z-index: 999;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+/* 충격파 — 메달 테두리에서 금빛 고리가 퍼져 나가며 사라진다 */
+.levelup-ring {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--medal-size);
+  height: var(--medal-size);
+  border-radius: 50%;
+  border: calc(var(--medal-size) * .05) solid #ffd84a;
+  box-shadow: 0 0 24px rgba(255, 216, 74, .9), inset 0 0 18px rgba(255, 216, 74, .6);
+  transform: translate(-50%, -50%) scale(.8);
+  opacity: 0;
+  animation: levelup-ring .8s cubic-bezier(.2, .8, .3, 1) forwards;
+}
+
+/* 별가루 — 가운데에서 사방으로 튀어 나갔다가 반짝이며 사라진다(--a 방향, --d 거리 배율) */
+.levelup-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: calc(var(--medal-size) * .09);
+  height: calc(var(--medal-size) * .09);
+  margin: calc(var(--medal-size) * -.045) 0 0 calc(var(--medal-size) * -.045);
+  background: #ffe066;
+  clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+  filter: drop-shadow(0 0 4px rgba(255, 220, 90, .95));
+  opacity: 0;
+  animation: levelup-spark 1s var(--delay, 0ms) cubic-bezier(.15, .8, .35, 1) forwards;
+}
+
+.levelup-spark:nth-child(3n) { background: #fff6c2; }
+.levelup-spark:nth-child(3n + 1) { background: #ffb347; }
+
+/* 글자 — 메달 바로 위에서 튕기며 나타난다 */
+.levelup-text {
+  position: fixed;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  white-space: nowrap;
+  transform: translate(-50%, -100%);
+}
+
+.levelup-text strong {
+  font-size: calc(var(--medal-size) * .24);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .02em;
+  color: #ffe14d;
+  -webkit-text-stroke: calc(var(--medal-size) * .012) #e0701c;
+  paint-order: stroke fill;
+  text-shadow: 0 4px 0 #b8520f, 0 8px 18px rgba(0, 0, 0, .35);
+  animation: levelup-text-pop .55s cubic-bezier(.34, 1.56, .64, 1) both;
+}
+
+.levelup-text span {
+  order: -1;
+  margin-bottom: 4px;
+  font-size: calc(var(--medal-size) * .1);
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, .4);
+  animation: reveal-fade-in .4s .25s ease-out both;
+}
+
+.levelup-fx.is-leaving,
+.levelup-text.is-leaving {
+  animation: reveal-fade-out .3s ease-in both;
+}
+
+/* 메달 — 번쩍 밝아지며 튕긴다. 복제본의 transform(가운데 위치·배율)은 건드리지 않도록
+   독립 속성 scale 로 튕긴다. 20% 지점에서 JS 가 새 레벨 메달로 바꾼다(LEVELUP_SWAP_MS). */
+img.fly-clone.levelup-pop {
+  animation: levelup-pop .8s ease-out;
+}
+
+@keyframes levelup-pop {
+  0% { scale: 1; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .25)) brightness(1); }
+  20% { scale: 1.22; filter: drop-shadow(0 0 28px rgba(255, 230, 120, 1)) brightness(1.9); }
+  45% { scale: .94; filter: drop-shadow(0 0 20px rgba(255, 230, 120, .8)) brightness(1.2); }
+  70% { scale: 1.05; }
+  100% { scale: 1; filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .25)) brightness(1); }
+}
+
+@keyframes levelup-ring {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(.8); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(2.1); }
+}
+
+@keyframes levelup-spark {
+  0% { opacity: 0; transform: rotate(var(--a)) translateY(0) scale(.4); }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--medal-size) * -1 * var(--d))) scale(1) rotate(180deg); }
+}
+
+@keyframes levelup-text-pop {
+  0% { opacity: 0; transform: translateY(20%) scale(.4); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 /* ── 제자리 안착 연출 공용(2026-09-28) ───────────────────────────────────────
    student-result.js가 원본(뱃지 img / 경험치 메달·바)을 복제해 body에 붙인다. 복제본은 원본 자리·크기에
    겹쳐 놓이고, --fly-dx/dy(가운데까지 거리)·--fly-scale(가운데에서의 배율)로 시작해 제자리
@@ -728,6 +850,69 @@ img.fly-clone {
 /* 가운데에 머무르기(경험치 바가 차는 동안) */
 .fly-clone.fly-hold {
   transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+}
+
+/* 보상을 크게 보여주는 동안 한 번만 까는 어두운 막(2026-09-30) — 카드·경험치·뱃지가 바뀔 때마다 배경이
+   밝아졌다 어두워지며 끊겨 보이지 않게 한다. 카드 막(.card-reveal, z 100)보다 아래, .page 안에 둔다.
+   이 막이 깔린 동안엔 카드 막 자체의 어두운 배경을 끈다. */
+.fx-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 99;
+  background: rgba(20, 20, 20, .62);
+  pointer-events: none;
+  animation: reveal-fade-in .3s ease-out both;
+}
+
+.fx-backdrop.is-leaving {
+  animation: reveal-fade-out .4s ease-in both;
+}
+
+.page.fx-dimmed .card-reveal {
+  background: transparent;
+}
+
+/* 자기 칸에서 붙기(2026-09-30) — 살짝 크게 흐릿하게 나타나며 줄어들어 한 번만 부드럽게 튕기고 멈춘다 */
+.fly-clone.fly-land {
+  animation: fly-land .6s cubic-bezier(.22, 1, .36, 1) both;
+}
+
+@keyframes fly-land {
+  0% {
+    opacity: 0;
+    transform: scale(var(--fly-scale));
+  }
+  45% {
+    opacity: 1;
+  }
+  70% {
+    transform: scale(.96);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* 복제본이 이미 튕기므로 칸(흰 박스)은 튕기지 않고 제목·문구만 페이드인한다 */
+.reward-item.fx-slot-landed.fx-no-bounce {
+  animation: none;
+}
+
+/* 확인(탭) 뒤 가운데에서 흐리게 사라지기 — 제자리 안착은 모든 보상 확인 후 따로 한다(2026-09-30) */
+.fly-clone.fly-leave {
+  animation: fly-leave .3s ease-in both;
+}
+
+@keyframes fly-leave {
+  from {
+    opacity: 1;
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(var(--fly-scale));
+  }
+  to {
+    opacity: 0;
+    transform: translate(var(--fly-dx), var(--fly-dy)) scale(calc(var(--fly-scale) * .85));
+  }
 }
 
 /* 가운데 → 제자리(경험치·뱃지) */

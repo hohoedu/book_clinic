@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -123,19 +124,20 @@ public class ClinicService {
     );
 
     /**
-     * 학년별 메달 이미지 — 메달 그림에 학년 숫자(1~6)가 그려져 있어 초1~초6만 존재한다.
-     * 중등(07)이나 학년 미지정은 null 을 내려 화면에서 메달 없이 "Lv. n" 만 노출한다
-     * (엉뚱한 숫자가 박힌 메달을 보여주는 것보다 낫다). medal_sm 은 표시용 축소본(104x104)이고
-     * 원본 /images/medal_N.png 는 1254x1254 라 아이콘 용도로는 쓰지 않는다 (2026-09-15).
+     * 레벨 메달 이미지 — 그림에 "Lv. n" 이 박혀 있어 레벨 번호로 medal_sm/medal_{n}.png 를 고른다(2026-09-30,
+     * 학년 메달 → 레벨 메달 전환. 예전 학년 메달은 medal_{학년}11.png 로 남겨뒀다). 레벨 메달은 1~12 전부 받을
+     * 예정이지만 지금은 일부만 있어서, 기동 시 실제로 있는 파일만 모아두고 없는 레벨은 null 을 내려
+     * 화면이 기본 메달/메달 없음으로 처리하게 한다 — 이미지 파일만 추가하고 재배포하면 자동 반영된다.
      */
-    private static final Map<String, String> MEDAL_IMG_BY_SCHOOLYEAR = Map.of(
-            "01", "/images/medal_sm/medal_1.png",
-            "02", "/images/medal_sm/medal_2.png",
-            "03", "/images/medal_sm/medal_3.png",
-            "04", "/images/medal_sm/medal_4.png",
-            "05", "/images/medal_sm/medal_5.png",
-            "06", "/images/medal_sm/medal_6.png"
-    );
+    private static final Map<Integer, String> LEVEL_MEDAL_IMG = java.util.stream.IntStream.rangeClosed(1, MAX_LEVEL)
+            .filter(n -> new ClassPathResource("static/images/medal_sm/medal_" + n + ".png").exists())
+            .boxed()
+            .collect(Collectors.toUnmodifiableMap(n -> n, n -> "/images/medal_sm/medal_" + n + ".png"));
+
+    /** 레벨 → 메달 이미지 경로 (그 레벨 이미지가 아직 없으면 null) */
+    public static String levelMedalImg(Integer levelNo) {
+        return levelNo == null ? null : LEVEL_MEDAL_IMG.get(levelNo);
+    }
 
     // student-main "이번 달에 읽은 책" 패널이 4칸 고정 레이아웃이라 서버에서도 4건으로 맞춘다
     private static final int MONTH_BOOKS_LIMIT = 4;
@@ -341,7 +343,7 @@ public class ClinicService {
         // 재도전 화면에서도 레벨 카드 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다.
         String schoolyear = resolveSchoolyear(studentId);
         resp.setSchoolyear(schoolyear);
-        applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
+        applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooks(studentId));
         applyStepStatus(resp, studentId, schoolyear);
         return resp;
     }
@@ -735,7 +737,7 @@ public class ClinicService {
             // (안 채우면 결과 화면 HTML의 placeholder "Lv. 2"가 그대로 노출된다)
             String schoolyear = resolveSchoolyear(studentId);
             resp.setSchoolyear(schoolyear);
-            applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooksByGrade(studentId, schoolyear));
+            applyLevelStatus(resp, schoolyear, clinicRepository.countDoneBooks(studentId));
             applyStepStatus(resp, studentId, schoolyear);
             // 새로 받은 뱃지가 없어도(틀린문제 재제출 등) 그 책의 심화 뱃지를 보상 칸에 계속 보여준다
             resp.setBookBadge(clinicRepository.findBookBadge(studentId, contentId, true));
@@ -821,7 +823,7 @@ public class ClinicService {
         // 재도전 결과 화면에서도 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다(2026-08-25).
         String schoolyear = resolveSchoolyear(studentId);
         resp.setSchoolyear(schoolyear);
-        int doneNow = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
+        int doneNow = clinicRepository.countDoneBooks(studentId);
         applyLevelStatus(resp, schoolyear, doneNow);
         applyStepStatus(resp, studentId, schoolyear);
         // 완독 권수는 첫 제출에서만 오른다 — 재도전·틀린문제 재제출은 합격 여부와 무관하게 권수가 그대로다.
@@ -988,7 +990,7 @@ public class ClinicService {
 
     /**
      * student-main 화면 레벨 카드용 — 학생의 현재 레벨/진행률을 계산한다(EXP 폐지).
-     * 단계 = 학생 학년(grade_key). 그 학년 도서 완독(DONE) 권수를 학년별 필요권수로 나눠 레벨(1~12)을 정하고,
+     * 단계 = 학생 학년(grade_key). 완독(DONE) 권수 전체(책 학년 무관, 2026-09-30)를 학생 학년의 필요권수로 나눠 레벨(1~12)을 정하고,
      * progressPercent는 현재 레벨 구간 내 완독 비율, booksToNextLevel은 다음 레벨까지 남은 완독 권수(만렙이면 0)다.
      * 학년 규칙이 없으면(예: 미등록/중등) 레벨1·진행률0으로 취급한다.
      */
@@ -998,19 +1000,20 @@ public class ClinicService {
 
         ClinicRespDTO.MainLevelInfoDTO result = new ClinicRespDTO.MainLevelInfoDTO();
         result.setCharacterImg(CHARACTER_IMG_BY_SCHOOLYEAR.get(schoolyear));
-        result.setMedalImg(MEDAL_IMG_BY_SCHOOLYEAR.get(schoolyear));
 
         if (rule == null) {
             result.setLevelNo(1);
+            result.setMedalImg(levelMedalImg(1));
             result.setProgressPercent(0);
             result.setBooksToNextLevel(null);
             return result;
         }
 
         int booksPerLevel = rule.booksPerLevel();
-        int doneBooks = clinicRepository.countDoneBooksByGrade(studentId, schoolyear);
+        int doneBooks = clinicRepository.countDoneBooks(studentId);
         int levelNo = levelFor(doneBooks, booksPerLevel);
         result.setLevelNo(levelNo);
+        result.setMedalImg(levelMedalImg(levelNo));
         result.setLevelName(rule.stageName());
         result.setFeature(rule.feature());
         result.setTitle(clinicRepository.findLevelTitle(schoolyear, levelNo));
@@ -1032,7 +1035,7 @@ public class ClinicService {
      * 학생별로 3쿼리(학년조회·완독권수·칭호)씩 날리는 대신, 완독권수/칭호표를 통째로 한 번씩만 읽는다.
      * clinicGradeKeyByStudentId 는 호출부가 이미 알고 있는 값(목록 쿼리가 같이 select 해둔 clinic_grade_key)을
      * 넘기면 되고, 비어있는 학생만 기존 resolveSchoolyear()로 개별 조회해 lazy-init까지 그대로 탄다.
-     * progressPercent/booksToNextLevel/characterImg/medalImg는 목록 화면에 필요 없어 채우지 않는다(2026-09-15).
+     * progressPercent/booksToNextLevel/characterImg는 목록 화면에 필요 없어 채우지 않는다(2026-09-15).
      */
     public Map<String, ClinicRespDTO.MainLevelInfoDTO> getMainLevelInfoBatch(Map<String, String> clinicGradeKeyByStudentId) {
         if (clinicGradeKeyByStudentId.isEmpty()) {
@@ -1040,7 +1043,7 @@ public class ClinicService {
         }
 
         List<String> studentIds = new ArrayList<>(clinicGradeKeyByStudentId.keySet());
-        Map<String, Integer> doneBooksByStudent = clinicRepository.countDoneBooksByGradeBatch(studentIds).stream()
+        Map<String, Integer> doneBooksByStudent = clinicRepository.countDoneBooksBatch(studentIds).stream()
                 .collect(Collectors.toMap(ClinicRespDTO.StudentDoneCountDTO::getStudentId, ClinicRespDTO.StudentDoneCountDTO::getDoneBooks));
         Map<String, String> titleByGradeLevel = clinicRepository.findAllLevelTitles().stream()
                 .collect(Collectors.toMap(t -> t.getSchoolyear() + "|" + t.getLevelNo(), ClinicRespDTO.LevelTitleRowDTO::getTitle));
@@ -1056,6 +1059,7 @@ public class ClinicService {
             LevelRule rule = LEVEL_RULES.get(schoolyear);
             if (rule == null) {
                 info.setLevelNo(1);
+                info.setMedalImg(levelMedalImg(1));
                 result.put(studentId, info);
                 continue;
             }
@@ -1063,6 +1067,7 @@ public class ClinicService {
             int doneBooks = doneBooksByStudent.getOrDefault(studentId, 0);
             int levelNo = levelFor(doneBooks, rule.booksPerLevel());
             info.setLevelNo(levelNo);
+            info.setMedalImg(levelMedalImg(levelNo));
             info.setTitle(titleByGradeLevel.get(schoolyear + "|" + levelNo));
             result.put(studentId, info);
         }
@@ -1242,6 +1247,8 @@ public class ClinicService {
         int booksPerLevel = rule.booksPerLevel();
         int levelNo = levelFor(doneBooks, booksPerLevel);
         resp.setLevelNo(levelNo);
+        resp.setMedalImg(levelMedalImg(levelNo));
+        resp.setPrevMedalImg(levelNo > 1 ? levelMedalImg(levelNo - 1) : null);
         resp.setLevelTitle(clinicRepository.findLevelTitle(schoolyear, levelNo));
         if (levelNo >= MAX_LEVEL) {
             resp.setProgressPercent(100);

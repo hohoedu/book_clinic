@@ -84,7 +84,7 @@ public class ClinicRespDTO {
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0)
         private String characterImg;       // 학년별 캐릭터 이미지 경로 (초1~3만 전용 이미지, 나머지는 기본값)
-        private String medalImg;           // 학년별 메달 이미지 경로 (초1~6만 존재, 중등/미지정이면 null)
+        private String medalImg;           // 레벨 메달 이미지 경로 (그 레벨 이미지가 아직 없으면 null — ClinicService.levelMedalImg)
     }
 
     /** 학생 목록 화면 레벨 배치 계산용 — 학생별 "자기 학년 도서" 완독 권수 1행 */
@@ -192,6 +192,8 @@ public class ClinicRespDTO {
         private boolean alreadyCompleted;  // 이미 DONE 처리된 책을 재제출한 경우 (레벨 재계산 없음)
         private Integer levelNo;           // 이번 완독 반영 후 현재 레벨 (합격 시에만, 아니면 null)
         private String levelTitle;         // 현재 레벨 칭호 (합격 시에만, 미시딩이면 null)
+        private String medalImg;           // 현재 레벨 메달 이미지 경로 (그 레벨 이미지가 아직 없으면 null)
+        private String prevMedalImg;       // 직전 레벨 메달 — 결과 화면 레벨업 연출이 이 메달에서 새 메달로 바꿔 끼운다(2026-09-30)
         private boolean leveledUp;         // 이번 완독으로 레벨이 올랐는지
         private boolean levelGained;       // 이번 제출로 완독 1권이 올라갔는지(=기본 첫 제출) — 결과 화면 경험치 연출 여부(2026-09-28)
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100, 합격 시에만)

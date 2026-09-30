@@ -14,7 +14,7 @@ public class StudentRespDTO {
         /** 진짜 학년 표시명 ("초3", "중1", "5세" …) — 목록 "학년" 칸 */
         private String gradeName;
         /** 독서 학년 코드 (erp_student.clinic_grade_key = 클리닉 자체 코드 01~06 초1~초6 / 07 중등,
-         *  erp_bookstore_code gubun='S' 와 조인). 레벨 앞 메달 이미지 medal_1~6.png 를 이 번호로 고른다 */
+         *  erp_bookstore_code gubun='S' 와 조인). 레벨 산정 기준 학년 */
         private String clinicGradeKey;
         /** 독서 학년 표시명 ("초3" …) */
         private String clinicGradeName;
@@ -25,6 +25,8 @@ public class StudentRespDTO {
         private String statusKey;
         private Integer levelNo;
         private String levelTitle;
+        /** 레벨 메달 이미지 경로 (그 레벨 이미지가 아직 없으면 null — ClinicService.levelMedalImg) */
+        private String medalImg;
     }
 
     /** 학년 필터 드롭다운용 코드 1건 (erp_bookstore_code gubun='S') */
@@ -59,7 +61,7 @@ public class StudentRespDTO {
         private Integer badgeCount;
         private Integer levelNo;
         private String levelTitle;
-        /** 학년별 메달 이미지 경로 (초1~6만 존재, 중등/미지정이면 null — ClinicService.MEDAL_IMG_BY_SCHOOLYEAR) */
+        /** 레벨 메달 이미지 경로 (그 레벨 이미지가 아직 없으면 null — ClinicService.levelMedalImg) */
         private String medalImg;
     }
 

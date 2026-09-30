@@ -126,8 +126,8 @@ public interface ClinicRepository {
                                          @Param("contentId") Integer contentId,
                                          @Param("advanced") boolean advanced);
 
-    /** 특정 학년 도서의 완독(DONE) 권수 — 레벨 계산 기준 (단계 = 학생 학년) */
-    int countDoneBooksByGrade(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
+    /** 완독(DONE) 권수 — 책 학년 무관, 레벨 계산 기준 (2026-09-30) */
+    int countDoneBooks(@Param("studentId") String studentId);
 
     /** 올해(completed_at 기준, KST) 완독(DONE)한 도서 권수 — 학년 무관, "독서탐험" 진행도 계산에 쓴다 */
     int countDoneBooksThisYear(@Param("studentId") String studentId);
@@ -138,9 +138,8 @@ public interface ClinicRepository {
     /** erp_bookstore_level 전체(레벨 칭호표) — 참조 데이터라 통째로 읽어 메모리에서 찾는다(학생 목록 화면에서 학생 수만큼 쿼리하지 않으려고) */
     List<ClinicRespDTO.LevelTitleRowDTO> findAllLevelTitles();
 
-    /** countDoneBooksByGrade의 배치 버전 — "학생 정보" 목록처럼 여러 학생의 완독 권수를 한 번에 구할 때 쓴다.
-     * 각 학생 자기 학년(clinic_grade_key) 도서 기준으로 세므로 studentId만 넘기면 된다 */
-    List<ClinicRespDTO.StudentDoneCountDTO> countDoneBooksByGradeBatch(@Param("studentIds") List<String> studentIds);
+    /** countDoneBooks의 배치 버전 — "학생 정보" 목록처럼 여러 학생의 완독 권수를 한 번에 구할 때 쓴다 */
+    List<ClinicRespDTO.StudentDoneCountDTO> countDoneBooksBatch(@Param("studentIds") List<String> studentIds);
 
     /** 특정 책의 카드 정보(제목/저자/표지) — NORMAL 카드 지급 시 이름/이미지 조회용 (없으면 null) */
     ClinicRespDTO.CardDTO findCardByContent(@Param("contentId") Integer contentId);

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+  <title>호호책방 로그아웃</title>
+  <link rel="manifest" th:href="@{/manifest.json}" />
+  <meta name="theme-color" content="#0988d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <link rel="apple-touch-icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" th:href="@{/css/student/student-common.css}" />
+  <link rel="stylesheet" th:href="@{/css/student/student-goodbye.css}" />
+</head>
+
+<body>
+  <!-- 로그아웃 안내(2026-09-30) — "다시 읽으러 가기"/"여권 작성하기"를 누른 뒤 QR 화면으로 바로 넘어가지
+       않고 여기서 로그아웃됐다는 걸 알려준다. 몇 초 뒤 자동으로(또는 확인 버튼으로) 로그인 화면으로 간다. -->
+  <div class="goodbye-viewport">
+    <section class="goodbye-card">
+      <img class="logo" th:src="@{/images/logo_chaekbang.png}" alt="호호책방 로고" />
+
+      <div class="goodbye-icon" th:classappend="${type == 'passport'} ? 'is-passport'">
+        <i th:class="${type == 'passport'} ? 'fa-solid fa-passport' : 'fa-solid fa-book-open-reader'"
+          aria-hidden="true"></i>
+      </div>
+
+      <h1>로그아웃 되었어요</h1>
+
+      <th:block th:if="${type == 'passport'}">
+        <p class="goodbye-lead">이제 종이 <strong>독서여권</strong>을 작성해 주세요!</p>
+        <p class="goodbye-desc">다음에 책을 읽으러 오면<br />학생증 QR을 찍고 다시 로그인하면 돼요.</p>
+      </th:block>
+      <th:block th:unless="${type == 'passport'}">
+        <p class="goodbye-lead">책을 한 번 더 <strong>꼼꼼히 읽고</strong> 와요!</p>
+        <p class="goodbye-desc">다 읽었으면 학생증 QR을 찍고 다시 로그인해서<br />문제를 풀면 돼요.</p>
+      </th:block>
+
+      <button type="button" class="goodbye-ok" id="goodbyeOkBtn">
+        확인<span class="goodbye-count" id="goodbyeCount"></span></button>
+    </section>
+  </div>
+
+  <script th:src="@{/js/student/student-goodbye.js}"></script>
+</body>
+
+</html>

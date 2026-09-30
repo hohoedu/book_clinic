@@ -260,14 +260,13 @@
         WHERE student_id = #{studentId} AND content_id = #{contentId} AND badge_id IN (4, 5)
     </delete>
 
-    <!-- 단계 = 학생 학년. 그 학년 도서(content.schoolyear)의 완독(DONE) 권수를 센다 -->
-    <select id="countDoneBooksByGrade" resultType="int">
+    <!-- 레벨 계산용 완독(DONE) 권수 — 책 학년과 무관하게 전부 센다(2026-09-30). 예전엔 학생 독서학년과
+         같은 학년 도서만 세서 "누적 독서" 권수와 레벨 진행이 어긋났다. 레벨당 필요권수만 학생 학년 기준이다. -->
+    <select id="countDoneBooks" resultType="int">
         SELECT COUNT(*)
-        FROM erp_bookstore_recommend_log rl
-        JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        WHERE rl.student_id = #{studentId}
-          AND rl.status = 'DONE'
-          AND c.schoolyear = #{schoolyear}
+        FROM erp_bookstore_recommend_log
+        WHERE student_id = #{studentId}
+          AND status = 'DONE'
     </select>
 
     <select id="countDoneBooksThisYear" resultType="int">
@@ -365,18 +364,14 @@
         FROM erp_bookstore_level
     </select>
 
-    <!-- countDoneBooksByGrade 배치 버전 — 학생마다 "자기 학년(clinic_grade_key) 도서"만 세야 해서
-         erp_student를 다시 조인해 그 학생의 학년을 기준으로 삼는다 -->
-    <select id="countDoneBooksByGradeBatch" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$StudentDoneCountDTO">
-        SELECT rl.student_id AS studentId, COUNT(*) AS doneBooks
-        FROM erp_bookstore_recommend_log rl
-        JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        JOIN erp_student st ON st.student_id = rl.student_id
-        WHERE rl.status = 'DONE'
-          AND c.schoolyear = st.clinic_grade_key
-          AND rl.student_id IN
+    <!-- countDoneBooks 배치 버전 — 책 학년과 무관하게 학생별 완독 권수 전체(2026-09-30) -->
+    <select id="countDoneBooksBatch" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$StudentDoneCountDTO">
+        SELECT student_id AS studentId, COUNT(*) AS doneBooks
+        FROM erp_bookstore_recommend_log
+        WHERE status = 'DONE'
+          AND student_id IN
           <foreach collection="studentIds" item="id" open="(" separator="," close=")">#{id}</foreach>
-        GROUP BY rl.student_id
+        GROUP BY student_id
     </select>
 
     <!-- "나의 책장" 모달 — 올해 추천받은 도서 전체(완독일/추천일 KST 기준). status는 화면 뱃지값으로 바로 매핑:

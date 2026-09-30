@@ -47,6 +47,7 @@ public class StudentService {
             if (levelInfo != null) {
                 student.setLevelNo(levelInfo.getLevelNo());
                 student.setLevelTitle(levelInfo.getTitle());
+                student.setMedalImg(levelInfo.getMedalImg());
             }
         }
 

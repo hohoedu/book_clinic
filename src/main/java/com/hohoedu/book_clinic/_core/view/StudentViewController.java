@@ -106,10 +106,22 @@ public class StudentViewController {
         return studentId;
     }
 
-    /** 학생 로그인 화면 — 실제 QR 스캔 대신 appId를 직접 입력해서 테스트하는 임시 화면 */
+    /** 학생 로그인 화면 */
     @GetMapping({ "/student", "/student/", "/student/login" })
     public String getLoginPage() {
         return "/student/student-login";
+    }
+
+    /**
+     * 로그아웃 안내 화면(2026-09-30) — "다시 읽으러 가기"/"여권 작성하기"는 로그아웃인데, 바로 QR 스캔
+     * 화면으로 넘어가면 학생이 "다시 스캔해야 하나?" 헷갈려했다. 로그아웃된 뒤 이 화면을 잠깐 보여줘서
+     * 로그아웃됐다는 것과 다음에 할 일을 알려주고, 몇 초 뒤(또는 확인 버튼) 로그인 화면으로 보낸다.
+     * 세션은 이미 끊긴 뒤라 로그인 확인을 하지 않는다. type: read(다시 읽으러 가기) / passport(여권 작성하기)
+     */
+    @GetMapping("/student/goodbye")
+    public String getGoodbyePage(@RequestParam(value = "type", required = false) String type, Model model) {
+        model.addAttribute("type", "passport".equals(type) ? "passport" : "read");
+        return "/student/student-goodbye";
     }
 
     /**

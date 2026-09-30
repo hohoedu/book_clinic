@@ -100,7 +100,7 @@ function renderStudentList(students) {
 
   listBody.innerHTML = students.map((s, idx) => {
     const levelNo = s.levelNo ?? 1;
-    const medalSrc = gradeMedalSrc(s.clinicGradeKey);
+    const medalSrc = s.medalImg;
     const statusLabel = s.statusKey === "WITHDRAWN" ? "탈퇴" : "이용중";
     const statusClass = s.statusKey === "WITHDRAWN" ? "status-withdrawn" : "status-active";
     return `
@@ -128,17 +128,6 @@ function renderStudentList(students) {
       </tr>
     `;
   }).join("");
-}
-
-/* 메달은 "학년" 칸의 진짜 학년(grade_key)이 아니라 독서 학년(clinic_grade_key) 기준이다 — 둘은 다를 수 있다.
-   clinic_grade_key('01'~'06' = 초1~초6)가 곧 medal_1~6.png 의 번호다. 메달 그림에 학년 숫자가
-   그려져 있어서, 이미지가 없는 중등('07')이나 학년 미지정은 엉뚱한 숫자를 보여주느니 메달 없이 "Lv. n" 만 노출한다.
-
-   images/medal_sm/ 은 목록 표시용 축소본(104x104)이다 — 원본 images/medal_N.png 는 1254x1254, 장당
-   1.3MB 라 26px 아이콘 6종에 8MB 를 받게 돼서 따로 뒀다. 크게 쓰는 화면은 원본을 그대로 쓰면 된다. */
-function gradeMedalSrc(clinicGradeKey) {
-  const n = Number(clinicGradeKey);
-  return Number.isInteger(n) && n >= 1 && n <= 6 ? `/images/medal_sm/medal_${n}.png` : null;
 }
 
 function escapeHtml(value) {
