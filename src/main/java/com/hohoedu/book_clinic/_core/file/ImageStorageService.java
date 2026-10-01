@@ -57,6 +57,36 @@ public class ImageStorageService {
     @Value("${ftp.signature-dir:signatures}")
     private String signatureDir;
 
+    /** 스페셜 카드 이미지 디렉터리 — 업로드 기능 없이 이미지 호스팅에 special_{학년}_{번호}.png로 직접 올려둔다(2026-10-01) */
+    @Value("${ftp.special-card-dir:bookstore/special_cards}")
+    private String specialCardDir;
+
+    /**
+     * 스페셜 카드 이미지 호스트 — ftp.server가 없으면 secrets의 GABIA_FTP_HOST를 직접 쓴다.
+     * ftp: 블록이 dev 프로필에만 있어 prod에선 ftp.server가 비는데, 업로드 경로(로컬 폴백)는 그대로 두고
+     * 이미 호스팅에 올라가 있는 스페셜 카드 주소만 만들 수 있게 따로 읽는다.
+     */
+    @Value("${ftp.server:${GABIA_FTP_HOST:}}")
+    private String specialCardHost;
+
+    /** 학년별 스페셜 카드 그림 수 — 그 학년 11번째 스페셜 카드부터는 01부터 다시 돈다 */
+    private static final int SPECIAL_CARD_IMAGE_COUNT = 10;
+
+    /**
+     * 스페셜(RARE) 카드 이미지 URL — special_{학년 2자리}_{번호 2자리}.png.
+     * 학년 = 그 스페셜 카드를 터뜨린(10·20…번째) 책의 학년, 번호 = triggerCount(발급 시점 누적 NORMAL 카드 수
+     * 10, 20, ...)로 정한 그 학생의 몇 번째 스페셜 카드인지. 호스트나 학년을 모르면 null(호출부가 기본 이미지 유지).
+     */
+    public String specialCardUrl(String schoolyear, int triggerCount, int cardSetSize) {
+        if (!isNotBlank(specialCardHost) || !isNotBlank(schoolyear) || triggerCount < cardSetSize) return null;
+        String grade = schoolyear.trim();
+        if (grade.length() == 1) grade = "0" + grade;
+        int seq = (triggerCount / cardSetSize - 1) % SPECIAL_CARD_IMAGE_COUNT + 1;
+        String path = normalizeDir(specialCardDir);
+        return "https://" + specialCardHost + (path.isEmpty() ? "" : "/" + path)
+                + String.format("/special_%s_%02d.png", grade, seq);
+    }
+
     /** 도서 표지 저장 후 접근 가능한 URL 반환 */
     public String store(MultipartFile file) throws IOException {
         return store(file, masterBookDir, "book");

@@ -10,6 +10,7 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.hohoedu.book_clinic._core.file.ImageStorageService;
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
@@ -162,6 +163,7 @@ public class ClinicService {
     private final BookRepository bookRepository;
     private final QuestionRepository questionRepository;
     private final MonitorService monitorService;
+    private final ImageStorageService imageStorageService;
 
     /**
      * 홈 화면(student-main) 진입 시 상태 조회 — 2026-07-29. 예전엔 홈 진입=자동추천이라 책을 다
@@ -332,14 +334,7 @@ public class ClinicService {
         // 카드 — 직전 결과 재조회라 "이번에 새로 받은" 카드는 아니지만, 그 책 카드를 이미 보유 중이면
         // 결과 화면 오른쪽 칸이 통째로 비지 않게 보유 카드를 그대로 내려준다(2026-09-03).
         // 이 값이 없어서 결과 화면을 새로고침하거나 재진입하면 방금 받은 카드가 사라져 보였다.
-        if (clinicRepository.existsNormalCard(studentId, contentId)) {
-            ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
-            if (card != null) {
-                resp.setCardName(card.getCardName());
-                resp.setCardImageUrl(card.getImageUrl());
-            }
-            resp.setTotalCards(clinicRepository.countNormalCards(studentId));
-        }
+        applyOwnedCard(resp, studentId, contentId);
         // 재도전 화면에서도 레벨 카드 placeholder("Lv. 2", "35 / 96")가 노출되지 않도록 항상 채운다.
         String schoolyear = resolveSchoolyear(studentId);
         resp.setSchoolyear(schoolyear);
@@ -747,14 +742,7 @@ public class ClinicService {
             resp.setBasicWrongQnums(findWrongQnums(logStatus.getRecommendId(), "01"));
             // 심화는 카드를 새로 주지 않지만(카드는 기본 첫 제출 때 책당 1장), 결과 화면 오른쪽 카드
             // 칸이 통째로 비지 않게 그 책에서 이미 받은 카드를 함께 내려준다(2026-09-03).
-            if (clinicRepository.existsNormalCard(studentId, contentId)) {
-                ClinicRespDTO.CardDTO ownedCard = clinicRepository.findCardByContent(contentId);
-                if (ownedCard != null) {
-                    resp.setCardName(ownedCard.getCardName());
-                    resp.setCardImageUrl(ownedCard.getImageUrl());
-                }
-                resp.setTotalCards(clinicRepository.countNormalCards(studentId));
-            }
+            applyOwnedCard(resp, studentId, contentId);
             syncMonitorSafely(studentId);
             return resp;
         }
@@ -857,19 +845,17 @@ public class ClinicService {
 
             boolean rewardReached = totalCards > 0 && totalCards % CARD_SET_SIZE == 0;
             resp.setCardRewardReached(rewardReached);
-            if (rewardReached && !clinicRepository.existsRareCard(studentId, totalCards)) {
-                clinicRepository.insertRareCard(studentId, totalCards);
+            if (rewardReached) {
+                if (!clinicRepository.existsRareCard(studentId, totalCards)) {
+                    clinicRepository.insertRareCard(studentId, totalCards);
+                }
+                applySpecialCard(resp, clinicRepository.findSpecialCardSource(studentId, contentId));
             }
-        } else if (clinicRepository.existsNormalCard(studentId, contentId)) {
+        } else {
             // 재도전·틀린문제 재제출 — 카드를 새로 주진 않지만(책당 1장), 이미 받아둔 그 책 카드를
             // 결과 화면에 계속 보여준다(2026-09-03). 예전엔 여기서 아무것도 안 채워서 재제출 결과
             // 화면의 카드 칸이 통째로 비었다.
-            ClinicRespDTO.CardDTO ownedCard = clinicRepository.findCardByContent(contentId);
-            if (ownedCard != null) {
-                resp.setCardName(ownedCard.getCardName());
-                resp.setCardImageUrl(ownedCard.getImageUrl());
-            }
-            resp.setTotalCards(clinicRepository.countNormalCards(studentId));
+            applyOwnedCard(resp, studentId, contentId);
         }
 
         // 기본 문제 뱃지 — 첫 제출은 이번 결과로 지급. 재도전으로 등급이 올라간 경우엔 기존 기본 뱃지(1~2)를
@@ -1085,6 +1071,10 @@ public class ClinicService {
      */
     public ClinicRespDTO.CardCollectionDTO getCardCollection(String studentId) {
         List<ClinicRespDTO.CardDTO> cards = clinicRepository.findEarnedCards(studentId);
+        for (ClinicRespDTO.CardDTO card : cards) {
+            String special = specialCardImage(card.getSpecialSchoolyear(), card.getTriggerCount());
+            if (special != null) card.setImageUrl(special);
+        }
         int normalTotal = clinicRepository.countNormalCards(studentId);
 
         ClinicRespDTO.CardCollectionDTO result = new ClinicRespDTO.CardCollectionDTO();
@@ -1118,6 +1108,35 @@ public class ClinicService {
     }
 
     /**
+     * 이미 받아둔 그 책 카드(+그 책으로 받은 스페셜 카드)를 결과 응답에 채운다 — 재도전·틀린문제·심화 제출과
+     * 직전 결과 재조회처럼 "이번에 새로 받은" 카드가 없을 때도 결과 화면 카드 칸이 비지 않게 한다.
+     * 스페셜 카드는 이 책 카드가 10·20·30…번째 카드였는지로 판정한다(2026-10-01). 카드가 없으면 아무것도 안 한다.
+     */
+    private void applyOwnedCard(ClinicRespDTO.QuizSubmitRespDTO resp, String studentId, Integer contentId) {
+        ClinicRespDTO.SpecialCardSourceDTO source = clinicRepository.findSpecialCardSource(studentId, contentId);
+        if (source == null) return;
+        ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
+        if (card != null) {
+            resp.setCardName(card.getCardName());
+            resp.setCardImageUrl(card.getImageUrl());
+        }
+        resp.setTotalCards(clinicRepository.countNormalCards(studentId));
+        applySpecialCard(resp, source);
+    }
+
+    /** 이 책 카드가 10·20·30…번째 카드였으면 그 책으로 받은 스페셜 카드(보유 여부+이미지)를 채운다 */
+    private void applySpecialCard(ClinicRespDTO.QuizSubmitRespDTO resp, ClinicRespDTO.SpecialCardSourceDTO source) {
+        if (source == null || source.getSeq() == null || source.getSeq() % CARD_SET_SIZE != 0) return;
+        resp.setSpecialCardOwned(true);
+        resp.setSpecialCardImageUrl(imageStorageService.specialCardUrl(source.getSchoolyear(), source.getSeq(), CARD_SET_SIZE));
+    }
+
+    /** 레어 카드의 스페셜 카드 이미지(special_{학년}_NN) — 일반 카드이거나 호스팅/학년을 모르면 null(매퍼 기본 이미지 유지) */
+    private String specialCardImage(String schoolyear, Integer triggerCount) {
+        return triggerCount == null ? null : imageStorageService.specialCardUrl(schoolyear, triggerCount, CARD_SET_SIZE);
+    }
+
+    /**
      * "나의 책장" / "나의 카드 컬렉션" 모달(student-bookcase.html)용 데이터.
      * 같은 화면에 type(book/card)만 바꿔 데이터를 갈아끼운다 — book이면 올해 읽은 책 전체,
      * card면 보유 카드 전체를 최신순으로 내려준다. defaultGrade는 학년 탭 초기 선택값(1~3 밖이면 null).
@@ -1127,9 +1146,16 @@ public class ClinicService {
 
         ClinicRespDTO.BookcaseRespDTO result = new ClinicRespDTO.BookcaseRespDTO();
         result.setType(isCard ? "card" : "book");
-        result.setItems(isCard
+        List<ClinicRespDTO.BookcaseItemDTO> items = isCard
                 ? clinicRepository.findCardsForBookcase(studentId)
-                : clinicRepository.findYearBooksForBookcase(studentId));
+                : clinicRepository.findYearBooksForBookcase(studentId);
+        if (isCard) {
+            for (ClinicRespDTO.BookcaseItemDTO item : items) {
+                String special = specialCardImage(item.getSpecialSchoolyear(), item.getTriggerCount());
+                if (special != null) item.setImageUrl(special);
+            }
+        }
+        result.setItems(items);
 
         Integer defaultGrade = null;
         try {

@@ -81,6 +81,10 @@
   display: block;
 }
 
+.quick-btn[hidden] {
+  display: none;
+}
+
 .quick-btn.pink {
   background: #ff7bd4;
   color: #3d1740;

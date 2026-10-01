@@ -2,7 +2,7 @@
   나의 책장 / 나의 카드 컬렉션 공용 화면.
   student-main 에서 <iframe src="/student/bookcase?type=book|card"> 로 띄운다.
   ?type=book  → 올해 읽은 책(완독/독서왕/재도전/읽는 중)
-  ?type=card  → 완독 시 획득한 수집 카드(일반/레어)
+  ?type=card  → 완독 시 획득한 수집 카드(일반/스페셜)
   레이아웃(선반/그리드/학년탭/정렬)은 동일하고 데이터만 갈아끼운다.
 
   데이터: 서버가 템플릿에 심어준 window.__BOOKCASE__ 를 우선 사용하고,
@@ -26,7 +26,7 @@
     card: [
       { grade: 1, date: '2026-08-24', title: '치과의사 드소토 선생님', imageUrl: '/images/student_result/card.png', status: 'normal' },
       { grade: 1, date: '2026-08-17', title: '소금 공해 이제 그만!', imageUrl: '/images/student_result/card.png', status: 'normal' },
-      { grade: null, date: '2026-08-10', title: '레어 카드', imageUrl: '/images/student_result/rare.png', status: 'rare' }
+      { grade: null, date: '2026-08-10', title: '스페셜 카드', imageUrl: '/images/student_result/rare.png', status: 'special' }
     ]
   };
 
@@ -48,7 +48,7 @@
       summaryLabel: '모은 카드',
       unit: '장',
       emptyText: '카드를<br>모아보세요!',
-      statusLabel: (s) => (s === 'rare' ? '레어' : '일반'),
+      statusLabel: (s) => (s === 'special' ? '스페셜' : '일반'),
       fallbackImg: '/images/student_result/card.png',
       useGradeTabs: false
     }
@@ -79,7 +79,7 @@
   subtitleEl.textContent = PROFILE.subtitle;
   summaryLabelEl.textContent = PROFILE.summaryLabel;
 
-  // 카드 모드는 학년 구분이 애매해(레어 카드엔 학년이 없음) 학년 탭을 숨기고 전체를 한 번에 보여준다
+  // 카드 모드는 학년 구분이 애매해(스페셜 카드엔 학년이 없음) 학년 탭을 숨기고 전체를 한 번에 보여준다
   if (!PROFILE.useGradeTabs) {
     gradeTabsWrap.style.visibility = 'hidden';
   } else {

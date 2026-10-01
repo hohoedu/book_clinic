@@ -305,6 +305,22 @@
         VALUES (#{studentId}, #{contentId}, 'NORMAL')
     </insert>
 
+    <!--
+      이 책 카드가 그 학생의 몇 번째 NORMAL 카드인지(획득순) + 그 책 학년(2026-10-01) — 순번이 10의 배수면
+      그 책으로 스페셜 카드를 받은 것이고, 학년은 스페셜 카드 이미지(special_{학년}_NN) 선택에 쓴다.
+      순번 규칙(earned_at, id)은 모니터링 "스페셜 카드 지급" 표시(MonitorMapper spcard)와 같다. 카드가 없으면 null.
+    -->
+    <select id="findSpecialCardSource" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$SpecialCardSourceDTO">
+        SELECT ranked.seq, c.schoolyear
+        FROM (
+            SELECT content_id, ROW_NUMBER() OVER (ORDER BY earned_at, id) AS seq
+            FROM erp_bookstore_student_card
+            WHERE student_id = #{studentId} AND card_type = 'NORMAL'
+        ) ranked
+        LEFT JOIN erp_bookstore_content c ON c.content_id = ranked.content_id
+        WHERE ranked.content_id = #{contentId}
+    </select>
+
     <select id="countNormalCards" resultType="int">
         SELECT COUNT(*)
         FROM erp_bookstore_student_card
@@ -314,26 +330,36 @@
     <select id="existsRareCard" resultType="boolean">
         SELECT CASE WHEN EXISTS (
             SELECT 1 FROM erp_bookstore_student_card
-            WHERE student_id = #{studentId} AND card_type = 'RARE' AND trigger_count = #{triggerCount}
+            WHERE student_id = #{studentId} AND card_type = 'SPECIAL' AND trigger_count = #{triggerCount}
         ) THEN 1 ELSE 0 END
     </select>
 
     <insert id="insertRareCard">
         INSERT INTO erp_bookstore_student_card (student_id, card_type, trigger_count)
-        VALUES (#{studentId}, 'RARE', #{triggerCount})
+        VALUES (#{studentId}, 'SPECIAL', #{triggerCount})
     </insert>
 
-    <!-- 보유 카드 전체 — NORMAL은 그 책 표지/제목, RARE는 content_id가 없어 고정 이름/이미지. 최신 획득순 -->
+    <!-- 보유 카드 전체 — NORMAL은 그 책 표지/제목, SPECIAL은 content_id가 없어 고정 이름. SPECIAL 이미지는 rare.png 폴백이고
+         ClinicService가 trigger_count로 스페셜 카드 이미지(special_NN)로 바꾼다. 최신 획득순 -->
     <select id="findEarnedCards" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$CardDTO">
         SELECT sc.content_id                         AS contentId,
                sc.card_type                          AS cardType,
-               CASE WHEN sc.card_type = 'RARE' THEN N'레어 카드' ELSE c.original_title END AS cardName,
-               CASE WHEN sc.card_type = 'RARE' THEN NULL ELSE c.author END AS bookTitle,
-               CASE WHEN sc.card_type = 'RARE' THEN '/images/student_result/rare.png'
+               CASE WHEN sc.card_type = 'SPECIAL' THEN N'스페셜 카드' ELSE c.original_title END AS cardName,
+               CASE WHEN sc.card_type = 'SPECIAL' THEN NULL ELSE c.author END AS bookTitle,
+               sc.trigger_count                      AS triggerCount,
+               rc.schoolyear                         AS specialSchoolyear,
+               CASE WHEN sc.card_type = 'SPECIAL' THEN '/images/student_result/rare.png'
                     ELSE ISNULL(cp.card_url, '/images/student_result/card.png') END AS imageUrl
         FROM erp_bookstore_student_card sc
         LEFT JOIN erp_bookstore_content c ON c.content_id = sc.content_id
         LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = sc.content_id
+        -- 레어 카드를 터뜨린 책(trigger_count번째 NORMAL 카드)의 학년 — 스페셜 카드 이미지 special_{학년}_NN 선택용
+        LEFT JOIN (
+            SELECT content_id, ROW_NUMBER() OVER (ORDER BY earned_at, id) AS seq
+            FROM erp_bookstore_student_card
+            WHERE student_id = #{studentId} AND card_type = 'NORMAL'
+        ) nc ON sc.card_type = 'SPECIAL' AND nc.seq = sc.trigger_count
+        LEFT JOIN erp_bookstore_content rc ON rc.content_id = nc.content_id
         WHERE sc.student_id = #{studentId}
         ORDER BY sc.earned_at DESC
     </select>
@@ -394,17 +420,26 @@
         ORDER BY COALESCE(rl.completed_at, rl.recommended_at) DESC
     </select>
 
-    <!-- "나의 카드 컬렉션" 모달 — 보유 카드 전체. RARE는 책이 없어 grade=null, 고정 이름/이미지 -->
+    <!-- "나의 카드 컬렉션" 모달 — 보유 카드 전체. SPECIAL은 책이 없어 grade=null, 고정 이름(이미지는 ClinicService가 special_NN으로 교체) -->
     <select id="findCardsForBookcase" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$BookcaseItemDTO">
-        SELECT CASE WHEN sc.card_type = 'RARE' THEN NULL ELSE TRY_CAST(c.schoolyear AS INT) END AS grade,
+        SELECT CASE WHEN sc.card_type = 'SPECIAL' THEN NULL ELSE TRY_CAST(c.schoolyear AS INT) END AS grade,
                CONVERT(varchar(10), sc.earned_at, 23) AS date,
-               CASE WHEN sc.card_type = 'RARE' THEN N'레어 카드' ELSE c.original_title END AS title,
-               CASE WHEN sc.card_type = 'RARE' THEN '/images/student_result/rare.png'
+               CASE WHEN sc.card_type = 'SPECIAL' THEN N'스페셜 카드' ELSE c.original_title END AS title,
+               CASE WHEN sc.card_type = 'SPECIAL' THEN '/images/student_result/rare.png'
                     ELSE ISNULL(cp.card_url, '/images/student_result/card.png') END AS imageUrl,
-               CASE WHEN sc.card_type = 'RARE' THEN 'rare' ELSE 'normal' END AS status
+               CASE WHEN sc.card_type = 'SPECIAL' THEN 'special' ELSE 'normal' END AS status,
+               sc.trigger_count AS triggerCount,
+               rc.schoolyear    AS specialSchoolyear
         FROM erp_bookstore_student_card sc
         LEFT JOIN erp_bookstore_content c ON c.content_id = sc.content_id
         LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = sc.content_id
+        -- 레어 카드를 터뜨린 책(trigger_count번째 NORMAL 카드)의 학년 — 스페셜 카드 이미지 special_{학년}_NN 선택용
+        LEFT JOIN (
+            SELECT content_id, ROW_NUMBER() OVER (ORDER BY earned_at, id) AS seq
+            FROM erp_bookstore_student_card
+            WHERE student_id = #{studentId} AND card_type = 'NORMAL'
+        ) nc ON sc.card_type = 'SPECIAL' AND nc.seq = sc.trigger_count
+        LEFT JOIN erp_bookstore_content rc ON rc.content_id = nc.content_id
         WHERE sc.student_id = #{studentId}
         ORDER BY sc.earned_at DESC
     </select>

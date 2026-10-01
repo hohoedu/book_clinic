@@ -586,6 +586,12 @@
       merged.booksToNextLevel = src.booksToNextLevel;
       merged.stepNow = src.stepNow;
       merged.stepTotal = src.stepTotal;
+      // 이미 받아둔 그 책 카드·스페셜 카드도 이어받는다(2026-10-01) — 빠뜨리면 결과 화면 카드 칸이 비었다
+      merged.cardName = src.cardName;
+      merged.cardImageUrl = src.cardImageUrl;
+      merged.totalCards = src.totalCards;
+      merged.specialCardOwned = src.specialCardOwned;
+      merged.specialCardImageUrl = src.specialCardImageUrl;
     };
 
     try {

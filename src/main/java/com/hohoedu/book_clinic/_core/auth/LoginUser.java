@@ -13,6 +13,7 @@ public class LoginUser implements Serializable {
     private Integer id;
     private String centerCode;
     private String roleKey;
+    private String userCode;
     private String userId;
     private String userName;
     private String type;
@@ -21,11 +22,12 @@ public class LoginUser implements Serializable {
     private Boolean isClinic;
 
     @Builder
-    public LoginUser(Integer id, String centerCode, String roleKey, String userId,
+    public LoginUser(Integer id, String centerCode, String roleKey, String userCode, String userId,
                      String userName, String type, Boolean isHan, Boolean isBook, Boolean isClinic) {
         this.id = id;
         this.centerCode = centerCode;
         this.roleKey = roleKey;
+        this.userCode = userCode;
         this.userId = userId;
         this.userName = userName;
         this.type = type;

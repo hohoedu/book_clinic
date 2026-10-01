@@ -1,5 +1,7 @@
 package com.hohoedu.book_clinic.clinic._dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+
 import java.util.List;
 import java.util.Map;
 
@@ -118,10 +120,21 @@ public class ClinicRespDTO {
     @Data
     public static class CardDTO {
         private Integer contentId;
-        private String cardType;    // NORMAL / RARE
-        private String cardName;    // NORMAL=책 제목, RARE="레어 카드" (화면 strong)
+        private String cardType;    // NORMAL / SPECIAL
+        private String cardName;    // NORMAL=책 제목, SPECIAL="스페셜 카드" (화면 strong)
         private String bookTitle;   // NORMAL=저자, RARE=null (화면 small)
-        private String imageUrl;    // NORMAL=erp_bookstore_card_path.card_url(미등록이면 기본 카드), RARE=고정 레어카드 이미지
+        private String imageUrl;    // NORMAL=erp_bookstore_card_path.card_url(미등록이면 기본 카드), RARE=스페셜 카드 이미지(special_NN, 서비스에서 채움)
+        @JsonIgnore
+        private Integer triggerCount; // RARE만 — 몇 번째 스페셜 카드인지 고르는 데만 쓴다
+        @JsonIgnore
+        private String specialSchoolyear; // RARE만 — 그 스페셜 카드를 터뜨린 책의 학년(이미지 special_{학년}_NN)
+    }
+
+    /** 이 책 카드가 몇 번째 NORMAL 카드인지 + 그 책 학년 — 스페셜 카드 판정/이미지 선택용(2026-10-01) */
+    @Data
+    public static class SpecialCardSourceDTO {
+        private Integer seq;
+        private String schoolyear;
     }
 
     /** student-main "나의 카드 컬렉션" 패널 — 보유 카드 목록 + 10장당 실물 1장 진행도 */
@@ -137,7 +150,7 @@ public class ClinicRespDTO {
      * "나의 책장" / "나의 카드 컬렉션" 모달(student-bookcase.html) 항목 1건.
      * 책/카드가 같은 레이아웃(선반 그리드)을 쓰므로 한 DTO로 처리하고 status 값 의미만 달라진다.
      *   책  : status = king(독서왕) / complete(완독) / retry(재도전) / reading(읽는 중)
-     *   카드: status = rare(레어) / normal(일반)
+     *   카드: status = special(스페셜) / normal(일반)
      */
     @Data
     public static class BookcaseItemDTO {
@@ -146,6 +159,10 @@ public class ClinicRespDTO {
         private String title;
         private String imageUrl;
         private String status;
+        @JsonIgnore
+        private Integer triggerCount; // 레어 카드만 — 스페셜 카드 이미지(special_{학년}_NN) 선택용
+        @JsonIgnore
+        private String specialSchoolyear; // 레어 카드만 — 그 스페셜 카드를 터뜨린 책의 학년
     }
 
     /** student-bookcase.html 로 내려주는 목록 + 초기 선택 학년 */
@@ -209,6 +226,10 @@ public class ClinicRespDTO {
         private String cardImageUrl;       // 획득 카드 이미지(card_path.card_url, 미등록 책은 기본 카드로 폴백)
         private Integer totalCards;         // 획득 후 보유 카드 총 수
         private boolean cardRewardReached;  // 이번 획득으로 10장 세트를 채웠는지(실물 1장 교환 시점)
+        // 이 책으로 받은 스페셜 카드 — 첫 제출(cardRewardReached)뿐 아니라 재도전·틀린문제·심화·직전 결과
+        // 재조회에서도 채워 결과 화면 칸이 비지 않게 한다(2026-10-01). 연출은 cardRewardReached일 때만.
+        private boolean specialCardOwned;
+        private String specialCardImageUrl; // 그 스페셜 카드 이미지(special_{학년}_NN)
         private Integer stepNow;            // 독서탐험 진행 칸 수 = 올해 완독 권수 (합격 시에만)
         private Integer stepTotal;          // 독서탐험 전체 칸 수 = 학년별 목표 권수 (합격 시에만)
         // 심화(qlevel=02) 결과에만 채운다(2026-09-02) — 심화왕(만점)이면 심화 쪽 버튼은 모두 사라지지만

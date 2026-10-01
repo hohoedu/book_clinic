@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import com.google.cloud.firestore.Firestore;
+import com.google.cloud.firestore.WriteBatch;
 import com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -103,6 +104,27 @@ public class MonitorSyncService {
             log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: reservationId={}", card.getReservationId(), e);
         } catch (ExecutionException e) {
             log.warn("Firestore 동기화 실패 — SQL은 정상 반영됨: reservationId={}", card.getReservationId(), e);
+        }
+    }
+
+    /**
+     * 카드 문서 일괄 삭제 — SQL에서 예약을 통째로 지운 경우(시연 초기화, 2026-10-01)에 쓴다.
+     * syncCard와 같은 원칙으로 Firestore 실패는 로그만 남기고 호출부로 던지지 않는다(SQL은 이미 커밋됨).
+     */
+    public void deleteCards(List<Long> reservationIds) {
+        if (reservationIds == null || reservationIds.isEmpty()) return;
+        WriteBatch batch = firestore.batch();
+        for (Long reservationId : reservationIds) {
+            batch.delete(firestore.collection(COLLECTION).document(String.valueOf(reservationId)));
+        }
+        try {
+            batch.commit().get();
+            log.info("Firestore 카드 삭제 성공 — {}건", reservationIds.size());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("Firestore 카드 삭제 실패 — SQL은 정상 반영됨: reservationIds={}", reservationIds, e);
+        } catch (ExecutionException e) {
+            log.warn("Firestore 카드 삭제 실패 — SQL은 정상 반영됨: reservationIds={}", reservationIds, e);
         }
     }
 

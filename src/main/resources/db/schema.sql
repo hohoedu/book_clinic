@@ -542,7 +542,7 @@ CREATE TABLE erp_bookstore_student_card (
     id             INT IDENTITY(1,1) PRIMARY KEY,
     student_id     VARCHAR(100)  NOT NULL,
     content_id     INT           NULL,      -- NORMAL만 값 있음(그 책). RARE는 NULL
-    card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / RARE
+    card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / SPECIAL (2026-10-01 RARE에서 이름 변경)
     trigger_count  INT           NULL,      -- RARE만 값 있음(발급을 유발한 누적 NORMAL 카드 수: 10, 20 ...)
     earned_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 지급일시(KST)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
@@ -550,9 +550,9 @@ CREATE TABLE erp_bookstore_student_card (
 CREATE UNIQUE INDEX UX_erp_bookstore_student_card_normal
     ON erp_bookstore_student_card (student_id, content_id)
     WHERE card_type = 'NORMAL';
-CREATE UNIQUE INDEX UX_erp_bookstore_student_card_rare
+CREATE UNIQUE INDEX UX_erp_bookstore_student_card_special
     ON erp_bookstore_student_card (student_id, trigger_count)
-    WHERE card_type = 'RARE';
+    WHERE card_type = 'SPECIAL';
 
 -- 클리닉 입실/퇴실 세션 (2026-07-15 실시간 모니터링) — 학생이 로그인하는 시점에 자동으로
 -- 입실 기록이 생긴다. 같은 날 이미 ENTERED 상태 세션이 있으면 재사용하고(재로그인은 새 세션이

@@ -19,6 +19,7 @@ public class CustomUserDetails implements UserDetails {
                 .id(user.getId())
                 .centerCode(user.getCenterCode())
                 .roleKey(user.getRoleKey())
+                .userCode(user.getUserCode())
                 .userId(user.getUserId())
                 .userName(user.getUserName())
                 .type(user.getType())

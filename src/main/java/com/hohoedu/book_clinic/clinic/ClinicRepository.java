@@ -156,6 +156,9 @@ public interface ClinicRepository {
     /** 학생의 NORMAL 카드 보유 총 수 — 레어카드 지급 임계값(10의 배수) 판단 기준 */
     int countNormalCards(@Param("studentId") String studentId);
 
+    /** 이 책 카드가 그 학생의 몇 번째 NORMAL 카드인지(획득순) + 그 책 학년 — 카드가 없으면 null */
+    ClinicRespDTO.SpecialCardSourceDTO findSpecialCardSource(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+
     /** 그 임계값(triggerCount)에서 이미 레어카드를 지급받았는지 (중복 지급 방지) */
     boolean existsRareCard(@Param("studentId") String studentId, @Param("triggerCount") int triggerCount);
 

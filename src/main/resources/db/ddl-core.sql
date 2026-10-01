@@ -420,7 +420,7 @@ CREATE TABLE erp_bookstore_student_card (
     id             INT IDENTITY(1,1) PRIMARY KEY,
     student_id     VARCHAR(100)  NOT NULL,
     content_id     INT           NULL,      -- NORMAL만 값 있음(그 책). RARE는 NULL
-    card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / RARE
+    card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / SPECIAL (2026-10-01 RARE에서 이름 변경)
     trigger_count  INT           NULL,      -- RARE만 값 있음(발급을 유발한 누적 NORMAL 카드 수: 10, 20 ...)
     earned_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 지급일시(KST)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
@@ -431,10 +431,10 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_erp_bookstore_student_
         ON erp_bookstore_student_card (student_id, content_id)
         WHERE card_type = 'NORMAL';
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_erp_bookstore_student_card_rare' AND object_id = OBJECT_ID('erp_bookstore_student_card'))
-    CREATE UNIQUE INDEX UX_erp_bookstore_student_card_rare
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_erp_bookstore_student_card_special' AND object_id = OBJECT_ID('erp_bookstore_student_card'))
+    CREATE UNIQUE INDEX UX_erp_bookstore_student_card_special
         ON erp_bookstore_student_card (student_id, trigger_count)
-        WHERE card_type = 'RARE';
+        WHERE card_type = 'SPECIAL';
 
 -- 클리닉 입실/퇴실 세션 (실시간 모니터링) — 학생이 로그인하는 시점에 자동으로 입실 기록이 생긴다
 IF OBJECT_ID('erp_bookstore_clinic_session', 'U') IS NULL

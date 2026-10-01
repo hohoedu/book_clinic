@@ -8,6 +8,7 @@ public class UserRespDTO {
     @Getter
     public static class DetailRespDTO {
         private final Integer id;
+        private final String userCode;
         private final String userId;
         private final String userName;
         private final String centerCode;
@@ -19,6 +20,7 @@ public class UserRespDTO {
 
         public DetailRespDTO(LoginUser loginUser) {
             this.id = loginUser.getId();
+            this.userCode = loginUser.getUserCode();
             this.userId = loginUser.getUserId();
             this.userName = loginUser.getUserName();
             this.centerCode = loginUser.getCenterCode();

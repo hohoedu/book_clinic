@@ -469,14 +469,21 @@
     newCardImg.alt = result.cardName;
   }
 
-  // 스페셜 카드 그림 — 시안의 "비밀의 책갈피" 이미지. 아직 파일이 없으면 기존 treasure.png로 되돌린다.
-  const SPECIAL_CARD_SRC = '/images/student_result/special_card.png';
+  // 스페셜 카드 그림 — 이미지 호스팅의 special_01~10.png 중 이번이 몇 번째 스페셜 카드인지에 맞는 것을
+  // 서버가 골라 준다(specialCardImageUrl, 2026-10-01). 주소가 없거나 못 불러오면 기존 treasure.png로 되돌린다.
+  const specialCardSrc = (result) => result.specialCardImageUrl || SPECIAL_CARD_FALLBACK;
   const SPECIAL_CARD_FALLBACK = '/images/student_result/treasure.png';
   const specialCardImg = document.getElementById('specialCardImg');
 
-  // 스페셜 카드 = 이번 첫 제출로 도서 카드가 10장의 배수를 채운 순간(서버 cardRewardReached, CARD_SET_SIZE=10).
-  // 재도전·틀린문제 재제출에는 카드를 새로 주지 않으므로 항상 false로 온다.
+  // 스페셜 카드 칸 — 이 책으로 스페셜 카드를 받았으면(서버 specialCardOwned) 항상 보여준다. 재도전·틀린문제·
+  // 심화 제출이나 결과 재조회에서도 칸이 사라지지 않게(2026-10-01).
   function hasSpecialCard(result) {
+    return Boolean(result.specialCardOwned || result.cardRewardReached);
+  }
+
+  // 스페셜 카드 연출 — 이번 첫 제출로 도서 카드가 10장의 배수를 채운 순간(서버 cardRewardReached)에만.
+  // 재제출에는 카드를 새로 주지 않으므로 항상 false로 온다(칸에만 보이고, 누르면 다시 보기는 된다).
+  function specialCardIsNew(result) {
     return Boolean(result.cardRewardReached);
   }
 
@@ -493,7 +500,7 @@
   function renderCard(result) {
     const show = hasSpecialCard(result);
     cardReward.hidden = !show;
-    if (show) setImgWithFallback(specialCardImg, SPECIAL_CARD_SRC, SPECIAL_CARD_FALLBACK);
+    if (show) setImgWithFallback(specialCardImg, specialCardSrc(result), SPECIAL_CARD_FALLBACK);
     renderTreasureProgress(result, show);
   }
 
@@ -533,6 +540,7 @@
 
   // 연출은 화면을 눌러야 닫힌다(다음 장이 있으면 이어서 나온다)
   let closeCurrentReveal = null;
+  let revealHideTimer = null;
   cardReveal.addEventListener('click', () => {
     if (closeCurrentReveal) closeCurrentReveal();
   });
@@ -585,6 +593,11 @@
     setImgWithFallback(cardRevealBack, src, fallback);
     cardRevealFront.alt = title;
 
+    // 앞 장의 "걷힌 뒤 숨김" 타이머가 남아 있으면 지운다 — 다음 장은 REVEAL_NEXT_GAP_MS(150)만에 뜨는데
+    // 앞 장 타이머(REVEAL_LEAVE_MS 400)가 그 뒤에 터지면 새로 뜬 장(스페셜 카드)이 멈칫하다 사라진다
+    clearTimeout(revealHideTimer);
+    cardRevealCard.style.visibility = '';
+
     // hidden을 풀고 reflow를 한 번 일으켜야 두 번째 장에서도 애니메이션이 처음부터 다시 돈다
     cardReveal.classList.remove('is-leaving');
     cardReveal.hidden = true;
@@ -602,7 +615,7 @@
 
     const stageRect = cardRevealStage ? cardRevealStage.getBoundingClientRect() : null;
     cardReveal.classList.add('is-leaving');
-    setTimeout(() => {
+    revealHideTimer = setTimeout(() => {
       cardReveal.hidden = true;
       cardRevealCard.style.visibility = '';
     }, REVEAL_LEAVE_MS);
@@ -646,7 +659,7 @@
       ? {
           title: '숨겨진 보물 발견!',
           desc: '선생님께 카드를 받아요!',
-          src: SPECIAL_CARD_SRC,
+          src: specialCardSrc(result),
           fallback: SPECIAL_CARD_FALLBACK,
           target: specialCardImg,
           cell: cardReward,
@@ -657,9 +670,12 @@
     bindReplay(newCard, bookCardItem);
     bindReplay(cardReward, specialItem);
 
-    // 자동 연출은 이번에 새로 받은 카드만 — 재도전·틀린문제 재제출도 서버가 보유 카드(cardName)를
-    // 내려주지만 cardNew가 false라 연출 없이 칸에만 보인다
-    return { bookCardItem: bookCardIsNew(result) ? bookCardItem : null, specialItem };
+    // 자동 연출은 이번에 새로 받은 카드만 — 재도전·틀린문제 재제출도 서버가 보유 카드(cardName·스페셜 카드)를
+    // 내려주지만 cardNew/cardRewardReached가 false라 연출 없이 칸에만 보인다
+    return {
+      bookCardItem: bookCardIsNew(result) ? bookCardItem : null,
+      specialItem: specialCardIsNew(result) ? specialItem : null,
+    };
   }
 
   function bookCardIsNew(result) {
@@ -676,7 +692,7 @@
     if (reducedMotion()) return;
     const pending = [];
     if (bookCardIsNew(result)) pending.push(newCard);
-    if (hasSpecialCard(result)) pending.push(cardReward);
+    if (specialCardIsNew(result)) pending.push(cardReward);
     if (shouldPlayExp(result)) pending.push(expCell);
     if (badgeIsNew(result) && !badgeReward.hidden) pending.push(badgeReward);
     // "보물 발견까지 N칸" — 크게 보여주진 않고, 이번에 카드를 새로 받아 남은 칸이 줄었을 때만 비워 뒀다가 붙인다

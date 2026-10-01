@@ -743,7 +743,7 @@
     </delete>
 
     <!--
-      RARE 카드는 "NORMAL 10장째"라는 사건으로 발급된다(trigger_count = 그 시점 누적 NORMAL 수).
+      SPECIAL(스페셜) 카드는 "NORMAL 10장째"라는 사건으로 발급된다(trigger_count = 그 시점 누적 NORMAL 수).
       NORMAL을 회수해 보유 수가 그 아래로 내려가면 근거가 사라지므로 함께 회수한다 — 남겨두면
       다시 10장을 채웠을 때 existsRareCard(trigger_count)에 걸려 레어카드를 영영 못 받는다.
       deleteNormalCard 다음에 호출해야 현재 보유 수가 회수 후 값으로 계산된다.
@@ -751,7 +751,7 @@
     <delete id="deleteOrphanRareCards">
         DELETE FROM erp_bookstore_student_card
         WHERE student_id = #{studentId}
-          AND card_type = 'RARE'
+          AND card_type = 'SPECIAL'
           AND trigger_count > (
               SELECT COUNT(*) FROM erp_bookstore_student_card
               WHERE student_id = #{studentId} AND card_type = 'NORMAL'
