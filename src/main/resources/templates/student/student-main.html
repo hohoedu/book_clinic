@@ -73,7 +73,11 @@
             </div>
             <!-- 제목·저자는 카드 전체 너비를 쓴다 — 정보/표지 2단(.book-content) 바깥 -->
             <div class="book-heading">
-              <div class="book-title" id="bookTitle">-</div>
+              <!-- 띠지 번호(학년별 책 번호, content_num) — 실물 책 띠지에 붙은 번호로 책장에서 찾는다 -->
+              <div class="book-title-row">
+                <span class="book-num" id="bookNum" hidden></span>
+                <div class="book-title" id="bookTitle">-</div>
+              </div>
               <!-- 지난번에 다 못 읽고 넘어간 책이면 어디까지 읽었는지 알려준다(2026-09-03) -->
               <p class="book-hold-note" id="bookHoldNote" hidden></p>
               <p class="book-author" id="bookAuthor">-</p>

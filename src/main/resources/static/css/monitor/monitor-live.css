@@ -982,63 +982,18 @@ i.badge-icon {
   color: #4c9be8;
 }
 
-/* 워크시트 출력대 — 화면에는 절대 보이지 않는다. display:none으로 숨기면 인쇄도 안 되므로
-   화면 밖으로 밀어두고, 인쇄할 때만(@media print) 제자리로 돌려 종이에 올린다. */
-.worksheet-print-stage {
+/* 활동지 출력 (2026-10-02) — 서버가 만들어준 PDF를 숨긴 iframe에 띄우고 그 안에서 인쇄한다.
+   화면에는 보이지 않아야 하지만 display:none이면 PDF 뷰어가 로드되지 않아 인쇄가 비는 브라우저가
+   있다. 그래서 크기를 0으로 두지 않고 화면 밖으로 밀어낸다.
+
+   인쇄 대상은 이 문서가 아니라 iframe 안의 PDF라, 예전처럼 @media print로 화면을 숨기거나
+   용지를 A4로 못박을 필요가 없다 — 장 나눔·용지·여백은 전부 PDF가 들고 있다. */
+.worksheet-print-frame {
   position: fixed;
   left: -10000px;
   top: 0;
-  width: 210mm;   /* A4 폭 — 화면 밖에서도 인쇄될 크기 그대로 레이아웃을 잡아둔다 */
+  width: 210mm;
+  height: 297mm;
+  border: 0;
 }
 
-.worksheet-image {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-/* 인쇄할 때는 워크시트 한 장만 종이에 올린다 — printWorksheet()가 body에 이 클래스를 붙이고,
-   afterprint에서 다시 뗀다. 사이드바·카드 목록·모달은 전부 숨긴다.
-
-   [무조건 한 장] 세로로 긴 워크시트가 두 장으로 잘리지 않도록, 출력대를 A4 인쇄영역
-   (210×297mm에서 여백 10mm를 뺀 190×277mm)에 딱 맞춰 고정하고 이미지는 그 안에 들어가도록
-   축소만 시킨다(width/height auto + max-*). 비율은 그대로 유지되고, 남는 쪽은 여백이 된다.
-   vh 대신 mm로 못박은 이유: 인쇄 시 vh 해석이 브라우저마다 달라 한 장 보장이 깨진다. */
-@media print {
-  body.worksheet-printing .admin-layout,
-  body.worksheet-printing .modal-overlay {
-    display: none !important;
-  }
-
-  body.worksheet-printing {
-    margin: 0;
-  }
-
-  body.worksheet-printing .worksheet-print-stage {
-    position: static;
-    display: flex;            /* 한 장 안에서 가운데 정렬 */
-    align-items: center;
-    justify-content: center;
-    width: 190mm;
-    height: 277mm;
-    overflow: hidden;         /* 혹시라도 넘치면 둘째 장을 만들지 않고 잘라낸다 */
-    page-break-after: avoid;
-    break-after: avoid;
-  }
-
-  body.worksheet-printing .worksheet-image {
-    width: auto;
-    height: auto;
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
-
-  /* 용지를 A4 세로로 못박는다 — 사용자가 대화상자에서 바꾸면 그 설정이 우선한다 */
-  @page {
-    size: A4 portrait;
-    margin: 10mm;
-  }
-}

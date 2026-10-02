@@ -240,7 +240,31 @@
   margin: 18px 0 24px;
 }
 
+/* 띠지 번호 배지 + 제목 한 줄 — 제목이 길면 제목만 말줄임된다 */
+.book-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.book-num {
+  flex: none;
+  min-width: 44px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #00b48e;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.book-num[hidden] { display: none; }
+
 .book-title {
+  flex: 1;
   margin: 0;
   min-width: 0;
   font-size: 34px;

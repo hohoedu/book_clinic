@@ -12,6 +12,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initReadingLogPanel();
   initBookSwapModal();
   initHoldModal();
+  document.getElementById("btnPrintAllWorksheets")
+    ?.addEventListener("click", printAllEnteredWorksheets);
   // 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에 기대지 않고 startElapsedTicker가 브라우저에서
   // 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를 기준점으로 삼아 그 위로 초를 더하는 방식이라
   // DB/브라우저 시계 차이 문제가 없다.
@@ -454,16 +456,21 @@ function sortedCards(list) {
 /* 그날 예약된 학생 전체를 입실/미입실/퇴실 3개 영역으로 나눠서 보여준다(2026-07-29) — 타임별로
    순차 노출하던 방식보다 지금 누가 어느 상태인지 한눈에 파악하기 쉽다. filteredCards()가 이미
    같은 기준(rank)으로 정렬해 내려주므로 여기서는 그 순서 그대로 그룹만 나눈다. */
-function renderGrid() {
-  // 이전 렌더링의 점수 상자는 곧 버려진다 — 관찰을 끊지 않으면 15초마다 관찰 대상이 쌓인다
-  scoreFitObserver?.disconnect();
-
+function groupCards() {
   const grouped = { entered: [], notEntered: [], exited: [] };
   filteredCards().forEach((card) => {
     if (card.sessionStatus === "EXITED") grouped.exited.push(card);
     else if (card.cardStatus === "NOT_ENTERED") grouped.notEntered.push(card);
     else grouped.entered.push(card);
   });
+  return grouped;
+}
+
+function renderGrid() {
+  // 이전 렌더링의 점수 상자는 곧 버려진다 — 관찰을 끊지 않으면 15초마다 관찰 대상이 쌓인다
+  scoreFitObserver?.disconnect();
+
+  const grouped = groupCards();
 
   renderSection("enteredGrid", "enteredCount", grouped.entered, "지금 입실한 학생이 없어요.");
   renderSection("notEnteredGrid", "notEnteredCount", grouped.notEntered, "미입실 학생이 없어요.");
@@ -677,7 +684,7 @@ function renderBookRow(el, card, pages, pageIndex) {
   if (holdBtn) holdBtn.addEventListener("click", () => openHoldModal(card, page));
 
   const worksheetBtn = bookRow.querySelector(".book-worksheet-btn");
-  if (worksheetBtn) worksheetBtn.addEventListener("click", () => printWorksheet(page));
+  if (worksheetBtn) worksheetBtn.addEventListener("click", () => printWorksheet(card, page));
 }
 
 /* ── 책 홀딩 / 자물쇠 (2026-09-03) ─────────────────────────────────────────────
@@ -760,50 +767,119 @@ async function saveHold(clear) {
   }
 }
 
-/* ── 워크시트 출력 (2026-09-14) ───────────────────────────────────────────────
-   책마다 1장씩 등록해둔 출력용 이미지를 선생님이 카드에서 바로 뽑아 쓴다. 워크시트가 등록된
-   책에만 프린터 아이콘이 뜨고(page.hasWorksheet), 누르면 미리보기 없이 곧장 인쇄 대화상자가 뜬다.
+/* ── 활동지 출력 (2026-09-14, 2026-10-02 PDF 방식으로 교체) ──────────────────────
+   책마다 1장씩 등록해둔 출력용 워크시트를 선생님이 카드에서 바로 뽑아 쓴다. 워크시트가 등록된
+   책에만 프린터 아이콘이 뜨고(page.hasWorksheet), 머리말의 '활동지 전체 출력'은 입실 학생 몫을
+   한 번에 뽑는다.
 
-   [주소를 숨기는 이유] 이미지는 호스팅 원본 주소가 아니라 /admin/monitor/worksheet/{contentId}
-   프록시로 받는다. 원본 주소를 화면에 내려주면 로그인하지 않은 사람도 URL만 알면 워크시트를
-   통째로 받아갈 수 있다. 프록시는 로그인 세션이 있어야 열리고 응답에 no-store가 붙는다.
-   화면에 그림을 띄우지 않으니 우클릭/드래그로 집어갈 경로도 없다.
+   [왜 PDF인가] 예전에는 업로드된 PDF를 PNG로 구워 저장하고 <img>에 물려 인쇄했는데, 래스터로
+   굳히는 순간 인쇄물의 작은 글자가 뭉개졌다. 지금은 서버가 원본 PDF에 이름·날짜를 찍어 한 개로
+   묶어주고, 브라우저는 그 PDF를 그대로 인쇄한다 — 벡터라 프린터 해상도 그대로 선명하다.
+   여러 장을 한 PDF로 받으므로 장 나눔도 PDF가 책임진다(예전의 "무조건 한 장" CSS 트릭 불필요).
 
-   [복사 차단의 한계] 인쇄 대화상자의 PDF 저장은 브라우저/OS 기능이라 웹에서 막을 수 없다. */
+   [주소를 숨기는 이유] 워크시트는 호스팅 원본 주소가 아니라 서버가 만들어준 PDF로만 받는다.
+   원본 주소를 화면에 내려주면 로그인하지 않은 사람도 URL만 알면 통째로 받아갈 수 있다.
+
+   [복사 차단의 한계] 브라우저 PDF 뷰어의 저장 버튼은 웹에서 막을 수 없다. */
 
 let worksheetPrinting = false;   // 연타로 인쇄 대화상자가 겹쳐 뜨는 것을 막는다
 
-function printWorksheet(page) {
-  if (page.contentId == null || worksheetPrinting) return;
+/* 책 한 권의 활동지를 뽑는다 (카드의 프린터 아이콘) */
+function printWorksheet(card, page) {
+  if (page.contentId == null) return;
+  printWorksheets([{ contentId: page.contentId, studentName: card.studentName ?? "" }]);
+}
+
+/* 지금 입실한 학생들의 활동지를 한 번에 뽑는다 (2026-10-02, 머리말의 '활동지 전체 출력').
+
+   대상은 화면의 '입실' 영역에 보이는 학생들이다 — 필터가 걸려 있으면 거기 보이는 만큼만 나간다.
+   보이는 것과 나오는 것이 같아야 몇 장이 나올지 선생님이 눈으로 미리 셀 수 있다.
+
+   [카드의 프린터 아이콘과 조건이 다른 이유 (2026-10-02)] 아이콘은 문제풀이를 마친 책에만 뜨지만
+   (canPrintWorksheet), 전체 출력은 워크시트가 등록돼 있기만 하면 담는다. 선생님은 수업이 시작될
+   때 그날 쓸 활동지를 미리 뽑아두는데, 그 시점엔 아직 아무도 문제를 다 풀지 않았다. 다 풀기를
+   기다렸다 뽑으면 학생이 끝낸 뒤에야 종이를 들고 뛰어야 한다.
+   한 학생이 두 권을 받았고 둘 다 워크시트가 있으면 두 장 나간다. */
+function printAllEnteredWorksheets() {
+  if (worksheetPrinting) return;
+
+  const sheets = [];
+  groupCards().entered.forEach((card) => {
+    bookPages(card).forEach((page) => {
+      if (page.contentId != null && page.hasWorksheet) {
+        sheets.push({ contentId: page.contentId, studentName: card.studentName ?? "" });
+      }
+    });
+  });
+
+  if (sheets.length === 0) {
+    alert("지금 출력할 활동지가 없습니다.\n\n워크시트가 등록된 책을 받은 입실 학생이 있어야 나옵니다.");
+    return;
+  }
+
+  const students = new Set(sheets.map((sheet) => sheet.studentName)).size;
+  if (!confirm(`입실 학생 ${students}명, 활동지 ${sheets.length}장을 출력합니다.\n계속할까요?`)) return;
+
+  printWorksheets(sheets);
+}
+
+/* 한 장이든 여러 장이든 여기로 모인다 — 서버에서 PDF를 받아 숨긴 iframe에 띄우고 인쇄한다. */
+async function printWorksheets(sheets) {
+  if (worksheetPrinting || sheets.length === 0) return;
   worksheetPrinting = true;
 
-  const img = document.getElementById("worksheetImage");
+  const button = document.getElementById("btnPrintAllWorksheets");
+  if (button) button.disabled = true;
+
+  let blobUrl = null;
+  let frame = null;
 
   const cleanup = () => {
-    document.body.classList.remove("worksheet-printing");
-    // 인쇄가 끝나면 비워둔다 — 남겨두면 다른 화면에서 Ctrl+P를 눌러도 이 워크시트가 딸려 나온다
-    img.removeAttribute("src");
+    // 인쇄가 끝나면 치운다 — 남겨두면 다른 화면에서 Ctrl+P를 눌러도 활동지가 딸려 나오고,
+    // blob 주소를 안 거두면 PDF가 메모리에 계속 남는다.
+    frame?.remove();
+    if (blobUrl) URL.revokeObjectURL(blobUrl);
+    if (button) button.disabled = false;
     worksheetPrinting = false;
   };
 
-  // 이미지가 다 뜨기 전에 인쇄하면 빈 종이가 나온다 — 로드가 끝난 뒤에 대화상자를 연다
-  img.onload = () => {
-    img.onload = img.onerror = null;
-    window.addEventListener("afterprint", cleanup, { once: true });
-    document.body.classList.add("worksheet-printing");
-    window.print();
-    // afterprint를 안 쏘는 브라우저(구형 사파리 등)에 대비한 안전망 — 화면이 인쇄 모드로 굳지 않게
-    setTimeout(() => { if (worksheetPrinting) cleanup(); }, 1000);
-  };
-  img.onerror = () => {
-    img.onload = img.onerror = null;
-    cleanup();
-    alert("워크시트를 불러오지 못했습니다. 도서 정보에 워크시트가 등록되어 있는지 확인해 주세요.");
-  };
+  try {
+    const response = await fetch("/admin/monitor/worksheet/print", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", [CSRF_HEADER]: getCsrfToken() },
+      body: JSON.stringify({ sheets }),
+    });
 
-  // 같은 책을 다시 눌렀을 때도 onload가 확실히 돌도록 먼저 비우고 넣는다
-  img.removeAttribute("src");
-  img.src = `/admin/monitor/worksheet/${page.contentId}`;
+    if (!response.ok) {
+      // 실패 응답은 PDF가 아니라 평소의 JSON 에러다
+      const error = await response.json().catch(() => null);
+      throw new Error(error?.error?.message ?? "활동지를 불러오지 못했습니다.");
+    }
+
+    blobUrl = URL.createObjectURL(await response.blob());
+
+    frame = document.createElement("iframe");
+    frame.className = "worksheet-print-frame";
+    frame.src = blobUrl;
+    document.body.appendChild(frame);
+
+    // PDF 뷰어가 다 뜨기 전에 인쇄하면 빈 종이가 나온다 — 로드가 끝난 뒤에 대화상자를 연다
+    await new Promise((resolve, reject) => {
+      frame.onload = resolve;
+      frame.onerror = () => reject(new Error("활동지를 여는 데 실패했습니다."));
+    });
+
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+
+    // 인쇄 대화상자가 닫히면 치운다. PDF를 띄운 iframe은 afterprint가 부모로 오지 않는 브라우저가
+    // 있어, 창이 다시 포커스를 받는 시점을 함께 본다.
+    window.addEventListener("focus", cleanup, { once: true });
+  } catch (error) {
+    console.error(error);
+    cleanup();
+    alert(error.message ?? "활동지를 출력하지 못했습니다.");
+  }
 }
 
 /* ── 추천 도서 교체 (2026-09-02) ────────────────────────────────────────────────

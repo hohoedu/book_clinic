@@ -22,6 +22,7 @@ public class ClinicRespDTO {
         /** 이 추천이 실제로 대여 확정된 item(실물 판본) — 재입실 재대여 등에 쓰인다 */
         private Integer itemId;
         private Integer contentId;
+        private Integer contentNum;      // 띠지 번호 — 학년별 책 번호(erp_bookstore_content.content_num)
         private String originalTitle;
         private String author;
         private String publisher;

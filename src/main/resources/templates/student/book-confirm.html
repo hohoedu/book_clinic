@@ -34,6 +34,9 @@
         오늘의 추천 도서
       </p>
 
+      <!-- 띠지 번호(학년별 책 번호, content_num) — 책장에서 이 번호로 실물 책을 찾는다. 값 없으면 숨김 -->
+      <p class="confirm-book-num" th:if="${book.contentNum != null}" th:text="${book.contentNum}">12</p>
+
       <!-- 책 제목은 대괄호로 감싸 한 문장 안에 넣는다 -->
       <h1 class="confirm-headline">
         <span class="confirm-headline-title"

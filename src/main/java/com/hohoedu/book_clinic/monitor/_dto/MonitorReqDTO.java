@@ -2,6 +2,7 @@ package com.hohoedu.book_clinic.monitor._dto;
 
 import java.util.List;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.NotNull;
@@ -10,6 +11,26 @@ import lombok.Data;
 
 /** 실시간 모니터링 요청 DTO 모음 */
 public class MonitorReqDTO {
+
+    /**
+     * 활동지 출력 요청 (2026-10-02) — 뽑을 워크시트와 그 장에 찍을 학생 이름을 짝지어 보낸다.
+     * 한 장(카드의 프린터 아이콘)이든 전체 출력이든 같은 모양으로 온다.
+     */
+    @Data
+    public static class WorksheetPrintReqDTO {
+        @NotNull(message = "출력할 활동지가 없습니다.")
+        @Size(min = 1, max = 100, message = "활동지는 한 번에 1~100장까지 출력할 수 있습니다.")
+        @Valid
+        private List<Sheet> sheets;
+
+        @Data
+        public static class Sheet {
+            @NotNull(message = "도서 ID는 필수입니다.")
+            private Integer contentId;
+            /** 이 장에 찍을 학생 이름 — 비어 있으면 이름 없이 나간다 */
+            private String studentName;
+        }
+    }
 
     /** 퇴실 처리 요청 — 세션ID를 몰라도 되도록 studentId만 받는다 (오늘 열린 세션을 서버가 찾음) */
     @Data

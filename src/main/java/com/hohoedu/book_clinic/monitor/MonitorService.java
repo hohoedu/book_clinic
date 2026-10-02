@@ -14,7 +14,6 @@ import org.springframework.transaction.annotation.Transactional;
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception403;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
-import com.hohoedu.book_clinic._core.file.ImageStorageService;
 import com.hohoedu.book_clinic._core.interceptor.StudentSessionRegistry;
 import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.book.BookService;
@@ -47,33 +46,6 @@ public class MonitorService {
     // 퇴실 시 읽던 책을 홀딩으로 내리기 위해 필요하다(2026-09-03). ClinicService를 주입하면
     // ClinicService → MonitorService 방향과 맞물려 순환 참조가 되므로 리포지토리를 직접 쓴다.
     private final ClinicRepository clinicRepository;
-    // 워크시트 원본을 서버에서 받아오기 위해 필요하다(2026-09-14) — 호스팅 주소를 화면에 노출하지 않는다
-    private final ImageStorageService imageStorageService;
-
-    /**
-     * 워크시트(출력용 이미지) 원본을 서버가 직접 받아 바이트로 돌려준다 (2026-09-14).
-     *
-     * 화면에는 호스팅 주소 대신 /admin/monitor/worksheet/{contentId}만 내려간다. 주소를 숨기는 게
-     * 목적이라 컨트롤러가 URL을 만지지 않고, 조회·수신을 전부 서버 안에서 끝낸다.
-     * 워크시트가 등록되지 않은 책이면 404.
-     */
-    public byte[] readWorksheet(Integer contentId) {
-        String url = bookService.findWorksheetUrl(contentId);
-        if (url == null || url.isBlank()) {
-            throw new Exception404("이 도서에는 등록된 워크시트가 없습니다.");
-        }
-        try {
-            return imageStorageService.read(url);
-        } catch (java.io.IOException e) {
-            log.warn("워크시트 이미지 로드 실패 — contentId={}", contentId, e);
-            throw new Exception400("워크시트 이미지를 불러오지 못했습니다.");
-        }
-    }
-
-    /** 워크시트 응답의 Content-Type — 원본 확장자 기준 */
-    public String worksheetContentType(Integer contentId) {
-        return imageStorageService.contentTypeOf(bookService.findWorksheetUrl(contentId));
-    }
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.

@@ -39,7 +39,7 @@ public class SecurityConfig {
                                                                 "/signup", "/juso", "/jusoCallBack",
                                                                 "/error",
                                                                 "/h2-console/**",
-                                                                "/css/**", "/js/**", "/images/**", "/uploads/**",
+                                                                "/css/**", "/js/**", "/images/**",
                                                                 "/lottie/**",
                                                                 "/favicon.ico",
                                                                 "/manifest.json", "/sw.js",

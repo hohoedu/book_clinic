@@ -88,6 +88,7 @@
     -->
     <select id="findBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
         SELECT bc.content_id     AS contentId,
+               bc.content_num    AS contentNum,
                it.item_id        AS itemId,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
@@ -117,6 +118,7 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
+               bc.content_num    AS contentNum,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
                COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
@@ -148,6 +150,7 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
+               bc.content_num    AS contentNum,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
                COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
@@ -544,6 +547,7 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
+               bc.content_num    AS contentNum,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
                COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,

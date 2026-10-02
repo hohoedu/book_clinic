@@ -4,37 +4,41 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URLConnection;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.UUID;
 
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 
 import lombok.extern.slf4j.Slf4j;
 
 /**
  * 도서 이미지 저장 서비스
  *
- * 가비아 이미지 호스팅(FTP) 접속정보가 설정되어 있으면 FTP로 업로드하고 공개 URL을 반환한다.
- * 접속정보가 비어 있으면(개발 환경 등) 서버 로컬 디스크에 저장하고 /uploads/** URL을 반환한다.
+ * 가비아 이미지 호스팅(FTP)에 업로드하고 공개 URL을 반환한다.
  *
- * 도서 ↔ 이미지 연결은 파일명이 아니라 DB image_url 값이 담당하므로 파일명은 UUID로 고유하게 둔다.
+ * 로컬 디스크 폴백(/uploads/**)은 없앴다(2026-10-02). prod에 ftp 설정이 빠져 있던 동안 운영 업로드가
+ * 조용히 서버 디스크에 쌓였다 — 접속정보가 비어 있으면 저장하지 않고 실패시켜 바로 드러나게 한다.
+ *
+ * 도서 이미지(표지·카드·워크시트)의 파일명은 content_id다(2026-10-02, 이전엔 UUID) — 호스팅 폴더만 보고도
+ * 어떤 책인지 알 수 있어야 해서다. 다시 올리면 같은 이름으로 덮어쓰므로, 반환 URL 끝에 ?v=업로드시각을 붙여
+ * 브라우저·CDN이 옛 그림을 계속 보여주지 않게 한다. 연결 자체는 여전히 DB에 저장된 URL 값이 담당한다.
+ * 서명 이미지는 책과 무관해 UUID 그대로다.
  *
  * 용도별로 원격 디렉터리를 나눈다(2026-09-02) — 표지는 master-book-dir, 수집 카드는 card-dir.
  * 파일명이 UUID라 한 폴더에 섞여도 충돌은 없지만, 카드만 따로 세거나 교체·정리하는 일이 생기므로
- * 처음부터 갈라둔다. 로컬 폴백도 같은 이유로 uploads/book, uploads/card로 나눈다.
+ * 처음부터 갈라둔다.
  */
 @Slf4j
 @Service
 public class ImageStorageService {
 
-    @Value("${file.upload-dir:uploads}")
-    private String uploadDir;
     @Value("${ftp.server:}")
     private String ftpServer;
     @Value("${ftp.port:21}")
@@ -87,46 +91,109 @@ public class ImageStorageService {
                 + String.format("/special_%s_%02d.png", grade, seq);
     }
 
-    /** 도서 표지 저장 후 접근 가능한 URL 반환 */
-    public String store(MultipartFile file) throws IOException {
-        return store(file, masterBookDir, "book");
+    /**
+     * 도서 표지 저장 후 접근 가능한 URL 반환 — 파일명 {contentId 3자리}.확장자(예: 001.jpg).
+     * 지점 하위도서(item) 표지는 마스터 표지를 덮어쓰면 안 되므로 {contentId}_{centerCode}.확장자로 둔다.
+     */
+    public String store(MultipartFile file, int contentId, String centerCode) throws IOException {
+        String baseName = isNotBlank(centerCode) ? fileBase(contentId) + "_" + centerCode.trim() : fileBase(contentId);
+        return store(file, masterBookDir, baseName, extractExtension(file.getOriginalFilename()));
     }
 
-    /** 수집 카드 이미지 저장 후 접근 가능한 URL 반환 */
-    public String storeCard(MultipartFile file) throws IOException {
-        return store(file, cardDir, "card");
+    /** 파일명용 content_id — 3자리 0 채움(1 → 001, 11 → 011). 1000부터는 그대로(1234) */
+    private String fileBase(int contentId) {
+        return String.format("%03d", contentId);
+    }
+
+    /** 수집 카드 이미지 저장 후 접근 가능한 URL 반환 — 파일명 {contentId}.확장자 */
+    public String storeCard(MultipartFile file, int contentId) throws IOException {
+        return store(file, cardDir, fileBase(contentId), extractExtension(file.getOriginalFilename()));
     }
 
     /**
-     * 워크시트 이미지 저장 후 접근 가능한 URL 반환 (2026-09-14).
+     * 워크시트 저장 후 접근 가능한 URL 반환 (2026-09-14).
      * 여기서 돌려주는 호스팅 주소는 DB(erp_bookstore_card_path.worksheet_url)에만 남고 브라우저로는
-     * 내려가지 않는다 — 모니터링 화면은 /admin/monitor/worksheet/{contentId} 프록시로만 받아본다.
+     * 내려가지 않는다 — 출력은 /admin/monitor/worksheet/print 가 만들어 주는 PDF로만 나간다.
+     *
+     * PDF는 변환 없이 원본 그대로 둔다(2026-10-02 재변경). 한때 PNG로 구워 저장했는데, 래스터로
+     * 굳히는 순간 인쇄물의 글자가 눈에 띄게 뭉개졌다 — 출력도 PDF로 하면 원본 벡터가 그대로
+     * 프린터 해상도로 찍힌다. 이미지로 올린 워크시트는 그대로 두고, 출력할 때 PDF 한 장에 얹는다.
      */
-    public String storeWorksheet(MultipartFile file) throws IOException {
-        return store(file, worksheetDir, "worksheet");
+    public String storeWorksheet(MultipartFile file, int contentId) throws IOException {
+        if (isPdf(file)) {
+            validatePdf(file);
+            return store(file, worksheetDir, fileBase(contentId), ".pdf");
+        }
+        return store(file, worksheetDir, fileBase(contentId), extractExtension(file.getOriginalFilename()));
+    }
+
+    /** 업로드된 파일이 PDF인지 — content-type이 비거나 엉뚱하게 오는 브라우저가 있어 확장자도 본다 */
+    public boolean isPdf(MultipartFile file) {
+        if (file == null) return false;
+        String contentType = file.getContentType();
+        if (contentType != null && contentType.toLowerCase().startsWith("application/pdf")) return true;
+        String name = file.getOriginalFilename();
+        return name != null && name.toLowerCase().endsWith(".pdf");
+    }
+
+    /** 저장된 주소가 PDF인지 — 출력할 때 페이지를 가져다 쓸지, 그림으로 얹을지 가른다 */
+    public boolean isPdfUrl(String storedUrl) {
+        return stripQuery(storedUrl).endsWith(".pdf");
+    }
+
+    /** ?v=... 를 떼고 소문자로 — 확장자 판별용 */
+    private String stripQuery(String storedUrl) {
+        if (storedUrl == null) return "";
+        int q = storedUrl.indexOf('?');
+        return (q < 0 ? storedUrl : storedUrl.substring(0, q)).toLowerCase();
+    }
+
+    /**
+     * 열리는 PDF인지만 확인하고 버린다 (2026-10-02).
+     *
+     * 변환해서 저장하지 않으니 업로드 시점에 내용을 볼 일이 없지만, 암호가 걸렸거나 깨진 파일을
+     * 그대로 받아두면 몇 주 뒤 수업 직전 출력에서야 터진다. 그때는 등록한 사람도 자리에 없다.
+     * 그래서 올리는 순간 한 번 열어보고 안 열리면 등록 자체를 막는다.
+     */
+    private void validatePdf(MultipartFile file) throws IOException {
+        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
+            if (document.getNumberOfPages() == 0) {
+                throw new Exception400("PDF에 페이지가 없습니다.");
+            }
+            if (document.getNumberOfPages() > 1) {
+                log.warn("워크시트 PDF가 {}장입니다 — 출력은 첫 페이지만 나갑니다. (파일명: {})",
+                        document.getNumberOfPages(), file.getOriginalFilename());
+            }
+        } catch (Exception400 e) {
+            throw e;
+        } catch (IOException e) {
+            log.warn("워크시트 PDF 열기 실패 (파일명: {})", file.getOriginalFilename(), e);
+            throw new Exception400("PDF를 열지 못했습니다. 암호가 걸려 있거나 손상된 파일일 수 있습니다.");
+        }
     }
 
     /** 입회 서명 이미지 저장 후 접근 가능한 URL 반환 (2026-09-10, 회원가입 이식) */
     public String storeSignature(MultipartFile file) throws IOException {
-        return store(file, signatureDir, "signature");
+        return store(file, signatureDir, UUID.randomUUID().toString().replace("-", ""),
+                extractExtension(file.getOriginalFilename()));
     }
 
     /**
-     * remoteDir: 가비아 FTP 기준 디렉터리, localSubDir: 로컬 폴백 시 uploads 아래 하위 폴더.
-     * 둘을 따로 받는 건 원격 경로가 환경변수(계정마다 다름)인 반면 로컬은 고정이기 때문이다.
+     * remoteDir: 가비아 FTP 기준 디렉터리, baseName: 확장자를 뺀 파일명.
+     * 같은 이름이 있으면 덮어쓴다(FTP STOR) — 반환 URL의 ?v=가 매번 달라 캐시된 옛 그림이 보이지 않는다.
      */
-    private String store(MultipartFile file, String remoteDir, String localSubDir) throws IOException {
-        String filename = UUID.randomUUID().toString().replace("-", "") + extractExtension(file.getOriginalFilename());
-        return gabiaEnabled() ? storeToGabia(file, filename, remoteDir) : storeToLocal(file, filename, localSubDir);
+    private String store(MultipartFile file, String remoteDir, String baseName, String extension)
+            throws IOException {
+        if (!isNotBlank(ftpServer)) {
+            throw new IOException("가비아 FTP 접속정보(ftp.server)가 설정되지 않았습니다.");
+        }
+        try (InputStream in = file.getInputStream()) {
+            return storeToGabia(in, baseName + extension, remoteDir) + "?v=" + System.currentTimeMillis();
+        }
     }
 
-    /** 가비아 FTP 접속정보가 설정되어 있는지 */
-    private boolean gabiaEnabled() {
-        return isNotBlank(ftpServer);
-    }
-
-    /** 가비아 이미지 호스팅(FTP) 업로드 */
-    private String storeToGabia(MultipartFile file, String filename, String remoteDir) throws IOException {
+    /** 가비아 이미지 호스팅(FTP) 업로드 — 테스트가 FTP 없이 저장 결과를 보도록 패키지 범위로 둔다 */
+    String storeToGabia(InputStream in, String filename, String remoteDir) throws IOException {
         FTPClient ftp = new FTPClient();
         try {
             ftp.connect(ftpServer, ftpPort);
@@ -138,10 +205,8 @@ public class ImageStorageService {
 
             changeToDir(ftp, remoteDir);
 
-            try (InputStream in = file.getInputStream()) {
-                if (!ftp.storeFile(filename, in)) {
-                    throw new IOException("가비아 FTP 업로드 실패: " + ftp.getReplyString());
-                }
+            if (!ftp.storeFile(filename, in)) {
+                throw new IOException("가비아 FTP 업로드 실패: " + ftp.getReplyString());
             }
         } finally {
             disconnectQuietly(ftp);
@@ -157,7 +222,7 @@ public class ImageStorageService {
         for (String segment : dir.split("/")) {
             if (segment.isBlank()) continue;
             if (!ftp.changeWorkingDirectory(segment)) {
-                ftp.makeDirectory(segment);
+                ftp.makeDirectory(segment); 
                 if (!ftp.changeWorkingDirectory(segment)) {
                     throw new IOException("원격 디렉터리 이동 실패: " + segment);
                 }
@@ -170,19 +235,9 @@ public class ImageStorageService {
      *
      * 워크시트는 호스팅 주소를 브라우저에 노출하지 않는 것이 핵심이라, 화면은 원본 URL 대신
      * /admin/monitor/worksheet/{contentId}만 받는다. 그 엔드포인트가 이 메서드로 원본을 가져온다.
-     * store()가 만든 두 가지 형태를 모두 처리한다 — 가비아 https 주소, 로컬 폴백('/uploads/...').
      */
     public byte[] read(String storedUrl) throws IOException {
         if (!isNotBlank(storedUrl)) throw new IOException("이미지 주소가 비어 있습니다.");
-
-        if (storedUrl.startsWith("/uploads/")) {
-            // 로컬 폴백본. DB에 저장된 값이라 외부 입력은 아니지만, 정규화 후 업로드 폴더 밖을
-            // 가리키면 거부한다(경로 조작 값이 어떤 경로로든 DB에 들어간 경우 대비).
-            Path base = Paths.get(uploadDir).toAbsolutePath().normalize();
-            Path target = base.resolve(storedUrl.substring("/uploads/".length())).normalize();
-            if (!target.startsWith(base)) throw new IOException("허용되지 않은 이미지 경로: " + storedUrl);
-            return Files.readAllBytes(target);
-        }
 
         URLConnection conn = URI.create(storedUrl).toURL().openConnection();
         conn.setConnectTimeout(5000);
@@ -194,7 +249,8 @@ public class ImageStorageService {
 
     /** 저장 주소의 확장자로 추정한 MIME 타입 — 알 수 없으면 image/jpeg */
     public String contentTypeOf(String storedUrl) {
-        String url = storedUrl == null ? "" : storedUrl.toLowerCase();
+        String url = stripQuery(storedUrl);
+        if (url.endsWith(".pdf")) return "application/pdf";
         if (url.endsWith(".png")) return "image/png";
         if (url.endsWith(".gif")) return "image/gif";
         if (url.endsWith(".webp")) return "image/webp";
@@ -204,14 +260,6 @@ public class ImageStorageService {
     /** 앞뒤 슬래시 제거 */
     private String normalizeDir(String dir) {
         return isNotBlank(dir) ? dir.replaceAll("^/+", "").replaceAll("/+$", "") : "";
-    }
-
-    /** 서버 로컬 디스크에 저장 */
-    private String storeToLocal(MultipartFile file, String filename, String subDir) throws IOException {
-        Path dir = Paths.get(uploadDir, subDir);
-        Files.createDirectories(dir);
-        file.transferTo(dir.resolve(filename).toAbsolutePath());
-        return "/uploads/" + subDir + "/" + filename;
     }
 
     /** 허용 확장자만 통과, 그 외는 확장자 제거 */

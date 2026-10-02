@@ -147,6 +147,7 @@
     const titleEl = document.getElementById('bookTitle');
     const holdNoteEl = document.getElementById('bookHoldNote');
     const authorEl = document.getElementById('bookAuthor');
+    const bookNumEl = document.getElementById('bookNum');
     const descEl = document.getElementById('bookDesc');
     const imgEl = document.getElementById('bookImg');
     const actionBtn = document.getElementById('mainActionBtn');
@@ -195,6 +196,9 @@
 
     function fillBookInfo(book) {
       titleEl.textContent = book.originalTitle ?? '-';
+      // 띠지 번호 — 값이 없는 책은 배지를 숨긴다
+      bookNumEl.hidden = book.contentNum == null;
+      bookNumEl.textContent = book.contentNum ?? '';
       authorEl.textContent = [book.author, book.publisher].filter(Boolean).join(' | ') || '-';
       descEl.textContent = book.summary ?? '-';
       imgEl.src = book.imageUrl || '/images/book-sample.png';

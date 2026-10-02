@@ -508,7 +508,6 @@
   // 세트까지 남은 장수. 직전 결과(/clinic/last-result)처럼 totalCards가 안 오면 셀 수 없어 숨긴다.
   const CARD_SET_SIZE = 10;
   const treasureProgress = document.getElementById('treasureProgress');
-  const mysteryCardImg = document.getElementById('mysteryCardImg');
 
   function renderTreasureProgress(result, specialShown) {
     if (specialShown || result.totalCards == null) {
@@ -519,8 +518,6 @@
     treasureProgress.querySelectorAll('.js-treasure-left').forEach((el) => {
       el.textContent = left;
     });
-    // 디자인 원본(png)이 들어오면 그걸 쓰고, 없으면 임시 SVG로 되돌린다
-    setImgWithFallback(mysteryCardImg, '/images/student_result/mystery_card.png', '/images/student_result/mystery_card.svg');
     treasureProgress.hidden = false;
   }
 

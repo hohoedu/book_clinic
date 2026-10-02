@@ -37,6 +37,20 @@
 }
 
 /* ── 안내 문구 ── */
+/* 띠지 번호 배지 — 홈 카드(.book-num)와 같은 색, 공용 기기라 더 크게 */
+.confirm-book-num {
+  display: table; /* 자기 줄을 차지하면서 가운데 정렬(옆 eyebrow가 inline-flex라 inline-block이면 한 줄에 붙는다) */
+  min-width: 64px;
+  margin: 0 auto 12px;
+  padding: 6px 20px;
+  border-radius: 999px;
+  background: #00b48e;
+  color: #fff;
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
 .confirm-headline {
   margin: 0 auto 6px;
   max-width: 15em;

@@ -430,18 +430,17 @@ function buildItemCard(item, master) {
 
   // 이미지 업로드/삭제
   const fileInput = card.querySelector(".it-image-input");
-  card.querySelector(".it-image-change").addEventListener("click", () => fileInput.click());
+  card.querySelector(".it-image-change").addEventListener("click", () => {
+    if (requireSavedBook()) fileInput.click();
+  });
   card.querySelector(".it-image-delete").addEventListener("click", () => setCardImage(card, ""));
   fileInput.addEventListener("change", async () => {
     const file = fileInput.files?.[0];
     if (!file) return;
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch("/book/image", { method: "POST", headers: { [CSRF_HEADER]: getCsrfToken() }, body: form });
-      const data = await res.json();
-      if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
-      setCardImage(card, data.response.url);
+      setCardImage(card, await uploadAsset("/book/image", file, currentContentId, {
+        centerCode: currentUser?.centerCode ?? "",
+      }));
     } catch (error) {
       console.error(error);
       alert(error.message ?? "이미지 업로드 중 오류가 발생했습니다.");
@@ -1257,6 +1256,139 @@ function getStatusValue() {
   return document.getElementById("status-stop")?.checked ? "N" : "Y";
 }
 
+/* 이미지 파일명이 content_id라(2026-10-02) 저장된 도서에만 바로 올릴 수 있다.
+   지점 하위도서 카드는 마스터가 있어야 열리므로 이 가드만 쓴다. 마스터 신규 등록은 아래 "보류 업로드"로 처리한다. */
+function requireSavedBook() {
+  if (currentMode === "new" || currentContentId == null) {
+    alert("도서를 먼저 저장한 뒤 이미지를 등록해 주세요.");
+    return false;
+  }
+  return true;
+}
+
+/* 이미지/워크시트 파일 하나를 올리고 저장된 URL을 돌려준다 */
+async function uploadAsset(endpoint, file, contentId, extra = {}) {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("contentId", contentId);
+  Object.entries(extra).forEach(([key, value]) => form.append(key, value));
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { [CSRF_HEADER]: getCsrfToken() },
+    body: form,
+  });
+  const data = await response.json();
+  if (!data.success) throw new Error(data.error?.message ?? "업로드에 실패했습니다.");
+  return data.response.url;
+}
+
+/* ===================== 신규 도서 보류 업로드 (2026-10-02) =====================
+   신규 등록 화면엔 아직 content_id가 없어 파일명을 정할 수 없다. 그래서 파일을 고르면 미리보기만 보여주고
+   파일은 들고 있다가, 저장 버튼에서 도서 등록 → content_id를 받은 뒤 업로드하고 URL을 부분 수정으로 붙인다.
+   미리보기용 blob 주소는 current*Url에 넣지 않는다 — 넣으면 등록 요청에 blob 주소가 그대로 실려 간다. */
+const ASSET_KINDS = {
+  image: { endpoint: "/book/image", field: "imageUrl", label: "표지" },
+  card: { endpoint: "/book/card-image", field: "cardUrl", label: "수집 카드" },
+  worksheet: { endpoint: "/book/worksheet-image", field: "worksheetUrl", label: "워크시트" },
+};
+const pendingFiles = { image: null, card: null, worksheet: null };
+const pendingPreviewUrls = [];
+
+function hasPendingFiles() {
+  return Object.values(pendingFiles).some(Boolean);
+}
+
+function resetPendingFiles() {
+  Object.keys(pendingFiles).forEach((kind) => (pendingFiles[kind] = null));
+  pendingPreviewUrls.splice(0).forEach((url) => URL.revokeObjectURL(url));
+}
+
+function setPendingFile(kind, file) {
+  pendingFiles[kind] = file;
+  const previewUrl = URL.createObjectURL(file);
+  pendingPreviewUrls.push(previewUrl);
+
+  if (kind === "image") {
+    const img = document.getElementById("bookInfoImage");
+    if (img) img.src = previewUrl;
+    return;
+  }
+
+  const isPdf = kind === "worksheet" && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
+  const img = document.getElementById(kind === "card" ? "bookCardImage" : "bookWorksheetImage");
+  const empty = document.getElementById(kind === "card" ? "bookCardEmpty" : "bookWorksheetEmpty");
+  if (img) {
+    img.src = isPdf ? "" : previewUrl;
+    img.hidden = isPdf;
+  }
+  if (empty) {
+    if (isPdf) empty.innerHTML = "PDF<br>워크시트 선택됨";
+    empty.hidden = !isPdf;
+  }
+}
+
+/* 방금 등록한 도서에 보류해 둔 파일을 올리고 URL을 붙인다. 실패한 항목 이름 목록을 돌려준다 */
+async function uploadPendingFiles(contentId) {
+  const payload = { contentId };
+  const failed = [];
+
+  for (const [kind, file] of Object.entries(pendingFiles)) {
+    if (!file) continue;
+    try {
+      payload[ASSET_KINDS[kind].field] = await uploadAsset(ASSET_KINDS[kind].endpoint, file, contentId);
+    } catch (error) {
+      console.error(error);
+      failed.push(ASSET_KINDS[kind].label);
+    }
+  }
+
+  // 올라간 것만 붙인다 — 안 보낸 필드(null)는 서버가 건드리지 않는다.
+  // 여기서 던지면 저장 흐름 전체가 실패로 끝나 화면이 "신규"로 남고, 다시 저장하면 도서가 중복 등록된다 — 삼킨다
+  if (Object.keys(payload).length > 1) {
+    try {
+      await postJson("/book/update", payload);
+    } catch (error) {
+      console.error(error);
+      Object.entries(pendingFiles).forEach(([kind, file]) => {
+        if (file && !failed.includes(ASSET_KINDS[kind].label)) failed.push(ASSET_KINDS[kind].label);
+      });
+    }
+  }
+  resetPendingFiles();
+  return failed;
+}
+
+/* 표지/카드/워크시트 버튼 공통 — 수정 화면은 바로 올리고, 신규 화면은 저장할 때까지 보류 */
+function initAssetButtons({ kind, inputId, changeId, deleteId, apply }) {
+  const input = document.getElementById(inputId);
+  document.getElementById(changeId)?.addEventListener("click", () => input?.click());
+  document.getElementById(deleteId)?.addEventListener("click", () => {
+    pendingFiles[kind] = null;
+    apply("");
+  });
+
+  input?.addEventListener("change", async () => {
+    const file = input.files?.[0];
+    if (!file) return;
+
+    if (currentMode === "new" || currentContentId == null) {
+      setPendingFile(kind, file);
+      input.value = "";
+      return;
+    }
+
+    try {
+      apply(await uploadAsset(ASSET_KINDS[kind].endpoint, file, currentContentId));
+    } catch (error) {
+      console.error(error);
+      alert(error.message ?? `${ASSET_KINDS[kind].label} 업로드 중 오류가 발생했습니다.`);
+    } finally {
+      input.value = "";
+    }
+  });
+}
+
 /* 도서 이미지 */
 function setBookImage(url) {
   currentImageUrl = url || "";
@@ -1264,50 +1396,31 @@ function setBookImage(url) {
   if (img) img.src = currentImageUrl || DEFAULT_BOOK_IMAGE;
 }
 
-/* 워크시트(출력용) 이미지 — 표지와 저장 위치도(FTP worksheets/) 테이블도 다르다 */
+/* 워크시트(출력용) 이미지 — 표지와 저장 위치도(FTP bookstore/worksheets/) 테이블도 다르다.
+   PDF도 올릴 수 있다(2026-10-02). PDF는 변환 없이 .pdf 그대로 저장되므로 <img>로는 미리볼 수 없다 —
+   그림 대신 "PDF 워크시트 등록됨" 문구를 띄운다. */
 function setWorksheetImage(url) {
   currentWorksheetUrl = url || "";
+  const isPdf = currentWorksheetUrl.split("?")[0].toLowerCase().endsWith(".pdf");
   const img = document.getElementById("bookWorksheetImage");
   const empty = document.getElementById("bookWorksheetEmpty");
   if (img) {
-    img.src = currentWorksheetUrl;
-    img.hidden = !currentWorksheetUrl;
+    img.src = isPdf ? "" : currentWorksheetUrl;
+    img.hidden = !currentWorksheetUrl || isPdf;
   }
-  if (empty) empty.hidden = !!currentWorksheetUrl;
+  if (empty) {
+    empty.innerHTML = isPdf ? "PDF<br>워크시트 등록됨" : "등록된<br>워크시트 없음";
+    empty.hidden = !!currentWorksheetUrl && !isPdf;
+  }
 }
 
 function initWorksheetButtons() {
-  const input = document.getElementById("bookWorksheetInput");
-  const changeBtn = document.getElementById("btnWorksheetChange");
-  const deleteBtn = document.getElementById("btnWorksheetDelete");
-
-  changeBtn?.addEventListener("click", () => input?.click());
-  deleteBtn?.addEventListener("click", () => setWorksheetImage(""));
-
-  input?.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-
-    try {
-      const form = new FormData();
-      form.append("file", file);
-
-      const response = await fetch("/book/worksheet-image", {
-        method: "POST",
-        headers: { [CSRF_HEADER]: getCsrfToken() },
-        body: form,
-      });
-
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
-
-      setWorksheetImage(data.response.url);
-    } catch (error) {
-      console.error(error);
-      alert(error.message ?? "이미지 업로드 중 오류가 발생했습니다.");
-    } finally {
-      input.value = "";
-    }
+  initAssetButtons({
+    kind: "worksheet",
+    inputId: "bookWorksheetInput",
+    changeId: "btnWorksheetChange",
+    deleteId: "btnWorksheetDelete",
+    apply: setWorksheetImage,
   });
 }
 
@@ -1325,72 +1438,22 @@ function setRewardCardImage(url) {
 }
 
 function initRewardCardButtons() {
-  const input = document.getElementById("bookCardInput");
-  const changeBtn = document.getElementById("btnCardChange");
-  const deleteBtn = document.getElementById("btnCardDelete");
-
-  changeBtn?.addEventListener("click", () => input?.click());
-  deleteBtn?.addEventListener("click", () => setRewardCardImage(""));
-
-  input?.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-
-    try {
-      const form = new FormData();
-      form.append("file", file);
-
-      const response = await fetch("/book/card-image", {
-        method: "POST",
-        headers: { [CSRF_HEADER]: getCsrfToken() },
-        body: form,
-      });
-
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
-
-      setRewardCardImage(data.response.url);
-    } catch (error) {
-      console.error(error);
-      alert(error.message ?? "이미지 업로드 중 오류가 발생했습니다.");
-    } finally {
-      input.value = "";
-    }
+  initAssetButtons({
+    kind: "card",
+    inputId: "bookCardInput",
+    changeId: "btnCardChange",
+    deleteId: "btnCardDelete",
+    apply: setRewardCardImage,
   });
 }
 
 function initImageButtons() {
-  const input = document.getElementById("bookImageInput");
-  const changeBtn = document.getElementById("btnImageChange");
-  const deleteBtn = document.getElementById("btnImageDelete");
-
-  changeBtn?.addEventListener("click", () => input?.click());
-  deleteBtn?.addEventListener("click", () => setBookImage(""));
-
-  input?.addEventListener("change", async () => {
-    const file = input.files?.[0];
-    if (!file) return;
-
-    try {
-      const form = new FormData();
-      form.append("file", file);
-
-      const response = await fetch("/book/image", {
-        method: "POST",
-        headers: { [CSRF_HEADER]: getCsrfToken() },
-        body: form,
-      });
-
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error?.message ?? "이미지 업로드에 실패했습니다.");
-
-      setBookImage(data.response.url);
-    } catch (error) {
-      console.error(error);
-      alert(error.message ?? "이미지 업로드 중 오류가 발생했습니다.");
-    } finally {
-      input.value = "";
-    }
+  initAssetButtons({
+    kind: "image",
+    inputId: "bookImageInput",
+    changeId: "btnImageChange",
+    deleteId: "btnImageDelete",
+    apply: setBookImage,
   });
 }
 
@@ -1400,6 +1463,7 @@ function renderBookInfo(book) {
 
   currentMode = "edit";
   currentContentId = book.contentId;
+  resetPendingFiles();
 
   setField("bookInfoTitle", `[${book.originalTitle ?? ""}]`, true);
   setValue("bookInfoTitleInput", book.originalTitle ?? "");
@@ -1429,6 +1493,7 @@ function renderBookInfo(book) {
 function clearBookInfo(isNew) {
   currentMode = isNew ? "new" : "edit";
   currentContentId = null;
+  resetPendingFiles();
 
   setField("bookInfoTitle", isNew ? "[신규 도서]" : "[도서 정보]", true);
   setValue("bookInfoTitleInput", "");
@@ -1501,6 +1566,8 @@ function getFormSnapshot() {
     imageUrl: currentImageUrl,
     worksheetUrl: currentWorksheetUrl,
     cardUrl: currentRewardCardUrl,
+    // 신규 화면에서 골라 둔(아직 안 올린) 파일 — 이탈 경고용. 등록 요청 본문엔 실리지 않는다
+    pendingFiles: Object.keys(pendingFiles).filter((kind) => pendingFiles[kind]).join(","),
     extraDetail: document.getElementById("bookInfoExtraDetail")?.value.trim() ?? "",
   };
 }
@@ -1600,17 +1667,32 @@ function initSaveBookButton() {
     try {
       let contentId = currentContentId;
 
+      const isRegister = currentMode !== "edit";
       if (bookDirty) {
-        contentId = await saveBook(currentMode === "edit" ? "update" : "register", snapshot);
+        contentId = await saveBook(isRegister ? "register" : "update", snapshot);
+      }
+
+      // 신규 등록이면 이제 content_id가 생겼으니 보류해 둔 표지/카드/워크시트를 올린다
+      let failedUploads = [];
+      if (isRegister && hasPendingFiles()) {
+        failedUploads = await uploadPendingFiles(contentId);
       }
 
       if (questionsDirty) {
         await saveQuestions(contentId);
       }
 
-      alert("저장되었습니다.");
+      alert(failedUploads.length
+        ? `도서는 저장되었지만 ${failedUploads.join(", ")} 업로드에 실패했습니다. 도서를 열어 다시 올려 주세요.`
+        : "저장되었습니다.");
       currentContentId = contentId;
       await loadBookList(currentFilters());
+      // 목록을 다시 불러오면 첫 책이 열린다 — 방금 저장한 책을 다시 열어 둬야 이어서 이미지를 올릴 수 있다
+      const saved = bookListCache.find((b) => b.contentId === contentId);
+      if (saved) {
+        renderBookInfo(saved);
+        renderBookList(bookListCache);
+      }
     } catch (error) {
       console.error(error);
       alert(error.message ?? "저장 중 오류가 발생했습니다.");
