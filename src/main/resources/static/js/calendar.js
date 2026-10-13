@@ -11,6 +11,7 @@
 const monthSwitch = document.getElementById("monthSwitch");
 const calendarGrid = document.getElementById("calendarGrid");
 const scheduleBox = document.getElementById("scheduleBox");
+const slotSchedule = document.getElementById("slotSchedule");
 
 const today = new Date();
 const todayKey = formatDateKey(today);
@@ -24,6 +25,8 @@ let activeMonth = months[0];
 
 // 날짜(yyyy-MM-dd) → 'complete' | 'available' | 'closed'
 let dayStatus = {};
+let slotsByDate = {};
+let selectedDate = null;
 
 init();
 
@@ -54,7 +57,9 @@ function renderTabs() {
 async function renderCalendar(monthKey) {
     // 다 만든 뒤 한 번에 갈아끼운다 — 먼저 비우면 응답을 기다리는 동안 달력이 빈 화면으로 깜빡인다.
     const slots = await fetchMonthSlots(monthKey);
-    dayStatus = toDayStatus(slots);
+    slotsByDate = groupByDate(slots);
+    dayStatus = toDayStatus(slotsByDate);
+    selectedDate = defaultSelectedDate(monthKey);
 
     const grid = document.createDocumentFragment();
     const [year, month] = monthKey.split("-").map(Number);
@@ -79,6 +84,7 @@ async function renderCalendar(monthKey) {
 
     calendarGrid.replaceChildren(grid);
     renderSummary(monthKey, lastDate);
+    renderSlotSchedule();
 }
 
 async function fetchMonthSlots(monthKey) {
@@ -98,16 +104,25 @@ async function fetchMonthSlots(monthKey) {
     }
 }
 
-/** 회차 목록 → 날짜별 상태. 앱 BookstoreReservationData.dayStatuses 와 같은 규칙. */
-function toDayStatus(slots) {
+/** 회차 목록 → 날짜별 회차 목록. 서버가 날짜·회차 순으로 내려주므로 순서는 그대로 둔다. */
+function groupByDate(slots) {
     const byDate = {};
-
     slots.forEach((slot) => {
         const date = slot.serviceDate;
         if (!date) return;
         (byDate[date] = byDate[date] || []).push(slot);
     });
+    return byDate;
+}
 
+/** 이번 달이면 오늘, 아니면 그 달에 회차가 있는 첫 날을 처음 선택해 둔다. */
+function defaultSelectedDate(monthKey) {
+    if (todayKey.startsWith(monthKey)) return todayKey;
+    return Object.keys(slotsByDate).sort()[0] || null;
+}
+
+/** 날짜별 회차 목록 → 날짜별 상태. 앱 BookstoreReservationData.dayStatuses 와 같은 규칙. */
+function toDayStatus(byDate) {
     const status = {};
     Object.keys(byDate).forEach((date) => {
         const daySlots = byDate[date];
@@ -145,6 +160,12 @@ function createDayCell(date, isOverflowDate) {
 
     chip.textContent = date.getDate();
     cell.appendChild(chip);
+
+    if (!isOverflowDate) {
+        cell.dataset.date = dateKey;
+        if (dateKey === selectedDate) cell.classList.add("selected");
+        cell.addEventListener("click", () => selectDate(dateKey));
+    }
     return cell;
 }
 
@@ -163,6 +184,73 @@ function renderSummary(monthKey, lastDate) {
     scheduleBox.textContent = reserved === 0 && available === 0
         ? `${month}월은 예약할 수 있는 일정이 없습니다.`
         : `${month}월 예약 ${reserved}일 · 예약 가능 ${available}일`;
+}
+
+function selectDate(dateKey) {
+    selectedDate = dateKey;
+    calendarGrid.querySelectorAll(".day-cell.selected").forEach((c) => c.classList.remove("selected"));
+    const cell = calendarGrid.querySelector(`.day-cell[data-date="${dateKey}"]`);
+    if (cell) cell.classList.add("selected");
+    renderSlotSchedule();
+}
+
+/** 선택한 날짜의 회차 스케줄 — 학생 센터에서 그날 열린 회차만 내려온다. */
+function renderSlotSchedule() {
+    const list = document.createDocumentFragment();
+
+    const title = document.createElement("li");
+    title.className = "slot-title";
+    title.textContent = selectedDate ? formatDayTitle(selectedDate) : "날짜를 선택해 주세요.";
+    list.appendChild(title);
+
+    const daySlots = selectedDate ? (slotsByDate[selectedDate] || []) : [];
+    if (selectedDate && daySlots.length === 0) {
+        const empty = document.createElement("li");
+        empty.className = "slot-empty";
+        empty.textContent = "운영하는 회차가 없습니다.";
+        list.appendChild(empty);
+    }
+
+    daySlots.forEach((slot) => {
+        const row = document.createElement("li");
+
+        const label = document.createElement("span");
+        label.className = "slot-seq";
+        label.textContent = `${slot.seq}회차`;
+
+        const time = document.createElement("span");
+        time.className = "slot-time";
+        time.textContent = `${formatTime(slot.startsAt)} ~ ${formatTime(slot.endsAt)}`;
+
+        const state = slotState(slot);
+        const badge = document.createElement("span");
+        badge.className = `slot-badge ${state.key}`;
+        badge.textContent = state.label;
+
+        row.append(label, time, badge);
+        list.appendChild(row);
+    });
+
+    slotSchedule.replaceChildren(list);
+}
+
+/** 회차 하나의 상태 — 날짜 색과 같은 우선순위(내 예약 > 예약 가능 > 마감). */
+function slotState(slot) {
+    if (slot.reservedByMe) return {key: "complete", label: "예약 완료"};
+    if (isOpen(slot)) return {key: "available", label: `잔여 ${slot.capacity - slot.reservedCount}석`};
+    return {key: "closed", label: "마감"};
+}
+
+/** "2026-10-13" → "10월 13일 (화)" */
+function formatDayTitle(dateKey) {
+    const [y, m, d] = dateKey.split("-").map(Number);
+    const weekday = "일월화수목금토"[new Date(y, m - 1, d).getDay()];
+    return `${m}월 ${d}일 (${weekday})`;
+}
+
+/** "2026-10-13T14:00:00" → "14:00" */
+function formatTime(dateTime) {
+    return String(dateTime).slice(11, 16);
 }
 
 function getMonthKey(year, month) {

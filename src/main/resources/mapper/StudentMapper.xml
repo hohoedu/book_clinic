@@ -118,6 +118,10 @@
                              레벨(학년별 필요권수) 산정 기준이 이 번호다.
       둘을 섞어 조인하면 코드 체계가 안 맞아 통째로 빗나간다 — 실제로 예전엔 grade_key를
       gubun='S'(01~07)에 물려놔서 학년이 "-"로 뜨고 학년 필터도 한 건도 안 걸렸다.
+
+      등록 상태(이용중/탈퇴)는 erp_student.status_key 가 아니라 erp_bookstore_assign.bookstore_state 로
+      판단한다(2026-10-13). 0=탈퇴, 1=이용중이고 수강 정보를 아직 저장 안 해 행이 없는 학생은
+      컬럼 기본값(1)과 같게 이용중으로 본다. 화면은 기존 ACTIVE/WITHDRAWN 코드를 그대로 쓴다.
     -->
     <select id="findStudentByCenterCode" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$StudentInfoRowDTO">
         SELECT st.student_id                                  AS studentId,
@@ -135,18 +139,23 @@
                   FROM erp_bookstore_recommend_log rl
                  WHERE rl.student_id = st.student_id
                    AND rl.status = 'DONE')                     AS totalDoneBooks,
-               st.status_key                                   AS statusKey
+               CASE WHEN ba.bookstore_state = 0 THEN 'WITHDRAWN' ELSE 'ACTIVE' END
+                                                               AS statusKey
         FROM erp_student st
-        LEFT JOIN erp_grade_code     gc ON gc.grade_key = st.grade_key
-        LEFT JOIN erp_bookstore_code cd ON cd.gubun = 'S' AND cd.code = st.clinic_grade_key
+        LEFT JOIN erp_grade_code       gc ON gc.grade_key = st.grade_key
+        LEFT JOIN erp_bookstore_code   cd ON cd.gubun = 'S' AND cd.code = st.clinic_grade_key
+        LEFT JOIN erp_bookstore_assign ba ON ba.student_id = st.student_id
         WHERE st.center_code = #{centerCode}
         <if test="gradeKey != null">AND st.grade_key = #{gradeKey}</if>
-        <if test="statusKey != null">AND st.status_key = #{statusKey}</if>
+        <if test="statusKey == 'WITHDRAWN'">AND ba.bookstore_state = 0</if>
+        <if test="statusKey == 'ACTIVE'">AND (ba.bookstore_state IS NULL OR ba.bookstore_state = 1)</if>
         <if test="keyword != null">
             AND (st.student_name LIKE '%' + #{keyword} + '%'
              OR st.billing_phone LIKE '%' + #{keyword} + '%')
         </if>
-        ORDER BY st.student_name ASC
+        <!-- 상태 "전체" 조회 시 이용중 → 탈퇴 순, 같은 상태 안에서는 이름순 (2026-10-13) -->
+        ORDER BY CASE WHEN ba.bookstore_state = 0 THEN 1 ELSE 0 END ASC,
+                 st.student_name ASC
     </select>
 
     <!-- 학년 필터 드롭다운 — 목록의 "학년" 칸/필터와 같은 진짜 학년(grade_key) 기준이라 erp_grade_code 에서 읽는다.
@@ -163,7 +172,8 @@
                st.student_name                                 AS studentName,
                st.grade_key                                    AS gradeKey,
                gc.grade_name                                    AS gradeName,
-               st.status_key                                    AS statusKey,
+               CASE WHEN ba.bookstore_state = 0 THEN 'WITHDRAWN' ELSE 'ACTIVE' END
+                                                                AS statusKey,
                st.billing_phone                                 AS billingPhone,
                st.school                                        AS school,
                st.address                                       AS address,
@@ -186,7 +196,8 @@
                   FROM erp_bookstore_student_badge sb
                  WHERE sb.student_id = st.student_id)           AS badgeCount
         FROM erp_student st
-        LEFT JOIN erp_grade_code gc ON gc.grade_key = st.grade_key
+        LEFT JOIN erp_grade_code       gc ON gc.grade_key = st.grade_key
+        LEFT JOIN erp_bookstore_assign ba ON ba.student_id = st.student_id
         WHERE st.student_id = #{studentId}
     </select>
 
@@ -250,6 +261,16 @@
              #{appId}, #{appPassword}, #{s.centerCode}, #{olpassGradeKey}, #{s.gradeKey}, #{statusKey},
              #{s.studentPrivacyAgree}, #{subHan}, #{subBook}, #{subHoho}, #{subHoho}, #{billingPhone},
              DATEADD(HOUR, 9, GETUTCDATE()), DATEADD(HOUR, 9, GETUTCDATE()))
+    </insert>
+
+    <!-- 가입 즉시 이용중이 되도록 수강 정보 1행을 같이 만든다 (2026-10-13).
+         학생정보의 이용중/탈퇴가 bookstore_state 기준이라 행이 없으면 상태 근거가 비어 버린다.
+         수강 시작일=가입일(KST), 레벨 스냅샷=1(신규 가입생은 완독 0권) -->
+    <insert id="insertAssignOnJoin">
+        INSERT INTO erp_bookstore_assign
+            (student_id, bookstore_state, bookstore_level, entry_bookstore_date)
+        VALUES
+            (#{studentId}, 1, 1, CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE))
     </insert>
 
     <insert id="insertGuardianOnJoin">

@@ -88,6 +88,7 @@ public class StudentJoinService {
         studentRepository.insertOnJoin(dto, studentId, birth, gender, appId, appPassword,
                 billingPhone, "ACTIVE", olpassGradeKey, subHan, subBook, subHoho);
         studentRepository.insertGuardianOnJoin(dto, studentId);
+        studentRepository.insertAssignOnJoin(studentId);
 
         log.info("[입회] 신규 학생 등록 studentId={}, center={}, appId={}", studentId, dto.getCenterCode(), appId);
         return studentId;

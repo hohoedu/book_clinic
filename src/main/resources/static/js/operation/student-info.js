@@ -9,7 +9,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initStudentModal();
   loadGradeOptions();
   loadStudentList();
-  document.getElementById("btnPrintQrCard").addEventListener("click", printQrCards);
+  // QR 카드 출력 버튼은 본사(PUS001)에서만 렌더링됨
+  document.getElementById("btnPrintQrCard")?.addEventListener("click", printQrCards);
 });
 
 const RESULT_LABEL = { DONE_KING: "독서왕", DONE_FRIEND: "통과", PENDING: "재도전" };
@@ -1079,6 +1080,9 @@ async function saveAssign() {
     currentDetail.assign = await putJson(
       `/admin/students/${encodeURIComponent(currentDetail.studentId)}/bookstore-assign`, payload);
     switchTab("assign");   // 저장된 값(레벨 스냅샷 포함)으로 다시 그린다
+    // 등록 상태(이용중/탈퇴)가 bookstore_state 기준이라 다른 탭 상태 표시와 뒤의 목록도 맞춰 준다 (2026-10-13)
+    currentDetail.statusKey = attending ? "ACTIVE" : "WITHDRAWN";
+    loadStudentList();
     alert("저장되었습니다.");
   } catch (e) {
     console.error("수강 정보 저장 실패", e);

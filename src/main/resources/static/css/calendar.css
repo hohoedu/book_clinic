@@ -153,3 +153,73 @@ body {
   background: #fafbfd;
   text-align: center;
 }
+
+/* 날짜 선택 — 칩 아래 점으로 표시해 상태 색·오늘 테두리와 겹치지 않게 한다 */
+.day-cell {
+  position: relative;
+  cursor: pointer;
+}
+
+.day-cell.selected::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+/* 선택한 날짜의 회차 스케줄 */
+.slot-schedule {
+  list-style: none;
+  margin: 0 16px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.slot-schedule li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.slot-schedule li + li {
+  border-top: 1px solid var(--line);
+}
+
+.slot-schedule .slot-title {
+  font-weight: 800;
+  background: #fafbfd;
+  border-radius: 8px 8px 0 0;
+}
+
+.slot-schedule .slot-empty {
+  justify-content: center;
+  color: var(--muted);
+}
+
+.slot-seq {
+  font-weight: 800;
+  color: var(--brand);
+}
+
+.slot-time {
+  flex: 1;
+  font-weight: 600;
+  color: #243042;
+}
+
+.slot-badge {
+  padding: 3px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.slot-badge.complete  { background: var(--complete); }
+.slot-badge.available { background: var(--available); }
+.slot-badge.closed    { background: var(--closed); color: var(--muted); }

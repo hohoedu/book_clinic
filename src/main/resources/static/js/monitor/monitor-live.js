@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initHoldModal();
   document.getElementById("btnPrintAllWorksheets")
     ?.addEventListener("click", printAllEnteredWorksheets);
+  document.getElementById("btnToastTest")?.addEventListener("click", runToastTest);
   // 시간이 흘러야만 바뀌는 값(독서 경과시간)은 폴링에 기대지 않고 startElapsedTicker가 브라우저에서
   // 1초마다 로컬로 올려준다 — 서버가 준 elapsedMinutes를 기준점으로 삼아 그 위로 초를 더하는 방식이라
   // DB/브라우저 시계 차이 문제가 없다.
@@ -222,8 +223,10 @@ function matchesSlot(card) {
 async function loadLiveView() {
   if (renderPaused) return;   // 멈춰 있는 동안은 서버 조회도 하지 않는다(콘솔 노이즈 방지)
   try {
-    const view = await getJson(`/admin/monitor/live?date=${selectedDate()}`);
+    const date = selectedDate();
+    const view = await getJson(`/admin/monitor/live?date=${date}`);
     cards = view.cards ?? [];
+    loadedDate = date;
     const now = Date.now();
     cards.forEach((c) => (c._syncedAt = now)); // 경과시간 로컬 카운트업 기준점
     initAttitudeCheckboxesOnce(view.attitudeCodeOptions);
@@ -363,6 +366,223 @@ function startElapsedTicker() {
   setInterval(render, 15000);
 }
 
+/* ── 상태 변경 알림 (2026-10-13) ─────────────────────────────────────────────
+   카드 우측 상단 상태 배지가 바뀌는 순간 = 이벤트. 직전 렌더링 때의 배지 문구와 비교해서
+   달라진 카드마다 우측 상단에 알림을 쌓는다. render()가 Firestore 스냅샷·폴링·15초 타이머
+   세 경로에서 모두 불리므로 어느 경로로 바뀌든 한 곳에서 잡힌다.
+   권장시간 초과·재도전 필요·스페셜 카드 지급은 직원이 직접 챙겨야 하는 일이라 닫기를 눌러야
+   닫히고, 나머지는 5초 뒤 저절로 사라진다. */
+
+const TOAST_AUTO_CLOSE_MS = 5000;
+
+// 카드별 직전 상태 — 키는 applyFirestoreCard와 같은 studentId + timeSlot
+let lastCardState = new Map();
+let notifyBaselineDate = null;
+// 지금 cards 배열이 어느 날짜 데이터인지 — 날짜를 바꾼 직후 새 데이터가 오기 전에 15초 타이머가
+// 돌면 selectedDate()는 이미 새 날짜라, 그걸로 기준점을 잡으면 옛 카드로 잡혀버린다
+let loadedDate = null;
+// 시간초과 알림은 책 1권당 1번만 — 폴링/스냅샷이 오가며 READING↔TIME_OVER가 출렁여도 다시 안 띄운다
+const notifiedTimeOver = new Set();
+
+function cardKey(card) {
+  return `${card.studentId}|${card.timeSlot}`;
+}
+
+/* 권장 독서 시간 초과는 시간이 흐르는 것만으로 바뀌는데 서버 이벤트가 없어 푸시가 안 온다 —
+   폴링(Firestore 정상 시 5분)을 기다리면 알림도 배지도 그만큼 늦으므로, 서버의
+   MonitorService.resolveCardStatus와 같은 기준(경과분 > 권장분)으로 브라우저에서 먼저 넘겨준다. */
+function promoteTimeOver() {
+  cards.forEach((card) => {
+    if (card.cardStatus !== "READING") return;
+    const pages = bookPages(card);
+    const latest = pages[pages.length - 1];
+    const elapsed = liveElapsed(latest.elapsedMinutes, card._syncedAt);
+    if (latest.readingTimeMinutes != null && elapsed != null && elapsed > latest.readingTimeMinutes) {
+      card.cardStatus = "TIME_OVER";
+    }
+  });
+}
+
+function specialCardCount(card) {
+  return bookPages(card).filter((p) => p.specialCardReached).length;
+}
+
+function latestRecommendId(card) {
+  const pages = bookPages(card);
+  return pages[pages.length - 1].recommendId;
+}
+
+function detectCardEvents() {
+  // 날짜를 바꿨거나 첫 진입이면 지금 상태를 기준점으로만 잡는다 — 이미 시간초과인 학생들 알림이
+  // 새로고침할 때마다 한꺼번에 쏟아지면 안 된다.
+  if (!loadedDate) return;
+  const baseline = notifyBaselineDate !== loadedDate;
+  if (baseline) {
+    lastCardState = new Map();
+    notifiedTimeOver.clear();   // 탭을 며칠씩 켜둬도 지난 날짜 기록이 쌓이지 않게
+    notifyBaselineDate = loadedDate;
+  }
+
+  cards.forEach((card) => {
+    const key = cardKey(card);
+    const prev = lastCardState.get(key);
+    const now = { status: card.cardStatus, badgeText: statusBadgeFor(card).text, special: specialCardCount(card) };
+    lastCardState.set(key, now);
+
+    if (baseline) {
+      // 기준점 시점에 이미 시간초과였던 책은 알린 것으로 친다
+      if (card.cardStatus === "TIME_OVER") notifiedTimeOver.add(`${key}|${latestRecommendId(card)}`);
+      return;
+    }
+
+    if (!prev || prev.badgeText !== now.badgeText) {
+      const event = cardEventMessage(card, prev?.status);
+      if (event) showToast(card, event);
+    }
+    if (prev && now.special > prev.special) {
+      showToast(card, {
+        type: "SPECIAL",
+        chip: { text: "스페셜 카드", icon: "fa-star", cls: "status-special" },
+        message: "학생에게 스페셜 카드를 지급해 주세요.",
+        sticky: true,
+      });
+    }
+  });
+}
+
+/* 바뀐 상태 → 알림 문구. null이면 알리지 않는다. */
+function cardEventMessage(card, prevStatus) {
+  const status = card.cardStatus;
+  const chip = statusBadgeFor(card);
+  const base = { type: status, chip };
+
+  switch (status) {
+    case "READING":
+      // 시간초과 → 독서 중은 서버 값이 잠깐 늦게 온 것뿐이라 새 이벤트가 아니다
+      if (prevStatus === "TIME_OVER") return null;
+      if (!prevStatus || prevStatus === "NOT_ENTERED") return { ...base, message: "학생이 입실해 독서를 시작했습니다." };
+      if (prevStatus === "EXITED") return { ...base, message: "학생이 다시 입실했습니다." };
+      return { ...base, message: "학생이 새 책 읽기를 시작했습니다." };
+    case "QUIZ_IN_PROGRESS":
+      if (card.quizQlevel === "02") return { ...base, message: "학생이 심화 문제풀이를 시작했습니다." };
+      return { ...base, message: `학생이 문제풀이를 시작했습니다. (${(card.basicAttemptRounds ?? 0) + 1}회차)` };
+    case "TIME_OVER": {
+      const tKey = `${cardKey(card)}|${latestRecommendId(card)}`;
+      if (notifiedTimeOver.has(tKey)) return null;
+      notifiedTimeOver.add(tKey);
+      return { ...base, message: "학생이 권장 독서 시간을 초과했습니다.", sticky: true };
+    }
+    case "RETRY_NEEDED":
+      return { ...base, message: "학생은 재도전이 필요합니다.", sticky: true };
+    case "KING":
+    case "FRIEND":
+    case "ADV_DONE":
+    case "ADV_KING":
+      return { ...base, message: `학생이 ${chip.text}${objectJosa(chip.text)} 달성했습니다.` };
+    case "EXITED":
+      return { ...base, message: "학생이 퇴실했습니다." };
+    default:
+      return null;   // NOT_ENTERED 등 — 직원이 할 일이 없는 변화
+  }
+}
+
+/* 받침 있으면 "을", 없으면 "를" (정독왕을 / 정독완료를) */
+function objectJosa(word) {
+  const code = word.charCodeAt(word.length - 1) - 0xac00;
+  if (code < 0 || code > 11171) return "을(를)";
+  return code % 28 === 0 ? "를" : "을";
+}
+
+/* 알림 클릭 → 해당 학생 카드로 스크롤 + 잠깐 강조.
+   필터·회차 선택 때문에 카드가 화면에 없으면 둘 다 "전체"로 풀고 다시 그린 뒤 찾는다. */
+function scrollToCard(key) {
+  const find = () => [...document.querySelectorAll(".monitor-card")].find((c) => c.dataset.cardKey === key);
+  let target = find();
+  if (!target) {
+    activeFilter = "ALL";
+    activeSlot = "ALL";
+    document.getElementById("monitorSlot").value = "ALL";
+    render();
+    target = find();
+  }
+  if (!target) return;   // 그 사이 예약 취소 등으로 카드가 사라진 경우
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.classList.remove("is-highlighted");
+  void target.offsetWidth;   // 연달아 눌러도 강조 애니메이션이 다시 돌게
+  target.classList.add("is-highlighted");
+  setTimeout(() => target.classList.remove("is-highlighted"), 2000);
+}
+
+/* 알림 테스트(2026-10-13, 임시) — 7종을 0.6초 간격으로 띄운다. 화면에 입실 카드가 있으면
+   그 학생 이름·회차로 띄워서 알림 클릭 → 카드 이동까지 확인할 수 있다. 확인 후 버튼과 함께 삭제. */
+function runToastTest() {
+  const real = cards.find((c) => c.cardStatus !== "NOT_ENTERED") ?? cards[0];
+  const card = real ?? { studentId: "test", timeSlot: "1", studentName: "홍길동" };
+  const events = [
+    { type: "READING", chip: STATUS_BADGE.READING, message: "학생이 입실해 독서를 시작했습니다." },
+    { type: "QUIZ_IN_PROGRESS", chip: { ...STATUS_BADGE.QUIZ_IN_PROGRESS, text: "문제 푸는 중 (1회차)" }, message: "학생이 문제풀이를 시작했습니다. (1회차)" },
+    { type: "TIME_OVER", chip: STATUS_BADGE.TIME_OVER, message: "학생이 권장 독서 시간을 초과했습니다.", sticky: true },
+    { type: "RETRY_NEEDED", chip: STATUS_BADGE.RETRY_NEEDED, message: "학생은 재도전이 필요합니다.", sticky: true },
+    { type: "KING", chip: STATUS_BADGE.KING, message: "학생이 정독왕을 달성했습니다." },
+    { type: "SPECIAL", chip: { text: "스페셜 카드", icon: "fa-star", cls: "status-special" }, message: "학생에게 스페셜 카드를 지급해 주세요.", sticky: true },
+    { type: "EXITED", chip: STATUS_BADGE.EXITED, message: "학생이 퇴실했습니다." },
+  ];
+  events.forEach((ev, i) => setTimeout(() => showToast(card, ev), i * 600));
+}
+
+function toastStack() {
+  let stack = document.getElementById("monitorToastStack");
+  if (!stack) {
+    stack = document.createElement("div");
+    stack.id = "monitorToastStack";
+    stack.className = "monitor-toast-stack";
+    document.body.appendChild(stack);
+  }
+  return stack;
+}
+
+function closeToast(el) {
+  if (el.classList.contains("is-leaving")) return;
+  el.classList.add("is-leaving");
+  setTimeout(() => el.remove(), 200);
+}
+
+function showToast(card, { type, chip, message, sticky = false }) {
+  const stack = toastStack();
+  // 같은 학생·같은 종류의 고정 알림이 이미 떠 있으면 새 것으로 바꾼다(중복으로 쌓이지 않게)
+  const dedupeKey = `${cardKey(card)}|${type}`;
+  stack.querySelectorAll(".monitor-toast").forEach((t) => {
+    if (t.dataset.key === dedupeKey) t.remove();
+  });
+
+  const el = document.createElement("div");
+  el.className = `monitor-toast ${chip.cls}${sticky ? " is-sticky" : ""}`;
+  el.dataset.key = dedupeKey;
+  const time = new Date().toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit" });
+  el.innerHTML = `
+    <div class="toast-head">
+      <span class="toast-chip"><i class="fa-solid ${chip.icon}"></i><span class="toast-chip-text"></span></span>
+      <span class="toast-time">${card.timeSlot ? `${card.timeSlot}회차 · ` : ""}${time}</span>
+    </div>
+    <p class="toast-msg"><b class="toast-name"></b> <span class="toast-text"></span></p>
+    ${sticky ? `<div class="toast-foot"><button type="button" class="toast-close">확인</button></div>` : ""}
+  `;
+  el.querySelector(".toast-chip-text").textContent = chip.text;
+  el.querySelector(".toast-name").textContent = card.studentName ?? "";
+  el.querySelector(".toast-text").textContent = message;
+
+  el.addEventListener("click", () => scrollToCard(cardKey(card)));
+  if (sticky) {
+    el.querySelector(".toast-close").addEventListener("click", (e) => {
+      e.stopPropagation();   // 확인 버튼은 닫기만 — 카드로 이동하지 않는다
+      closeToast(el);
+    });
+  } else {
+    setTimeout(() => closeToast(el), TOAST_AUTO_CLOSE_MS);
+  }
+  stack.prepend(el);   // 최신 알림이 맨 위
+}
+
 /* ── 렌더링 ── */
 
 /* 화면 고정 스위치 (개발용, 2026-09-14).
@@ -388,6 +608,8 @@ window.monitorResume = () => {
 
 function render() {
   if (renderPaused) return;
+  promoteTimeOver();
+  detectCardEvents();
   const counts = computeCounts();
   renderFilters(counts);
   renderGrid();
@@ -551,6 +773,7 @@ function buildCardEl(card) {
 
   const badge = statusBadgeForPage(card, page, isLatestPage);
   el.className = "monitor-card " + badge.cls;
+  el.dataset.cardKey = cardKey(card);   // 알림 클릭 시 이 카드로 스크롤하기 위한 표식
 
   const helpFlair = card.helpNeeded
     ? `<span class="name-flair-wrap"><i class="fa-solid fa-seedling name-flair"></i>` +

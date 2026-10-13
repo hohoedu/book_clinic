@@ -30,7 +30,8 @@
       <header class="page-header">
         <h1>학생 정보</h1>
         <div class="page-header-actions">
-          <button type="button" id="btnPrintQrCard" class="guide-btn">
+          <!-- QR 카드 출력: 본사(PUS001) 세션에서만 노출 -->
+          <button type="button" id="btnPrintQrCard" class="guide-btn" th:if="${centerCode == 'PUS001'}">
             <i class="fa-solid fa-id-card"></i>
             QR 카드 출력
           </button>

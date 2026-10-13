@@ -107,17 +107,20 @@
                 max(CASE WHEN rn = 3 THEN book_img END) AS img3,
                 max(CASE WHEN rn = 4 THEN book_img END) AS img4
             FROM (
-                SELECT ebdd.book_img,
+                -- 표지는 도서 마스터의 현재 이미지를 우선한다(2026-10-13). diary_detail.book_img 는
+                -- 문제 제출 시점의 스냅샷이라, 그 뒤 이미지를 다시 올리거나 저장소를 옮기면(10/02 가비아 전환)
+                -- 옛 주소가 남아 앱에서 깨진다. 마스터에 이미지가 없을 때만 스냅샷을 쓴다.
+                SELECT coalesce(nullif(c.image_url, ''), ebdd.book_img) AS book_img,
                        row_number() OVER (
                            ORDER BY ebd2.record_date DESC, ebd2.record_time DESC, ebdd.id DESC
                        ) AS rn
                 FROM erp_bookstore_diary ebd2
                 JOIN erp_bookstore_diary_detail ebdd ON ebdd.diary_key = ebd2.diary_key
+                LEFT JOIN erp_bookstore_content c ON c.content_id = ebdd.content_id
                 WHERE ebd2.student_id = s.student_id
-                  AND ebd2.record_date &lt;= cast(getdate() AS date)
+                  AND ebd2.record_date &lt;= cast(dateadd(hour, 9, getutcdate()) AS date)
                   AND ebd2.is_send = 1
-                  AND ebdd.book_img IS NOT NULL
-                  AND ebdd.book_img &lt;&gt; ''
+                  AND coalesce(nullif(c.image_url, ''), nullif(ebdd.book_img, '')) IS NOT NULL
             ) t
             WHERE rn &lt;= 4
         ) books
@@ -268,7 +271,8 @@
         SELECT
             dd.content_id AS contentId,
             coalesce(dd.book_name, c.original_title) AS title,
-            coalesce(dd.book_img,  c.image_url)      AS imageUrl,
+            -- 표지는 마스터 현재 이미지 우선 — 스냅샷(dd.book_img)은 옛 주소일 수 있다(2026-10-13)
+            coalesce(nullif(c.image_url, ''), dd.book_img) AS imageUrl,
 
             -- recommend_log 쪽이 재제출까지 반영된 점수다(2026-09-21부터 처음/최종이 같은 값).
             -- diary_detail 스냅샷은 그 책 기록이 없을 때만 쓰는 대비책이다.

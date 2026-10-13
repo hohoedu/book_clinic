@@ -33,6 +33,9 @@ public interface StudentRepository {
             @Param("subHan") boolean subHan, @Param("subBook") boolean subBook,
             @Param("subHoho") boolean subHoho);
 
+    /** 가입 시 수강 정보(erp_bookstore_assign) 기본 행 insert — 이용중(1)으로 시작한다 */
+    void insertAssignOnJoin(@Param("studentId") String studentId);
+
     /** 보호자(법정대리인) 행 insert */
     void insertGuardianOnJoin(@Param("s") StudentJoinReqDTO dto, @Param("studentId") String studentId);
 

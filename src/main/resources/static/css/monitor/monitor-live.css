@@ -997,3 +997,133 @@ i.badge-icon {
   border: 0;
 }
 
+
+/* ── 상태 변경 알림 (2026-10-13) — 우측 상단에 쌓이는 카드형 알림, 최신이 맨 위 ── */
+.monitor-toast-stack {
+  position: fixed;
+  top: 64px;             /* 머리말(활동지 전체 출력·사용 가이드 버튼)을 가리지 않게 그 아래부터 */
+  right: 8px;            /* padding 8px만큼 당겨서 알림 자체는 화면 끝에서 16px 떨어진다 */
+  z-index: 900;          /* 모달(1000) 아래 — 모달을 띄우면 알림이 가리지 않게 */
+  width: 356px;          /* 알림 340px + 좌우 여백 8px씩 */
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  /* overflow-y를 auto로 두면 x도 자동으로 스크롤 가능이 된다 — 등장/퇴장 애니메이션이 옆으로
+     16px 밀려나는 순간 하단에 가로 스크롤바가 깜빡이므로 가로는 숨긴다 */
+  overflow-x: hidden;
+  padding: 8px;          /* 숨긴 영역에 그림자가 잘리지 않게 안쪽 여백 */
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;  /* 알림 사이 빈 공간은 아래 화면 클릭을 막지 않는다 */
+}
+
+.monitor-toast {
+  --toast-accent: #64748b;
+  pointer-events: auto;
+  background: #fff;
+  border: 1px solid #e8ecef;
+  border-left: 4px solid var(--toast-accent);
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.12);
+  padding: 12px 14px;
+  animation: toast-in 0.2s ease-out;
+}
+
+.monitor-toast {
+  cursor: pointer;   /* 누르면 해당 학생 카드로 이동 */
+}
+
+.monitor-toast:hover {
+  border-color: #d5dbe0;
+  border-left-color: var(--toast-accent);
+}
+
+/* 알림을 눌러 이동한 카드 — 2초간 테두리 강조 */
+.monitor-card.is-highlighted {
+  animation: card-highlight 2s ease-out;
+}
+
+@keyframes card-highlight {
+  0%, 40% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.55); }
+  100% { box-shadow: 0 0 0 4px rgba(59, 130, 246, 0); }
+}
+
+.monitor-toast.is-leaving {
+  animation: toast-out 0.2s ease-in forwards;
+}
+
+.monitor-toast.status-reading { --toast-accent: #2f9e6e; }
+.monitor-toast.status-quiz { --toast-accent: #3b82f6; }
+.monitor-toast.status-completed { --toast-accent: #00a984; }
+.monitor-toast.status-retry { --toast-accent: #e5484d; }
+.monitor-toast.status-timeover { --toast-accent: #f5a524; }
+.monitor-toast.status-exited { --toast-accent: #9aa5ab; }
+.monitor-toast.status-special { --toast-accent: #d4a017; }
+
+.toast-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.toast-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid #dfe3e6;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #444;
+  white-space: nowrap;
+}
+
+.toast-chip i {
+  color: var(--toast-accent);
+}
+
+.toast-time {
+  font-size: 12px;
+  color: #8a9297;
+  white-space: nowrap;
+}
+
+.toast-msg {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #222;
+  word-break: keep-all;
+}
+
+.toast-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.toast-close {
+  border: none;
+  background: none;
+  padding: 4px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--toast-accent);
+  cursor: pointer;
+}
+
+.toast-close:hover {
+  text-decoration: underline;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes toast-out {
+  to { opacity: 0; transform: translateX(16px); }
+}

@@ -210,12 +210,14 @@ function applyRoleUi() {
   const newBtn = document.getElementById("btnNewBook");
   const importBtn = document.getElementById("btnImportExcel");
 
+  // 템플릿 다운로드 / 엑셀 일괄 등록은 본사 전용 — 사용자 조회 실패 시(isHq 기본값)에도 노출하지 않도록 centerCode로 직접 판별
+  const showImport = currentUser?.centerCode === HQ_CENTER_CODE;
+  if (importBtn) importBtn.hidden = !showImport;
+  const templateBtn = document.getElementById("btnImportTemplate");
+  if (templateBtn) templateBtn.hidden = !showImport;
+
   if (isHq) {
     if (newBtn) newBtn.textContent = "+ 신규 도서 등록";
-    // 템플릿 다운로드 / 엑셀 일괄 등록은 본사 전용
-    if (importBtn) importBtn.hidden = false;
-    const templateBtn = document.getElementById("btnImportTemplate");
-    if (templateBtn) templateBtn.hidden = false;
     return;
   }
 
