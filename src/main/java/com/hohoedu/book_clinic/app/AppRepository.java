@@ -55,13 +55,21 @@ public interface AppRepository {
             @Param("studentId") String studentId, @Param("recordDate") String recordDate,
             @Param("sentOnly") boolean sentOnly);
 
-    /** 문제 유형별 누적 정답률 (그 날짜까지). */
+    /** 문제 유형별 그날 정답률 — 그 날짜에 읽은 책들 합산. */
     List<AppRespDTO.ReportTendencyDTO> selectBookstoreReportTendencies(
             @Param("studentId") String studentId, @Param("recordDate") String recordDate,
             @Param("sentOnly") boolean sentOnly);
+
+    /** 영역 코드(erp_bookstore_code gubun='T')의 역량 문구 전부, id 순. */
+    List<String> selectCompetencyContents(@Param("code") String code);
 
     /** 월별 완독 권수 — 입회월(또는 그 해 1월)부터 기준일의 달까지, 읽지 않은 달은 0으로 채워 오름차순. */
     List<AppRespDTO.ReportMonthlyDTO> selectBookstoreReportMonthly(
             @Param("studentId") String studentId, @Param("recordDate") String recordDate,
             @Param("sentOnly") boolean sentOnly);
+
+    // ── 도서 상세 (2026-10-15) ──
+
+    /** 도서 1권의 상세 정보. 없는 content_id 면 null. */
+    AppRespDTO.BookDetailDTO selectBookDetail(@Param("contentId") Integer contentId);
 }

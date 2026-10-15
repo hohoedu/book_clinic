@@ -86,7 +86,7 @@ public class AppRespDTO {
      * 화면 상단의 일자 탭이 조회 단위다 — {@link #dates} 는 최근 정독 일자 4개(오름차순),
      * 나머지 값은 전부 {@link #recordDate} 하루치다. 탭을 누르면 앱이 그 날짜로 다시 호출한다.
      *
-     * 누적 성격의 값(totalBookCount, tendencies, monthly)도 "그 날짜까지"로 잘라서 낸다.
+     * 누적 성격의 값(totalBookCount, monthly)도 "그 날짜까지"로 잘라서 낸다. tendencies 는 그 날 하루치다.
      * 과거 탭을 눌렀는데 미래 기록이 섞여 보이면 탭의 의미가 사라지기 때문이다.
      *
      * 일지가 한 건도 없는 학생은 dates 가 비고 나머지는 0/빈 리스트다(화면에서 빈 상태 처리).
@@ -109,10 +109,12 @@ public class AppRespDTO {
         private int totalBookCount;   // 그 날짜까지 누적 완독 권수
 
         /**
-         * "이번 정독활동에서는 …" 요약 문장. 생성 정책이 정해지지 않아 항상 null 이다.
-         * 앱은 null 이면 문장 영역을 통째로 숨긴다.
+         * 요약 문장 재료 — 앱이 "이번 정독활동에서는 {summaryContent}하는 {summaryTypeName}능력이 뛰어났어요."로 조합한다.
+         * 그날 성향 중 rate 최고 영역(동점이면 무작위)과 그 영역의 역량 문구(무작위 1개).
+         * 성향이나 문구가 없으면 둘 다 null(앱은 문장 영역을 숨긴다).
          */
-        private String summaryText;
+        private String summaryContent;
+        private String summaryTypeName;
 
         private List<ReportBookDTO> books;
         private List<ReportBadgeDTO> badges;
@@ -173,13 +175,14 @@ public class AppRespDTO {
         private int earnedCount;
     }
 
-    /** 정독 결과 — 독서 성향. 문제 유형(erp_bookstore_code gubun='T')별 누적 정답률. */
+    /** 정독 결과 — 독서 성향. 문제 유형(erp_bookstore_code gubun='T')별 그날 정답률(그 날짜에 읽은 책들 합산). */
     @Data
     public static class ReportTendencyDTO {
         private String typeCode;   // '01' ...
         private String typeName;   // 이해 / 표현 / 어휘 ...
         private Double rate;       // 점수(%) — 기본 50% + 맞힌 비율만큼의 나머지 50%
         private int answerCount;   // 표본 수 — 앱에서 신뢰도 판단용
+        private int correctCount;  // 맞힌 수 — 요약 문장 영역 고를 때 표본 보정용
     }
 
     /** 정독 결과 — 독서량 그래프 한 점. 앱의 ReportGraphData 와 필드명을 맞춰 문자열로 낸다. */
@@ -188,5 +191,26 @@ public class AppRespDTO {
         private String year;   // '2026'
         private String month;  // '09'
         private String count;  // '3'
+    }
+
+    /**
+     * 도서 상세 — 정독 결과 화면에서 표지를 탭하면 띄우는 상세 정보(2026-10-15).
+     * 코드값(장르·학년·분류)은 화면에 바로 쓰도록 이름으로 풀어서 낸다.
+     */
+    @Data
+    public static class BookDetailDTO {
+        private Integer contentId;
+        private String title;
+        private String author;
+        private String publisher;
+        private String imageUrl;
+        private String genreName;        // 장르명
+        private String schoolyearName;   // 권장 학년명
+        private String contentTypeName;  // 분류명 (교과연계/추천도서/수상작 등)
+        private String extraDetailName;  // 분류에 딸린 값 하나 — 연계교과/추천기관명/수상명, 없으면 null
+        private String summary;          // 줄거리
+        private String keywords;         // 해시태그, 쉼표 구분 ("우정,용기") — 앱이 나눠서 쓴다
+        private String readingTime;      // 독서 예상 시간(분)
+        private String difficulty;       // 난이도 (상/중/하)
     }
 }

@@ -541,9 +541,11 @@ function bindReportEvents(report) {
 }
 
 function summaryHtml(report) {
-  // 요약 문장(summaryText)은 생성 정책이 아직 없어 서버가 늘 null 로 준다 —
-  // 그때는 문장 영역을 통째로 숨긴다(앱과 같은 처리)
-  const comment = escapeHtml(report.summaryText ?? "");
+  // 요약 문장은 앱이 재료(summaryContent / summaryTypeName)로 조합하므로 미리보기도 똑같이 조합한다.
+  // 재료가 null 이면 문장 영역을 통째로 숨긴다(앱과 같은 처리)
+  const comment = report.summaryContent
+    ? escapeHtml(`이번 정독활동에서는 ${report.summaryContent}하는 ${report.summaryTypeName}능력이 뛰어났어요.`)
+    : "";
 
   return `
     <section class="app-summary">

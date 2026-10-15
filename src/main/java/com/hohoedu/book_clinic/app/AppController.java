@@ -1,7 +1,8 @@
 package com.hohoedu.book_clinic.app;
 
 import java.time.YearMonth;
-import java.util.List;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -9,7 +10,9 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
+import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
 import com.hohoedu.book_clinic.app._dto.AppReqDTO;
 import com.hohoedu.book_clinic.app._dto.AppRespDTO;
@@ -37,6 +40,8 @@ public class AppController {
 
     /** 이용권 목록의 기본 서비스 — 지금 앱에 이용권 화면이 있는 서비스는 책방뿐이다 */
     private static final String SERVICE_BOOK = "BOOK";
+
+    private static final DateTimeFormatter YM_FORMAT = DateTimeFormatter.ofPattern("yyyyMM");
 
     private final AppRepository appRepository;
     private final AppReportService appReportService;
@@ -104,6 +109,47 @@ public class AppController {
         YearMonth ym = YearMonth.of(Integer.parseInt(reqDTO.getYear()), Integer.parseInt(reqDTO.getMonth()));
         return ResponseEntity.ok(ApiUtils.success(
                 reservationService.findOpenSlots(studentId, ym.atDay(1), ym.atEndOfMonth())));
+    }
+
+    /**
+     * 출석체크 화면 — 그 달의 예약·이용 기록(2026-10-14).
+     *
+     * 앱이 all_pass 출석 기록과 한 리스트에 섞어 날짜순으로 보여준다. 이용 전 건은 예정 시각
+     * (startsAt/endsAt)을, 입실한 건은 실제 시각(checkIn/checkOut)을 쓴다. 취소 건도 함께
+     * 내리고 숨김은 앱이 판단한다.
+     */
+    @PostMapping("/reservation/history")
+    public ResponseEntity<?> reservationHistory(@RequestBody(required = false) AppReqDTO.ReservationHistoryDTO reqDTO,
+                                                HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        String ymText = (reqDTO == null || reqDTO.getYm() == null) ? "" : reqDTO.getYm();
+        YearMonth ym;
+        try {
+            ym = YearMonth.parse(ymText, YM_FORMAT);
+        } catch (DateTimeParseException e) {
+            throw new Exception400("ym 은 yyyyMM 형식이어야 합니다.");
+        }
+        return ResponseEntity.ok(ApiUtils.success(reservationService.findReservationHistory(studentId, ym)));
+    }
+
+    /**
+     * 도서 상세 — 정독 결과 화면에서 도서 표지를 탭했을 때(2026-10-15).
+     *
+     * 도서 정보는 학생 개인 데이터가 아니라서 "이 학생이 읽은 책인지"까지는 보지 않고 로그인만
+     * 확인한다. 정독 결과의 books[].contentId 를 그대로 실어 보내면 된다.
+     */
+    @PostMapping("/bookstore/book/detail")
+    public ResponseEntity<?> bookDetail(@RequestBody(required = false) AppReqDTO.BookDetailDTO reqDTO,
+                                        HttpServletRequest request) {
+        requireStudentId(request);
+        if (reqDTO == null || reqDTO.getContentId() == null) {
+            throw new Exception400("contentId 가 필요합니다.");
+        }
+        AppRespDTO.BookDetailDTO res = appRepository.selectBookDetail(reqDTO.getContentId());
+        if (res == null) {
+            throw new Exception404("도서 정보를 찾을 수 없습니다.");
+        }
+        return ResponseEntity.ok(ApiUtils.success(res));
     }
 
     private String requireStudentId(HttpServletRequest request) {

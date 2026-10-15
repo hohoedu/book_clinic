@@ -42,4 +42,20 @@ public class AppReqDTO {
         private String year;  // yyyy
         private String month; // MM (0 패딩)
     }
+
+    /**
+     * 출석체크 화면의 월별 예약·이용 기록 조회.
+     */
+    @Data
+    public static class ReservationHistoryDTO {
+        private String ym; // yyyyMM
+    }
+
+    /**
+     * 도서 상세 조회 — 정독 결과 화면에서 도서 표지를 탭했을 때(2026-10-15).
+     */
+    @Data
+    public static class BookDetailDTO {
+        private Integer contentId;
+    }
 }

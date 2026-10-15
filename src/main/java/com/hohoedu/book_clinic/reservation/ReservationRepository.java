@@ -91,6 +91,11 @@ public interface ReservationRepository {
     List<ReservationRespDTO.ReservationItemDTO> findMyReservations(@Param("studentId") String studentId,
                                                                 @Param("fromDate") LocalDate fromDate);
 
+    /** 학생 본인의 기간 내 예약 전체(모든 상태) + 실제 입·퇴실 시각 — 앱 출석체크 화면용 */
+    List<ReservationRespDTO.ReservationItemDTO> findReservationHistory(@Param("studentId") String studentId,
+                                                                    @Param("fromDate") LocalDate fromDate,
+                                                                    @Param("toDate") LocalDate toDate);
+
     /** 대리 예약 화면(관리자) — 특정 센터·날짜의 예약 목록(모든 상태 포함) */
     List<ReservationRespDTO.AdminReservationRowDTO> findReservationsByDate(@Param("centerCode") String centerCode,
                                                                        @Param("date") LocalDate date);

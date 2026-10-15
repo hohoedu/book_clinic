@@ -59,6 +59,12 @@ public class ReservationRespDTO {
          * 마감을 넘겨도 취소 자체는 서버에서 막힌다. 목록 조회에서만 채워진다.
          */
         private Boolean cancelable;
+        /**
+         * 실제 입실·퇴실 시각 "HH:mm" (2026-10-14, 앱 출석체크 화면). 미입실/미퇴실이면 null.
+         * 예정 시각(startsAt/endsAt)과 달리 실제 이용 기록이다. 월별 이용 기록 조회에서만 채워진다.
+         */
+        private String checkIn;
+        private String checkOut;
     }
 
     /**

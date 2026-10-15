@@ -2,41 +2,23 @@ package com.hohoedu.book_clinic.app;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
+import java.util.Random;
 
 import org.springframework.stereotype.Service;
 
 import com.hohoedu.book_clinic.app._dto.AppRespDTO;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
-/**
- * 정독 결과(리포트) 조립 (2026-09-23).
- *
- * 앱의 정독 결과 화면(POST /app/bookstore/report)과 관리자 발송 미리보기
- * (POST /admin/growth/app-send/report)가 같은 응답을 써야 해서 조립을 여기로 모았다 —
- * 미리보기는 "학부모에게 이렇게 나간다"를 보여주는 화면이라, 조립이 두 벌이 되는 순간
- * 미리보기와 실제 발송물이 조용히 갈라진다.
- *
- * 두 곳의 차이는 sentOnly 하나뿐이다. 앱은 발송된 일지만 보고(true), 미리보기는 발송 전
- * 일지를 봐야 하므로 false 다.
- *
- * 쿼리가 여섯 개로 나뉘는 건 카디널리티가 서로 달라서다(요약 1행 / 책 N행 / 뱃지 5행 /
- * 성향 유형별 / 월별). 여기서는 이어붙이기만 하고 계산은 전부 SQL 이 한다.
- */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AppReportService {
 
     private final AppRepository appRepository;
 
-    /**
-     * @param recordDate 볼 일자(yyyy-MM-dd). null 이면 가장 최근 정독 일자를 고른다.
-     * @param sentOnly   true 면 발송된 일지(is_send=1)만 대상으로 한다.
-     *
-     * 기록이 한 건도 없으면 빈 리포트(dates=[], recordDate=null)를 그대로 낸다 —
-     * 기록이 없는 건 오류가 아니라 화면의 빈 상태이고, 호출부가 에러 분기와 빈 상태 분기를
-     * 둘 다 들고 있을 이유가 없다.
-     */
     public AppRespDTO.BookstoreReportDTO getReport(String studentId, String recordDate, boolean sentOnly) {
         List<String> dates = appRepository.selectBookstoreReportDates(studentId, sentOnly);
         Collections.reverse(dates); // 화면의 일자 탭은 과거 → 현재 순서다
@@ -46,7 +28,8 @@ public class AppReportService {
                 : (dates.isEmpty() ? null : dates.get(dates.size() - 1));
 
         AppRespDTO.BookstoreReportDTO res = appRepository.selectBookstoreReportSummary(studentId, targetDate, sentOnly);
-        if (res == null) res = new AppRespDTO.BookstoreReportDTO();
+        if (res == null)
+            res = new AppRespDTO.BookstoreReportDTO();
         res.setDates(dates);
         res.setRecordDate(targetDate);
 
@@ -60,7 +43,10 @@ public class AppReportService {
 
         res.setBooks(appRepository.selectBookstoreReportBooks(studentId, targetDate, sentOnly));
         res.setBadges(appRepository.selectBookstoreReportBadges(studentId, targetDate, sentOnly));
-        res.setTendencies(appRepository.selectBookstoreReportTendencies(studentId, targetDate, sentOnly));
+        List<AppRespDTO.ReportTendencyDTO> tendencies = appRepository.selectBookstoreReportTendencies(studentId,
+                targetDate, sentOnly);
+        res.setTendencies(tendencies);
+        fillSummary(res, tendencies, studentId, targetDate);
 
         // 월별 독서량은 완독 이력(recommend_log) 기준이지만 발송 여부는 똑같이 탄다 —
         // 결과가 아직 안 보이는데 그래프만 먼저 오르면 두 화면이 어긋난다(2026-09-23).
@@ -70,8 +56,47 @@ public class AppReportService {
         return res;
     }
 
+    /**
+     * 요약 문장 재료(역량 문구 / 영역명)를 따로 채운다 — 문장 조합은 앱이 한다.
+     * 그날 성향 중 보정 점수 최고 영역(동점이면 무작위)의 문구(무작위)를 쓰고, 성향이 없으면 둘 다 null.
+     *
+     * 영역은 rate 가 아니라 라플라스 보정 (맞힌 수 + 1) / (푼 수 + 2) 로 고른다 — rate 로 고르면
+     * 1문제 다 맞힌 영역(100%)이 10문제 중 9.5개 맞힌 영역(95%)을 이긴다. 보정하면 0.67 대 0.88.
+     *
+     * 무작위는 (학생, 날짜) 시드로 고정한다 — 요청마다 뽑으면 탭을 다시 누를 때마다 문장이 바뀌고,
+     * 발송 미리보기에서 본 문장과 학부모가 앱에서 보는 문장이 달라진다.
+     */
+    private void fillSummary(AppRespDTO.BookstoreReportDTO res, List<AppRespDTO.ReportTendencyDTO> tendencies,
+            String studentId, String recordDate) {
+        List<AppRespDTO.ReportTendencyDTO> scored = tendencies.stream()
+                .filter(t -> t.getAnswerCount() > 0)
+                .toList();
+        if (scored.isEmpty())
+            return;
+
+        // 분모가 모두 정수라 같은 비율이면 double 도 정확히 같은 값이 나온다(동점 판정 안전)
+        double max = scored.stream().mapToDouble(AppReportService::smoothedScore).max().getAsDouble();
+        List<AppRespDTO.ReportTendencyDTO> top = scored.stream()
+                .filter(t -> smoothedScore(t) == max)
+                .toList();
+        Random random = new Random(Objects.hash(studentId, recordDate));
+        AppRespDTO.ReportTendencyDTO pick = top.get(random.nextInt(top.size()));
+
+        List<String> contents = appRepository.selectCompetencyContents(pick.getTypeCode());
+        String content = contents.isEmpty() ? null : trimToNull(contents.get(random.nextInt(contents.size())));
+        res.setSummaryTypeName(pick.getTypeName());
+        if (content == null)
+            return;
+        res.setSummaryContent(content);
+    }
+
+    private static double smoothedScore(AppRespDTO.ReportTendencyDTO t) {
+        return (t.getCorrectCount() + 1.0) / (t.getAnswerCount() + 2.0);
+    }
+
     private static String trimToNull(String v) {
-        if (v == null) return null;
+        if (v == null)
+            return null;
         String t = v.trim();
         return t.isEmpty() ? null : t;
     }

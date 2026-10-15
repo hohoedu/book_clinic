@@ -2,6 +2,7 @@ package com.hohoedu.book_clinic.reservation;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -65,7 +66,16 @@ public class ReservationService {
     /** 예약 가능한 열린 슬롯 목록(학생 앱). 기간 미지정 시 오늘부터 4주(28일) */
     public List<ReservationRespDTO.SlotOptionDTO> findOpenSlots(String studentId, LocalDate fromDate, LocalDate toDate) {
         Student student = requireStudent(studentId);
-        return findOpenSlotsByCenter(student.getCenterCode(), fromDate, toDate, studentId);
+        List<ReservationRespDTO.SlotOptionDTO> slots =
+                findOpenSlotsByCenter(student.getCenterCode(), fromDate, toDate, studentId);
+        // 학생 채널 예약 마감(2026-10-15) — 시작 24시간 이내 회차는 앱에서 "마감"으로 보이게 한다.
+        // 쿼리(findOpenSlots)는 직원 대리 예약 화면과 같이 쓰므로 거기서 바꾸지 않고 학생 경로에서만 덮는다.
+        for (ReservationRespDTO.SlotOptionDTO slot : slots) {
+            if ("OPEN".equals(slot.getStatus()) && isPastStudentDeadline(slot.getStartsAt())) {
+                slot.setStatus("CLOSED");
+            }
+        }
+        return slots;
     }
 
     /**
@@ -92,12 +102,20 @@ public class ReservationService {
         requireStudent(studentId);
         List<ReservationRespDTO.ReservationItemDTO> reservations =
                 repository.findMyReservations(studentId, KstClock.today());
-        LocalDateTime now = KstClock.now();
         for (ReservationRespDTO.ReservationItemDTO r : reservations) {
             r.setCancelable("RESERVED".equals(r.getStatus()) && r.getStartsAt() != null
-                    && !now.isAfter(r.getStartsAt().minusHours(CANCEL_DEADLINE_HOURS)));
+                    && !isPastStudentDeadline(r.getStartsAt()));
         }
         return reservations;
+    }
+
+    /**
+     * 그 달의 예약·이용 기록 — 앱 출석체크 화면용(2026-10-14). 상태 무관 전부 내리고,
+     * 숨김(취소 등)은 앱이 판단한다. 입실한 건은 실제 입·퇴실 시각(checkIn/checkOut)이 채워진다.
+     */
+    public List<ReservationRespDTO.ReservationItemDTO> findReservationHistory(String studentId, YearMonth ym) {
+        requireStudent(studentId);
+        return repository.findReservationHistory(studentId, ym.atDay(1), ym.atEndOfMonth());
     }
 
     /**
@@ -133,11 +151,17 @@ public class ReservationService {
     private static final long EARLY_ENTRY_MINUTES = 10;
 
     /**
-     * 학생/학부모의 취소·변경 마감 = 회차 시작 이만큼 전까지(2026-09-14). 예약이 곧 이용권 차감이
-     * 되면서 취소에 마감이 생겼다 — 직전 취소를 허용하면 그 자리를 다른 학생이 쓸 수 없는데도
-     * 횟수는 온전히 돌아가기 때문이다. 센터 직원의 대리 취소에는 적용하지 않는다.
+     * 학생/학부모의 예약·취소·변경 마감 = 회차 시작 이만큼 전까지. 예약이 곧 이용권 차감이
+     * 되면서 취소에 마감이 생겼고(2026-09-14) — 직전 취소를 허용하면 그 자리를 다른 학생이 쓸 수
+     * 없는데도 횟수는 온전히 돌아가기 때문이다 — 신규 예약도 같은 마감을 탄다(2026-10-15).
+     * 센터 직원의 대리 예약·취소에는 적용하지 않는다(직원은 당일에도 가능).
      */
-    private static final long CANCEL_DEADLINE_HOURS = 24;
+    private static final long STUDENT_DEADLINE_HOURS = 24;
+
+    /** 회차 시작까지 {@value #STUDENT_DEADLINE_HOURS}시간이 안 남았는지 — 학생 채널 예약·취소 마감 판정 */
+    private boolean isPastStudentDeadline(LocalDateTime startsAt) {
+        return startsAt != null && KstClock.now().isAfter(startsAt.minusHours(STUDENT_DEADLINE_HOURS));
+    }
 
     /**
      * 입실 시점에 그날 예약을 ATTENDED로 전환한다. {@code MonitorService.enterSession}이 부른다.
@@ -304,7 +328,7 @@ public class ReservationService {
     }
 
     /**
-     * 학생 채널 취소·변경 마감 검사 — 회차 시작 {@value #CANCEL_DEADLINE_HOURS}시간 전까지만 허용한다.
+     * 학생 채널 취소·변경 마감 검사 — 회차 시작 {@value #STUDENT_DEADLINE_HOURS}시간 전까지만 허용한다.
      * 예약을 못 찾으면(이미 지난 회차 등) 여기서 판단하지 않고 통과시킨다 — 취소 UPDATE가
      * 0행으로 떨어져 "처리할 수 없는 예약"으로 안내되는 쪽이 메시지가 정확하다.
      */
@@ -313,10 +337,9 @@ public class ReservationService {
         if (reservation == null || reservation.getStartsAt() == null) {
             return;
         }
-        LocalDateTime deadline = reservation.getStartsAt().minusHours(CANCEL_DEADLINE_HOURS);
-        if (KstClock.now().isAfter(deadline)) {
+        if (isPastStudentDeadline(reservation.getStartsAt())) {
             throw new Exception400(slotLabel(reservation.getServiceDate(), reservation.getSeq())
-                    + " — 이용 " + CANCEL_DEADLINE_HOURS + "시간 전까지만 취소·변경할 수 있습니다."
+                    + " — 이용 " + STUDENT_DEADLINE_HOURS + "시간 전까지만 취소·변경할 수 있습니다."
                     + " 센터로 문의해주세요.");
         }
     }
@@ -378,7 +401,8 @@ public class ReservationService {
                 item.setEndsAt(slot.getEndsAt());
                 if (Boolean.TRUE.equals(slot.getReservedByMe())) {
                     item.setTargetStatus("ALREADY_RESERVED");
-                } else if (!"OPEN".equals(slot.getStatus())) {
+                } else if (!"OPEN".equals(slot.getStatus()) || isPastStudentDeadline(slot.getStartsAt())) {
+                    // 시작 24시간 이내 회차도 학생은 예약할 수 없다(2026-10-15) — 확정 시 reserveOne이 다시 막는다
                     item.setTargetStatus("CLOSED");
                 } else if (slot.getReservedCount() != null && slot.getCapacity() != null
                         && slot.getReservedCount() >= slot.getCapacity()) {
@@ -458,6 +482,14 @@ public class ReservationService {
         // 직원 대리 예약도 같은 규칙을 탄다 — 지난 회차로 잡아주면 그 학생은 입실을 못 한다.
         if (!slot.getEndsAt().isAfter(KstClock.now())) {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 이미 종료된 회차입니다.");
+        }
+
+        // 학생 채널 예약 마감(2026-10-15) — 시작 24시간 이내 회차는 앱에서 예약할 수 없다. 목록에서
+        // CLOSED로 내려주지만 API 직접 호출 우회를 막으려고 여기서도 막는다. 직원 대리 예약은 제외.
+        if (!"ADMIN".equals(changedByRole) && isPastStudentDeadline(slot.getStartsAt())) {
+            throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
+                    + " — 이용 " + STUDENT_DEADLINE_HOURS + "시간 전까지만 예약할 수 있습니다."
+                    + " 센터로 문의해주세요.");
         }
 
         // 하루 2회차 상한 정책(2026-08-28, 기존 1 → 2) — 4주 일괄(reserveOne을 날짜별로 반복 호출)로

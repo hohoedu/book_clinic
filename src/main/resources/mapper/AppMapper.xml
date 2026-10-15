@@ -245,15 +245,6 @@
               AND rl.status = 'DONE'
               AND rl.completed_at IS NOT NULL
               AND cast(rl.completed_at AS date) &lt;= #{recordDate,jdbcType=DATE}
-              -- 발송 대기 중인 일지에 달린 책은 아직 세지 않는다 (2026-09-23).
-              -- "일지에 달렸는데 미발송"만 빼는 형태인 것은 일부러다 — 일지 상세는 세션이 없으면
-              -- 적재되지 않고(MonitorService.recordDiaryDetail) 실패해도 조용히 넘어가는데,
-              -- "발송된 일지에 달린 책만" 세면 그런 책은 영영 누적에서 사라진다(되살릴 일지가
-              -- 없으니 발송할 방법도 없다). 빼는 건 곧 발송될 것이 확실한 건만으로 한정한다.
-              --
-              -- 미리보기(sentOnly=false)는 지금 보고 있는 날짜만 예외로 센다 — 발송 버튼을 누르면
-              -- 그날 일지가 is_send=1 이 되므로, 그 한 건을 빼 버리면 미리보기 숫자가 정작 학부모가
-              -- 보게 될 숫자보다 낮아진다. 미리보기는 "보내고 난 뒤의 앱"이어야 한다 (2026-09-23).
               AND NOT EXISTS (
                   SELECT 1
                   FROM erp_bookstore_diary_detail dd2
@@ -401,12 +392,21 @@
             cd.code   AS typeCode,
             cd.codeNm AS typeName,
             cast(round(50.0 + 50.0 * sum(CASE WHEN l.is_correct = 1 THEN 1 ELSE 0 END) / count(*), 1) AS float) AS rate,
-            count(*)  AS answerCount
+            count(*)  AS answerCount,
+            sum(CASE WHEN l.is_correct = 1 THEN 1 ELSE 0 END) AS correctCount
         FROM erp_bookstore_code cd
         JOIN latest l ON l.qtype = cd.code
         WHERE cd.gubun = 'T'
         GROUP BY cd.code, cd.codeNm
         ORDER BY cd.code
+    </select>
+
+    <!-- 요약 문장용 역량 문구 전부 — 고르는 건 서비스가 (학생, 날짜) 시드로 한다. 순서가 고정돼야 같은 문구가 나온다 -->
+    <select id="selectCompetencyContents" resultType="string">
+        SELECT content
+        FROM erp_bookstore_competency_detail
+        WHERE code = #{code}
+        ORDER BY id
     </select>
 
     <!--
@@ -488,6 +488,33 @@
         ) c
         WHERE mo.m BETWEEN base.startM AND base.mn
         ORDER BY mo.m ASC
+    </select>
+
+    <!-- 도서 상세 (2026-10-15) — 정독 결과 화면에서 표지 탭. 코드값은 erp_bookstore_code 이름으로 푼다.
+         부가 정보(content_detail)는 분류에 맞는 gubun 하나만 있다(BookMapper.searchContents와 같은 규칙). -->
+    <select id="selectBookDetail" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$BookDetailDTO">
+        SELECT
+            bc.content_id     AS contentId,
+            bc.original_title AS title,
+            bc.author         AS author,
+            bc.publisher      AS publisher,
+            nullif(bc.image_url, '') AS imageUrl,
+            g.codeNm          AS genreName,
+            s.codeNm          AS schoolyearName,
+            ct.codeNm         AS contentTypeName,
+            COALESCE(da.name, dr.name, dc.name) AS extraDetailName,
+            bc.summary        AS summary,
+            bc.keywords       AS keywords,
+            bc.reading_time   AS readingTime,
+            bc.difficulty     AS difficulty
+        FROM erp_bookstore_content bc
+        LEFT JOIN erp_bookstore_code g  ON g.gubun = 'G'  AND g.code = bc.genre
+        LEFT JOIN erp_bookstore_code s  ON s.gubun = 'S'  AND s.code = bc.schoolyear
+        LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
+        LEFT JOIN erp_bookstore_content_detail da ON da.content_id = bc.content_id AND da.gubun = 'A'
+        LEFT JOIN erp_bookstore_content_detail dr ON dr.content_id = bc.content_id AND dr.gubun = 'R'
+        LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
+        WHERE bc.content_id = #{contentId}
     </select>
 
 </mapper>
