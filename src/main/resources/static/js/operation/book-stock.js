@@ -131,12 +131,12 @@ function renderStocks() {
 
   tbody.innerHTML = "";
 
-  stocks.forEach((stock, index) => {
+  stocks.forEach((stock) => {
     const row = document.createElement("tr");
     row.className = "stock-master-row";
     row.dataset.contentId = stock.contentId;
     row.innerHTML = `
-      <td class="col-no">${index + 1}</td>
+      <td class="col-no">${stock.contentNum ?? ""}</td>
       <td class="col-book">
         <i class="fa-solid fa-caret-right tree-caret"></i>
         <img src="${stock.imageUrl || DEFAULT_BOOK_IMAGE}" alt="" onerror="this.src='${DEFAULT_BOOK_IMAGE}'">

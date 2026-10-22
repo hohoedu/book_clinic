@@ -43,6 +43,9 @@ public class AppRespDTO {
         private String bookImg2;
         private String bookImg3;
         private String bookImg4;
+
+        // 가장 최근 정독 결과 발송 시각 (yyyy-MM-dd HH:mm:ss, 없으면 null) — 앱 "새 결과" 표시용
+        private String lastReportSentAt;
     }
 
     /**
@@ -212,5 +215,18 @@ public class AppRespDTO {
         private String keywords;         // 해시태그, 쉼표 구분 ("우정,용기") — 앱이 나눠서 쓴다
         private String readingTime;      // 독서 예상 시간(분)
         private String difficulty;       // 난이도 (상/중/하)
+    }
+
+    /**
+     * 내 책장 한 권 (2026-10-22) — 올해 읽은 책. 같은 책을 여러 번 읽었으면 가장 최근 기록 1건만 낸다.
+     * 메인 화면 "최근 읽은 책"과 같은 규칙으로 직원이 발송한 일지(is_send=1)에 실린 책만 센다.
+     */
+    @Data
+    public static class BookcaseBookDTO {
+        private Integer contentId;
+        private String title;
+        private String imageUrl;
+        private String readDate;  // yyyy-MM-dd — 그 책이 실린 가장 최근 독서일지 날짜
+        private String result;    // KING 정독왕 / FRIEND 정독 완료 / RETRY 재도전 필요 / null(결과 없음)
     }
 }

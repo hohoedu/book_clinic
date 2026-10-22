@@ -442,19 +442,17 @@
             WHERE sb.student_id = rl.student_id AND sb.content_id = rl.content_id
         ) badge
         OUTER APPLY (
-            -- 스페셜(실물) 카드 지급 대상 표시 (2026-09-14).
-            -- 이 책으로 받은 완독 카드가 그 학생의 몇 번째 NORMAL 카드였는지 획득순으로 세어,
-            -- 10장 세트를 정확히 채운 책(10·20·30번째)에만 1로 내려간다. 10은 스페셜 카드를
-            -- 실제로 적립하는 ClinicService.CARD_SET_SIZE와 같은 값이어야 한다.
-            -- 아직 문제를 안 푼 책은 카드 자체가 없어 이 APPLY가 비고 NULL로 내려간다.
-            SELECT CAST(CASE WHEN ranked.seq % 10 = 0 THEN 1 ELSE 0 END AS BIT) AS reached
-            FROM (
-                SELECT sc.content_id,
-                       ROW_NUMBER() OVER (ORDER BY sc.earned_at, sc.id) AS seq
-                FROM erp_bookstore_student_card sc
-                WHERE sc.student_id = rl.student_id AND sc.card_type = 'NORMAL'
-            ) ranked
-            WHERE ranked.content_id = rl.content_id
+            -- 스페셜(실물) 카드 지급 대상 표시 (2026-09-14, 2026-10-22 학년별 규칙).
+            -- 스페셜 카드 행에 칸을 채운 책(content_id)이 남으므로 "이 책으로 스페셜을 받았는지"만 본다 —
+            -- 칸 계산(학년별 목표 권수 ÷ 10)은 ClinicService/SpecialCardPolicy 한 곳에만 둔다.
+            -- 아직 문제를 안 푼 책은 그 책 카드 자체가 없어 이 APPLY가 비고 NULL로 내려간다.
+            SELECT CAST(CASE WHEN EXISTS (
+                       SELECT 1 FROM erp_bookstore_student_card sp
+                       WHERE sp.student_id = rl.student_id AND sp.card_type = 'SPECIAL'
+                         AND sp.content_id = rl.content_id
+                   ) THEN 1 ELSE 0 END AS BIT) AS reached
+            FROM erp_bookstore_student_card nc
+            WHERE nc.student_id = rl.student_id AND nc.card_type = 'NORMAL' AND nc.content_id = rl.content_id
         ) spcard
         OUTER APPLY (
             SELECT TOP 1 session_id, quiz_started_at
@@ -531,19 +529,17 @@
             WHERE sb.student_id = rl.student_id AND sb.content_id = rl.content_id
         ) badge
         OUTER APPLY (
-            -- 스페셜(실물) 카드 지급 대상 표시 (2026-09-14).
-            -- 이 책으로 받은 완독 카드가 그 학생의 몇 번째 NORMAL 카드였는지 획득순으로 세어,
-            -- 10장 세트를 정확히 채운 책(10·20·30번째)에만 1로 내려간다. 10은 스페셜 카드를
-            -- 실제로 적립하는 ClinicService.CARD_SET_SIZE와 같은 값이어야 한다.
-            -- 아직 문제를 안 푼 책은 카드 자체가 없어 이 APPLY가 비고 NULL로 내려간다.
-            SELECT CAST(CASE WHEN ranked.seq % 10 = 0 THEN 1 ELSE 0 END AS BIT) AS reached
-            FROM (
-                SELECT sc.content_id,
-                       ROW_NUMBER() OVER (ORDER BY sc.earned_at, sc.id) AS seq
-                FROM erp_bookstore_student_card sc
-                WHERE sc.student_id = rl.student_id AND sc.card_type = 'NORMAL'
-            ) ranked
-            WHERE ranked.content_id = rl.content_id
+            -- 스페셜(실물) 카드 지급 대상 표시 (2026-09-14, 2026-10-22 학년별 규칙).
+            -- 스페셜 카드 행에 칸을 채운 책(content_id)이 남으므로 "이 책으로 스페셜을 받았는지"만 본다 —
+            -- 칸 계산(학년별 목표 권수 ÷ 10)은 ClinicService/SpecialCardPolicy 한 곳에만 둔다.
+            -- 아직 문제를 안 푼 책은 그 책 카드 자체가 없어 이 APPLY가 비고 NULL로 내려간다.
+            SELECT CAST(CASE WHEN EXISTS (
+                       SELECT 1 FROM erp_bookstore_student_card sp
+                       WHERE sp.student_id = rl.student_id AND sp.card_type = 'SPECIAL'
+                         AND sp.content_id = rl.content_id
+                   ) THEN 1 ELSE 0 END AS BIT) AS reached
+            FROM erp_bookstore_student_card nc
+            WHERE nc.student_id = rl.student_id AND nc.card_type = 'NORMAL' AND nc.content_id = rl.content_id
         ) spcard
         OUTER APPLY (
             SELECT TOP 1 session_id, quiz_started_at
@@ -743,18 +739,21 @@
     </delete>
 
     <!--
-      SPECIAL(스페셜) 카드는 "NORMAL 10장째"라는 사건으로 발급된다(trigger_count = 그 시점 누적 NORMAL 수).
-      NORMAL을 회수해 보유 수가 그 아래로 내려가면 근거가 사라지므로 함께 회수한다 — 남겨두면
-      다시 10장을 채웠을 때 existsRareCard(trigger_count)에 걸려 레어카드를 영영 못 받는다.
+      SPECIAL(스페셜) 카드는 "그 학년 NORMAL N장째"라는 사건으로 발급된다(trigger_count = 그 학년 누적 NORMAL 수,
+      2026-10-22 학년별 규칙). NORMAL을 회수해 그 학년 보유 수가 그 아래로 내려가면 근거가 사라지므로 함께
+      회수한다 — 남겨두면 다시 그 장수를 채웠을 때 existsRareCard에 걸려 스페셜 카드를 영영 못 받는다.
+      학년이 비어 있는 행은 셀 기준이 없어 건드리지 않는다(학년 채우기 패치 전 데이터 보호).
       deleteNormalCard 다음에 호출해야 현재 보유 수가 회수 후 값으로 계산된다.
     -->
     <delete id="deleteOrphanRareCards">
         DELETE FROM erp_bookstore_student_card
         WHERE student_id = #{studentId}
           AND card_type = 'SPECIAL'
+          AND schoolyear IS NOT NULL
           AND trigger_count > (
-              SELECT COUNT(*) FROM erp_bookstore_student_card
-              WHERE student_id = #{studentId} AND card_type = 'NORMAL'
+              SELECT COUNT(*) FROM erp_bookstore_student_card n
+              WHERE n.student_id = #{studentId} AND n.card_type = 'NORMAL'
+                AND n.schoolyear = erp_bookstore_student_card.schoolyear
           )
     </delete>
 

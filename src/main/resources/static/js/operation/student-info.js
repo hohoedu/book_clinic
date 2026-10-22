@@ -15,6 +15,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
 const RESULT_LABEL = { DONE_KING: "독서왕", DONE_FRIEND: "통과", PENDING: "재도전" };
 
+/*
+ * 등록 상태 — erp_bookstore_assign 기준(StudentMapper.findStudentByCenterCode 주석 참고).
+ * UNREGISTERED(미등록)는 all_pass 에서 입회만 하고 책방은 한 번도 안 다닌 학생(미수강 + 시작일자 없음) (2026-10-16)
+ */
+const STATUS_LABEL = { ACTIVE: "이용중", WITHDRAWN: "탈퇴", UNREGISTERED: "미등록" };
+const STATUS_CLASS = { ACTIVE: "status-active", WITHDRAWN: "status-withdrawn", UNREGISTERED: "status-unregistered" };
+
 /* 회원가입 화면 링크 — 경로는 아직 확정 전이라 임시다(추후 수정 예정).
    origin은 현재 접속 도메인, centerCode는 로그인 직원 센터(body[data-center-code])를 붙인다 */
 const SIGNUP_LINK_PATH = "/signup";
@@ -102,8 +109,8 @@ function renderStudentList(students) {
   listBody.innerHTML = students.map((s, idx) => {
     const levelNo = s.levelNo ?? 1;
     const medalSrc = s.medalImg;
-    const statusLabel = s.statusKey === "WITHDRAWN" ? "탈퇴" : "이용중";
-    const statusClass = s.statusKey === "WITHDRAWN" ? "status-withdrawn" : "status-active";
+    const statusLabel = STATUS_LABEL[s.statusKey] ?? "이용중";
+    const statusClass = STATUS_CLASS[s.statusKey] ?? "status-active";
     return `
       <tr class="student-row"
           data-student-id="${escapeHtml(s.studentId)}"
@@ -798,12 +805,12 @@ function statusButtons(status) {
 
 /* 전체 탭 헤더용 — 4단계 버튼 그룹 대신 현재 상태 하나만 재원중/탈퇴 색으로 표시 */
 function singleStatusPill(status) {
-  const cls = status === "탈퇴" ? "danger" : "active";
+  const cls = status === "탈퇴" ? "danger" : status === "미등록" ? "muted" : "active";
   return `<span class="status-chip ${cls}">${status}</span>`;
 }
 
 function statusLabel(statusKey) {
-  return statusKey === "WITHDRAWN" ? "탈퇴" : "이용중";
+  return STATUS_LABEL[statusKey] ?? "이용중";
 }
 
 function reservationStatusPill(status) {
@@ -999,7 +1006,7 @@ function renderBasicTab(d) {
 
 /*
  * 수강 정보 탭 — erp_bookstore_assign 1행을 읽고 쓴다 (2026-09-15).
- * "독서 레벨"은 저장 시점에 서버가 찍는 자동계산 레벨 스냅샷이라 화면에선 읽기 전용이다.
+ * "독서 레벨"은 서버가 조회할 때마다 다시 계산한 현재 레벨(목록과 같은 값)이라 화면에선 읽기 전용이다.
  * 미수강을 고르면 아래 미수강 행(일자/사유)이 펼쳐지고, 수강으로 되돌리면 접히면서 저장 시 값이 비워진다.
  */
 function renderAssignTab(d) {

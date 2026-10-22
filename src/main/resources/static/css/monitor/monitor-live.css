@@ -64,6 +64,113 @@
   background: #fff;
 }
 
+/* 학년 다중 선택 드롭다운(2026-10-20) — 회차 select와 같은 모양의 버튼 + 체크박스 메뉴 */
+.monitor-grade-picker {
+  position: relative;
+}
+
+.monitor-grade-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #555;
+  background: #fff;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.monitor-grade-trigger i {
+  font-size: 11px;
+  color: #8a9297;
+}
+
+/* 학년을 골라둔 상태 — 전체가 아니라는 걸 한눈에 */
+.monitor-grade-trigger.active {
+  border-color: #2f9e6e;
+  color: #2f9e6e;
+  font-weight: 600;
+  background: #f0faf5;
+}
+
+.monitor-grade-trigger.active i { color: #2f9e6e; }
+
+.monitor-grade-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  min-width: 200px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #e0e4e7;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.monitor-grade-menu[hidden] { display: none; }
+
+.monitor-grade-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.monitor-grade-option {
+  position: relative;
+  cursor: pointer;
+}
+
+.monitor-grade-option input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.monitor-grade-option span {
+  display: block;
+  padding: 8px 0;
+  text-align: center;
+  border: 1px solid #e0e4e7;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  background: #f7f8f9;
+  user-select: none;
+}
+
+.monitor-grade-option input:checked + span {
+  background: #2f9e6e;
+  border-color: #2f9e6e;
+  color: #fff;
+}
+
+.monitor-grade-option input:focus-visible + span {
+  outline: 2px solid #2f9e6e;
+  outline-offset: 2px;
+}
+
+.monitor-grade-menu-foot {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eef1f3;
+  text-align: right;
+}
+
+.monitor-grade-reset {
+  border: none;
+  background: none;
+  font-size: 12px;
+  color: #8a9297;
+  cursor: pointer;
+}
+
+.monitor-grade-reset:hover { color: #2f9e6e; }
+
 .monitor-filters {
   display: flex;
   gap: 8px;

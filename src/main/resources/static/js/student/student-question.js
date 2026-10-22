@@ -590,6 +590,7 @@
       merged.cardName = src.cardName;
       merged.cardImageUrl = src.cardImageUrl;
       merged.totalCards = src.totalCards;
+      merged.cardsToNextSpecial = src.cardsToNextSpecial;
       merged.specialCardOwned = src.specialCardOwned;
       merged.specialCardImageUrl = src.specialCardImageUrl;
     };

@@ -82,7 +82,14 @@ const inlineScanner = (function createInlineQrScanner() {
 
   function start() {
     if (running) return;
-    if (!video || typeof window.jsQR !== 'function') {
+    // jsQR.js는 SW가 가로채지 않아 오프라인 폴백이 없다 — 페이지는 캐시로 떴는데 jsQR만 없으면
+    // 네트워크가 끊긴 상태로 열린 것이다. 연결이 돌아오면 새로고침해 다시 받아온다.
+    if (!navigator.onLine || typeof window.jsQR !== 'function') {
+      showError('네트워크 연결을 확인해주세요.');
+      window.addEventListener('online', () => window.location.reload(), { once: true });
+      return;
+    }
+    if (!video) {
       showError('QR 스캐너를 불러오지 못했어요. "다른 방법으로 로그인"을 눌러주세요.');
       return;
     }

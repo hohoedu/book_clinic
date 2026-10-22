@@ -77,7 +77,7 @@ public class ReservationController {
         return ResponseEntity.ok(ApiUtils.success("예약이 취소되었습니다."));
     }
 
-    /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차로 가장 가까운 4개 날짜의 슬롯 상태를 알려준다 */
+    /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차로, 고른 날짜(없으면 가장 가까운 날)부터 4개 날짜의 슬롯 상태를 알려준다 */
     @PostMapping("/batch-preview")
     public ResponseEntity<?> batchPreview(@RequestBody ReservationReqDTO.BatchPreviewReqDTO reqDTO,
                                           HttpServletRequest request) {
@@ -86,7 +86,7 @@ public class ReservationController {
             throw new Exception400("요일과 회차를 선택해 주세요.");
         }
         return ResponseEntity.ok(ApiUtils.success(
-                reservationService.previewBatch(studentId, reqDTO.getDayOfWeek(), reqDTO.getSeq())));
+                reservationService.previewBatch(studentId, reqDTO.getDayOfWeek(), reqDTO.getSeq(), reqDTO.getStartDate())));
     }
 
     /** 4주 일괄 확정 — 미리보기에서 확인한 슬롯 id 목록을 그대로 보낸다 */

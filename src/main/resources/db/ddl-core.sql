@@ -414,14 +414,15 @@ CREATE TABLE erp_bookstore_student_badge (
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 
--- 학생별 카드 지급 이력 — NORMAL(완독 시 그 책 카드, 책당 1장) / RARE(NORMAL 카드 10장마다 추가 지급)
+-- 학생별 카드 지급 이력 — NORMAL(완독 시 그 책 카드, 책당 1장) / SPECIAL(학년별 목표 권수 ÷ 10 칸마다 추가 지급, 2026-10-22)
 IF OBJECT_ID('erp_bookstore_student_card', 'U') IS NULL
 CREATE TABLE erp_bookstore_student_card (
     id             INT IDENTITY(1,1) PRIMARY KEY,
     student_id     VARCHAR(100)  NOT NULL,
-    content_id     INT           NULL,      -- NORMAL만 값 있음(그 책). RARE는 NULL
+    content_id     INT           NULL,      -- NORMAL = 그 책, SPECIAL = 칸을 채운 책(2026-10-22)
     card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / SPECIAL (2026-10-01 RARE에서 이름 변경)
-    trigger_count  INT           NULL,      -- RARE만 값 있음(발급을 유발한 누적 NORMAL 카드 수: 10, 20 ...)
+    trigger_count  INT           NULL,      -- SPECIAL만 값 있음(발급을 유발한 그 학년 누적 NORMAL 카드 수, 2026-10-22 학년별)
+    schoolyear     VARCHAR(2)    NULL,      -- 카드를 받은 때의 학생 학년 — 스페셜 카드는 학년마다 0부터 센다(2026-10-22)
     earned_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 지급일시(KST)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
@@ -431,9 +432,9 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_erp_bookstore_student_
         ON erp_bookstore_student_card (student_id, content_id)
         WHERE card_type = 'NORMAL';
 
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_erp_bookstore_student_card_special' AND object_id = OBJECT_ID('erp_bookstore_student_card'))
-    CREATE UNIQUE INDEX UX_erp_bookstore_student_card_special
-        ON erp_bookstore_student_card (student_id, trigger_count)
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_erp_bookstore_student_card_special_grade' AND object_id = OBJECT_ID('erp_bookstore_student_card'))
+    CREATE UNIQUE INDEX UX_erp_bookstore_student_card_special_grade
+        ON erp_bookstore_student_card (student_id, schoolyear, trigger_count)
         WHERE card_type = 'SPECIAL';
 
 -- 클리닉 입실/퇴실 세션 (실시간 모니터링) — 학생이 로그인하는 시점에 자동으로 입실 기록이 생긴다

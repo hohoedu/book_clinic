@@ -146,9 +146,6 @@ public class ClinicService {
     // 문제풀이 합격선 = 전체 문항 수의 2/3 (12문항→8개, 15문항→10개 기준으로 확정)
     private static final double QUIZ_PASS_RATIO = 2.0 / 3;
 
-    // 온라인 카드(NORMAL) N장마다 온라인 레어카드 1장 추가 지급 + 오프라인 실물 카드 1장(시스템은 진행도/달성 표시까지만)
-    private static final int CARD_SET_SIZE = 10;
-
     // 뱃지 id (erp_bookstore_badge) — 책마다 기본 1개(1~3 택1) + 심화 1개(4~5 택1).
     // 2026-09-14 4종 → 5종 복원: 기본 문제 결과를 다시 불합격/합격/만점 3단계로 나눈다(2026-09-02에
     // 합격/불합격 무관 "독서완료" 1개로 합쳤던 것을 되돌림). 심화는 그대로 2단계(합격선 없음) 유지.
@@ -825,31 +822,37 @@ public class ClinicService {
             if (rule != null) {
                 resp.setLeveledUp(resp.getLevelNo() > levelFor(doneNow - 1, rule.booksPerLevel()));
             }
+            // 완독 권수가 바뀐 시점이라 erp_bookstore_assign.bookstore_level 도 현재 레벨로 맞춘다(2026-10-16).
+            // all_pass 는 레벨 계산 규칙 없이 이 컬럼을 그대로 읽는다. 레벨업 때만이 아니라 첫 제출마다
+            // 덮어써서, 학년 변경 등으로 이미 어긋나 있던 값도 다음 완독 때 바로잡히게 한다.
+            clinicRepository.updateBookstoreLevel(studentId, resp.getLevelNo());
         } else {
             resp.setLeveledUp(false);
         }
 
         // 온라인 카드 — 이 책 첫 제출에서만 지급(책당 1장, 합격/불합격 무관). 재도전/틀린문제 재제출은 지급 없음.
-        // NORMAL 카드가 CARD_SET_SIZE(10)의 배수를 채운 순간 온라인 레어카드도 함께 지급하고,
-        // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다.
+        // 지금 학년에서 받은 카드 수가 스페셜 카드 칸(SpecialCardPolicy)에 닿은 순간 스페셜 카드도 함께 주고,
+        // 그 시점을 cardRewardReached로 알려 오프라인 실물 1장 교환 안내를 띄운다(2026-10-22 학년별 규칙).
         if (firstAttempt && !clinicRepository.existsNormalCard(studentId, contentId)) {
-            clinicRepository.insertNormalCard(studentId, contentId);
+            clinicRepository.insertNormalCard(studentId, contentId, schoolyear);
             ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
-            int totalCards = clinicRepository.countNormalCards(studentId); // 이번 지급 포함
+            int gradeCards = clinicRepository.countNormalCards(studentId, schoolyear); // 이번 지급 포함
             if (card != null) {
                 resp.setCardName(card.getCardName());
                 resp.setCardImageUrl(card.getImageUrl());
                 resp.setCardNew(true);
             }
-            resp.setTotalCards(totalCards);
+            resp.setTotalCards(gradeCards);
+            Integer goal = goalBooks(schoolyear);
+            resp.setCardsToNextSpecial(SpecialCardPolicy.cardsToNext(goal, gradeCards));
 
-            boolean rewardReached = totalCards > 0 && totalCards % CARD_SET_SIZE == 0;
+            boolean rewardReached = SpecialCardPolicy.isThreshold(goal, gradeCards);
             resp.setCardRewardReached(rewardReached);
             if (rewardReached) {
-                if (!clinicRepository.existsRareCard(studentId, totalCards)) {
-                    clinicRepository.insertRareCard(studentId, totalCards);
+                if (!clinicRepository.existsRareCard(studentId, schoolyear, gradeCards)) {
+                    clinicRepository.insertRareCard(studentId, contentId, schoolyear, gradeCards);
                 }
-                applySpecialCard(resp, clinicRepository.findSpecialCardSource(studentId, contentId));
+                applySpecialCard(resp, clinicRepository.findSpecialCardByContent(studentId, contentId));
             }
         } else {
             // 재도전·틀린문제 재제출 — 카드를 새로 주진 않지만(책당 1장), 이미 받아둔 그 책 카드를
@@ -1066,8 +1069,8 @@ public class ClinicService {
     }
 
     /**
-     * student-main "나의 카드 컬렉션" 패널 — 보유 카드(NORMAL+RARE) 목록(최신 획득순)과
-     * NORMAL 카드 기준 10장당 레어카드/실물 교환 진행도를 내려준다(erp_bookstore_student_card 조회).
+     * student-main "나의 카드 컬렉션" 패널 — 보유 카드(NORMAL+SPECIAL) 목록(최신 획득순)과
+     * 지금 학년의 스페셜 카드(=실물 교환) 진행도를 내려준다(erp_bookstore_student_card 조회).
      */
     public ClinicRespDTO.CardCollectionDTO getCardCollection(String studentId) {
         List<ClinicRespDTO.CardDTO> cards = clinicRepository.findEarnedCards(studentId);
@@ -1075,13 +1078,15 @@ public class ClinicService {
             String special = specialCardImage(card.getSpecialSchoolyear(), card.getTriggerCount());
             if (special != null) card.setImageUrl(special);
         }
-        int normalTotal = clinicRepository.countNormalCards(studentId);
+        String schoolyear = resolveSchoolyear(studentId);
+        int gradeCards = clinicRepository.countNormalCards(studentId, schoolyear);
+        Integer toNext = SpecialCardPolicy.cardsToNext(goalBooks(schoolyear), gradeCards);
 
         ClinicRespDTO.CardCollectionDTO result = new ClinicRespDTO.CardCollectionDTO();
         result.setCards(cards);
-        result.setTotalCards(normalTotal);
-        result.setExchangeableCount(normalTotal / CARD_SET_SIZE);
-        result.setCardsToNextReward(CARD_SET_SIZE - normalTotal % CARD_SET_SIZE);
+        result.setTotalCards(gradeCards);
+        result.setExchangeableCount((int) cards.stream().filter(c -> "SPECIAL".equals(c.getCardType())).count());
+        result.setCardsToNextReward(toNext == null ? 0 : toNext);
         return result;
     }
 
@@ -1110,30 +1115,42 @@ public class ClinicService {
     /**
      * 이미 받아둔 그 책 카드(+그 책으로 받은 스페셜 카드)를 결과 응답에 채운다 — 재도전·틀린문제·심화 제출과
      * 직전 결과 재조회처럼 "이번에 새로 받은" 카드가 없을 때도 결과 화면 카드 칸이 비지 않게 한다.
-     * 스페셜 카드는 이 책 카드가 10·20·30…번째 카드였는지로 판정한다(2026-10-01). 카드가 없으면 아무것도 안 한다.
+     * 스페셜 카드는 그 책으로 지급된 기록(content_id)이 있는지로 판정한다(2026-10-22). 카드가 없으면 아무것도 안 한다.
      */
     private void applyOwnedCard(ClinicRespDTO.QuizSubmitRespDTO resp, String studentId, Integer contentId) {
-        ClinicRespDTO.SpecialCardSourceDTO source = clinicRepository.findSpecialCardSource(studentId, contentId);
-        if (source == null) return;
+        if (!clinicRepository.existsNormalCard(studentId, contentId)) return;
         ClinicRespDTO.CardDTO card = clinicRepository.findCardByContent(contentId);
         if (card != null) {
             resp.setCardName(card.getCardName());
             resp.setCardImageUrl(card.getImageUrl());
         }
-        resp.setTotalCards(clinicRepository.countNormalCards(studentId));
-        applySpecialCard(resp, source);
+        String schoolyear = resolveSchoolyear(studentId);
+        int gradeCards = clinicRepository.countNormalCards(studentId, schoolyear);
+        resp.setTotalCards(gradeCards);
+        resp.setCardsToNextSpecial(SpecialCardPolicy.cardsToNext(goalBooks(schoolyear), gradeCards));
+        applySpecialCard(resp, clinicRepository.findSpecialCardByContent(studentId, contentId));
     }
 
-    /** 이 책 카드가 10·20·30…번째 카드였으면 그 책으로 받은 스페셜 카드(보유 여부+이미지)를 채운다 */
+    /** 그 책으로 받은 스페셜 카드가 있으면 보유 여부+이미지를 채운다 */
     private void applySpecialCard(ClinicRespDTO.QuizSubmitRespDTO resp, ClinicRespDTO.SpecialCardSourceDTO source) {
-        if (source == null || source.getSeq() == null || source.getSeq() % CARD_SET_SIZE != 0) return;
+        if (source == null || source.getSeq() == null) return;
         resp.setSpecialCardOwned(true);
-        resp.setSpecialCardImageUrl(imageStorageService.specialCardUrl(source.getSchoolyear(), source.getSeq(), CARD_SET_SIZE));
+        resp.setSpecialCardImageUrl(specialCardImage(source.getSchoolyear(), source.getSeq()));
     }
 
-    /** 레어 카드의 스페셜 카드 이미지(special_{학년}_NN) — 일반 카드이거나 호스팅/학년을 모르면 null(매퍼 기본 이미지 유지) */
+    /**
+     * 스페셜 카드 이미지(special_{학년}_NN) — 학년 = 그 카드를 받은 때의 학생 학년, NN = 그 학년의 몇 번째 스페셜인지.
+     * 일반 카드이거나 호스팅/학년을 모르면 null(매퍼 기본 이미지 유지).
+     */
     private String specialCardImage(String schoolyear, Integer triggerCount) {
-        return triggerCount == null ? null : imageStorageService.specialCardUrl(schoolyear, triggerCount, CARD_SET_SIZE);
+        if (triggerCount == null || schoolyear == null) return null;
+        return imageStorageService.specialCardUrl(schoolyear,
+                SpecialCardPolicy.ordinal(goalBooks(schoolyear), triggerCount));
+    }
+
+    /** 학년별 목표 권수(1년 권장도서 수) — 독서탐험 지도 칸 수와 같은 값을 스페셜 카드 칸 나누기에도 쓴다 */
+    private Integer goalBooks(String schoolyear) {
+        return schoolyear == null ? null : STEP_TOTAL_BY_SCHOOLYEAR.get(schoolyear);
     }
 
     /**

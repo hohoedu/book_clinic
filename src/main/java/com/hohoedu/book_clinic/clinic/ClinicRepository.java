@@ -126,6 +126,9 @@ public interface ClinicRepository {
                                          @Param("contentId") Integer contentId,
                                          @Param("advanced") boolean advanced);
 
+    /** 수강 정보(erp_bookstore_assign)의 레벨 스냅샷 갱신 — 완독 시점에 현재 레벨로 맞춘다 (2026-10-16) */
+    void updateBookstoreLevel(@Param("studentId") String studentId, @Param("levelNo") int levelNo);
+
     /** 완독(DONE) 권수 — 책 학년 무관, 레벨 계산 기준 (2026-09-30) */
     int countDoneBooks(@Param("studentId") String studentId);
 
@@ -145,25 +148,30 @@ public interface ClinicRepository {
     ClinicRespDTO.CardDTO findCardByContent(@Param("contentId") Integer contentId);
 
     // ── 카드 지급 이력 (2026-07-28, erp_bookstore_student_card) ──
-    // NORMAL(완독 시 그 책 카드, 책당 1장) / RARE(NORMAL 10장마다 추가 지급, 책과 무관) 두 종류를 관리한다.
+    // NORMAL(완독 시 그 책 카드, 책당 1장) / SPECIAL(학년별 칸마다 추가 지급, SpecialCardPolicy) 두 종류를 관리한다.
+    // 2026-10-22부터 두 종류 모두 지급 당시 학생 학년(schoolyear)을 함께 남긴다 — 학년이 오르면 0부터 다시 센다.
 
     /** 이미 그 책의 NORMAL 카드를 지급받았는지 (중복 지급 방지) */
     boolean existsNormalCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
 
-    /** NORMAL 카드 1장 지급 기록 */
-    void insertNormalCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+    /** NORMAL 카드 1장 지급 기록 — schoolyear = 지금 학생 학년 */
+    void insertNormalCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId,
+                          @Param("schoolyear") String schoolyear);
 
-    /** 학생의 NORMAL 카드 보유 총 수 — 레어카드 지급 임계값(10의 배수) 판단 기준 */
-    int countNormalCards(@Param("studentId") String studentId);
+    /** 그 학년에서 받은 NORMAL 카드 수 — 스페셜 카드 칸 판단 기준 */
+    int countNormalCards(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear);
 
-    /** 이 책 카드가 그 학생의 몇 번째 NORMAL 카드인지(획득순) + 그 책 학년 — 카드가 없으면 null */
-    ClinicRespDTO.SpecialCardSourceDTO findSpecialCardSource(@Param("studentId") String studentId, @Param("contentId") Integer contentId);
+    /** 그 책으로 받은 스페셜 카드(지급 시점 장수 + 학년) — 없으면 null */
+    ClinicRespDTO.SpecialCardSourceDTO findSpecialCardByContent(@Param("studentId") String studentId,
+                                                                @Param("contentId") Integer contentId);
 
-    /** 그 임계값(triggerCount)에서 이미 레어카드를 지급받았는지 (중복 지급 방지) */
-    boolean existsRareCard(@Param("studentId") String studentId, @Param("triggerCount") int triggerCount);
+    /** 그 학년의 그 칸(triggerCount)에서 이미 스페셜 카드를 받았는지 (중복 지급 방지) */
+    boolean existsRareCard(@Param("studentId") String studentId, @Param("schoolyear") String schoolyear,
+                           @Param("triggerCount") int triggerCount);
 
-    /** 레어카드 1장 지급 기록 (triggerCount = 이를 발생시킨 누적 NORMAL 카드 수: 10, 20 ...) */
-    void insertRareCard(@Param("studentId") String studentId, @Param("triggerCount") int triggerCount);
+    /** 스페셜 카드 1장 지급 기록 — contentId = 칸을 채운 그 책, triggerCount = 그 학년 누적 카드 수 */
+    void insertRareCard(@Param("studentId") String studentId, @Param("contentId") Integer contentId,
+                        @Param("schoolyear") String schoolyear, @Param("triggerCount") int triggerCount);
 
     /** 보유 카드 전체(NORMAL+RARE), 최신 획득순 — 카드 컬렉션 패널용 */
     List<ClinicRespDTO.CardDTO> findEarnedCards(@Param("studentId") String studentId);

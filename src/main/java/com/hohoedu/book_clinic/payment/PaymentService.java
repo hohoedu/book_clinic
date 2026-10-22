@@ -2,6 +2,7 @@ package com.hohoedu.book_clinic.payment;
 
 import java.time.YearMonth;
 import java.net.URI;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
@@ -53,6 +54,12 @@ public class PaymentService {
     /** billing_ym(CHAR(6)) 포맷 — "구매한 달"을 기록하는 값이다(2026-09-14, 이용권 기간과 무관) */
     private static final DateTimeFormatter BILLING_YM = DateTimeFormatter.ofPattern("yyyyMM");
     private static final String DEFAULT_CANCEL_REASON = "고객 환불 요청";
+
+    /** 환불 정책(2026-10-21) — 결제일로부터 3개월 이내, 남은 이용권 1회당 3,000원. calculateRefund 참고 */
+    private static final int REFUND_PERIOD_MONTHS = 3;
+    private static final int REFUND_UNIT_PRICE = 3000;
+    private static final String REFUND_RULE_CODE = "R2610_UNIT3000";
+    private static final String REFUND_RULE_NAME = "잔여 1회당 3,000원 환불";
 
     private final PaymentRepository paymentRepository;
     private final PaymentTxService paymentTxService;
@@ -589,7 +596,10 @@ public class PaymentService {
         }
 
         int remainAfter = groupTotalAmount - groupTotalRefunded - quote.getRefundAmount();
-        boolean partial = remainAfter > 0;
+        // 같은 tid 에서 이미 일부를 환불했으면(형제 묶음결제에서 다른 형제가 먼저 환불) 남는 금액이 0원이어도
+        // 전체취소가 아니라 부분취소로 보내야 한다 — 이니시스는 부분취소된 거래의 전체취소를
+        // "부분취소 원거래 취소불가"로 거절한다(2026-10-22, 72,000원 묶음결제 후 형제 순차 환불에서 확인).
+        boolean partial = remainAfter > 0 || groupTotalRefunded > 0;
 
         InicisClient.Result result;
         try {
@@ -620,16 +630,19 @@ public class PaymentService {
     }
 
     /**
-     * 환불 규정 적용 — priority 순으로 훑어 조건에 처음 맞는 규정 하나만 쓴다.
-     * 어디에도 안 걸리면 환불 불가다(규정에 없는 환불을 코드가 임의로 만들어내지 않는다).
+     * 환불 금액 계산 (2026-10-21 정책) — 결제일로부터 3개월 이내면 남은 이용권 1회당 3,000원을 환불한다.
      *
-     * 사용 횟수만으로 판정한다(2026-08-05, 날짜 조건 폐지) — 0회 전액, 1회 75%, 2회 50%,
-     * 3회 이상은 규정에 맞는 행이 없어 자연히 환불 불가로 떨어진다. usedDays는 더 이상 판정에
-     * 쓰지 않지만 payment_cancel 감사 스냅샷에 여전히 남기므로 계산은 유지한다.
+     * 예전에는 erp_bookstore_refund_rule 의 "사용 횟수별 환불 비율"을 썼지만, 새 정책은 비율이 아니라
+     * 잔여 횟수 × 고정 단가라 그 테이블로 표현되지 않는다. 그래서 규정 테이블은 더 이상 읽지 않고 여기 상수로 둔다.
+     * 단가·기간이 바뀌면 아래 상수와 REFUND_RULE_CODE 를 함께 바꾼다 — rule_code 는 payment_cancel 에
+     * 스냅샷으로 남아 "어느 정책으로 환불했는지"의 근거가 된다.
      *
-     * 환불은 결제 1건당 1번만 허용한다(2026-08-05) — refund_amount가 조금이라도 있으면 그걸로
-     * 끝이다. 부분환불(예: 75%) 후 남은 잔액을 다시 계산해서 또 내주면, 두 번 요청하는 것만으로
-     * 사실상 100% 환불이 되어 "1회 사용 시 75%까지만" 같은 규정이 무의미해진다.
+     *   · 기간: 결제일 + 3개월 당일까지(KST). 이용권 사용기한(첫 예약일부터 90일)과는 별개다.
+     *   · 금액: 남은 횟수 × 3,000원. 결제 금액(이미 환불된 금액 제외)을 넘지 않는다.
+     *   · 남은 횟수는 이용권 행의 remain_count 그대로다 — 예약하면 즉시 차감되고 취소하면 복구된다.
+     *
+     * 환불은 결제 1건당 1번만 허용한다(2026-08-05) — refund_amount 가 조금이라도 있으면 끝이다.
+     * 환불이 확정되면 남은 횟수는 회수된다(confirmRefunded).
      */
     private PaymentRespDTO.RefundQuoteDTO calculateRefund(PaymentRespDTO.PaymentDTO payment) {
         if (!"PAID".equals(payment.getStatus())) {
@@ -642,31 +655,36 @@ public class PaymentService {
             return refundDenied("승인 정보가 없어 환불할 수 없습니다.");
         }
 
-        int usedDays = (int) ChronoUnit.DAYS.between(payment.getPaidAt().toLocalDate(), KstClock.today());
+        LocalDate paidDate = payment.getPaidAt().toLocalDate();
+        LocalDate today = KstClock.today();
+        int usedDays = (int) ChronoUnit.DAYS.between(paidDate, today);
 
         PassRespDTO.PassDTO pass = passService.findByRef(PassService.SOURCE_PG, payment.getOrderNo());
-        int usedCount = pass == null ? 0 : passService.usedCount(pass.getPassId());
+        if (pass == null || pass.getRevokedAt() != null) {
+            return refundDenied("환불할 이용권을 찾을 수 없습니다.");
+        }
+        int usedCount = passService.usedCount(pass.getPassId());
 
-        List<PaymentRespDTO.RefundRuleDTO> rules = paymentRepository.findActiveRefundRules();
-        for (PaymentRespDTO.RefundRuleDTO rule : rules) {
-            if (usedCount > rule.getMaxCount()) {
-                continue;
-            }
-            // 원 단위 절사 — 정수 나눗셈이 그대로 절사다. 카드사에 원 미만 금액은 넘길 수 없다.
-            int refundAmount = payment.getAmount() * rule.getRefundRate() / 100;
-            // 이미 일부 환불된 건이면 남은 한도까지만
-            int refundable = payment.getAmount() - payment.getRefundAmount();
-            refundAmount = Math.min(refundAmount, refundable);
-
-            if (refundAmount <= 0) {
-                return refundDenied("환불 가능 금액이 없습니다.");
-            }
-            return new PaymentRespDTO.RefundQuoteDTO(true, null, rule.getRuleCode(), rule.getRuleName(),
-                    usedDays, usedCount, refundAmount);
+        LocalDate refundDeadline = paidDate.plusMonths(REFUND_PERIOD_MONTHS);
+        if (today.isAfter(refundDeadline)) {
+            return new PaymentRespDTO.RefundQuoteDTO(false,
+                    "결제일로부터 " + REFUND_PERIOD_MONTHS + "개월이 지나 환불할 수 없습니다.",
+                    null, null, usedDays, usedCount, 0);
         }
 
-        return new PaymentRespDTO.RefundQuoteDTO(false, "환불 가능 기간이 지났거나 사용 횟수가 초과되었습니다.",
-                null, null, usedDays, usedCount, 0);
+        int remainCount = pass.getRemainCount();
+        if (remainCount <= 0) {
+            return new PaymentRespDTO.RefundQuoteDTO(false, "남은 이용권이 없어 환불할 금액이 없습니다.",
+                    null, null, usedDays, usedCount, 0);
+        }
+
+        int refundable = payment.getAmount() - payment.getRefundAmount();
+        int refundAmount = Math.min(remainCount * REFUND_UNIT_PRICE, refundable);
+        if (refundAmount <= 0) {
+            return refundDenied("환불 가능 금액이 없습니다.");
+        }
+        return new PaymentRespDTO.RefundQuoteDTO(true, null, REFUND_RULE_CODE, REFUND_RULE_NAME,
+                usedDays, usedCount, refundAmount);
     }
 
     private PaymentRespDTO.RefundQuoteDTO refundDenied(String reason) {

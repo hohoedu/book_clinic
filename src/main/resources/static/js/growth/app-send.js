@@ -77,17 +77,22 @@ const TENDENCY_ICON = {
    서버 리포트에 문구 필드가 없어(영역별 점수만 내려온다) 화면에서 영역 코드로 고른다.
    이름이 아니라 코드로 거는 이유는 TENDENCY_ICON 과 같다.
 
-   02/03/04 는 앱 화면에서 확인한 문구다. 나머지는 아직 못 봐서 임시값이다
-   — TODO: 앱 문구를 확인해 맞춘다 (2026-09-23). */
+   문구는 학부모 앱(i-with lib/_core/constants.dart tendencyLabels)이 기준이다(2026-10-22) —
+   직원이 발송 전에 보는 미리보기가 학부모 화면과 같아야 한다. 영역마다 [기본, 상위] 두 문구이고
+   정답률 90% 이상이면 상위 문구를 쓴다(TENDENCY_UPPER_RATE). 앱 문구를 바꾸면 여기도 같이 바꾼다. */
 const TENDENCY_TITLE = {
-  "01": { title: "이야기 이해왕", icon: "fa-regular fa-file-lines" },        // 이해 (임시)
-  "02": { title: "표현의 연금술사", icon: "fa-solid fa-flask" },             // 표현
-  "03": { title: "냉철한 분석가", icon: "fa-solid fa-scale-balanced" },      // 논리
-  "04": { title: "주제를 찾는 탐구자", icon: "fa-solid fa-magnifying-glass" }, // 사고
-  "05": { title: "감성적인 독서가", icon: "fa-regular fa-face-smile" },      // 감정 (임시)
-  "06": { title: "걸어다니는 어휘사전", icon: "fa-solid fa-book" },          // 어휘 (임시)
-  "07": { title: "지식을 넓히는 탐험가", icon: "fa-solid fa-globe" },        // 지식 (임시)
+  "01": { titles: ["예리한 인간로봇", "직관형 독서가"], icon: "fa-regular fa-file-lines" },        // 이해
+  "02": { titles: ["표현의 연금술사", "표현의 마술사"], icon: "fa-solid fa-flask" },               // 표현
+  "03": { titles: ["냉철한 분석가", "꼼꼼한 논리주의자"], icon: "fa-solid fa-scale-balanced" },     // 논리
+  "04": { titles: ["주제를 찾는 탐구자", "깊이 생각하는 사색가"], icon: "fa-solid fa-magnifying-glass" }, // 사고
+  "05": { titles: ["감성적인 독서가", "따뜻한 공감주의자"], icon: "fa-regular fa-face-smile" },     // 감정
+  "06": { titles: ["걸어 다니는 어휘사전", "똑똑한 어휘박사"], icon: "fa-solid fa-book" },          // 어휘
+  "07": { titles: ["호기심 많은 지식인", "사려 깊은 추론가"], icon: "fa-solid fa-globe" },          // 지식
 };
+/* 이 정답률(%) 이상이면 상위 문구 — 앱 BookstoreReportData.resultLabels 와 같은 기준 */
+const TENDENCY_UPPER_RATE = 90;
+/* 6개 이상 영역이 모두 100%면 앱은 세 줄 모두 "완벽한 독서가"로 보여준다(BookstoreReportData.isPerfect) */
+const TENDENCY_PERFECT_TITLE = "완벽한 독서가";
 
 /* 버블 캔버스 — 자리를 미리 잡지 않고 값에서 크기를 내고 겹치지 않게 앉힌다 (2026-09-23).
    pad 는 가장자리 여백, gap 은 버블 사이 최소 간격. fill 은 캔버스 면적 중 버블이 차지할
@@ -853,13 +858,17 @@ function vennHtml(tendencies) {
 /* 독서 성향 문구 — 정답률 상위 3개 영역을 문구로/* 독서 성향 문구 — 벤 다이어그램과 같은 상위 3개를 같은 순서로 늘어놓는다.
    왼쪽 그림의 원과 오른쪽 줄이 1:1로 맞아야 어느 영역 이야기인지 읽힌다. */
 function tendencyTitlesHtml(tendencies) {
-  return [...(tendencies ?? [])]
-    .filter((t) => t.rate != null)
+  const scored = (tendencies ?? []).filter((t) => t.rate != null && TENDENCY_TITLE[t.typeCode]);
+  const perfect = scored.length >= 6 && scored.every((t) => Number(t.rate) >= 100);
+  return [...scored]
     .sort((a, b) => b.rate - a.rate)
     .slice(0, VENN.circles.length)
     .map((t) => {
-      const info = TENDENCY_TITLE[t.typeCode] ?? { title: t.typeName, icon: "fa-regular fa-star" };
-      return `<div class="app-tendency-item"><i class="${info.icon}"></i>${escapeHtml(info.title)}</div>`;
+      const info = TENDENCY_TITLE[t.typeCode];
+      const title = perfect
+        ? TENDENCY_PERFECT_TITLE
+        : info.titles[Number(t.rate) >= TENDENCY_UPPER_RATE ? 1 : 0];
+      return `<div class="app-tendency-item"><i class="${info.icon}"></i>${escapeHtml(title)}</div>`;
     })
     .join("");
 }

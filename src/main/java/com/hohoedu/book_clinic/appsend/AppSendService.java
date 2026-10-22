@@ -33,6 +33,8 @@ public class AppSendService {
 
     /** 푸시 제목 — 앱 알림창에 그대로 뜬다 */
     private static final String PUSH_TITLE = "독서 결과 도착";
+    /** 푸시 data.type — i-with 가 이 값으로 알림 탭 시 정독 결과 화면을 연다 */
+    private static final String PUSH_TYPE_REPORT = "BOOKSTORE_REPORT";
 
     private final AppSendRepository appSendRepository;
     private final DiaryRepository diaryRepository;
@@ -114,7 +116,9 @@ public class AppSendService {
         String body = target.getStudentName() + " 학생의 독서 결과가 도착했어요. 앱에서 확인해 보세요.";
         try {
             notificationService.send(
-                    new NotificationReqDTO.SendReqDTO(PUSH_TITLE, body, "STUDENT", target.getStudentId()), sentBy);
+                    new NotificationReqDTO.SendReqDTO(PUSH_TITLE, body, "STUDENT", target.getStudentId(),
+                            // 앱이 알림을 누르면 이 학생의 정독 결과 화면으로 간다(형제면 그 학생으로 전환)
+                            Map.of("type", PUSH_TYPE_REPORT, "studentId", target.getStudentId())), sentBy);
         } catch (Exception e) {
             log.warn("독서 결과 푸시 실패 studentId={} error={}", target.getStudentId(), e.getMessage());
         }

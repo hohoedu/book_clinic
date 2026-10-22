@@ -72,4 +72,9 @@ public interface AppRepository {
 
     /** 도서 1권의 상세 정보. 없는 content_id 면 null. */
     AppRespDTO.BookDetailDTO selectBookDetail(@Param("contentId") Integer contentId);
+
+    // ── 내 책장 (2026-10-22) ──
+
+    /** 올해 읽은 책 전체(발송된 일지 기준, 책마다 최근 1건), 최신순. */
+    List<AppRespDTO.BookcaseBookDTO> selectBookcaseBooks(@Param("studentId") String studentId);
 }

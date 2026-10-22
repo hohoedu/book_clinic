@@ -8,6 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,6 +47,8 @@ public class MonitorService {
     // 퇴실 시 읽던 책을 홀딩으로 내리기 위해 필요하다(2026-09-03). ClinicService를 주입하면
     // ClinicService → MonitorService 방향과 맞물려 순환 참조가 되므로 리포지토리를 직접 쓴다.
     private final ClinicRepository clinicRepository;
+    // 입실·퇴실 학부모 푸시(2026-10-22) — 커밋 후에만 보내도록 이벤트로 넘긴다(AttendancePushListener)
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 입실 기록 — 학생 로그인 성공 시 StudentViewController가 호출한다.
@@ -60,6 +63,9 @@ public class MonitorService {
     public void enterSession(String studentId) {
         LocalDate today = KstClock.today();
         Integer sessionId = monitorRepository.findOpenSessionId(studentId, today);
+        // 새 세션일 때만 입실 알림 — 이미 입실한 학생이 QR을 다시 찍거나 문제풀이 앱에 다시 로그인해
+        // 세션을 재사용하는 경우까지 알리면 학부모에게 같은 알림이 여러 번 간다
+        boolean newSession = sessionId == null;
         if (sessionId == null) {
             monitorRepository.insertSession(studentId, today);
             sessionId = monitorRepository.findOpenSessionId(studentId, today);
@@ -78,6 +84,9 @@ public class MonitorService {
         // COALESCE 폴백으로만 채워지는 불안정한 상태였다. ensureDiary는 이미 있으면 손대지 않는다.
         monitorRepository.ensureDiary(sessionId);
         syncSafely(sessionId);
+        if (newSession) {
+            eventPublisher.publishEvent(new AttendancePushEvent(studentId, true, KstClock.now()));
+        }
     }
 
     /** 오늘 이미 퇴실 처리됐는지 — 문제풀이 기기(앱 로그인) 홈 화면이 "이미 퇴실했습니다" 안내에 쓴다 */
@@ -101,7 +110,7 @@ public class MonitorService {
 
     /**
      * 퇴실 처리 — 직원이 모니터링 화면에서 호출. enterSession과 대칭 구조로 studentId만 받아서
-     * 오늘 열린 세션을 스스로 찾는다. 열린 세션이 없으면(이미 퇴실 처리됨 등) 조용히 무시.
+     * 오늘 열린 세션을 스스로 찾는다. 열린 세션이 없으면(이미 퇴실 처리됨 등) 조용히 무시. 
      */
     @Transactional
     public void exitSession(String studentId) {
@@ -130,6 +139,7 @@ public class MonitorService {
         // ensureDiary가 만들어둔 헤더에 out_time을 채운다(2026-07-30, 직원이 수동 보정한 값은 보존).
         monitorRepository.syncDiaryOutTime(sessionId);
         syncSafely(sessionId);
+        eventPublisher.publishEvent(new AttendancePushEvent(studentId, false, KstClock.now()));
     }
 
     /**

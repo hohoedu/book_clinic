@@ -101,7 +101,7 @@
             <p class="reward-desc"><strong id="rewardBadgeName"></strong> 스티커를 획득했어요!</p>
           </div>
 
-          <!-- 숨겨진 보물 — 완독 카드 10장을 채운 순간(스페셜 카드 지급)에만 노출 -->
+          <!-- 숨겨진 보물 — 스페셜 카드 칸(학년별 목표 권수 ÷ 10)을 채운 순간(스페셜 카드 지급)에만 노출 -->
           <div class="reward-item" id="cardReward" hidden>
             <p class="reward-title violet">숨겨진 보물 발견!</p>
             <div class="reward-icon">
@@ -110,7 +110,7 @@
             <p class="reward-desc">선생님께 카드를 받아요!</p>
           </div>
 
-          <!-- 스페셜 카드를 못 받았을 때 그 자리 — 10장 세트까지 남은 권수(칸)를 보여준다 -->
+          <!-- 스페셜 카드를 못 받았을 때 그 자리 — 다음 스페셜 카드까지 남은 권수(칸, 서버 cardsToNextSpecial)를 보여준다 -->
           <div class="reward-item" id="treasureProgress" hidden>
             <p class="reward-title violet">보물 발견까지 <span class="js-treasure-left"></span>칸!</p>
             <div class="reward-icon">

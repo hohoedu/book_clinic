@@ -133,6 +133,18 @@ public class AppController {
     }
 
     /**
+     * 내 책장 — 올해 읽은 책 전체(2026-10-22).
+     *
+     * 예전에는 앱이 메인 화면 응답의 최근 4권(bookImg1~4)을 그대로 책장에 썼다. 그래서 "올해 읽은 책"이
+     * 4권을 넘지 못했다. 메인과 같은 규칙(발송된 일지만)으로 전체를 내려 책장과 메인 숫자가 어긋나지 않게 한다.
+     */
+    @PostMapping("/bookstore/bookcase")
+    public ResponseEntity<?> bookcase(HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        return ResponseEntity.ok(ApiUtils.success(appRepository.selectBookcaseBooks(studentId)));
+    }
+
+    /**
      * 도서 상세 — 정독 결과 화면에서 도서 표지를 탭했을 때(2026-10-15).
      *
      * 도서 정보는 학생 개인 데이터가 아니라서 "이 학생이 읽은 책인지"까지는 보지 않고 로그인만

@@ -17,11 +17,16 @@ public class ReservationReqDTO {
         private String toDate;
     }
 
-    /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차 */
+    /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차·시작일 */
     @Data
     public static class BatchPreviewReqDTO {
         private Integer dayOfWeek;
         private Integer seq;
+        /**
+         * 반복을 시작할 날짜(yyyy-MM-dd, 2026-10-22) — 앱에서 고른 날짜. 이 날짜부터 같은 요일 4주를 잡는다.
+         * 비어 있으면 예전처럼 오늘 이후 가장 가까운 같은 요일부터(구버전 앱 호환).
+         */
+        private LocalDate startDate;
     }
 
     @Data

@@ -1,6 +1,8 @@
 package com.hohoedu.book_clinic.payment;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -90,18 +92,12 @@ class PaymentServiceRefundTest {
         when(studentRepository.findSiblingGroup("S1"))
                 .thenReturn(List.of(Student.builder().studentId("S1").build()));
 
+        // 잔여 12회 × 3,000원 = 36,000원이지만 이 행의 결제 금액(10,000원)을 넘을 수 없다
         PassRespDTO.PassDTO pass = new PassRespDTO.PassDTO();
         pass.setPassId(42);
+        pass.setRemainCount(12);
         when(passService.findByRef(PassService.SOURCE_PG, "BC_A")).thenReturn(pass);
         when(passService.usedCount(42)).thenReturn(0);
-
-        PaymentRespDTO.RefundRuleDTO fullRefundRule = new PaymentRespDTO.RefundRuleDTO();
-        fullRefundRule.setRuleCode("R100");
-        fullRefundRule.setRuleName("전액환불");
-        fullRefundRule.setMaxDays(9999);
-        fullRefundRule.setMaxCount(0);
-        fullRefundRule.setRefundRate(100);
-        when(paymentRepository.findActiveRefundRules()).thenReturn(List.of(fullRefundRule));
 
         // 환불 선점(claimRefund)은 동시 요청 방지용 원자적 UPDATE다. 모킹이 없으면 0(=이미 선점됨)이
         // 돌아와 실제 환불 로직에 들어가기 전에 막힌다.
@@ -123,5 +119,118 @@ class PaymentServiceRefundTest {
 
         assertEquals(10_000, partialAmountCaptor.getValue(), "부분취소 금액은 이 학생 몫만큼이어야 한다");
         assertEquals(10_000, remainAfterCaptor.getValue(), "취소 후 남을 잔액은 다른 형제 몫(10,000원)이어야 한다");
+    }
+
+    /**
+     * 72,000원 형제 묶음결제에서 동생(36,000원)이 먼저 환불한 뒤 형이 환불하는 경우(2026-10-22) —
+     * 취소 후 남는 금액은 0원이지만 이미 부분취소된 거래라 전체취소가 아니라 부분취소로 보내야 한다.
+     * 전체취소로 보내면 이니시스가 "부분취소 원거래 취소불가"로 거절한다.
+     */
+    @Test
+    void refund_형제묶음결제_다른_형제가_먼저_환불했으면_마지막도_부분취소() {
+        PaymentRespDTO.PaymentDTO older = new PaymentRespDTO.PaymentDTO();
+        older.setPaymentId(11);
+        older.setOrderNo("BC_OLD");
+        older.setGroupOrderNo("BG_SIB");
+        older.setStudentId("S_OLD");
+        older.setTid("TID_SIB");
+        older.setAmount(36_000);
+        older.setRefundAmount(0);
+        older.setStatus("PAID");
+        older.setPaidAt(LocalDateTime.now().minusDays(1));
+
+        PaymentRespDTO.PaymentDTO younger = new PaymentRespDTO.PaymentDTO();
+        younger.setPaymentId(12);
+        younger.setOrderNo("BC_YOUNG");
+        younger.setGroupOrderNo("BG_SIB");
+        younger.setStudentId("S_YOUNG");
+        younger.setTid("TID_SIB");
+        younger.setAmount(36_000);
+        younger.setRefundAmount(36_000); // 동생은 이미 전액 환불받음
+        younger.setStatus("CANCELED");
+
+        when(paymentRepository.findById(11)).thenReturn(older);
+        when(paymentRepository.findByGroupOrderNo("BG_SIB")).thenReturn(List.of(older, younger));
+        when(studentRepository.findSiblingGroup("S_OLD"))
+                .thenReturn(List.of(Student.builder().studentId("S_OLD").build()));
+
+        PassRespDTO.PassDTO pass = new PassRespDTO.PassDTO();
+        pass.setPassId(77);
+        pass.setRemainCount(12);
+        when(passService.findByRef(PassService.SOURCE_PG, "BC_OLD")).thenReturn(pass);
+        when(passService.usedCount(77)).thenReturn(0);
+        when(paymentRepository.claimRefund(11)).thenReturn(1);
+        when(paymentTxService.openCancel(eq(11), eq(36_000), any(), any(), any(), anyInt(), anyInt())).thenReturn(101);
+        InicisClient.Result okResult = new InicisClient.Result(200, Map.of("resultCode", "00"), "{}");
+        when(inicisClient.refund(any(), any(), any(), anyInt())).thenReturn(okResult);
+
+        paymentService.refund("S_OLD", 11, "테스트 환불", "APP");
+
+        ArgumentCaptor<Integer> partialAmountCaptor = ArgumentCaptor.forClass(Integer.class);
+        ArgumentCaptor<Integer> remainAfterCaptor = ArgumentCaptor.forClass(Integer.class);
+        verify(inicisClient).refund(eq("TID_SIB"), any(), partialAmountCaptor.capture(), remainAfterCaptor.capture());
+        assertEquals(36_000, partialAmountCaptor.getValue(), "전체취소(null)가 아니라 부분취소 금액이 실려야 한다");
+        assertEquals(0, remainAfterCaptor.getValue(), "형제 둘 다 환불하면 남는 금액은 0원");
+    }
+
+    // ── 환불 정책(2026-10-21): 결제일로부터 3개월 이내, 남은 이용권 1회당 3,000원 ──
+
+    private PaymentRespDTO.RefundQuoteDTO quoteFor(LocalDateTime paidAt, int remainCount) {
+        PaymentRespDTO.PaymentDTO payment = new PaymentRespDTO.PaymentDTO();
+        payment.setPaymentId(7);
+        payment.setOrderNo("BC_Q");
+        payment.setStudentId("S1");
+        payment.setTid("TID7");
+        payment.setAmount(36_000);
+        payment.setRefundAmount(0);
+        payment.setStatus("PAID");
+        payment.setPaidAt(paidAt);
+        when(paymentRepository.findById(7)).thenReturn(payment);
+        when(studentRepository.findSiblingGroup("S1"))
+                .thenReturn(List.of(Student.builder().studentId("S1").build()));
+
+        PassRespDTO.PassDTO pass = new PassRespDTO.PassDTO();
+        pass.setPassId(70);
+        pass.setTotalCount(12);
+        pass.setRemainCount(remainCount);
+        when(passService.findByRef(PassService.SOURCE_PG, "BC_Q")).thenReturn(pass);
+        when(passService.usedCount(70)).thenReturn(12 - remainCount);
+
+        return paymentService.quote("S1", 7);
+    }
+
+    @Test
+    void quote_미사용이면_12회_곱하기_3000원_전액() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now(), 12);
+        assertTrue(quote.isRefundable());
+        assertEquals(36_000, quote.getRefundAmount());
+    }
+
+    @Test
+    void quote_잔여_5회면_15000원() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusMonths(1), 5);
+        assertTrue(quote.isRefundable());
+        assertEquals(15_000, quote.getRefundAmount());
+        assertEquals(7, quote.getUsedCount());
+    }
+
+    @Test
+    void quote_결제일로부터_3개월_당일까지는_환불된다() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusMonths(3), 4);
+        assertTrue(quote.isRefundable());
+        assertEquals(12_000, quote.getRefundAmount());
+    }
+
+    @Test
+    void quote_3개월이_지나면_환불_불가() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusMonths(3).minusDays(1), 10);
+        assertFalse(quote.isRefundable());
+        assertEquals(0, quote.getRefundAmount());
+    }
+
+    @Test
+    void quote_남은_횟수가_없으면_환불_불가() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now(), 0);
+        assertFalse(quote.isRefundable());
     }
 }

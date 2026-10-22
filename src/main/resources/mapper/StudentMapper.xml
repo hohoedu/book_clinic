@@ -119,9 +119,14 @@
       둘을 섞어 조인하면 코드 체계가 안 맞아 통째로 빗나간다 — 실제로 예전엔 grade_key를
       gubun='S'(01~07)에 물려놔서 학년이 "-"로 뜨고 학년 필터도 한 건도 안 걸렸다.
 
-      등록 상태(이용중/탈퇴)는 erp_student.status_key 가 아니라 erp_bookstore_assign.bookstore_state 로
-      판단한다(2026-10-13). 0=탈퇴, 1=이용중이고 수강 정보를 아직 저장 안 해 행이 없는 학생은
-      컬럼 기본값(1)과 같게 이용중으로 본다. 화면은 기존 ACTIVE/WITHDRAWN 코드를 그대로 쓴다.
+      등록 상태는 erp_student.status_key 가 아니라 erp_bookstore_assign 으로 판단한다(2026-10-13).
+        - bookstore_state = 1                          → ACTIVE       이용중
+        - bookstore_state = 0 + 시작일자 있음           → WITHDRAWN    탈퇴(책방을 다니다 그만둠)
+        - bookstore_state = 0 + 시작일자 없음           → UNREGISTERED 미등록(2026-10-16 추가)
+          all_pass 입회 학생은 책방 미수강(0)·시작일자 없음으로 행이 만들어진다 — 책방을 한 번도 안 다닌
+          학생을 "탈퇴"로 보이지 않게 구분한다. 책방 가입은 1 + 가입일이고, 수강 정보 저장은 시작일자가
+          필수라 "0 + 시작일자 없음"은 이 경우에만 생긴다. all_pass 도 같은 규칙을 쓴다.
+        - 행이 없는 학생은 컬럼 기본값(1)과 같게 이용중으로 본다.
     -->
     <select id="findStudentByCenterCode" resultType="com.hohoedu.book_clinic.student._dto.StudentRespDTO$StudentInfoRowDTO">
         SELECT st.student_id                                  AS studentId,
@@ -139,7 +144,9 @@
                   FROM erp_bookstore_recommend_log rl
                  WHERE rl.student_id = st.student_id
                    AND rl.status = 'DONE')                     AS totalDoneBooks,
-               CASE WHEN ba.bookstore_state = 0 THEN 'WITHDRAWN' ELSE 'ACTIVE' END
+               CASE WHEN ba.student_id IS NULL OR ba.bookstore_state = 1 THEN 'ACTIVE'
+                    WHEN ba.entry_bookstore_date IS NULL THEN 'UNREGISTERED'
+                    ELSE 'WITHDRAWN' END
                                                                AS statusKey
         FROM erp_student st
         LEFT JOIN erp_grade_code       gc ON gc.grade_key = st.grade_key
@@ -147,14 +154,17 @@
         LEFT JOIN erp_bookstore_assign ba ON ba.student_id = st.student_id
         WHERE st.center_code = #{centerCode}
         <if test="gradeKey != null">AND st.grade_key = #{gradeKey}</if>
-        <if test="statusKey == 'WITHDRAWN'">AND ba.bookstore_state = 0</if>
+        <if test="statusKey == 'WITHDRAWN'">AND ba.bookstore_state = 0 AND ba.entry_bookstore_date IS NOT NULL</if>
+        <if test="statusKey == 'UNREGISTERED'">AND ba.bookstore_state = 0 AND ba.entry_bookstore_date IS NULL</if>
         <if test="statusKey == 'ACTIVE'">AND (ba.bookstore_state IS NULL OR ba.bookstore_state = 1)</if>
         <if test="keyword != null">
             AND (st.student_name LIKE '%' + #{keyword} + '%'
              OR st.billing_phone LIKE '%' + #{keyword} + '%')
         </if>
-        <!-- 상태 "전체" 조회 시 이용중 → 탈퇴 순, 같은 상태 안에서는 이름순 (2026-10-13) -->
-        ORDER BY CASE WHEN ba.bookstore_state = 0 THEN 1 ELSE 0 END ASC,
+        <!-- 상태 "전체" 조회 시 이용중 → 탈퇴 → 미등록 순, 같은 상태 안에서는 이름순 (2026-10-13, 미등록 2026-10-16) -->
+        ORDER BY CASE WHEN ba.student_id IS NULL OR ba.bookstore_state = 1 THEN 0
+                      WHEN ba.entry_bookstore_date IS NOT NULL THEN 1
+                      ELSE 2 END ASC,
                  st.student_name ASC
     </select>
 
@@ -172,7 +182,9 @@
                st.student_name                                 AS studentName,
                st.grade_key                                    AS gradeKey,
                gc.grade_name                                    AS gradeName,
-               CASE WHEN ba.bookstore_state = 0 THEN 'WITHDRAWN' ELSE 'ACTIVE' END
+               CASE WHEN ba.student_id IS NULL OR ba.bookstore_state = 1 THEN 'ACTIVE'
+                    WHEN ba.entry_bookstore_date IS NULL THEN 'UNREGISTERED'
+                    ELSE 'WITHDRAWN' END
                                                                 AS statusKey,
                st.billing_phone                                 AS billingPhone,
                st.school                                        AS school,
@@ -288,22 +300,48 @@
         WHERE student_id = #{studentId}
     </update>
 
+    <!--
+      앱 형제 전환 검증 (2026-10-21) — 앱의 형제 목록은 all_pass /sibling_select(erp_sibling)에서 오므로
+      같은 테이블로 확인한다. 결제용 findSiblingGroup 이 보는 erp_student_sibling 은 수동 등록 테이블이라
+      여기에 쓰면 앱에 보이는 형제로 전환이 안 될 수 있다.
+    -->
+    <select id="isSameSiblingGroup" resultType="boolean">
+        SELECT CASE WHEN EXISTS (
+                   SELECT 1
+                   FROM erp_sibling a
+                            JOIN erp_sibling b ON a.sibling_key = b.sibling_key
+                   WHERE a.student_id = #{studentId}
+                     AND b.student_id = #{targetStudentId}
+               ) THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END
+    </select>
+
+    <!--
+      형제 그룹(본인 포함) — 결제창 형제 선택·형제 묶음결제·그룹 환불 검증에 쓴다.
+      2026-10-22: 수동 등록 테이블(erp_student_sibling) 대신 all_pass 가 관리하는 erp_sibling 을 본다 —
+      앱의 형제 목록·형제 전환과 같은 기준이어야 "앱에선 형제인데 결제에선 혼자"가 생기지 않는다.
+      본인이 아닌 형제는 책방을 이용 중(erp_bookstore_assign.bookstore_state = 1)인 학생만 — 서당만 다니는
+      형제에게 책방 이용권을 같이 결제해 주는 경로가 되면 안 된다. 본인은 조건 없이 항상 포함한다.
+    -->
     <select id="findSiblingGroup" resultType="com.hohoedu.book_clinic.student.model.Student">
-        SELECT id                     AS id,
-               center_code            AS centerCode,
-               grade_key              AS gradeKey,
-               school                 AS school,
-               student_id             AS studentId,
-               student_name           AS studentName,
-               app_id                 AS appId
-        FROM erp_student
-        WHERE student_id = #{studentId}
-           OR student_id IN (
-               SELECT sib2.student_id FROM erp_student_sibling sib2
-               WHERE sib2.sibling_key IN (
-                   SELECT sib1.sibling_key FROM erp_student_sibling sib1 WHERE sib1.student_id = #{studentId}
+        SELECT s.id                     AS id,
+               s.center_code            AS centerCode,
+               s.grade_key              AS gradeKey,
+               s.school                 AS school,
+               s.student_id             AS studentId,
+               s.student_name           AS studentName,
+               s.app_id                 AS appId
+        FROM erp_student s
+        WHERE s.student_id = #{studentId}
+           OR (s.student_id IN (
+                   SELECT sib2.student_id FROM erp_sibling sib2
+                   WHERE sib2.sibling_key IN (
+                       SELECT sib1.sibling_key FROM erp_sibling sib1 WHERE sib1.student_id = #{studentId}
+                   )
                )
-           )
+               AND EXISTS (
+                   SELECT 1 FROM erp_bookstore_assign ba
+                   WHERE ba.student_id = s.student_id AND ba.bookstore_state = 1
+               ))
     </select>
 
     <!--

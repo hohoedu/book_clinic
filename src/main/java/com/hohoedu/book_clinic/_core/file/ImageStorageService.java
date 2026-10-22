@@ -77,15 +77,15 @@ public class ImageStorageService {
     private static final int SPECIAL_CARD_IMAGE_COUNT = 10;
 
     /**
-     * 스페셜(RARE) 카드 이미지 URL — special_{학년 2자리}_{번호 2자리}.png.
-     * 학년 = 그 스페셜 카드를 터뜨린(10·20…번째) 책의 학년, 번호 = triggerCount(발급 시점 누적 NORMAL 카드 수
-     * 10, 20, ...)로 정한 그 학생의 몇 번째 스페셜 카드인지. 호스트나 학년을 모르면 null(호출부가 기본 이미지 유지).
+     * 스페셜 카드 이미지 URL — special_{학년 2자리}_{번호 2자리}.png.
+     * 학년 = 그 카드를 받은 때의 학생 학년, 번호 = 그 학년에서 몇 번째 스페셜 카드인지(1부터,
+     * SpecialCardPolicy.ordinal). 호스트나 학년을 모르면 null(호출부가 기본 이미지 유지).
      */
-    public String specialCardUrl(String schoolyear, int triggerCount, int cardSetSize) {
-        if (!isNotBlank(specialCardHost) || !isNotBlank(schoolyear) || triggerCount < cardSetSize) return null;
+    public String specialCardUrl(String schoolyear, int ordinal) {
+        if (!isNotBlank(specialCardHost) || !isNotBlank(schoolyear) || ordinal < 1) return null;
         String grade = schoolyear.trim();
         if (grade.length() == 1) grade = "0" + grade;
-        int seq = (triggerCount / cardSetSize - 1) % SPECIAL_CARD_IMAGE_COUNT + 1;
+        int seq = (ordinal - 1) % SPECIAL_CARD_IMAGE_COUNT + 1;
         String path = normalizeDir(specialCardDir);
         return "https://" + specialCardHost + (path.isEmpty() ? "" : "/" + path)
                 + String.format("/special_%s_%02d.png", grade, seq);

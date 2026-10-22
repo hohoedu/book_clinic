@@ -550,7 +550,8 @@
     <!-- 보유도서 설정 목록 — 마스터 도서가 기준이고 우리 센터 사본 수를 붙인다 (보유 0권도 행으로 보여야 하므로 LEFT JOIN 집계).
          절판(state='N') 도서는 더 이상 보유 수량을 조정할 대상이 아니라 제외한다. -->
     <select id="searchCenterStocks" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$StockRespDTO">
-        SELECT bc.content_id     AS contentId,
+        SELECT bc.content_num    AS contentNum,
+               bc.content_id     AS contentId,
                bc.original_title AS originalTitle,
                bc.image_url      AS imageUrl,
                bc.schoolyear     AS schoolyear,

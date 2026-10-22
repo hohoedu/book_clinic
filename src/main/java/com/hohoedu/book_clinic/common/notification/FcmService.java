@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Firebase Cloud Messaging(FCM) 발송 서비스
@@ -24,13 +25,24 @@ public class FcmService {
      * @return 발송 성공 여부
      */
     public boolean sendToToken(String token, String title, String body) {
-        Message message = Message.builder()
+        return sendToToken(token, title, body, null);
+    }
+
+    /**
+     * 단일 FCM 토큰으로 발송 + data(2026-10-22) — 앱이 알림을 눌렀을 때 이동할 화면을 data 로 고른다.
+     * data 에 title/body 도 같이 넣는다: 앱의 포그라운드 알림 표시(showNotification)는 data 의 title/body 를 쓴다.
+     */
+    public boolean sendToToken(String token, String title, String body, Map<String, String> data) {
+        Message.Builder builder = Message.builder()
                 .setToken(token)
                 .setNotification(Notification.builder()
                         .setTitle(title)
                         .setBody(body)
-                        .build())
-                .build();
+                        .build());
+        if (data != null && !data.isEmpty()) {
+            builder.putAllData(data).putData("title", title).putData("body", body);
+        }
+        Message message = builder.build();
         try {
             FirebaseMessaging.getInstance().send(message);
             return true;

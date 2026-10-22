@@ -130,6 +130,7 @@ public class BookRespDTO {
     /** 보유도서 설정 화면 1행 — 마스터 도서 정보 + 우리 센터 보유 수량(사본 수) */
     @Data
     public static class StockRespDTO {
+        private Integer contentNum;     // 학년 내 도서 번호 (No 표시용 — 검색/필터해도 안 바뀜)
         private Integer contentId;
         private String originalTitle;
         private String imageUrl;

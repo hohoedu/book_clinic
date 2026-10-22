@@ -37,7 +37,11 @@
             books.img1 AS bookImg1,
             books.img2 AS bookImg2,
             books.img3 AS bookImg3,
-            books.img4 AS bookImg4
+            books.img4 AS bookImg4,
+
+            -- 가장 최근 정독 결과 발송 시각(2026-10-22) — 앱이 "마지막으로 본 결과"와 비교해 정독 결과 버튼의
+            -- new 표시를 켠다. 알림만으로 켜면 iOS 백그라운드 등에서 놓칠 수 있어 서버 값으로 판단한다.
+            convert(varchar(19), sent.last_send_at, 120) AS lastReportSentAt
 
         FROM erp_student s
 
@@ -125,6 +129,13 @@
             WHERE rn &lt;= 4
         ) books
 
+        OUTER APPLY (
+            SELECT max(ebd3.send_at) AS last_send_at
+            FROM erp_bookstore_diary ebd3
+            WHERE ebd3.student_id = s.student_id
+              AND ebd3.is_send = 1
+        ) sent
+
         WHERE s.student_id = #{studentId}
     </select>
 
@@ -199,12 +210,16 @@
          확인하는 화면이라 미발송이어야 볼 이유가 있다 (2026-09-23).
     -->
 
+    <!-- 일자 탭 — 예전엔 최근 4일치만 내려 그 이전 결과를 앱에서 볼 수 없었다(2026-10-22).
+         앱 탭이 4개를 넘으면 옆으로 넘겨 보므로 넉넉히 내리되, 응답이 끝없이 커지지 않게 상한(60)만 둔다. -->
     <select id="selectBookstoreReportDates" resultType="java.lang.String">
-        SELECT TOP 4 convert(varchar(10), d.record_date, 23)
+        SELECT TOP 60 convert(varchar(10), d.record_date, 23)
         FROM erp_bookstore_diary d
         WHERE d.student_id = #{studentId}
           AND d.record_date &lt;= cast(dateadd(hour, 9, getutcdate()) AS date)
           <if test="sentOnly"> AND d.is_send = 1 </if>
+        -- 하루에 두 번 입실하면(퇴실 후 다른 회차) 일지가 날짜당 2건이라 탭이 중복되지 않게 날짜로 묶는다
+        GROUP BY d.record_date
         ORDER BY d.record_date DESC
     </select>
 
@@ -488,6 +503,37 @@
         ) c
         WHERE mo.m BETWEEN base.startM AND base.mn
         ORDER BY mo.m ASC
+    </select>
+
+    <!-- 내 책장 (2026-10-22) — 올해 읽은 책 전체. 메인의 "최근 독서 기록 4개"와 같은 규칙:
+         발송된 일지(is_send=1)만, 오늘(KST)까지, 표지는 도서 마스터 이미지 우선.
+         같은 책이 여러 날 일지에 실리면(재도전 등) 가장 최근 1건만 남긴다. -->
+    <select id="selectBookcaseBooks" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$BookcaseBookDTO">
+        SELECT contentId, title, imageUrl, readDate, result
+        FROM (
+            SELECT dd.content_id                                  AS contentId,
+                   coalesce(dd.book_name, c.original_title)       AS title,
+                   coalesce(nullif(c.image_url, ''), dd.book_img) AS imageUrl,
+                   convert(varchar(10), d.record_date, 23)        AS readDate,
+                   rl.grade                                       AS result,
+                   d.record_date                                  AS sortDate,
+                   d.record_time                                  AS sortTime,
+                   row_number() OVER (
+                       PARTITION BY dd.content_id
+                       ORDER BY d.record_date DESC, d.record_time DESC, dd.id DESC
+                   ) AS rn
+            FROM erp_bookstore_diary d
+            JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+            LEFT JOIN erp_bookstore_content c ON c.content_id = dd.content_id
+            LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
+            WHERE d.student_id = #{studentId}
+              AND d.is_send = 1
+              AND dd.content_id IS NOT NULL
+              AND d.record_date &lt;= cast(dateadd(hour, 9, getutcdate()) AS date)
+              AND year(d.record_date) = year(dateadd(hour, 9, getutcdate()))
+        ) t
+        WHERE rn = 1
+        ORDER BY sortDate DESC, sortTime DESC
     </select>
 
     <!-- 도서 상세 (2026-10-15) — 정독 결과 화면에서 표지 탭. 코드값은 erp_bookstore_code 이름으로 푼다.

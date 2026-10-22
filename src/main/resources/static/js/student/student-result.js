@@ -481,7 +481,7 @@
     return Boolean(result.specialCardOwned || result.cardRewardReached);
   }
 
-  // 스페셜 카드 연출 — 이번 첫 제출로 도서 카드가 10장의 배수를 채운 순간(서버 cardRewardReached)에만.
+  // 스페셜 카드 연출 — 이번 첫 제출로 스페셜 카드 칸을 채운 순간(서버 cardRewardReached)에만.
   // 재제출에는 카드를 새로 주지 않으므로 항상 false로 온다(칸에만 보이고, 누르면 다시 보기는 된다).
   function specialCardIsNew(result) {
     return Boolean(result.cardRewardReached);
@@ -495,8 +495,8 @@
     img.src = src;
   }
 
-  // "숨겨진 보물 발견!" 칸(2x2 마지막) — 완독 카드 10장을 채운 순간(스페셜 카드 지급)에만 노출한다(2026-09-01).
-  // 평범한 완독(1~9장째)은 띄우지 않는다 — 10장 달성이 곧 실물 교환 시점이다.
+  // "숨겨진 보물 발견!" 칸(2x2 마지막) — 스페셜 카드 칸을 채운 순간(스페셜 카드 지급)에만 노출한다(2026-09-01).
+  // 칸은 학년별 목표 권수를 10등분한 값이라(2026-10-22, 서버 SpecialCardPolicy) 화면은 계산하지 않는다.
   function renderCard(result) {
     const show = hasSpecialCard(result);
     cardReward.hidden = !show;
@@ -504,17 +504,17 @@
     renderTreasureProgress(result, show);
   }
 
-  // 스페셜 카드를 못 받았을 때 그 자리에 "보물 발견까지 N칸!" — 도서 카드 10장(서버 CARD_SET_SIZE)
-  // 세트까지 남은 장수. 직전 결과(/clinic/last-result)처럼 totalCards가 안 오면 셀 수 없어 숨긴다.
-  const CARD_SET_SIZE = 10;
+  // 스페셜 카드를 못 받았을 때 그 자리에 "보물 발견까지 N칸!" — 다음 스페셜 카드까지 남은 장수를 서버가
+  // cardsToNextSpecial로 내려준다(학년별로 칸 크기가 달라 화면에서 셀 수 없다). 그 학년 목표를 다 채웠으면
+  // null이라 숨긴다 — 학년이 바뀌기 전까지 더 받을 스페셜 카드가 없다.
   const treasureProgress = document.getElementById('treasureProgress');
 
   function renderTreasureProgress(result, specialShown) {
-    if (specialShown || result.totalCards == null) {
+    const left = result.cardsToNextSpecial;
+    if (specialShown || left == null) {
       treasureProgress.hidden = true;
       return;
     }
-    const left = CARD_SET_SIZE - (result.totalCards % CARD_SET_SIZE);
     treasureProgress.querySelectorAll('.js-treasure-left').forEach((el) => {
       el.textContent = left;
     });
@@ -522,7 +522,7 @@
   }
 
   /* ── 카드 획득 연출(2026-09-28) ─────────────────────────────────────────
-     도서 카드(이번에 새로 받은 경우) → 스페셜 카드(10장 달성) 순서로 한 장씩 띄운다.
+     도서 카드(이번에 새로 받은 경우) → 스페셜 카드(칸 달성) 순서로 한 장씩 띄운다.
      한 장은 학생이 화면을 누를 때까지 떠 있고(자동으로 닫히지 않음), 다음 장은 CSS 애니메이션을
      처음부터 다시 튼다. */
   const cardReveal = document.getElementById('cardReveal');

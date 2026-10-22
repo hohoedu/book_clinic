@@ -46,7 +46,7 @@ public class NotificationService {
             return new NotificationRespDTO.SendResultDTO(0, 1);
         }
 
-        boolean success = fcmService.sendToToken(student.getAppToken(), reqDTO.getTitle(), reqDTO.getBody());
+        boolean success = fcmService.sendToToken(student.getAppToken(), reqDTO.getTitle(), reqDTO.getBody(), reqDTO.getData());
         saveHistory(sentBy, reqDTO, "STUDENT", student.getStudentId(), student.getAppToken(),
                 success, success ? null : "FCM 발송 실패");
         return new NotificationRespDTO.SendResultDTO(success ? 1 : 0, success ? 0 : 1);

@@ -1,6 +1,5 @@
 package com.hohoedu.book_clinic.payment;
 
-import java.time.LocalDate;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -60,14 +59,12 @@ class PaymentTxServiceTest {
         PaymentRespDTO.PaymentDTO payment = new PaymentRespDTO.PaymentDTO();
         payment.setOrderNo("BC002");
         payment.setGroupOrderNo("BG001"); // 형제 묶음결제 — 이미 그룹 내 다른 학생 행이 같은 tid를 씀
-        // 자동결제 전환(2026-09-07) 이후 이용권 기간은 결제 행의 주기를 그대로 따른다
-        payment.setCycleFrom(LocalDate.of(2026, 9, 7));
-        payment.setCycleUntil(LocalDate.of(2026, 10, 6));
+        payment.setStudentId("S2");
 
         PaymentRespDTO.ProductDTO product = new PaymentRespDTO.ProductDTO();
         product.setProductId(1);
         product.setServiceCode("BOOK");
-        product.setTotalCount(10);
+        product.setTotalCount(12);
 
         // 같은 그룹(BG001) 안에서의 공유는 "다른 곳에 쓰인 것"으로 세지 않는다 → 0건
         when(paymentRepository.countByTidElsewhere("SHARED_TID", "BC002", "BG001")).thenReturn(0);
@@ -78,8 +75,46 @@ class PaymentTxServiceTest {
                 payment, product, "SHARED_TID", "Card", "국민카드", "123456******7890", "00000000", "0000");
 
         assertTrue(updated);
-        verify(passService).grant(any(), any(), anyInt(), any(), any(), any(), any(),
-                eq(LocalDate.of(2026, 9, 7)), eq(LocalDate.of(2026, 10, 6)), anyInt());
+        // 2026-09-14 정책: 이용권은 기간 없이(첫 예약 때 90일 확정) 발급한다 — 결제 행의 주인에게, 그 행의 주문번호로
+        verify(passService).grantUnassigned(eq("S2"), any(), eq(1), eq("BOOK"), eq(PassService.SOURCE_PG),
+                eq("BC002"), any(), eq(12));
+    }
+
+    /**
+     * 형제 묶음결제 승인 확정(2026-10-22) — 형제 2명이면 결제 행 2개가 같은 tid로 각각 결제완료가 되고,
+     * 이용권도 형제 각자에게(각자의 주문번호로) 12회씩 발급돼야 한다. 한 명만 처리되면 안 된다.
+     */
+    @Test
+    void confirmPaidGroup_형제_각자_결제완료와_이용권_발급() {
+        PaymentRespDTO.PaymentDTO first = new PaymentRespDTO.PaymentDTO();
+        first.setOrderNo("BC_A");
+        first.setGroupOrderNo("BG_AB");
+        first.setStudentId("S_A");
+        first.setAmount(36_000);
+        PaymentRespDTO.PaymentDTO second = new PaymentRespDTO.PaymentDTO();
+        second.setOrderNo("BC_B");
+        second.setGroupOrderNo("BG_AB");
+        second.setStudentId("S_B");
+        second.setAmount(36_000);
+
+        PaymentRespDTO.ProductDTO product = new PaymentRespDTO.ProductDTO();
+        product.setProductId(7);
+        product.setServiceCode("BOOK");
+        product.setTotalCount(12);
+
+        when(paymentRepository.countByTidElsewhere(eq("TID_AB"), any(), eq("BG_AB"))).thenReturn(0);
+        when(paymentRepository.markPaid(any(), eq("TID_AB"), any(), any(), any(), any(), any())).thenReturn(1);
+
+        boolean allUpdated = paymentTxService.confirmPaidGroup(java.util.List.of(first, second), product,
+                "TID_AB", "Card", "국민카드", "123456******7890", "00000000", "0000");
+
+        assertTrue(allUpdated);
+        verify(paymentRepository).markPaid(eq("BC_A"), eq("TID_AB"), any(), any(), any(), any(), any());
+        verify(paymentRepository).markPaid(eq("BC_B"), eq("TID_AB"), any(), any(), any(), any(), any());
+        verify(passService).grantUnassigned(eq("S_A"), any(), eq(7), eq("BOOK"), eq(PassService.SOURCE_PG),
+                eq("BC_A"), any(), eq(12));
+        verify(passService).grantUnassigned(eq("S_B"), any(), eq(7), eq("BOOK"), eq(PassService.SOURCE_PG),
+                eq("BC_B"), any(), eq(12));
     }
 
     @Test

@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", async () => {
   initDatePicker();
   initSlotPicker();
+  initGradePicker();
   await loadLiveView();
   // Firestore 연결 여부가 확인되기 전까지는 안전하게 30초(빠른 주기)로 시작한다 — connectFirestore()가
   // 실제로 스냅샷을 받으면 onFirestoreHealthy()가 5분 주기로 늦춰준다(2026-08-07, N+1 제거 이후 이
@@ -119,6 +120,10 @@ function statusBadgeForPage(card, page, isLatestPage) {
 let cards = [];
 let activeFilter = "ALL";
 let activeSlot = "ALL";
+// 학년 다중 선택(2026-10-20) — 비어 있으면 전체. gradeName(erp_bookstore_code gubun='S' 코드명) 기준
+const GRADE_OPTIONS = ["초1", "초2", "초3", "초4", "초5", "초6"];
+const GRADE_STORAGE_KEY = "monitor.selectedGrades";
+let activeGrades = new Set();
 let selectedCard = null;
 let firestoreUnsubscribe = null;
 // 카드 캐러셀에서 학생이 지금 보고 있는 책 페이지 인덱스 — studentId 기준으로 렌더링을 넘나들며
@@ -217,6 +222,100 @@ function hasAttitude(card) {
 function matchesSlot(card) {
   if (activeSlot === "ALL") return true;
   return card.timeSlot === activeSlot;
+}
+
+function matchesGrade(card) {
+  if (activeGrades.size === 0) return true;
+  return activeGrades.has(card.gradeName);
+}
+
+/* 상태 chip 카운트·카드 목록이 공통으로 보는 범위 — 회차 + 학년 */
+function inScope(card) {
+  return matchesSlot(card) && matchesGrade(card);
+}
+
+/* 학년 드롭다운 — 체크박스로 여러 학년을 고르고, 고르는 즉시 반영된다(조회 버튼 없음).
+   마지막 선택은 브라우저에 기억해 둔다 — 담당 학년만 보는 선생님이 매번 다시 고르지 않게. */
+function initGradePicker() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(GRADE_STORAGE_KEY) ?? "[]");
+    activeGrades = new Set(saved.filter((g) => GRADE_OPTIONS.includes(g)));
+  } catch (e) {
+    activeGrades = new Set();
+  }
+
+  const picker = document.getElementById("monitorGradePicker");
+  const trigger = document.getElementById("monitorGradeTrigger");
+  const menu = document.getElementById("monitorGradeMenu");
+  const options = document.getElementById("monitorGradeOptions");
+
+  options.innerHTML = GRADE_OPTIONS.map((g) => `
+    <label class="monitor-grade-option">
+      <input type="checkbox" value="${g}" ${activeGrades.has(g) ? "checked" : ""} />
+      <span>${g}</span>
+    </label>`).join("");
+
+  options.addEventListener("change", (e) => {
+    if (e.target.checked) activeGrades.add(e.target.value);
+    else activeGrades.delete(e.target.value);
+    onGradeChanged();
+  });
+
+  document.getElementById("monitorGradeReset").addEventListener("click", () => {
+    resetGradeFilter();
+    render();
+  });
+
+  const setOpen = (open) => {
+    menu.hidden = !open;
+    trigger.setAttribute("aria-expanded", String(open));
+  };
+  trigger.addEventListener("click", () => setOpen(menu.hidden));
+  document.addEventListener("click", (e) => {
+    if (!menu.hidden && !picker.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) setOpen(false);
+  });
+
+  updateGradeLabel();
+}
+
+function onGradeChanged() {
+  try {
+    localStorage.setItem(GRADE_STORAGE_KEY, JSON.stringify([...activeGrades]));
+  } catch (e) { /* 저장 못 해도 필터 자체는 동작한다 */ }
+  updateGradeLabel();
+  render();
+}
+
+function resetGradeFilter() {
+  activeGrades.clear();
+  document.querySelectorAll("#monitorGradeOptions input").forEach((cb) => (cb.checked = false));
+  try {
+    localStorage.removeItem(GRADE_STORAGE_KEY);
+  } catch (e) { /* 무시 */ }
+  updateGradeLabel();
+}
+
+/* 버튼 문구: 없음/6개 전부 → "전체 학년", 그 외 → "초2, 초4~6"처럼 연속 구간은 묶어서 */
+function updateGradeLabel() {
+  const label = document.getElementById("monitorGradeLabel");
+  const trigger = document.getElementById("monitorGradeTrigger");
+  const nums = GRADE_OPTIONS.filter((g) => activeGrades.has(g)).map((g) => Number(g.slice(1)));
+  const isAll = nums.length === 0 || nums.length === GRADE_OPTIONS.length;
+  trigger.classList.toggle("active", !isAll);
+  if (isAll) {
+    label.textContent = "전체 학년";
+    return;
+  }
+  const ranges = [];
+  nums.forEach((n) => {
+    const last = ranges[ranges.length - 1];
+    if (last && last[1] === n - 1) last[1] = n;
+    else ranges.push([n, n]);
+  });
+  label.textContent = ranges.map(([a, b]) => (a === b ? `초${a}` : `초${a}~${b}`)).join(", ");
 }
 
 /* 최초 진입(또는 날짜 변경) 시 1회 조회 — 이후 갱신은 Firestore 구독으로 받는다 */
@@ -494,7 +593,7 @@ function objectJosa(word) {
 }
 
 /* 알림 클릭 → 해당 학생 카드로 스크롤 + 잠깐 강조.
-   필터·회차 선택 때문에 카드가 화면에 없으면 둘 다 "전체"로 풀고 다시 그린 뒤 찾는다. */
+   필터·회차·학년 선택 때문에 카드가 화면에 없으면 모두 "전체"로 풀고 다시 그린 뒤 찾는다. */
 function scrollToCard(key) {
   const find = () => [...document.querySelectorAll(".monitor-card")].find((c) => c.dataset.cardKey === key);
   let target = find();
@@ -502,6 +601,7 @@ function scrollToCard(key) {
     activeFilter = "ALL";
     activeSlot = "ALL";
     document.getElementById("monitorSlot").value = "ALL";
+    resetGradeFilter();
     render();
     target = find();
   }
@@ -616,7 +716,7 @@ function render() {
 }
 
 function computeCounts() {
-  const slotCards = cards.filter(matchesSlot);
+  const slotCards = cards.filter(inScope);
   const counts = { total: slotCards.length, notEntered: 0, reading: 0, quizInProgress: 0, timeOver: 0, retryNeeded: 0, completed: 0, readingLogMissing: 0 };
   slotCards.forEach((c) => {
     if (c.cardStatus === "NOT_ENTERED") counts.notEntered++;
@@ -647,7 +747,7 @@ function renderFilters(counts) {
 }
 
 function filteredCards() {
-  const slotCards = cards.filter(matchesSlot);
+  const slotCards = cards.filter(inScope);
   let result;
   if (activeFilter === "ALL") result = slotCards;
   else if (activeFilter === "LOG_MISSING") result = slotCards.filter((c) => !hasAttitude(c));

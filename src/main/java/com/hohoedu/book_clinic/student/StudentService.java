@@ -75,10 +75,13 @@ public class StudentService {
     /**
      * "학생 정보" 상세모달 수강 정보 탭 — 아직 저장한 적 없는 학생이면 행을 만들지 않고
      * 화면용 기본값(수강중 / 시작일=학생 등록일 / 레벨=현재 자동계산 레벨)만 조립해 내려준다.
+     * 레벨은 저장된 행이 있어도 bookstore_level 스냅샷 대신 지금 자동계산 레벨을 보여준다(2026-10-16) —
+     * 스냅샷은 저장/완독 시점에만 바뀌어 학년 변경 등으로 목록의 레벨과 어긋날 수 있다.
      */
     public StudentRespDTO.BookstoreAssignDTO getBookstoreAssign(String studentId) {
         StudentRespDTO.BookstoreAssignDTO assign = studentRepository.findBookstoreAssign(studentId);
         if (assign != null) {
+            assign.setLevel(clinicService.getMainLevelInfo(studentId).getLevelNo());
             return assign;
         }
 

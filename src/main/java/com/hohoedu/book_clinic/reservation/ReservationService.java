@@ -18,6 +18,7 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
+import com.hohoedu.book_clinic.schedule.materialize.ScheduleMaterializer;
 import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 import com.hohoedu.book_clinic.reservation._dto.ReservationReqDTO;
@@ -63,7 +64,7 @@ public class ReservationService {
 
     // ── 조회 ─────────────────────────────────────────────────────────────
 
-    /** 예약 가능한 열린 슬롯 목록(학생 앱). 기간 미지정 시 오늘부터 4주(28일) */
+    /** 예약 가능한 열린 슬롯 목록(학생 앱). 기간 미지정 시 오늘부터 열려 있는 회차 전체(ScheduleMaterializer.RESERVATION_OPEN_DAYS) */
     public List<ReservationRespDTO.SlotOptionDTO> findOpenSlots(String studentId, LocalDate fromDate, LocalDate toDate) {
         Student student = requireStudent(studentId);
         List<ReservationRespDTO.SlotOptionDTO> slots =
@@ -87,7 +88,9 @@ public class ReservationService {
      */
     public List<ReservationRespDTO.SlotOptionDTO> findOpenSlotsByCenter(String centerCode, LocalDate fromDate, LocalDate toDate, String studentId) {
         LocalDate from = fromDate != null ? fromDate : KstClock.today();
-        LocalDate to = toDate != null ? toDate : from.plusDays(BATCH_WEEKS * 7 - 1);
+        // 기간 미지정이면 미리 만들어 둔 회차 전체(오늘 ~ 오늘+RESERVATION_OPEN_DAYS)를 보여준다(2026-10-22).
+        // 예전엔 4주(28일)로 잘려서, 정독 달력(달 단위 조회)에는 보이는 마지막 며칠이 예약하기 화면에는 안 보였다.
+        LocalDate to = toDate != null ? toDate : from.plusDays(ScheduleMaterializer.RESERVATION_OPEN_DAYS);
         if (to.isBefore(from)) {
             throw new Exception400("조회 기간이 올바르지 않습니다.");
         }
@@ -347,10 +350,15 @@ public class ReservationService {
     // ── 4주 일괄 ─────────────────────────────────────────────────────────
 
     /**
-     * 4주 일괄 신청 미리보기. dayOfWeek(ISO 1=월~7=일)와 seq로 오늘 이후 가장 가까운 4번의
-     * 해당 요일 날짜를 찾아, 각 날짜의 슬롯 상태를 알려준다. 실제 예약은 만들지 않는다(읽기 전용).
+     * 4주 일괄 신청 미리보기. dayOfWeek(ISO 1=월~7=일)와 seq로 4번의 해당 요일 날짜를 찾아,
+     * 각 날짜의 슬롯 상태를 알려준다. 실제 예약은 만들지 않는다(읽기 전용).
+     *
+     * startDate 가 있으면 그 날짜(앱에서 고른 날짜)부터 센다(2026-10-22). 예전엔 항상 오늘 이후 가장
+     * 가까운 같은 요일부터라, 11/19를 고르고 반복을 켜도 10/22·10/29… 처럼 고른 날짜와 무관한 주가 잡혔다.
+     * 오늘보다 이전이면 오늘부터로 당긴다. 아직 회차가 안 열린 뒤쪽 주는 NOT_OPEN(앱 "준비중")으로 나온다.
      */
-    public List<ReservationRespDTO.BatchPreviewItemDTO> previewBatch(String studentId, Integer dayOfWeek, Integer seq) {
+    public List<ReservationRespDTO.BatchPreviewItemDTO> previewBatch(String studentId, Integer dayOfWeek, Integer seq,
+                                                                      LocalDate startDate) {
         Student student = requireStudent(studentId);
         if (dayOfWeek == null || dayOfWeek < 1 || dayOfWeek > 7) {
             throw new Exception400("요일 값이 올바르지 않습니다.");
@@ -359,7 +367,9 @@ public class ReservationService {
             throw new Exception400("회차를 선택해주세요.");
         }
 
-        List<LocalDate> targetDates = nextDates(dayOfWeek, BATCH_WEEKS);
+        LocalDate today = KstClock.today();
+        LocalDate from = (startDate == null || startDate.isBefore(today)) ? today : startDate;
+        List<LocalDate> targetDates = nextDates(from, dayOfWeek, BATCH_WEEKS);
         List<ReservationRespDTO.SlotOptionDTO> slots =
                 repository.findSlotsByDates(student.getCenterCode(), targetDates, seq, studentId);
         Map<LocalDate, ReservationRespDTO.SlotOptionDTO> byDate = slots.stream()
@@ -566,9 +576,9 @@ public class ReservationService {
         return dto;
     }
 
-    /** 오늘(KST) 이후 가장 가까운 dayOfWeek부터 시작해 매주 반복되는 날짜 count개 */
-    private List<LocalDate> nextDates(int dayOfWeek, int count) {
-        LocalDate date = KstClock.today();
+    /** from(포함) 이후 가장 가까운 dayOfWeek부터 시작해 매주 반복되는 날짜 count개 */
+    private List<LocalDate> nextDates(LocalDate from, int dayOfWeek, int count) {
+        LocalDate date = from;
         while (date.getDayOfWeek().getValue() != dayOfWeek) {
             date = date.plusDays(1);
         }

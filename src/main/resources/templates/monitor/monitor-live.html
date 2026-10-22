@@ -89,6 +89,22 @@
           <option>2교시(15:00~16:00)</option>
         </select>
 
+        <!-- 학년 다중 선택(2026-10-20) — 초1~초6 중 원하는 학년만 골라 본다(예: 초2 + 초4~6).
+             아무것도 안 고르면 전체. 목록은 monitor-live.js의 GRADE_OPTIONS로 렌더링한다. -->
+        <div class="monitor-grade-picker" id="monitorGradePicker">
+          <button type="button" class="monitor-grade-trigger" id="monitorGradeTrigger"
+                  aria-haspopup="true" aria-expanded="false">
+            <span id="monitorGradeLabel">전체 학년</span>
+            <i class="fa-solid fa-chevron-down"></i>
+          </button>
+          <div class="monitor-grade-menu" id="monitorGradeMenu" hidden>
+            <div class="monitor-grade-options" id="monitorGradeOptions"></div>
+            <div class="monitor-grade-menu-foot">
+              <button type="button" class="monitor-grade-reset" id="monitorGradeReset">전체 보기</button>
+            </div>
+          </div>
+        </div>
+
         <!-- 필터 chip은 monitor-live.js가 카운트와 함께 렌더링한다 -->
         <div class="monitor-filters" id="monitorFilters"></div>
       </section>

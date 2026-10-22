@@ -128,10 +128,13 @@ public class ClinicRespDTO {
         @JsonIgnore
         private Integer triggerCount; // RARE만 — 몇 번째 스페셜 카드인지 고르는 데만 쓴다
         @JsonIgnore
-        private String specialSchoolyear; // RARE만 — 그 스페셜 카드를 터뜨린 책의 학년(이미지 special_{학년}_NN)
+        private String specialSchoolyear; // SPECIAL만 — 그 카드를 받은 때의 학생 학년(이미지 special_{학년}_NN)
     }
 
-    /** 이 책 카드가 몇 번째 NORMAL 카드인지 + 그 책 학년 — 스페셜 카드 판정/이미지 선택용(2026-10-01) */
+    /**
+     * 그 책으로 받은 스페셜 카드 — seq = 지급 시점의 그 학년 누적 카드 수(trigger_count),
+     * schoolyear = 지급 당시 학생 학년. 이미지 번호를 고르는 데 쓴다(2026-10-22).
+     */
     @Data
     public static class SpecialCardSourceDTO {
         private Integer seq;
@@ -142,9 +145,9 @@ public class ClinicRespDTO {
     @Data
     public static class CardCollectionDTO {
         private List<CardDTO> cards;         // 보유 카드(완독 책), 최신순
-        private int totalCards;              // 보유 카드 총 수
-        private int exchangeableCount;       // 실물 교환 가능 횟수 (totalCards / 10)
-        private int cardsToNextReward;       // 다음 실물까지 남은 카드 수 (10 - totalCards % 10)
+        private int totalCards;              // 지금 학년에서 받은 카드 수
+        private int exchangeableCount;       // 받은 스페셜 카드 수(= 실물 교환 횟수)
+        private int cardsToNextReward;       // 다음 스페셜까지 남은 카드 수 — 그 학년 목표를 다 채웠으면 0
     }
 
     /**
@@ -225,8 +228,9 @@ public class ClinicRespDTO {
         private String cardName;           // 카드명(=책 제목). 신규 획득이거나 그 책 카드를 이미 보유 중이면 채워진다
         private boolean cardNew;           // 이번 제출로 처음 받은 카드인지(화면 "신규 카드를 획득했어요!" 문구 분기)
         private String cardImageUrl;       // 획득 카드 이미지(card_path.card_url, 미등록 책은 기본 카드로 폴백)
-        private Integer totalCards;         // 획득 후 보유 카드 총 수
-        private boolean cardRewardReached;  // 이번 획득으로 10장 세트를 채웠는지(실물 1장 교환 시점)
+        private Integer totalCards;         // 지금 학년에서 받은 카드 수(학년이 오르면 0부터 다시 센다, 2026-10-22)
+        private Integer cardsToNextSpecial; // 다음 스페셜 카드까지 남은 장수 — 그 학년 목표를 다 채웠으면 null
+        private boolean cardRewardReached;  // 이번 획득으로 스페셜 카드 칸에 닿았는지(실물 1장 교환 시점)
         // 이 책으로 받은 스페셜 카드 — 첫 제출(cardRewardReached)뿐 아니라 재도전·틀린문제·심화·직전 결과
         // 재조회에서도 채워 결과 화면 칸이 비지 않게 한다(2026-10-01). 연출은 cardRewardReached일 때만.
         private boolean specialCardOwned;

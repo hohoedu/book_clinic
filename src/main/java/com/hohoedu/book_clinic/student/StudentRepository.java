@@ -54,6 +54,12 @@ public interface StudentRepository {
     /** 이 학생이 속한 형제 그룹 전체(본인 포함) — 결제창 형제 선택 화면용. 형제가 없으면 본인 1건만 돌아온다 */
     List<Student> findSiblingGroup(@Param("studentId") String studentId);
 
+    /**
+     * 두 학생이 같은 형제 그룹인지 — 앱의 형제 전환(/app/sibling/switch) 검증용 (2026-10-21).
+     * all_pass 가 관리하는 erp_sibling 을 본다(앱의 형제 목록이 이 테이블에서 나온다).
+     */
+    boolean isSameSiblingGroup(@Param("studentId") String studentId, @Param("targetStudentId") String targetStudentId);
+
     /** "학생 정보" 화면 목록 — 센터 내 학생 전체 (레벨은 조회 후 서비스에서 채운다). 필터는 전부 선택값이면 null로 넘긴다 */
     List<StudentRespDTO.StudentInfoRowDTO> findStudentByCenterCode(@Param("centerCode") String centerCode,
             @Param("gradeKey") String gradeKey, @Param("statusKey") String statusKey, @Param("keyword") String keyword);

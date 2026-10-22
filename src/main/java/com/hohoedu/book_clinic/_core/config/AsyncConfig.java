@@ -30,4 +30,20 @@ public class AsyncConfig {
         executor.initialize();
         return executor;
     }
+
+    /**
+     * 학부모 앱 푸시 전용 스레드 풀 (2026-10-22) — 입실·퇴실 알림을 FCM 응답을 기다리지 않고 보낸다.
+     * 출석체크 기기의 QR 입실 응답이 FCM 왕복만큼 늦어지면 안 되고, FCM 이 느려도 Firestore 동기화
+     * 풀과 섞이지 않게 따로 둔다.
+     */
+    @Bean(name = "pushExecutor")
+    public Executor pushExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(1);
+        executor.setMaxPoolSize(4);
+        executor.setQueueCapacity(500);
+        executor.setThreadNamePrefix("push-");
+        executor.initialize();
+        return executor;
+    }
 }

@@ -537,21 +537,22 @@ CREATE TABLE erp_bookstore_student_badge (
 -- 10장마다 추가 지급, 특정 책과 무관해서 content_id는 NULL) 두 종류를 한 테이블에서 관리한다.
 -- id를 surrogate PK로 두는 이유: RARE는 content_id가 없어 (student_id, content_id)로 유일성을 못 잡는다.
 -- NORMAL 중복 지급 방지는 UX_erp_bookstore_student_card_normal(student_id, content_id) 필터드 유니크로 막는다.
--- RARE 중복 지급 방지는 trigger_count(그 RARE를 발생시킨 시점의 누적 NORMAL 카드 수, 10/20/30 ...)로 판단한다.
+-- SPECIAL 중복 지급 방지는 (학년, trigger_count — 그 학년 누적 NORMAL 카드 수)로 판단한다(2026-10-22 학년별 칸).
 CREATE TABLE erp_bookstore_student_card (
     id             INT IDENTITY(1,1) PRIMARY KEY,
     student_id     VARCHAR(100)  NOT NULL,
-    content_id     INT           NULL,      -- NORMAL만 값 있음(그 책). RARE는 NULL
+    content_id     INT           NULL,      -- NORMAL = 그 책, SPECIAL = 칸을 채운 책(2026-10-22)
     card_type      VARCHAR(10)   NOT NULL DEFAULT 'NORMAL',  -- NORMAL / SPECIAL (2026-10-01 RARE에서 이름 변경)
-    trigger_count  INT           NULL,      -- RARE만 값 있음(발급을 유발한 누적 NORMAL 카드 수: 10, 20 ...)
+    trigger_count  INT           NULL,      -- SPECIAL만 값 있음(발급을 유발한 그 학년 누적 NORMAL 카드 수, 2026-10-22 학년별)
+    schoolyear     VARCHAR(2)    NULL,      -- 카드를 받은 때의 학생 학년 — 스페셜 카드는 학년마다 0부터 센다(2026-10-22)
     earned_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),  -- 지급일시(KST)
     FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
 );
 CREATE UNIQUE INDEX UX_erp_bookstore_student_card_normal
     ON erp_bookstore_student_card (student_id, content_id)
     WHERE card_type = 'NORMAL';
-CREATE UNIQUE INDEX UX_erp_bookstore_student_card_special
-    ON erp_bookstore_student_card (student_id, trigger_count)
+CREATE UNIQUE INDEX UX_erp_bookstore_student_card_special_grade
+    ON erp_bookstore_student_card (student_id, schoolyear, trigger_count)
     WHERE card_type = 'SPECIAL';
 
 -- 클리닉 입실/퇴실 세션 (2026-07-15 실시간 모니터링) — 학생이 로그인하는 시점에 자동으로
