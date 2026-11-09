@@ -3,11 +3,14 @@ package com.hohoedu.book_clinic.pass;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
+import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -32,16 +35,32 @@ public class PassService {
     private static final DateTimeFormatter YM = DateTimeFormatter.ofPattern("yyyyMM");
 
     /**
-     * 이용권 유효기간(일) — 첫 예약이 잡힌 날부터 이만큼 쓸 수 있다(2026-09-14 정책).
-     * 시작일을 포함해 90일이므로 마지막 날은 시작일 + 89일이다(9/15 첫 예약 → 12/13까지).
+     * 이용권 유효기간(일) — 유효기간 시작일부터 이만큼 쓸 수 있다(2026-09-14 정책).
+     * 2026-10-27부터 "90일 당일까지"라 마지막 날은 시작일 + 90일이다(10/15 시작 → 1/13까지).
      */
     public static final int VALID_DAYS = 90;
+
+    /**
+     * 서비스 제공기간(일) — 결제일 + 이만큼 당일까지 이용권으로 예약할 수 있다(2026-10-27).
+     * 이 날이 지나면 남은 이용권은 소멸하고 같은 수만큼 쿠폰으로 바뀐다({@link #convertToCoupon}).
+     * 환불 기간도 이 기간과 같다.
+     */
+    public static final int SERVICE_DAYS = 90;
+
+    /**
+     * 유효기간 자동 시작(일) — 결제 후 이만큼 지나도록 첫 예약이 없으면 결제일 + 이 일수부터
+     * 유효기간이 시작된다(2026-10-27). 첫 예약 회차가 이보다 늦어도 시작일은 여기로 당겨진다.
+     * 그래서 서비스 종료 ~ 유효기간 종료(= 쿠폰 기간)는 누구든 최대 이 일수다.
+     */
+    public static final int AUTO_START_DAYS = 30;
 
     public static final String SOURCE_PG = "PG";
     public static final String SOURCE_SEODANG = "SEODANG";
     public static final String SOURCE_FREE = "FREE";
+    public static final String SOURCE_COUPON = "COUPON";
 
     private final PassRepository passRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 이용권 발급. PG 승인 성공 직후 결제 트랜잭션 안에서 호출되므로 별도 트랜잭션을 열지 않는다
@@ -54,9 +73,9 @@ public class PassService {
      */
     public void grant(String studentId, String centerCode, int productId, String serviceCode,
                       String source, String refNo, String billingYm,
-                      LocalDate validFrom, LocalDate validUntil, int totalCount) {
+                      LocalDate validFrom, LocalDate validUntil, LocalDate serviceUntil, int totalCount) {
         passRepository.insertPass(studentId, centerCode, productId, serviceCode, source, refNo,
-                billingYm, validFrom, validUntil, totalCount);
+                billingYm, validFrom, validUntil, serviceUntil, totalCount);
     }
 
     /**
@@ -69,11 +88,18 @@ public class PassService {
      *
      * 서당 일괄청구분은 여전히 달력 월이라 {@link #grantMonthly}을 그대로 쓴다 — 두 체계가
      * 공존하므로 기간 판정 쿼리는 "NULL이면 아직 미배정"만 한 갈래 더 보면 된다.
+     *
+     * 서비스 제공기간(2026-10-27)은 결제 시점에 바로 정해진다 — 오늘(결제일) + 90일 당일까지.
+     * 승인 확정과 같은 트랜잭션에서 불리므로 오늘이 곧 결제일이다(배치 복구는 몇 분 늦을 뿐이다).
+     *
+     * 발급 사실을 이벤트로 알린다(2026-10-27) — 결제대기 예약 확정과 멈춘 자동 예약 재개가 받는다.
+     * 받는 쪽은 커밋 뒤에 돌므로, 결제가 롤백되면 아무 일도 일어나지 않는다.
      */
     public void grantUnassigned(String studentId, String centerCode, int productId, String serviceCode,
                                 String source, String refNo, String billingYm, int totalCount) {
         grant(studentId, centerCode, productId, serviceCode, source, refNo, billingYm,
-                null, null, totalCount);
+                null, null, KstClock.today().plusDays(SERVICE_DAYS), totalCount);
+        eventPublisher.publishEvent(new PassGrantedEvent(studentId));
     }
 
     /**
@@ -88,7 +114,7 @@ public class PassService {
                              String source, String refNo, String billingYm, int totalCount) {
         YearMonth ym = YearMonth.parse(billingYm, YM);
         grant(studentId, centerCode, productId, serviceCode, source, refNo, billingYm,
-                ym.atDay(1), ym.atEndOfMonth(), totalCount);
+                ym.atDay(1), ym.atEndOfMonth(), null, totalCount);
     }
 
     /**
@@ -129,21 +155,32 @@ public class PassService {
         // 아직 기간이 안 정해진 이용권이면 이 예약이 그 이용권의 "첫 예약"이다 — 예약한 회차
         // 날짜부터 90일로 기간을 확정한다(2026-09-14). 기준이 예약을 잡은 날이 아니라 회차
         // 날짜인 것은 정책 그대로다(9/14에 9/15 회차를 예약 → 9/15부터 90일).
+        // 다만 회차가 결제일 + 30일보다 늦으면 시작일은 결제일 + 30일로 당긴다(2026-10-27).
         // 조건부 UPDATE라 0행이면 다른 요청이 먼저 활성화한 것이고, 그 경우엔 기간이 이 예약
         // 날짜를 덮는지 다시 봐야 하므로 선택부터 새로 한다.
         if (pass.getValidFrom() == null) {
-            if (passRepository.activatePass(pass.getPassId(), serviceDate, VALID_DAYS - 1) == 0) {
+            LocalDate start = activationStart(pass, serviceDate);
+            if (passRepository.activatePass(pass.getPassId(), start, VALID_DAYS) == 0) {
                 log.warn("[이용권] 활성화 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
                 pass = passRepository.findUsablePassOn(studentId, serviceCode, serviceDate);
                 if (pass == null) {
                     return false;
                 }
-                if (pass.getValidFrom() == null
-                        && passRepository.activatePass(pass.getPassId(), serviceDate, VALID_DAYS - 1) == 0) {
-                    return false;
+                if (pass.getValidFrom() == null) {
+                    start = activationStart(pass, serviceDate);
+                    if (passRepository.activatePass(pass.getPassId(), start, VALID_DAYS) == 0) {
+                        return false;
+                    }
                 }
             }
-            log.info("[이용권] 유효기간 확정 — passId={}, {} ~ {}일간", pass.getPassId(), serviceDate, VALID_DAYS);
+            // 시작일을 당겼으면 회차 날짜가 기간 밖일 수 있다. 예약은 한 달 앞까지만 열리고 서비스
+            // 기간(결제일 + 90일) 안에서만 잡을 수 있어 정상적으로는 생기지 않지만, 생기면 이 예약은
+            // 이 이용권으로 쓸 수 없다 — false면 호출부가 예약째 롤백하므로 활성화도 함께 되돌아간다.
+            if (pass.getValidFrom() == null && serviceDate.isAfter(start.plusDays(VALID_DAYS))) {
+                log.warn("[이용권] 회차가 유효기간 밖 — passId={}, 시작={}, 회차={}", pass.getPassId(), start, serviceDate);
+                return false;
+            }
+            log.info("[이용권] 유효기간 확정 — passId={}, {}부터 {}일", pass.getPassId(), start, VALID_DAYS);
         }
 
         // 조회와 갱신 사이에 다른 요청이 먼저 깎았으면 0행이 된다. 예약은 학생 행 락으로 직렬화돼
@@ -175,19 +212,125 @@ public class PassService {
                 continue;
             }
             if (passRepository.incrementRemain(use.getPassId()) == 0) {
-                log.info("[이용권] 복구 대상 아님(회수된 이용권) — passId={}, reservationId={}",
-                        use.getPassId(), reservationId);
+                restoreToCoupon(use.getPassId(), reservationId);
                 continue;
             }
             // 첫 예약을 취소했다면 그 이용권은 아직 한 번도 쓰지 않은 상태로 되돌아간다 —
             // 확정해둔 90일 기간도 함께 풀어 미배정으로 되돌린다(2026-09-14). 그러지 않으면
             // 예약했다 바로 취소한 것만으로 만료일이 박혀버린다. 다른 예약이 아직 그 이용권을
             // 쓰고 있으면(살아있는 차감이 남아 있으면) 기간은 그대로 유지한다.
+            //
+            // 단, 결제 후 30일이 이미 지났다면 미배정이 아니라 "결제일 + 30일 시작"으로 되돌린다
+            // (2026-10-27) — 예약이 없었다면 자동 시작됐을 기간이 정답이다.
             if (passRepository.countUse(use.getPassId()) == 0) {
                 passRepository.deactivatePass(use.getPassId());
-                log.info("[이용권] 유효기간 해제(첫 예약 취소) — passId={}", use.getPassId());
+                PassRespDTO.PassDTO pass = passRepository.lockPass(use.getPassId());
+                LocalDate autoStart = autoStartDate(pass);
+                if (autoStart != null && !KstClock.today().isBefore(autoStart)) {
+                    passRepository.activatePass(use.getPassId(), autoStart, VALID_DAYS);
+                    log.info("[이용권] 첫 예약 취소 — 자동 시작일로 기간 재설정. passId={}, {}부터", use.getPassId(), autoStart);
+                } else {
+                    log.info("[이용권] 유효기간 해제(첫 예약 취소) — passId={}", use.getPassId());
+                }
             }
         }
+    }
+
+    /**
+     * 유효기간 시작일 = min(첫 예약 회차 날짜, 결제일 + 30일) (2026-10-27).
+     * 서비스 제공기간이 없는 이용권(서당/무상)이나 지급일이 없는 경우는 회차 날짜 그대로다.
+     */
+    static LocalDate activationStart(PassRespDTO.PassDTO pass, LocalDate serviceDate) {
+        LocalDate autoStart = autoStartDate(pass);
+        return autoStart != null && serviceDate.isAfter(autoStart) ? autoStart : serviceDate;
+    }
+
+    /** 결제일 + 30일 — 서비스 제공기간이 있는 앱 결제분만 해당한다(없으면 null) */
+    private static LocalDate autoStartDate(PassRespDTO.PassDTO pass) {
+        if (pass == null || pass.getServiceUntil() == null || pass.getGrantedAt() == null) {
+            return null;
+        }
+        return pass.getGrantedAt().toLocalDate().plusDays(AUTO_START_DAYS);
+    }
+
+    /**
+     * 소멸한 이용권의 예약을 취소했을 때 — 그 1회를 쿠폰으로 돌려준다(2026-10-27).
+     *
+     * incrementRemain이 0행인 경우는 둘이다: 환불로 회수된 이용권(돌려주지 않는다)과 쿠폰으로
+     * 전환된 이용권(쿠폰으로 돌려준다). 행 잠금으로 읽어서 전환 배치와 겹치지 않게 한다.
+     */
+    private void restoreToCoupon(int passId, Long reservationId) {
+        PassRespDTO.PassDTO pass = passRepository.lockPass(passId);
+        if (pass == null || pass.getRevokedAt() != null || pass.getConvertedAt() == null) {
+            log.info("[이용권] 복구 대상 아님(회수된 이용권) — passId={}, reservationId={}", passId, reservationId);
+            return;
+        }
+        if (!issueCoupon(pass, 1)) {
+            log.info("[이용권] 쿠폰 기간이 없어 복구 안 함 — passId={}, reservationId={}", passId, reservationId);
+            return;
+        }
+        log.info("[이용권] 소멸 후 예약 취소 → 쿠폰 1장 복구 — passId={}, reservationId={}", passId, reservationId);
+    }
+
+    /**
+     * 쿠폰 발급 — 이용권 1장당 쿠폰 행 1개. 이미 있으면 횟수만 더한다.
+     * 쿠폰 기간 = 서비스 제공기간 다음 날 ~ 원래 이용권의 유효기간 마지막 날.
+     *
+     * @return 발급했으면 true. 유효기간이 서비스 기간보다 늦게 끝나지 않아 쿠폰 기간이 없으면 false
+     */
+    private boolean issueCoupon(PassRespDTO.PassDTO pass, int count) {
+        LocalDate couponFrom = pass.getServiceUntil().plusDays(1);
+        if (pass.getValidUntil() == null || pass.getValidUntil().isBefore(couponFrom)) {
+            return false;
+        }
+        String refNo = String.valueOf(pass.getPassId());
+        PassRespDTO.PassDTO coupon = passRepository.findCouponOf(refNo);
+        if (coupon != null) {
+            passRepository.addToCoupon(coupon.getPassId(), count);
+        } else {
+            grant(pass.getStudentId(), pass.getCenterCode(), pass.getProductId(), pass.getServiceCode(),
+                    SOURCE_COUPON, refNo, pass.getBillingYm(), couponFrom, pass.getValidUntil(), null, count);
+        }
+        return true;
+    }
+
+    /**
+     * 서비스 제공기간이 끝난 이용권 1장을 소멸시키고 남은 횟수만큼 쿠폰으로 바꾼다(2026-10-27).
+     * {@code PassExpiryJob}이 한 장씩 부른다 — 한 장이 실패해도 나머지는 진행돼야 해서 트랜잭션을 장 단위로 끊는다.
+     *
+     * @return 발급한 쿠폰 수 (남은 횟수가 없거나 쿠폰 기간이 없으면 0)
+     */
+    @Transactional
+    public int convertToCoupon(int passId) {
+        PassRespDTO.PassDTO pass = passRepository.lockPass(passId);
+        if (pass == null || pass.getConvertedAt() != null || pass.getRevokedAt() != null
+                || pass.getServiceUntil() == null) {
+            return 0;
+        }
+        int remain = pass.getRemainCount();
+        passRepository.markConverted(passId);
+        if (remain <= 0) {
+            return 0;
+        }
+        if (!issueCoupon(pass, remain)) {
+            log.info("[이용권] 서비스 기간 종료 — 쿠폰 기간 없음, {}회 소멸. passId={}, 유효기간 끝={}",
+                    remain, passId, pass.getValidUntil());
+            return 0;
+        }
+        log.info("[이용권] 서비스 기간 종료 → 쿠폰 {}장 ({} ~ {}). passId={}",
+                remain, pass.getServiceUntil().plusDays(1), pass.getValidUntil(), passId);
+        return remain;
+    }
+
+    /** 결제 후 30일 동안 첫 예약이 없는 이용권의 유효기간을 시작시킨다 — {@code PassExpiryJob}이 부른다 */
+    @Transactional
+    public int autoStartUnassigned(LocalDate today) {
+        return passRepository.autoStartUnassigned(today, AUTO_START_DAYS, VALID_DAYS);
+    }
+
+    /** 서비스 제공기간이 끝났는데 아직 전환되지 않은 이용권 — {@code PassExpiryJob}이 부른다 */
+    public List<PassRespDTO.PassDTO> findServiceEnded(LocalDate today) {
+        return passRepository.findServiceEnded(today);
     }
 
     /** 이 학생이 이 서비스에 쓸 수 있는 총 잔여 횟수 */

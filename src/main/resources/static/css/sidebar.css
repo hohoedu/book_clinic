@@ -95,6 +95,18 @@
   color: #063b20;
 }
 
+.quick-btn.logout {
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font-size: 18px;
+}
+
+.quick-btn.logout:hover {
+  background: rgba(255, 255, 255, .15);
+}
+
 .sidebar-sub {
   width: 156px;
   background: #007c6e;

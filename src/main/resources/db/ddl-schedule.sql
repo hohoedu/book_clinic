@@ -256,14 +256,14 @@ CREATE TABLE erp_bookstore_reservation (
     -- 인덱스로 걸기 위해 필요하다 — 유니크 인덱스는 조인한 컬럼에 걸 수 없어서, 날짜가 예약 행
     -- 자체에 있어야만 UX_reservation_student_date가 성립한다. 값은 항상 슬롯에서 복사한다.
     service_date     DATE          NOT NULL,
-    status           VARCHAR(12)   NOT NULL DEFAULT 'RESERVED',  -- RESERVED/CANCELED/ATTENDED/NOSHOW
+    status           VARCHAR(12)   NOT NULL DEFAULT 'RESERVED',  -- RESERVED/CANCELED/ATTENDED/NOSHOW/PAY_WAIT(결제대기, 2026-10-27)
     -- 예약방법(2026-08-19) — 누가 등록했는지. STUDENT/PARENT=학생 앱 직접 예약, ADMIN=센터 직원 대리
     -- 등록. 생성 시점에 고정해서 저장한다(예약 현황 화면의 "직접 예약"/"센터 예약" 표시가 이 값을 그대로 씀).
     channel          VARCHAR(20)   NOT NULL DEFAULT 'STUDENT',
     reserved_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     canceled_at      DATETIME2,               -- 취소 일시(KST)
     cancel_reason    VARCHAR(200),            -- 휴무 지정에 의한 관리자 취소 사유 등
-    CONSTRAINT CK_reservation_status CHECK (status IN ('RESERVED', 'CANCELED', 'ATTENDED', 'NOSHOW')),
+    CONSTRAINT CK_reservation_status CHECK (status IN ('RESERVED', 'CANCELED', 'ATTENDED', 'NOSHOW', 'PAY_WAIT')),
     CONSTRAINT CK_reservation_channel CHECK (channel IN ('STUDENT', 'PARENT', 'ADMIN', 'SYSTEM')),
     FOREIGN KEY (slot_instance_id) REFERENCES erp_bookstore_slot_instance (slot_instance_id)
     -- 예약이 있으면 슬롯 삭제 불가 (기본 RESTRICT)
@@ -272,7 +272,7 @@ CREATE TABLE erp_bookstore_reservation (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_slot_student' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
     CREATE UNIQUE INDEX UX_reservation_slot_student
         ON erp_bookstore_reservation (slot_instance_id, student_id)
-        WHERE status = 'RESERVED';  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스)
+        WHERE status IN ('RESERVED', 'PAY_WAIT');  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스, 결제대기 포함 2026-10-27)
 
 -- 2026-08-28: "하루 한 회차" → "하루 두 회차"로 정책 변경. (student_id, service_date) 유니크로는
 -- "2건까지"를 표현할 수 없어 UX_reservation_student_date는 만들지 않는다. 하루 2회차 상한은
@@ -298,3 +298,32 @@ CREATE TABLE erp_bookstore_reservation_log (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_reservation_log_reservation' AND object_id = OBJECT_ID('erp_bookstore_reservation_log'))
     CREATE INDEX IX_reservation_log_reservation
         ON erp_bookstore_reservation_log (reservation_id, changed_at);  -- 예약 1건의 전체 이력 조회 경로
+
+-- ── 매주 자동 예약 패턴 (2026-10-27) — 학생별 "매주 ○요일 ○회차" ─────
+IF OBJECT_ID('erp_bookstore_auto_reservation', 'U') IS NULL
+CREATE TABLE erp_bookstore_auto_reservation (
+    auto_id       INT IDENTITY(1,1) PRIMARY KEY,
+    student_id    VARCHAR(100) NOT NULL,   -- erp_student.student_id (값으로만 연결)
+    day_of_week   TINYINT      NOT NULL,   -- ISO 요일 1=월 ~ 7=일
+    seq           TINYINT      NOT NULL,   -- 회차 번호
+    enabled       BIT          NOT NULL DEFAULT 1,
+    filled_until  DATE,                    -- 여기까지는 자동 예약을 시도했다. 다음 시도는 이 다음 날부터
+    no_pass_at    DATE,                    -- 이용권이 없어 멈춘 날. NULL이면 정상. 안내를 한 번만 보내는 기준
+    created_at    DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at    DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    CONSTRAINT UX_auto_reservation UNIQUE (student_id, day_of_week, seq)
+);
+
+-- ── 자동 예약 안내 대기열 (2026-10-27) — 새벽 배치 결과를 쌓아뒀다가 오전 10시에 학생별로 묶어 푸시 ──
+IF OBJECT_ID('erp_bookstore_auto_notice', 'U') IS NULL
+CREATE TABLE erp_bookstore_auto_notice (
+    notice_id   INT IDENTITY(1,1) PRIMARY KEY,
+    student_id  VARCHAR(100) NOT NULL,
+    message     VARCHAR(200) NOT NULL,     -- 안내 한 줄. 발송 시 학생별로 줄바꿈으로 묶는다
+    created_at  DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    sent_at     DATETIME2                  -- NULL이면 아직 안 보냄
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_auto_notice_unsent' AND object_id = OBJECT_ID('erp_bookstore_auto_notice'))
+    CREATE INDEX IX_auto_notice_unsent ON erp_bookstore_auto_notice (student_id, notice_id)
+        WHERE sent_at IS NULL;

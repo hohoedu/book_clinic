@@ -50,8 +50,8 @@ public class SubscriptionTxService {
     @Transactional
     public List<PaymentRespDTO.PaymentDTO> openCharge(SubscriptionRespDTO.SubscriptionDTO sub,
                                                       List<SubscriptionRespDTO.MemberDTO> members,
+                                                      String groupOrderNo,
                                                       LocalDate cycleFrom, LocalDate cycleUntil) {
-        String groupOrderNo = groupOrderNo(sub.getSubscriptionId(), cycleFrom);
         String billingYm = cycleFrom.format(BILLING_YM);
 
         List<PaymentRespDTO.PaymentDTO> opened = new ArrayList<>();
@@ -140,5 +140,16 @@ public class SubscriptionTxService {
     /** 청구 주문번호 — 주기로부터 결정적으로 만든다(같은 주기 재청구를 PG가 거절하게 하려고) */
     public static String groupOrderNo(int subscriptionId, LocalDate cycleFrom) {
         return "SUB" + subscriptionId + "-" + cycleFrom.format(CYCLE_TAG);
+    }
+
+    /**
+     * 같은 날 실패한 시도 다음의 재시도 주문번호 — SUB{id}-{yyyyMMdd}-R{n} (2026-10-27).
+     *
+     * 실패한 결제 행(FAILED)도 order_no 유니크에 남아 있어, 같은 날 "다시 시도"가 같은 번호로
+     * 행을 만들면 막힌다. 예전에는 그 막힘을 "이미 청구된 주기"로 읽어 성공 처리했다 — 돈도
+     * 이용권도 없이 성공으로 끝났다. 그래서 실패만 남은 번호는 건너뛰고 다음 번호를 쓴다.
+     */
+    public static String retryGroupOrderNo(int subscriptionId, LocalDate cycleFrom, int attempt) {
+        return groupOrderNo(subscriptionId, cycleFrom) + "-R" + attempt;
     }
 }

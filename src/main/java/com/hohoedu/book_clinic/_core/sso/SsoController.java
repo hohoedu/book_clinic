@@ -46,7 +46,7 @@ public class SsoController {
         try {
             token = ssoTokenUtil.issue(userDetails.getLoginUser().getUserId(), redirectUrl);
         } catch (RuntimeException e) {
-            return "redirect:/admin/book-data";
+            return "redirect:/";
         }
         String url = UriComponentsBuilder.fromUriString(allPassBaseUrl + "/sso/callback")
                 .queryParam("token", token)
@@ -81,7 +81,7 @@ public class SsoController {
         request.getSession(true).setAttribute("SPRING_SECURITY_CONTEXT", context);
 
         String destination = (principal.redirectUrl() != null && !principal.redirectUrl().isBlank())
-                ? principal.redirectUrl() : "/admin/book-data";
+                ? principal.redirectUrl() : "/";
         return "redirect:" + destination;
     }
 }

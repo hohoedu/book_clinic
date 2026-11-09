@@ -16,7 +16,8 @@ public interface DiaryRepository {
     List<DiaryRespDTO.RowDTO> findDiaryRows(@Param("date") LocalDate date,
                                             @Param("centerCode") String centerCode,
                                             @Param("timeSlot") String timeSlot,
-                                            @Param("keyword") String keyword);
+                                            @Param("keyword") String keyword,
+                                            @Param("teacherCode") String teacherCode);
 
     /** 그날 그 센터 학생들이 읽은 책 전체 — 학생별로 묶어 행에 붙인다(DiaryService) */
     List<DiaryRespDTO.BookDTO> findDiaryBooks(@Param("date") LocalDate date,

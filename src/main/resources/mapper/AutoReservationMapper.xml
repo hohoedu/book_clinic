@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+  매주 자동 예약 (2026-10-27) — 패턴 + 10시 일괄 안내 대기열.
+  시각은 전부 DATEADD(HOUR, 9, GETUTCDATE())로 KST를 만든다.
+-->
+<mapper namespace="com.hohoedu.book_clinic.reservation.AutoReservationRepository">
+
+    <sql id="patternColumns">
+        auto_id      AS autoId,
+        student_id   AS studentId,
+        day_of_week  AS dayOfWeek,
+        seq          AS seq,
+        enabled      AS enabled,
+        filled_until AS filledUntil,
+        no_pass_at   AS noPassAt,
+        CASE WHEN enabled = 0 THEN 'OFF'
+             WHEN no_pass_at IS NOT NULL THEN 'NO_PASS'
+             ELSE 'ON' END AS state
+    </sql>
+
+    <select id="findByStudent" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AutoPatternDTO">
+        SELECT <include refid="patternColumns"/>
+        FROM erp_bookstore_auto_reservation
+        WHERE student_id = #{studentId}
+        ORDER BY day_of_week, seq
+    </select>
+
+    <select id="findById" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AutoPatternDTO">
+        SELECT <include refid="patternColumns"/>
+        FROM erp_bookstore_auto_reservation
+        WHERE auto_id = #{autoId}
+    </select>
+
+    <select id="findByKey" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AutoPatternDTO">
+        SELECT <include refid="patternColumns"/>
+        FROM erp_bookstore_auto_reservation
+        WHERE student_id = #{studentId}
+          AND day_of_week = #{dayOfWeek}
+          AND seq = #{seq}
+    </select>
+
+    <select id="findAllEnabled" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AutoPatternDTO">
+        SELECT <include refid="patternColumns"/>
+        FROM erp_bookstore_auto_reservation
+        WHERE enabled = 1
+        ORDER BY auto_id
+    </select>
+
+    <select id="findEnabledByStudent" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AutoPatternDTO">
+        SELECT <include refid="patternColumns"/>
+        FROM erp_bookstore_auto_reservation
+        WHERE student_id = #{studentId}
+          AND enabled = 1
+        ORDER BY day_of_week, seq
+    </select>
+
+    <insert id="insertPattern">
+        INSERT INTO erp_bookstore_auto_reservation (student_id, day_of_week, seq, enabled, filled_until)
+        VALUES (#{studentId}, #{dayOfWeek}, #{seq}, 1, #{filledUntil})
+    </insert>
+
+    <update id="enable">
+        UPDATE erp_bookstore_auto_reservation
+        SET enabled      = 1,
+            filled_until = #{filledUntil},
+            no_pass_at   = NULL,
+            updated_at   = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE auto_id = #{autoId}
+    </update>
+
+    <update id="disable">
+        UPDATE erp_bookstore_auto_reservation
+        SET enabled    = 0,
+            no_pass_at = NULL,
+            updated_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE auto_id = #{autoId}
+          AND enabled = 1
+    </update>
+
+    <update id="updateFilledUntil">
+        UPDATE erp_bookstore_auto_reservation
+        SET filled_until = #{filledUntil},
+            updated_at   = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE auto_id = #{autoId}
+          AND (filled_until IS NULL OR filled_until &lt; #{filledUntil})
+    </update>
+
+    <update id="markNoPass">
+        UPDATE erp_bookstore_auto_reservation
+        SET no_pass_at = #{today},
+            updated_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE auto_id = #{autoId}
+          AND no_pass_at IS NULL
+    </update>
+
+    <update id="clearNoPass">
+        UPDATE erp_bookstore_auto_reservation
+        SET no_pass_at = NULL,
+            updated_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE auto_id = #{autoId}
+          AND no_pass_at IS NOT NULL
+    </update>
+
+    <insert id="insertNotice">
+        INSERT INTO erp_bookstore_auto_notice (student_id, message)
+        VALUES (#{studentId}, #{message})
+    </insert>
+
+    <select id="findUnsentNotices" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$AutoNoticeDTO">
+        SELECT notice_id AS noticeId, student_id AS studentId, message
+        FROM erp_bookstore_auto_notice
+        WHERE sent_at IS NULL
+        ORDER BY student_id, notice_id
+    </select>
+
+    <update id="markNoticesSent">
+        UPDATE erp_bookstore_auto_notice
+        SET sent_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE sent_at IS NULL
+          AND notice_id IN
+          <foreach collection="noticeIds" item="id" open="(" close=")" separator=",">#{id}</foreach>
+    </update>
+
+</mapper>

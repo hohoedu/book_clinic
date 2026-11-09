@@ -26,7 +26,7 @@ const STATUS_CLASS = {
 /* 결제 방식 코드 → 색상 클래스. 글자는 서버가 내려주는 payMethodLabel을 그대로 쓴다 */
 const PAY_METHOD_CLASS = { AUTO: "pay-auto", ONCE: "pay-once" };
 
-const RESERVATION_LABEL = { ATTENDED: "출석 완료", RESERVED: "예약", NOSHOW: "미출석" };
+const RESERVATION_LABEL = { ATTENDED: "출석 완료", RESERVED: "예약", NOSHOW: "미출석", PAY_WAIT: "결제대기" };
 const TRAIL_STATUS_LABEL = { PAID: "결제 완료", CANCELED: "결제 취소", REQ: "취소 요청", DONE: "취소 완료", FAIL: "취소 실패" };
 
 const TABLE_COLUMN_COUNT = 8;

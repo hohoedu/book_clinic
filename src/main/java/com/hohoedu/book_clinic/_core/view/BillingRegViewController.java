@@ -134,9 +134,9 @@ public class BillingRegViewController {
                 subscriptionService.prepareCardReg(ownerStudentId, studentIds, productCode, firstBillingOn);
 
         // INILite 모바일 빌키발급 창(docs/billing 매뉴얼).
-        // [price=0 검증 중] 결제 없이 빌키만 발급되는지 확인한다(2026-09-08). 되면 첫 결제도
-        // 학부모가 고른 결제일에 배치가 낸다(E-1). 이니시스가 0을 거부하면 월액으로 되돌려
-        // 등록 즉시 첫 결제로 처리한다(E-2).
+        // 빌키만 발급한다(price=0). 금액을 실어도 이 창은 결제하지 않는다는 것을 2026-10-27 테스트 MID로
+        // 확인했다(거래조회 NOT_FOUND_PAYMENT). 첫 결제는 1분쯤 뒤 배치가 빌링 승인으로 낸다
+        // — SubscriptionService.completeBillKeyReg 참고.
         String orderId = reg.getOrderNo();
         String price = "0";
         String timestamp = com.hohoedu.book_clinic._core.utils.KstClock.now().format(TS14);
@@ -196,10 +196,10 @@ public class BillingRegViewController {
                 String cardName = firstNonBlank(params.get("cardCompanyName"), params.get("cardName"),
                         params.get("cardKindName"), params.get("cardTypeName"));
                 String cardNo = firstNonBlank(params.get("cardNumber"), params.get("cardNo"));
+                // 등록창 billkey는 암호화돼 온다 — 원래 빌키로 풀어서 저장한다(InicisClient.plainBillKey)
                 SubscriptionRespDTO.CardRegResultDTO result = subscriptionService.completeBillKeyReg(
-                        regOrderNo, billKey, cardName, cardNo);
-                String status = "ACTIVE".equals(result.getStatus()) ? "ok" : "billing_fail";
-                return done(status, result.getRemainCount(), null);
+                        regOrderNo, inicisClient.plainBillKey(billKey), cardName, cardNo);
+                return done(regStatus(result), result.getRemainCount(), null);
             } catch (Exception e) {
                 log.error("[자동결제] 카드등록 실패 — orderId={}", regOrderNo, e);
                 return done("fail", 0, e.getMessage());
@@ -217,12 +217,22 @@ public class BillingRegViewController {
             }
             SubscriptionRespDTO.CardRegResultDTO result = subscriptionService.completeCardReg(
                     regOrderNo, params.get("P_REQ_URL"), params.get("P_TID"));
-            String status = "ACTIVE".equals(result.getStatus()) ? "ok" : "billing_fail";
-            return done(status, result.getRemainCount(), null);
+            return done(regStatus(result), result.getRemainCount(), null);
         } catch (Exception e) {
             log.error("[자동결제] 카드등록 실패 — regOrderNo={}", regOrderNo, e);
             return done("fail", 0, e.getMessage());
         }
+    }
+
+    /**
+     * 앱에 돌려줄 결과 — ok(결제까지 완료) / billing_pending(카드는 등록됐고 첫 결제는 몇 분 안에
+     * 배치가 낸다) / billing_fail(카드는 등록됐지만 첫 결제 실패)
+     */
+    private String regStatus(SubscriptionRespDTO.CardRegResultDTO result) {
+        if (!"ACTIVE".equals(result.getStatus())) {
+            return "billing_fail";
+        }
+        return result.isPaid() ? "ok" : "billing_pending";
     }
 
     private String firstNonBlank(String... vs) {

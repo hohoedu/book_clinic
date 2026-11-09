@@ -24,14 +24,15 @@ public interface PassRepository {
                     @Param("productId") int productId, @Param("serviceCode") String serviceCode,
                     @Param("source") String source, @Param("refNo") String refNo,
                     @Param("billingYm") String billingYm, @Param("validFrom") LocalDate validFrom,
-                    @Param("validUntil") LocalDate validUntil, @Param("totalCount") int totalCount);
+                    @Param("validUntil") LocalDate validUntil, @Param("serviceUntil") LocalDate serviceUntil,
+                    @Param("totalCount") int totalCount);
 
     /**
      * 유효기간 확정 — 아직 미배정(valid_from IS NULL)인 이용권에만 기간을 박는다(2026-09-14).
      * 조건부 UPDATE라 두 요청이 동시에 들어와도 먼저 도착한 쪽만 1행을 받는다.
      *
-     * @param startDate 첫 예약이 잡힌 회차의 날짜 (= valid_from)
-     * @param addDays   valid_until까지 더할 일수 (90일 정책이면 89)
+     * @param startDate 유효기간 시작일 = min(첫 예약 회차 날짜, 결제일 + 30일) (= valid_from)
+     * @param addDays   valid_until까지 더할 일수 (2026-10-27부터 "90일 당일까지"라 90)
      */
     int activatePass(@Param("passId") int passId, @Param("startDate") LocalDate startDate,
                      @Param("addDays") int addDays);
@@ -109,4 +110,25 @@ public interface PassRepository {
      * 잔여만 0으로 만들면 "다 써서 0"인지 "환불돼서 0"인지 구분이 안 되기 때문이다.
      */
     int revoke(@Param("passId") int passId);
+
+    // ── 서비스 제공기간 / 쿠폰 전환 (2026-10-27) ──
+
+    /** 결제 후 autoStartDays일이 지나도록 첫 예약이 없는 이용권의 유효기간을 시작시킨다. 시작된 건수 */
+    int autoStartUnassigned(@Param("today") LocalDate today, @Param("autoStartDays") int autoStartDays,
+                            @Param("validDays") int validDays);
+
+    /** 서비스 제공기간이 {@code today} 전에 끝났는데 아직 전환되지 않은 이용권 */
+    List<PassRespDTO.PassDTO> findServiceEnded(@Param("today") LocalDate today);
+
+    /** 이용권 한 장을 행 잠금(UPDLOCK)으로 읽는다 — 전환과 쿠폰 복구가 겹치지 않게 */
+    PassRespDTO.PassDTO lockPass(@Param("passId") int passId);
+
+    /** 소멸 처리 — 잔여 0 + converted_at. 이미 전환됐으면 0행 */
+    int markConverted(@Param("passId") int passId);
+
+    /** 원래 이용권(pass_id를 문자열로 넘긴다)에서 나온 쿠폰. 없으면 null */
+    PassRespDTO.PassDTO findCouponOf(@Param("refNo") String refNo);
+
+    /** 쿠폰에 횟수를 더한다(total·remain 함께) */
+    int addToCoupon(@Param("passId") int passId, @Param("count") int count);
 }

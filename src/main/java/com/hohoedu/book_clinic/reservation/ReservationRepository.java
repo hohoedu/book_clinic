@@ -121,4 +121,20 @@ public interface ReservationRepository {
     /** 슬롯이 끝났는데(ends_at < asOf) 아직 RESERVED로 남아있는 예약 id들 — 노쇼 배치 대상 */
     List<Long> findNoShowCandidates(@Param("asOf") LocalDateTime asOf);
 
+    // ── 결제대기(PAY_WAIT, 2026-10-27) ──────────────────────────────────
+
+    /** 그 학생의 결제대기 예약 — 회차 시작 시각 오름차순(결제 후 앞 회차부터 확정한다) */
+    List<ReservationRespDTO.ReservationItemDTO> findPayWaitByStudent(@Param("studentId") String studentId);
+
+    /** 결제대기 예약을 하나라도 가진 학생 — 새벽 배치의 재결제 대상 */
+    List<String> findPayWaitStudentIds();
+
+    /** 회차 시작이 before보다 이른 결제대기 예약(studentId 포함) — 수업 직전까지 자리를 막지 않게 미리 푼다 */
+    List<ReservationRespDTO.ReservationItemDTO> findPayWaitStartingBefore(@Param("before") LocalDateTime before);
+
+    /** 결제대기 취소 — 이용권을 깎은 적이 없어 복구 없이 상태만 닫는다. 영향행수 0이면 이미 처리된 건 */
+    int cancelPayWait(@Param("reservationId") Long reservationId,
+                      @Param("studentId") String studentId,
+                      @Param("reason") String reason);
+
 }

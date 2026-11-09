@@ -55,8 +55,10 @@ public class PaymentService {
     private static final DateTimeFormatter BILLING_YM = DateTimeFormatter.ofPattern("yyyyMM");
     private static final String DEFAULT_CANCEL_REASON = "고객 환불 요청";
 
-    /** 환불 정책(2026-10-21) — 결제일로부터 3개월 이내, 남은 이용권 1회당 3,000원. calculateRefund 참고 */
-    private static final int REFUND_PERIOD_MONTHS = 3;
+    /**
+     * 환불 정책(2026-10-21) — 남은 이용권 1회당 3,000원. calculateRefund 참고.
+     * 기간은 2026-10-27부터 서비스 제공기간과 같다(결제일 + 90일 당일까지, PassService.SERVICE_DAYS).
+     */
     private static final int REFUND_UNIT_PRICE = 3000;
     private static final String REFUND_RULE_CODE = "R2610_UNIT3000";
     private static final String REFUND_RULE_NAME = "잔여 1회당 3,000원 환불";
@@ -630,14 +632,15 @@ public class PaymentService {
     }
 
     /**
-     * 환불 금액 계산 (2026-10-21 정책) — 결제일로부터 3개월 이내면 남은 이용권 1회당 3,000원을 환불한다.
+     * 환불 금액 계산 (2026-10-21 정책) — 서비스 제공기간 안이면 남은 이용권 1회당 3,000원을 환불한다.
      *
      * 예전에는 erp_bookstore_refund_rule 의 "사용 횟수별 환불 비율"을 썼지만, 새 정책은 비율이 아니라
      * 잔여 횟수 × 고정 단가라 그 테이블로 표현되지 않는다. 그래서 규정 테이블은 더 이상 읽지 않고 여기 상수로 둔다.
      * 단가·기간이 바뀌면 아래 상수와 REFUND_RULE_CODE 를 함께 바꾼다 — rule_code 는 payment_cancel 에
      * 스냅샷으로 남아 "어느 정책으로 환불했는지"의 근거가 된다.
      *
-     *   · 기간: 결제일 + 3개월 당일까지(KST). 이용권 사용기한(첫 예약일부터 90일)과는 별개다.
+     *   · 기간: 서비스 제공기간 = 결제일 + 90일 당일까지(KST, 2026-10-27). 유효기간(첫 예약일부터 90일)과는 별개다.
+     *     기간이 지나면 남은 횟수는 쿠폰으로 바뀌는데, 쿠폰은 환불하지 않는다(findByRef가 PG 이용권만 찾는다).
      *   · 금액: 남은 횟수 × 3,000원. 결제 금액(이미 환불된 금액 제외)을 넘지 않는다.
      *   · 남은 횟수는 이용권 행의 remain_count 그대로다 — 예약하면 즉시 차감되고 취소하면 복구된다.
      *
@@ -665,10 +668,14 @@ public class PaymentService {
         }
         int usedCount = passService.usedCount(pass.getPassId());
 
-        LocalDate refundDeadline = paidDate.plusMonths(REFUND_PERIOD_MONTHS);
+        // 환불 기간 = 서비스 제공기간(2026-10-27). 이용권에 박힌 service_until을 정답으로 쓰고,
+        // 그 컬럼이 없던 시절 발급분만 결제일 + 90일로 계산한다.
+        LocalDate refundDeadline = pass.getServiceUntil() != null
+                ? pass.getServiceUntil()
+                : paidDate.plusDays(PassService.SERVICE_DAYS);
         if (today.isAfter(refundDeadline)) {
             return new PaymentRespDTO.RefundQuoteDTO(false,
-                    "결제일로부터 " + REFUND_PERIOD_MONTHS + "개월이 지나 환불할 수 없습니다.",
+                    "서비스 제공기간(결제일로부터 " + PassService.SERVICE_DAYS + "일)이 지나 환불할 수 없습니다.",
                     null, null, usedDays, usedCount, 0);
         }
 

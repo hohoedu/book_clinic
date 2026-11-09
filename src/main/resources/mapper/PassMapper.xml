@@ -13,20 +13,31 @@
       타입 없는 NULL을 varbinary로 보내는데 varbinary→date는 암시적 변환이 안 돼서 INSERT가 깨진다
       ("Implicit conversion from data type varbinary to date is not allowed", 오류 257).
       PaymentMapper.insertReady의 cycle_from/until도 같은 이유로 타입을 적어 두었다.
+      service_until(2026-10-27)도 서당분·쿠폰은 NULL이라 같은 이유로 타입을 적는다.
     -->
     <insert id="insertPass">
         INSERT INTO erp_bookstore_pass
             (student_id, center_code, product_id, service_code, source, ref_no, billing_ym,
-             valid_from, valid_until, total_count, remain_count, granted_at)
+             valid_from, valid_until, service_until, total_count, remain_count, granted_at)
         VALUES
             (#{studentId}, #{centerCode}, #{productId}, #{serviceCode}, #{source}, #{refNo}, #{billingYm},
-             #{validFrom,jdbcType=DATE}, #{validUntil,jdbcType=DATE},
+             #{validFrom,jdbcType=DATE}, #{validUntil,jdbcType=DATE}, #{serviceUntil,jdbcType=DATE},
              #{totalCount}, #{totalCount}, DATEADD(HOUR, 9, GETUTCDATE()))
     </insert>
 
     <sql id="passColumns">
         pass_id, student_id, center_code, product_id, service_code, source, ref_no,
-        billing_ym, valid_from, valid_until, total_count, remain_count, granted_at, revoked_at
+        billing_ym, valid_from, valid_until, service_until, total_count, remain_count,
+        granted_at, revoked_at, converted_at
+    </sql>
+
+    <!--
+      서비스 제공기간 안인지(2026-10-27) — 이용권으로 예약하는 "오늘"이 service_until 이하여야 한다.
+      회차 날짜가 아니라 오늘 기준이다: 12/10에 1/7 회차를 잡는 것은 서비스 기간(~12/30) 안의 예약이라 허용된다.
+      서당/무상분과 쿠폰은 NULL이라 이 조건에 걸리지 않는다.
+    -->
+    <sql id="inServicePeriod">
+        (service_until IS NULL OR service_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE))
     </sql>
 
     <!--
@@ -52,6 +63,7 @@
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
           AND remain_count > 0
+          AND <include refid="inServicePeriod"/>
           AND (valid_from IS NULL
                OR (valid_from &lt;= #{date} AND valid_until &gt;= #{date}))
         ORDER BY CASE WHEN valid_from IS NULL THEN 1 ELSE 0 END,
@@ -59,7 +71,7 @@
                  granted_at ASC
     </select>
 
-    <!-- 첫 예약이 그 이용권의 90일을 시작시킨다. 미배정(valid_from IS NULL)일 때만 박힌다 -->
+    <!-- 첫 예약(또는 결제 30일 경과)이 그 이용권의 90일을 시작시킨다. 미배정(valid_from IS NULL)일 때만 박힌다 -->
     <update id="activatePass">
         UPDATE erp_bookstore_pass
         SET valid_from  = #{startDate},
@@ -110,6 +122,8 @@
     <!--
       복구(예약 취소). remain_count &lt; total_count 조건이 두 가지를 동시에 막는다 —
       중복 복구로 잔여가 부풀어 오르는 것, 그리고 환불로 회수된(revoked) 이용권이 되살아나는 것.
+      converted_at IS NULL — 쿠폰으로 전환된(소멸한) 이용권에는 되돌리지 않는다. 0행이면 호출부가
+      그 1회를 쿠폰으로 돌려준다(2026-10-27).
     -->
     <update id="incrementRemain">
         UPDATE erp_bookstore_pass
@@ -117,6 +131,7 @@
         WHERE pass_id = #{passId}
           AND remain_count &lt; total_count
           AND revoked_at IS NULL
+          AND converted_at IS NULL
     </update>
 
     <!-- 되돌린 차감 이력에 취소 시각을 찍는다. 이미 찍혀 있으면 0행이라 중복 복구가 드러난다 -->
@@ -129,7 +144,8 @@
 
     <!--
       "지금 쓸 수 있는 횟수" — 화면의 잔여 표시이자 자동 재결제 판정의 기준값이다.
-      이미 만료된 기간의 잔여는 제외하고(이월 없음), 아직 첫 예약이 없어 기간이 안 정해진
+      서비스 제공기간이 끝난 이용권도 제외한다(2026-10-27) — 전환 배치가 돌기 전이라도 그 잔여는 이미
+      쿠폰 몫이다. 이미 만료된 기간의 잔여는 제외하고(이월 없음), 아직 첫 예약이 없어 기간이 안 정해진
       이용권(valid_from IS NULL)은 포함한다 — 사둔 횟수라 당장 예약에 쓸 수 있다(2026-09-14).
     -->
     <select id="sumRemain" resultType="int">
@@ -138,6 +154,7 @@
         WHERE student_id   = #{studentId}
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
+          AND <include refid="inServicePeriod"/>
           AND (valid_from IS NULL
                OR (valid_from  &lt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)
                    AND valid_until &gt;= CAST(DATEADD(HOUR, 9, GETUTCDATE()) AS DATE)))
@@ -169,6 +186,7 @@
         WHERE student_id   = #{studentId}
           AND service_code = #{serviceCode}
           AND revoked_at IS NULL
+          AND <include refid="inServicePeriod"/>
           AND (valid_from IS NULL
                OR (valid_from &lt;= #{date} AND valid_until &gt;= #{date}))
     </select>
@@ -198,6 +216,68 @@
             revoked_at   = DATEADD(HOUR, 9, GETUTCDATE())
         WHERE pass_id = #{passId}
           AND revoked_at IS NULL
+    </update>
+
+    <!-- ═══════════ 서비스 제공기간 / 쿠폰 전환 (2026-10-27) ═══════════ -->
+
+    <!--
+      유효기간 자동 시작 — 결제 후 autoStartDays일이 지나도록 첫 예약이 없는 앱 결제분은
+      결제일 + autoStartDays일부터 유효기간을 시작시킨다. 한 문장이라 여러 번 돌아도 결과가 같다.
+      "결제일"은 granted_at의 날짜다(승인 확정과 이용권 발급이 한 트랜잭션이라 같은 날이다).
+    -->
+    <update id="autoStartUnassigned">
+        UPDATE erp_bookstore_pass
+        SET valid_from  = DATEADD(DAY, #{autoStartDays}, CAST(granted_at AS DATE)),
+            valid_until = DATEADD(DAY, #{autoStartDays} + #{validDays}, CAST(granted_at AS DATE))
+        WHERE valid_from IS NULL
+          AND service_until IS NOT NULL
+          AND revoked_at IS NULL
+          AND converted_at IS NULL
+          AND DATEADD(DAY, #{autoStartDays}, CAST(granted_at AS DATE)) &lt;= #{today}
+    </update>
+
+    <!-- 서비스 제공기간이 끝났는데 아직 전환되지 않은 이용권 (잔여 0이어도 전환 표시는 남긴다) -->
+    <select id="findServiceEnded" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
+        SELECT <include refid="passColumns"/>
+        FROM erp_bookstore_pass
+        WHERE service_until &lt; #{today}
+          AND converted_at IS NULL
+          AND revoked_at IS NULL
+    </select>
+
+    <!--
+      이용권 한 장을 잠그고 읽는다 — 전환 배치와 예약 취소(쿠폰 복구)가 같은 이용권을 동시에
+      건드릴 때 한쪽씩 처리되게 한다. 호출부 트랜잭션이 끝날 때까지 행 잠금이 유지된다.
+    -->
+    <select id="lockPass" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
+        SELECT <include refid="passColumns"/>
+        FROM erp_bookstore_pass WITH (UPDLOCK, ROWLOCK)
+        WHERE pass_id = #{passId}
+    </select>
+
+    <!-- 소멸 처리 — 잔여를 0으로 만들고 전환 시각을 남긴다. 이미 전환됐으면 0행 -->
+    <update id="markConverted">
+        UPDATE erp_bookstore_pass
+        SET remain_count = 0,
+            converted_at = DATEADD(HOUR, 9, GETUTCDATE())
+        WHERE pass_id = #{passId}
+          AND converted_at IS NULL
+    </update>
+
+    <!-- 원래 이용권에서 나온 쿠폰 (없으면 null) — 이용권 1장당 쿠폰 행은 1개만 둔다 -->
+    <select id="findCouponOf" resultType="com.hohoedu.book_clinic.pass._dto.PassRespDTO$PassDTO">
+        SELECT <include refid="passColumns"/>
+        FROM erp_bookstore_pass
+        WHERE source = 'COUPON'
+          AND ref_no = #{refNo}
+    </select>
+
+    <!-- 쿠폰 추가 — 소멸 후 예약 취소로 돌려받는 1회. total도 함께 늘려야 "살아있는 차감 = total − remain"이 유지된다 -->
+    <update id="addToCoupon">
+        UPDATE erp_bookstore_pass
+        SET total_count  = total_count + #{count},
+            remain_count = remain_count + #{count}
+        WHERE pass_id = #{passId}
     </update>
 
 </mapper>

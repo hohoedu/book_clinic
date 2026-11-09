@@ -79,6 +79,14 @@ public interface SubscriptionRepository {
                  @Param("newNextBillingOn") LocalDate newNextBillingOn);
 
     /**
+     * 잔여 소진 청구 선점(2026-10-27) — 오늘 청구해도 되는 구독(ACTIVE이고 다음 시도일이 비었거나
+     * 오늘 이전)만 다음 시도일을 newNextBillingOn으로 밀며 집는다. 하루 한 번만 청구되게 하는 1차 장치다.
+     * 영향행수 0이면 이미 오늘 청구했거나 재시도일이 아직 안 됐다는 뜻이다.
+     */
+    int claimOnDemand(@Param("subscriptionId") int subscriptionId, @Param("today") LocalDate today,
+                      @Param("newNextBillingOn") LocalDate newNextBillingOn);
+
+    /**
      * 청구 성공 반영 — 다음 주기로 넘기고 실패 카운터를 되돌린다.
      * next_billing_on은 claimDue가 이미 밀어놨으므로 여기서는 주기 시작일만 옮긴다.
      */
@@ -106,6 +114,12 @@ public interface SubscriptionRepository {
     int cancel(@Param("subscriptionId") int subscriptionId);
 
     int removeMembers(@Param("subscriptionId") int subscriptionId);
+
+    /**
+     * 카드 등록 후 첫 결제를 기다리는 구독 — ACTIVE인데 한 번도 결제된 적이 없고,
+     * [olderThan] 전에 만든 READY 결제 행이 남아 있다(확인 필요 표시가 붙은 행은 사람 몫이라 뺀다).
+     */
+    List<SubscriptionRespDTO.SubscriptionDTO> findFirstChargePending(@Param("olderThan") java.time.LocalDateTime olderThan);
 
     /**
      * 카드등록창까지 갔다가 이탈한 PENDING 건 정리 — 결제의 READY 정리와 같은 성격이다.

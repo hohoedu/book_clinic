@@ -68,8 +68,11 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .anyRequest().authenticated())
                                 .formLogin(form -> form
-                                                // 세션 만료 등으로 튕겨나간 경우 원래 요청했던 페이지로 복귀, 그 외(예: /login 직접 접속)는 도서 데이터 화면으로 이동
-                                                .defaultSuccessUrl("/admin/book-data", false)
+                                                .loginPage("/login")
+                                                // 로그인 폼의 지점 코드를 details로 넘겨 CustomAuthenticationProvider에서 계정 센터와 대조
+                                                .authenticationDetailsSource(request -> request.getParameter("centerCode"))
+                                                // 세션 만료 등으로 튕겨나간 경우 원래 요청했던 페이지로 복귀, 그 외(예: /login 직접 접속)는 루트(/)로 보내 센터별 첫 화면으로 분기
+                                                .defaultSuccessUrl("/", false)
                                                 .permitAll())
                                 .logout(logout -> logout
                                                 .logoutSuccessUrl("/login")

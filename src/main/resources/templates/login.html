@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko" xmlns:th="http://www.thymeleaf.org">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>호호책방 로그인</title>
+  <link rel="icon" th:href="@{/images/icons/icon-192.png}" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+  <link rel="stylesheet" th:href="@{/css/login.css}" />
+</head>
+
+<body>
+  <main class="login-wrap">
+    <img class="login-logo" th:src="@{/images/icons/bookstore_logo.png}" alt="호호책방" />
+
+    <form class="login-form" id="loginForm" th:action="@{/login}" method="post">
+      <div class="login-field">
+        <i class="fa-solid fa-building" aria-hidden="true"></i>
+        <input type="text" name="centerCode" id="centerCode" placeholder="지점 코드를 입력해 주세요."
+          autocomplete="organization" required />
+      </div>
+      <div class="login-field">
+        <i class="fa-solid fa-user" aria-hidden="true"></i>
+        <input type="text" name="username" id="username" placeholder="ID를 입력해 주세요."
+          autocomplete="username" required />
+      </div>
+      <div class="login-field">
+        <i class="fa-solid fa-lock" aria-hidden="true"></i>
+        <input type="password" name="password" id="password" placeholder="비밀번호를 입력해 주세요."
+          autocomplete="current-password" required />
+      </div>
+
+      <label class="login-remember">
+        <input type="checkbox" id="rememberId" />
+        <span class="login-check" aria-hidden="true"><i class="fa-solid fa-check"></i></span>
+        아이디 저장
+      </label>
+
+      <p class="login-error" th:if="${errorMessage}" th:text="${errorMessage}">로그인에 실패했습니다.</p>
+
+      <button type="submit" class="login-btn">로그인 <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></button>
+    </form>
+  </main>
+  <script th:src="@{/js/login.js}"></script>
+</body>
+
+</html>

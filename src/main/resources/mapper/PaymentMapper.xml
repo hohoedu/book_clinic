@@ -152,6 +152,9 @@
         FROM erp_bookstore_payment
         WHERE status = 'READY'
           AND requested_at &lt; #{olderThan}
+          -- 자동결제 행은 빌링 상점(MID)에서 승인돼 일반 MID로 조회하면 "거래 없음"이 나온다.
+          -- 그걸 미승인으로 읽고 닫으면 결제된 건이 사라진다 — 자동결제 쪽(SubscriptionService)이 따로 확인한다
+          AND subscription_id IS NULL
     </select>
 
     <!--

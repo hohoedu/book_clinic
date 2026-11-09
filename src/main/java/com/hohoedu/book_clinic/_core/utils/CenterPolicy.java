@@ -21,6 +21,11 @@ public class CenterPolicy {
                 && HQ_CENTER_CODE.equals(userDetails.getLoginUser().getCenterCode());
     }
 
+    /** 로그인 후 첫 화면 — 본사는 도서 데이터 관리, 그 외 센터는 실시간 모니터링 */
+    public static String homeUrl(CustomUserDetails userDetails) {
+        return isHq(userDetails) ? "/admin/book-data" : "/admin/monitor/live-view";
+    }
+
     /** 본사 직원이 아니면 403 — 본사 전용 쓰기 API 진입부에서 호출한다 */
     public static void assertHq(CustomUserDetails userDetails) {
         if (!isHq(userDetails)) {

@@ -36,6 +36,7 @@ public class ReservationController {
     private static final String SESSION_STUDENT_ID = "studentId";
 
     private final ReservationService reservationService;
+    private final AutoReservationService autoReservationService;
     private final MonitorService monitorService;
 
     /** 예약 가능한 슬롯 목록. fromDate/toDate 생략 시 오늘부터 4주 */
@@ -100,6 +101,39 @@ public class ReservationController {
         // 어차피 모니터링 화면의 날짜 필터에 안 걸려서 그냥 무해하게 넘어간다.
         reservations.forEach(r -> monitorService.syncReservationCard(r.getReservationId()));
         return ResponseEntity.ok(ApiUtils.success(reservations));
+    }
+
+    // ── 매주 자동 예약 (2026-10-27) ──────────────────────────────────────
+
+    /** 내 자동 예약 목록 — state: ON / OFF / NO_PASS(이용권이 없어 멈춤) */
+    @PostMapping("/auto/list")
+    public ResponseEntity<?> autoList(HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        return ResponseEntity.ok(ApiUtils.success(autoReservationService.findMine(studentId)));
+    }
+
+    /** 자동 예약 켜기 — 요일·회차를 저장하고 시작일부터 열린 날짜를 바로 예약한다. 날짜별 결과를 돌려준다 */
+    @PostMapping("/auto")
+    public ResponseEntity<?> autoRegister(@RequestBody ReservationReqDTO.AutoRegisterReqDTO reqDTO,
+                                          HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        return ResponseEntity.ok(ApiUtils.success(autoReservationService.register(studentId,
+                reqDTO.getDayOfWeek(), reqDTO.getSeq(), reqDTO.getStartDate())));
+    }
+
+    /** 자동 예약 다시 켜기 — 오늘부터 다시 연다 */
+    @PostMapping("/auto/on")
+    public ResponseEntity<?> autoOn(@RequestBody ReservationReqDTO.AutoToggleReqDTO reqDTO, HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        return ResponseEntity.ok(ApiUtils.success(autoReservationService.turnOn(studentId, reqDTO.getAutoId())));
+    }
+
+    /** 자동 예약 끄기 — 이미 잡힌 예약은 그대로 둔다 */
+    @PostMapping("/auto/off")
+    public ResponseEntity<?> autoOff(@RequestBody ReservationReqDTO.AutoToggleReqDTO reqDTO, HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        autoReservationService.turnOff(studentId, reqDTO.getAutoId());
+        return ResponseEntity.ok(ApiUtils.success("자동 예약을 껐습니다."));
     }
 
     private LocalDate parseDate(String value) {

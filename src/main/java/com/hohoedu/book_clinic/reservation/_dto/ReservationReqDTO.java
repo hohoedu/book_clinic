@@ -46,6 +46,23 @@ public class ReservationReqDTO {
         private List<Long> slotInstanceIds;
     }
 
+    /**
+     * 매주 자동 예약 켜기(2026-10-27) — 요일(1=월~7=일)·회차, 시작일(yyyy-MM-dd, 앱에서 고른 날짜).
+     * 시작일이 비었거나 과거면 오늘부터 연다.
+     */
+    @Data
+    public static class AutoRegisterReqDTO {
+        private Integer dayOfWeek;
+        private Integer seq;
+        private LocalDate startDate;
+    }
+
+    /** 자동 예약 켜기/끄기 — 내 패턴 id */
+    @Data
+    public static class AutoToggleReqDTO {
+        private Integer autoId;
+    }
+
     // ── 센터 직원 대리 예약 ──────────────────────────────────────────────
     // 대상 학생을 세션이 아니라 요청 본문으로 직접 지정한다는 점만 학생용과 다르다.
     // 뒤에서 부르는 ReservationService 로직은 완전히 동일하다(직원이라고 정원 우선권을 갖지 않는다).

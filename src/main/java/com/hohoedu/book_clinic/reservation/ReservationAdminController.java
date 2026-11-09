@@ -55,6 +55,7 @@ public class ReservationAdminController {
     @GetMapping("/summary")
     public ResponseEntity<?> summary(@RequestParam("date") String date,
                                      @AuthenticationPrincipal CustomUserDetails userDetails) {
+                                    
         String centerCode = centerAccessGuard.requireCenterCode(userDetails);
         return ResponseEntity.ok(ApiUtils.success(
                 reservationService.findSlotSummary(centerCode, LocalDate.parse(date))));

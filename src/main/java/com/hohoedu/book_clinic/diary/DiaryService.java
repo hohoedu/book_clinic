@@ -38,8 +38,8 @@ public class DiaryService {
     private final MonitorService monitorService;
 
     public DiaryRespDTO.DiaryViewRespDTO getDiaryView(LocalDate date, String centerCode,
-                                                      String timeSlot, String keyword) {
-        List<DiaryRespDTO.RowDTO> rows = diaryRepository.findDiaryRows(date, centerCode, timeSlot, keyword);
+                                                      String timeSlot, String keyword, String teacherCode) {
+        List<DiaryRespDTO.RowDTO> rows = diaryRepository.findDiaryRows(date, centerCode, timeSlot, keyword, teacherCode);
 
         Map<String, List<DiaryRespDTO.BookDTO>> booksByStudent = diaryRepository.findDiaryBooks(date, centerCode)
                 .stream()

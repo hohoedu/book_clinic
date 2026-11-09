@@ -1,6 +1,7 @@
 document.addEventListener("DOMContentLoaded", initSidebar);
 document.addEventListener("DOMContentLoaded", hideHqOnlyMenus);
 document.addEventListener("DOMContentLoaded", initDemoReset);
+document.addEventListener("DOMContentLoaded", initSidebarLogout);
 
 /* 로그인 직원 정보 — 사이드바 기능들이 같이 쓰므로 한 번만 조회한다. 실패하면 null */
 let sidebarMePromise = null;
@@ -24,6 +25,25 @@ async function hideHqOnlyMenus() {
   const me = await loadSidebarMe();
   if (me && me.centerCode === "PUS001") return;
   hqOnly.forEach((el) => el.remove());
+}
+
+/* 사이드바 하단 로그아웃 — 성공/실패와 관계없이 로그인 화면으로 보낸다 */
+function initSidebarLogout() {
+  const btn = document.getElementById("sidebarLogoutBtn");
+  if (!btn) return;
+
+  btn.addEventListener("click", async () => {
+    try {
+      const token = document.cookie.match(/(?:^|; )XSRF-TOKEN=([^;]*)/);
+      await fetch("/logout", {
+        method: "POST",
+        headers: token ? { "X-XSRF-TOKEN": decodeURIComponent(token[1]) } : {},
+      });
+    } catch (error) {
+      console.error(error);
+    }
+    window.location.href = "/login";
+  });
 }
 
 /* 시연 데이터 초기화 (2026-10-01) — 시연 관리자 계정에서만 버튼을 보인다.

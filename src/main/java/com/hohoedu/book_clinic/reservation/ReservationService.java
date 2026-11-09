@@ -12,7 +12,9 @@ import java.util.stream.Collectors;
 
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
 import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
@@ -106,7 +108,8 @@ public class ReservationService {
         List<ReservationRespDTO.ReservationItemDTO> reservations =
                 repository.findMyReservations(studentId, KstClock.today());
         for (ReservationRespDTO.ReservationItemDTO r : reservations) {
-            r.setCancelable("RESERVED".equals(r.getStatus()) && r.getStartsAt() != null
+            // 결제대기(PAY_WAIT)도 학생이 스스로 풀 수 있다 — 이용권을 깎지 않은 예약이라 자리만 반납된다
+            r.setCancelable(("RESERVED".equals(r.getStatus()) || "PAY_WAIT".equals(r.getStatus())) && r.getStartsAt() != null
                     && !isPastStudentDeadline(r.getStartsAt()));
         }
         return reservations;
@@ -261,7 +264,7 @@ public class ReservationService {
             throw new Exception400("예약할 회차를 선택해주세요.");
         }
         Student student = requireStudent(studentId);
-        return reserveOne(student, slotInstanceId, studentId, "STUDENT");
+        return reserveOne(student, slotInstanceId, studentId, "STUDENT", false);
     }
 
     /**
@@ -276,7 +279,7 @@ public class ReservationService {
             throw new Exception400("예약할 회차를 선택해주세요.");
         }
         Student student = requireStudent(studentId);
-        return reserveOne(student, slotInstanceId, adminUserId, "ADMIN");
+        return reserveOne(student, slotInstanceId, adminUserId, "ADMIN", false);
     }
 
     /**
@@ -317,6 +320,13 @@ public class ReservationService {
 
         int updated = repository.cancelReservation(reservationId, studentId, reason);
         if (updated == 0) {
+            // 결제대기(2026-10-27) — 이용권을 깎지 않은 예약이라 자리만 반납하고 끝낸다
+            if (repository.cancelPayWait(reservationId, studentId, reason) > 0) {
+                repository.decrementReservedCount(slotInstanceId);
+                repository.insertLog(reservationId, "PAY_WAIT", "CANCELED", changedBy, changedByRole, reason);
+                log.info("[예약] 결제대기 취소 — reservationId={}, studentId={}", reservationId, studentId);
+                return;
+            }
             throw new Exception400("이미 취소되었거나 처리할 수 없는 예약입니다.");
         }
 
@@ -460,11 +470,137 @@ public class ReservationService {
 
         List<ReservationRespDTO.ReservationItemDTO> reserved = new ArrayList<>();
         for (Long slotInstanceId : ordered) {
-            reserved.add(reserveOne(student, slotInstanceId, studentId, "STUDENT"));
+            reserved.add(reserveOne(student, slotInstanceId, studentId, "STUDENT", false));
         }
 
         log.info("[예약] 4주 일괄 확정 — studentId={}, slotInstanceIds={}", studentId, ordered);
         return reserved;
+    }
+
+    // ── 매주 자동 예약 / 결제대기 (2026-10-27) ──────────────────────────
+
+    /** 이용권이 없어 예약이 막혔을 때 — 자동 예약이 다른 실패(마감 등)와 구분하려고 따로 둔다 */
+    static class NoUsablePassException extends Exception400 {
+        NoUsablePassException(String message) {
+            super(message);
+        }
+    }
+
+    /**
+     * 자동 예약 1건 — AutoReservationService(새벽 배치·결제 직후·패턴 등록)가 부른다.
+     *
+     * 예외를 던지지 않고 결과로 돌려준다. 배치는 학생 수백 명의 날짜를 이어서 처리하므로 한 건의
+     * 실패(마감, 하루 상한)가 흐름을 끊으면 안 되기 때문이다. 대신 실패한 건은 반드시 롤백해야
+     * 한다 — reserveOne은 이 메서드 안의 직접 호출이라 예외가 프록시를 거치지 않으므로, 잡은 자리에서
+     * rollback-only를 세운다(안 그러면 예약 INSERT와 정원 증가가 커밋된다).
+     *
+     * REQUIRES_NEW인 이유: 결제 확정 직후(AFTER_COMMIT) 이벤트에서도 불리는데, 그 시점의 기존
+     * 트랜잭션은 이미 커밋돼 다시 커밋되지 않는다 — 새 트랜잭션을 열어야 실제로 저장된다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public ReservationRespDTO.AutoAttemptDTO reserveAuto(String studentId, Long slotInstanceId, boolean holdIfNoPass) {
+        Student student = studentRepository.findById(studentId);
+        if (student == null) {
+            return ReservationRespDTO.AutoAttemptDTO.of(AUTO_FAILED, null, "학생 정보를 찾을 수 없습니다.");
+        }
+        try {
+            ReservationRespDTO.ReservationItemDTO item =
+                    reserveOne(student, slotInstanceId, null, "SYSTEM", holdIfNoPass);
+            String outcome = "PAY_WAIT".equals(item.getStatus()) ? AUTO_HELD : AUTO_RESERVED;
+            return ReservationRespDTO.AutoAttemptDTO.of(outcome, item.getReservationId(), null);
+        } catch (NoUsablePassException e) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return ReservationRespDTO.AutoAttemptDTO.of(AUTO_NO_PASS, null, e.getMessage());
+        } catch (Exception400 | Exception404 e) {
+            TransactionAspectSupport.currentTransactionStatus().setRollbackOnly();
+            return ReservationRespDTO.AutoAttemptDTO.of(AUTO_FAILED, null, e.getMessage());
+        }
+    }
+
+    public static final String AUTO_RESERVED = "RESERVED";
+    public static final String AUTO_HELD = "HELD";
+    public static final String AUTO_ALREADY = "ALREADY";
+    public static final String AUTO_NO_PASS = "NO_PASS";
+    public static final String AUTO_FAILED = "FAILED";
+
+    /**
+     * 결제대기 확정 — 이용권이 새로 생긴 직후 부른다. 앞 회차부터 1회씩 깎으며 RESERVED로 바꾸고,
+     * 이용권이 모자라면 거기서 멈춘다(남은 결제대기는 다음 결제를 기다린다).
+     *
+     * @return 확정된 건수
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public int confirmPayWait(String studentId) {
+        List<ReservationRespDTO.ReservationItemDTO> waiting = repository.findPayWaitByStudent(studentId);
+        if (waiting.isEmpty()) {
+            return 0;
+        }
+        // reserveOne과 같은 학생 행 락 — 같은 학생의 예약·취소와 차감 순서가 엇갈리지 않게 한다
+        repository.lockStudentForReservation(studentId);
+        int confirmed = 0;
+        for (ReservationRespDTO.ReservationItemDTO r : waiting) {
+            if (!passService.consumeForReservation(studentId, "BOOK", r.getReservationId(), r.getServiceDate())) {
+                break;
+            }
+            if (repository.transitionStatus(r.getReservationId(), "PAY_WAIT", "RESERVED") == 0) {
+                // 그 사이 취소된 건 — 방금 깎은 1회를 되돌린다
+                passService.restoreForReservation(r.getReservationId());
+                continue;
+            }
+            repository.insertLog(r.getReservationId(), "PAY_WAIT", "RESERVED", null, "SYSTEM", "결제 완료로 확정");
+            confirmed++;
+        }
+        if (confirmed > 0) {
+            log.info("[예약] 결제대기 확정 — studentId={}, {}건", studentId, confirmed);
+        }
+        return confirmed;
+    }
+
+    /**
+     * 결제대기 해제 — 자동구매가 중지·해지됐을 때 잡아둔 자리를 모두 반납한다.
+     *
+     * @return 해제된 예약(안내 문구용)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<ReservationRespDTO.ReservationItemDTO> releasePayWait(String studentId, String reason) {
+        List<ReservationRespDTO.ReservationItemDTO> released = new ArrayList<>();
+        for (ReservationRespDTO.ReservationItemDTO r : repository.findPayWaitByStudent(studentId)) {
+            if (releaseOne(studentId, r, reason)) {
+                released.add(r);
+            }
+        }
+        return released;
+    }
+
+    /**
+     * 시작이 임박한 결제대기 해제 — 결제대기로는 입실할 수 없으니 수업 직전까지 자리를 막아둘 이유가 없다.
+     * 재시도 일정(최대 9일)이 수업 30일 전에 끝나므로 정상 흐름에서는 걸리는 건이 없어야 한다.
+     *
+     * @return 해제된 예약(studentId 포함)
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public List<ReservationRespDTO.ReservationItemDTO> releasePayWaitStartingBefore(LocalDateTime before, String reason) {
+        List<ReservationRespDTO.ReservationItemDTO> released = new ArrayList<>();
+        for (ReservationRespDTO.ReservationItemDTO r : repository.findPayWaitStartingBefore(before)) {
+            if (releaseOne(r.getStudentId(), r, reason)) {
+                released.add(r);
+            }
+        }
+        return released;
+    }
+
+    private boolean releaseOne(String studentId, ReservationRespDTO.ReservationItemDTO r, String reason) {
+        if (repository.cancelPayWait(r.getReservationId(), studentId, reason) == 0) {
+            return false;
+        }
+        repository.decrementReservedCount(r.getSlotInstanceId());
+        repository.insertLog(r.getReservationId(), "PAY_WAIT", "CANCELED", null, "SYSTEM", reason);
+        return true;
+    }
+
+    /** 자동 예약 안내 문구용 — "11월 25일 화요일 2회차" */
+    public String slotLabelOf(LocalDate date, Integer seq) {
+        return slotLabel(date, seq);
     }
 
     // ── 내부 ─────────────────────────────────────────────────────────────
@@ -476,7 +612,12 @@ public class ReservationService {
      */
     private static final int MAX_SLOTS_PER_DAY = 4;
 
-    private ReservationRespDTO.ReservationItemDTO reserveOne(Student student, Long slotInstanceId, String changedBy, String changedByRole) {
+    /**
+     * @param holdIfNoPass 이용권이 없을 때 예외 대신 결제대기(PAY_WAIT)로 자리만 잡는다 — 자동구매 학생의
+     *                     자동 예약 전용(2026-10-27). 그 밖의 경로는 모두 false다.
+     */
+    private ReservationRespDTO.ReservationItemDTO reserveOne(Student student, Long slotInstanceId, String changedBy,
+                                                            String changedByRole, boolean holdIfNoPass) {
         // 하루 2회차 상한의 동시성 방어(2026-08-28) — (student_id, service_date) 유니크 인덱스를 없앤
         // 대신 이 학생 행을 UPDLOCK으로 잡아, 서로 다른 슬롯으로 거의 동시에 들어오는 같은 학생의
         // 요청을 DB가 한 건씩 직렬 처리하게 만든다(아래 countOtherReservedOnDate 체크가 유효해진다).
@@ -549,11 +690,19 @@ public class ReservationService {
         // 두 요청이 동시에 깎아 마이너스로 내려가는 일은 없다(decrementRemain의 조건도 이중 방어).
         if (!passService.consumeForReservation(student.getStudentId(), "BOOK",
                 command.getReservationId(), slot.getServiceDate())) {
-            throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq())
+            if (holdIfNoPass) {
+                // 결제대기(2026-10-27) — 자동구매 카드 결제가 실패한 사이 자리를 다른 학생에게 뺏기지 않게
+                // 정원만 차지해 둔다. 결제가 되면 confirmPayWait가 차감하며 RESERVED로 바꾼다.
+                repository.transitionStatus(command.getReservationId(), "RESERVED", "PAY_WAIT");
+                repository.insertLog(command.getReservationId(), null, "PAY_WAIT", changedBy, changedByRole, "이용권 결제대기");
+                return repository.findReservationById(command.getReservationId());
+            }
+            throw new NoUsablePassException(slotLabel(slot.getServiceDate(), slot.getSeq())
                     + " — 해당 날짜에 쓸 수 있는 이용권이 없습니다. 결제 후 예약해주세요.");
         }
 
-        repository.insertLog(command.getReservationId(), null, "RESERVED", changedBy, changedByRole, null);
+        repository.insertLog(command.getReservationId(), null, "RESERVED", changedBy, changedByRole,
+                "SYSTEM".equals(changedByRole) ? "자동 예약" : null);
         return repository.findReservationById(command.getReservationId());
     }
 

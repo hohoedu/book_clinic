@@ -36,11 +36,14 @@ public class DiaryController {
     public ResponseEntity<?> list(@RequestParam(value = "date", required = false) String date,
                                   @RequestParam(value = "timeSlot", required = false) String timeSlot,
                                   @RequestParam(value = "keyword", required = false) String keyword,
+                                  @RequestParam(value = "mine", defaultValue = "false") boolean mine,
                                   @AuthenticationPrincipal CustomUserDetails userDetails) {
         LocalDate targetDate = date == null || date.isBlank() ? KstClock.today() : LocalDate.parse(date);
         String centerCode = userDetails.getLoginUser().getCenterCode();
+        // 담당 판정 기준은 로그인 직원의 user_code (erp_teacher_assign.assign_*_teacher 와 같은 값)
+        String teacherCode = mine ? userDetails.getLoginUser().getUserCode() : null;
         return ResponseEntity.ok(ApiUtils.success(
-                diaryService.getDiaryView(targetDate, centerCode, timeSlot, keyword)));
+                diaryService.getDiaryView(targetDate, centerCode, timeSlot, keyword, teacherCode)));
     }
 
     /** 독서태도·기타 전달사항 일괄 저장 — 상단 "저장" 버튼(바뀐 행만 담겨 온다) */

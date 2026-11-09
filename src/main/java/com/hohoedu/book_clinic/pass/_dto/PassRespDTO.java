@@ -18,17 +18,21 @@ public class PassRespDTO {
         private String centerCode;
         private int productId;
         private String serviceCode;
-        /** PG / SEODANG / FREE */
+        /** PG / SEODANG / FREE / COUPON */
         private String source;
-        /** PG=payment.order_no, SEODANG=all_pass 청구 bill_id */
+        /** PG=payment.order_no, SEODANG=all_pass 청구 bill_id, COUPON=원래 pass_id */
         private String refNo;
         private String billingYm;
         private LocalDate validFrom;
         private LocalDate validUntil;
+        /** 서비스 제공기간 마지막 날(결제일 + 90일). 앱 결제분만 있고 서당/무상/쿠폰은 null */
+        private LocalDate serviceUntil;
         private int totalCount;
         private int remainCount;
         private LocalDateTime grantedAt;
         private LocalDateTime revokedAt;
+        /** 쿠폰으로 전환(소멸)된 시각. null이 아니면 잔여는 쿠폰 행으로 옮겨졌다 */
+        private LocalDateTime convertedAt;
     }
 
     /**

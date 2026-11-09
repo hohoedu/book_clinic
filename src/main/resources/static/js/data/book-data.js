@@ -139,12 +139,11 @@ function hasAdvancedLevel(schoolyear) {
 /*
  * 학년+레벨별 고정 문제 수
  * - 기본(01): 초1~초4는 12문제, 초5·초6은 15문제
- * - 심화(02): 초1·초2는 6문제(어휘3+문법3), 초3·초4는 10문제(어휘5+문법5), 초5·초6은 12문제(어휘6+문법6)
+ * - 심화(02): 초1·초2는 6문제(어휘3+문법3), 초3~초6은 10문제(어휘5+문법5) — 초5·초6도 12→10으로 통일(2026-10-27)
  */
 function requiredQuestionCount(schoolyear, level) {
   if (level === "02") {
-    if (schoolyear === "01" || schoolyear === "02") return 6;
-    return schoolyear === "03" || schoolyear === "04" ? 10 : 12;
+    return schoolyear === "01" || schoolyear === "02" ? 6 : 10;
   }
   return schoolyear === "05" || schoolyear === "06" ? 15 : 12;
 }

@@ -32,7 +32,9 @@
     </nav>
 
     <div class="sidebar-bottom">
-      <button class="quick-btn green">메인으로</button>
+      <button type="button" class="quick-btn logout" id="sidebarLogoutBtn" title="로그아웃">
+        <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
       <!-- 시연 데이터 초기화 — 시연 관리자 계정에서만 sidebar.js가 보이게 한다 -->
       <button type="button" class="quick-btn pink" id="demoResetBtn" title="시연 데이터 초기화" hidden>초기화</button>
     </div>
@@ -51,7 +53,8 @@
       <a th:href="@{/admin/operation/schedule}">운영 스케줄</a>
       <a th:href="@{/admin/operation/student-view}">학생 정보</a>
       <a th:href="@{/admin/payment/history-view}">결제 내역</a>
-      <a th:href="@{/admin/payment/review-view}">결제 이상 건</a>
+      <!-- 센터 구분 없이 전체 센터 건이 조회돼 메뉴에서 숨김(2026-11-09) — 센터 필터 적용 후 복구 -->
+      <a th:href="@{/admin/payment/review-view}" style="display: none;">결제 이상 건</a>
     </div>
 
     <div class="sub-menu" data-sub="monitor">

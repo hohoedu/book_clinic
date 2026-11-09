@@ -25,6 +25,7 @@
     ATTENDED: { label: "이용 완료", cls: "status-used" },
     CANCELED: { label: "예약 취소", cls: "status-cancelled" },
     NOSHOW: { label: "결석", cls: "status-absent" },
+    PAY_WAIT: { label: "결제대기", cls: "status-complete" },
   };
 
   function getCsrfToken() {

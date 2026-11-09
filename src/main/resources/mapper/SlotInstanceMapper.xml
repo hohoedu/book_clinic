@@ -78,7 +78,7 @@
         JOIN erp_bookstore_reservation r ON r.slot_instance_id = si.slot_instance_id
         WHERE si.center_code = #{centerCode}
           AND si.service_date BETWEEN #{fromDate} AND #{toDate}
-          AND r.status = 'RESERVED'
+          AND r.status IN ('RESERVED', 'PAY_WAIT')
     </select>
 
     <!--

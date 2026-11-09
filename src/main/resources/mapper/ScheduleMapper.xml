@@ -94,7 +94,7 @@
         WHERE si.center_code = #{centerCode}
           AND si.service_date &gt;= #{fromDate}
           AND ((DATEDIFF(day, '19000101', si.service_date) % 7) + 1) = #{dayOfWeek}
-          AND r.status = 'RESERVED'
+          AND r.status IN ('RESERVED', 'PAY_WAIT')
     </select>
 
     <insert id="archiveSchedule">

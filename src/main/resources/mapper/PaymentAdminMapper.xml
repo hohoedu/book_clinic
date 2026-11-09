@@ -47,6 +47,7 @@
             WHERE p.student_id   = st.student_id
               AND p.service_code = #{serviceCode}
               AND p.billing_ym   = #{billingYm}
+              AND p.source      &lt;&gt; 'COUPON'   <!-- 쿠폰은 원래 이용권의 billing_ym을 물려받아 그 달 결제분으로 잘못 잡힌다(2026-10-27) -->
             ORDER BY CASE WHEN p.revoked_at IS NULL THEN 0 ELSE 1 END, p.granted_at DESC
         ) ps
         LEFT JOIN erp_bookstore_product pr ON pr.product_id = ps.product_id

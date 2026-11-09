@@ -6,6 +6,8 @@ IF OBJECT_ID('erp_bookstore_diary',                 'U') IS NOT NULL DROP TABLE 
 IF OBJECT_ID('erp_bookstore_reading_log',           'U') IS NOT NULL DROP TABLE erp_bookstore_reading_log;
 IF OBJECT_ID('erp_bookstore_clinic_session',        'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_session;
 IF OBJECT_ID('erp_bookstore_clinic_reservation',    'U') IS NOT NULL DROP TABLE erp_bookstore_clinic_reservation;
+IF OBJECT_ID('erp_bookstore_auto_notice',           'U') IS NOT NULL DROP TABLE erp_bookstore_auto_notice;
+IF OBJECT_ID('erp_bookstore_auto_reservation',      'U') IS NOT NULL DROP TABLE erp_bookstore_auto_reservation;
 IF OBJECT_ID('erp_bookstore_reservation_log',       'U') IS NOT NULL DROP TABLE erp_bookstore_reservation_log;
 IF OBJECT_ID('erp_bookstore_reservation',           'U') IS NOT NULL DROP TABLE erp_bookstore_reservation;
 IF OBJECT_ID('erp_bookstore_slot_instance',         'U') IS NOT NULL DROP TABLE erp_bookstore_slot_instance;
@@ -773,6 +775,7 @@ CREATE TABLE erp_bookstore_pass (
     service_code VARCHAR(10)   NOT NULL,       -- 상품의 service_code 스냅샷. "이 학생 도서 잔여횟수"가 가장 잦은
                                                -- 조회라 매번 product를 조인하지 않으려고 값으로도 복사해 둔다
     source       VARCHAR(10)   NOT NULL,       -- PG(앱 카드결제) / SEODANG(서당 일괄청구) / FREE(본사 무상부여)
+                                               -- / COUPON(서비스 제공기간 종료 시 잔여를 옮긴 쿠폰, ref_no=원래 pass_id)
     ref_no       VARCHAR(40),                  -- 이 횟수가 발생한 근거의 식별자. source에 따라 가리키는 곳이 다르다.
                                                -- PG=erp_bookstore_payment.order_no / SEODANG=all_pass 청구 bill_id.
                                                -- 외부 시스템 키가 섞여 있어 FK를 걸 수 없다
@@ -787,7 +790,7 @@ CREATE TABLE erp_bookstore_pass (
     -- 서당 일괄청구분은 여전히 그 달의 1일~말일로 채워진다 — 두 체계가 공존하므로
     -- 주기를 billing_ym에서 역산하지 않고 이 두 컬럼을 단일 진실로 삼는다.
     valid_from   DATE,
-    -- 기간의 마지막 날(앱 결제분은 valid_from + 89일, 서당분은 말일).
+    -- 기간의 마지막 날(앱 결제분은 valid_from + 90일 — 2026-10-27 "90일 당일까지"로 변경, 서당분은 말일).
     -- 오늘이 이 범위 밖이면 remain_count가 남아 있어도 못 쓴다 — 이월 없이 소멸한다는 정책.
     valid_until  DATE,
     total_count  SMALLINT      NOT NULL,       -- 지급된 총 횟수 (product.total_count 스냅샷)
@@ -817,6 +820,22 @@ IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_
 
 IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_until' AND is_nullable = 0)
     ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_until DATE NULL;
+
+-- 마이그레이션 (2026-10-27, 서비스 제공기간 + 쿠폰 전환) — patch-261027-pass-service-period.sql과 같은 내용.
+-- service_until: 서비스 제공기간 마지막 날 = 결제일 + 90일(당일 포함). 이 날까지만 이용권으로 예약할 수 있고,
+--   이 날이 지나면 남은 횟수는 소멸하면서 같은 수만큼 쿠폰(source='COUPON', ref_no=원래 pass_id)으로 바뀐다.
+--   유효기간(valid_from~valid_until)과 별개다 — 유효기간이 더 늦게 끝나는 만큼이 쿠폰 기간이 된다.
+--   앱 결제분만 채운다. 서당/무상분과 쿠폰 행은 NULL(기간 제한 없이 valid_from~valid_until만 본다).
+-- converted_at: 쿠폰으로 전환된 시각. NULL이 아니면 이 이용권은 소멸했고 잔여는 쿠폰 행에 있다.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'service_until')
+    ALTER TABLE erp_bookstore_pass ADD service_until DATE NULL;
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'converted_at')
+    ALTER TABLE erp_bookstore_pass ADD converted_at DATETIME2 NULL;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_service_until' AND object_id = OBJECT_ID('erp_bookstore_pass'))
+    CREATE INDEX IX_pass_service_until ON erp_bookstore_pass (service_until)
+        WHERE converted_at IS NULL AND service_until IS NOT NULL;
 
 -- 출석할 때마다 타는 경로 — 살아있는 이용권만 보면 되므로 필터드 인덱스로 좁힌다.
 -- 여러 달치가 겹칠 수 있게 되면서(월 단위 유효기간 도입) 소진 순서 기준이 granted_at(먼저 산 것)에서
@@ -1540,14 +1559,14 @@ CREATE TABLE erp_bookstore_reservation (
     -- 인덱스로 걸기 위해 필요하다 — 유니크 인덱스는 조인한 컬럼에 걸 수 없어서, 날짜가 예약 행
     -- 자체에 있어야만 UX_reservation_student_date가 성립한다. 값은 항상 슬롯에서 복사한다.
     service_date     DATE          NOT NULL,
-    status           VARCHAR(12)   NOT NULL DEFAULT 'RESERVED',  -- RESERVED/CANCELED/ATTENDED/NOSHOW
+    status           VARCHAR(12)   NOT NULL DEFAULT 'RESERVED',  -- RESERVED/CANCELED/ATTENDED/NOSHOW/PAY_WAIT(결제대기, 2026-10-27)
     -- 예약방법(2026-08-19) — 누가 등록했는지. STUDENT/PARENT=학생 앱 직접 예약, ADMIN=센터 직원 대리
     -- 등록. 생성 시점에 고정해서 저장한다(예약 현황 화면의 "직접 예약"/"센터 예약" 표시가 이 값을 그대로 씀).
     channel          VARCHAR(20)   NOT NULL DEFAULT 'STUDENT',
     reserved_at      DATETIME2     DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     canceled_at      DATETIME2,               -- 취소 일시(KST)
     cancel_reason    VARCHAR(200),            -- 휴무 지정에 의한 관리자 취소 사유 등
-    CONSTRAINT CK_reservation_status CHECK (status IN ('RESERVED', 'CANCELED', 'ATTENDED', 'NOSHOW')),
+    CONSTRAINT CK_reservation_status CHECK (status IN ('RESERVED', 'CANCELED', 'ATTENDED', 'NOSHOW', 'PAY_WAIT')),
     CONSTRAINT CK_reservation_channel CHECK (channel IN ('STUDENT', 'PARENT', 'ADMIN', 'SYSTEM')),
     FOREIGN KEY (slot_instance_id) REFERENCES erp_bookstore_slot_instance (slot_instance_id)
     -- 예약이 있으면 슬롯 삭제 불가 (기본 RESTRICT)
@@ -1556,7 +1575,7 @@ CREATE TABLE erp_bookstore_reservation (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_reservation_slot_student' AND object_id = OBJECT_ID('erp_bookstore_reservation'))
     CREATE UNIQUE INDEX UX_reservation_slot_student
         ON erp_bookstore_reservation (slot_instance_id, student_id)
-        WHERE status = 'RESERVED';  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스)
+        WHERE status IN ('RESERVED', 'PAY_WAIT');  -- 동일 회차 중복 예약 차단. 취소 후 재예약 가능 (필터링된 인덱스, 결제대기 포함 2026-10-27)
 
 -- 2026-08-28: "하루 한 회차" → "하루 두 회차"로 정책 변경. (student_id, service_date) 유니크로는
 -- "2건까지"를 표현할 수 없어 이 인덱스를 제거한다. 하루 2회차 상한은 이제 응용 계층에서 강제한다
@@ -1582,3 +1601,32 @@ CREATE TABLE erp_bookstore_reservation_log (
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_reservation_log_reservation' AND object_id = OBJECT_ID('erp_bookstore_reservation_log'))
     CREATE INDEX IX_reservation_log_reservation
         ON erp_bookstore_reservation_log (reservation_id, changed_at);  -- 예약 1건의 전체 이력 조회 경로
+
+-- ── 매주 자동 예약 패턴 (2026-10-27) — 학생별 "매주 ○요일 ○회차" ─────
+IF OBJECT_ID('erp_bookstore_auto_reservation', 'U') IS NULL
+CREATE TABLE erp_bookstore_auto_reservation (
+    auto_id       INT IDENTITY(1,1) PRIMARY KEY,
+    student_id    VARCHAR(100) NOT NULL,   -- erp_student.student_id (값으로만 연결)
+    day_of_week   TINYINT      NOT NULL,   -- ISO 요일 1=월 ~ 7=일
+    seq           TINYINT      NOT NULL,   -- 회차 번호
+    enabled       BIT          NOT NULL DEFAULT 1,
+    filled_until  DATE,                    -- 여기까지는 자동 예약을 시도했다. 다음 시도는 이 다음 날부터
+    no_pass_at    DATE,                    -- 이용권이 없어 멈춘 날. NULL이면 정상. 안내를 한 번만 보내는 기준
+    created_at    DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    updated_at    DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    CONSTRAINT UX_auto_reservation UNIQUE (student_id, day_of_week, seq)
+);
+
+-- ── 자동 예약 안내 대기열 (2026-10-27) — 새벽 배치 결과를 쌓아뒀다가 오전 10시에 학생별로 묶어 푸시 ──
+IF OBJECT_ID('erp_bookstore_auto_notice', 'U') IS NULL
+CREATE TABLE erp_bookstore_auto_notice (
+    notice_id   INT IDENTITY(1,1) PRIMARY KEY,
+    student_id  VARCHAR(100) NOT NULL,
+    message     VARCHAR(200) NOT NULL,     -- 안내 한 줄. 발송 시 학생별로 줄바꿈으로 묶는다
+    created_at  DATETIME2    NOT NULL DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
+    sent_at     DATETIME2                  -- NULL이면 아직 안 보냄
+);
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_auto_notice_unsent' AND object_id = OBJECT_ID('erp_bookstore_auto_notice'))
+    CREATE INDEX IX_auto_notice_unsent ON erp_bookstore_auto_notice (student_id, notice_id)
+        WHERE sent_at IS NULL;

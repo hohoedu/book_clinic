@@ -28,6 +28,10 @@ import lombok.extern.slf4j.Slf4j;
  * SubscriptionTestController가 이 메서드를 직접 부르기 때문에 스케줄만 떼면 수동 호출로
  * 청구가 나갈 수 있다. 다시 켤 때는 상수를 true로 바꾸고 @Scheduled를 되살리면 된다.
  *
+ * [2026-10-27] "잔여 2회" 대신 "자동 예약이 이용권 없이 막힌 순간(잔여 0)"에 청구하는 것으로 확정해
+ * AutoReservationJob(03:25)이 SubscriptionService.chargeForPassShortage로 낸다. 이 월 청구는
+ * 다시 켤 계획이 없다 — 켜면 이용권이 떨어지지 않은 학생에게도 매달 청구가 나간다.
+ *
  * 아래 설명은 청구를 다시 켰을 때의 동작이다.
  *
  * [왜 새벽인가] 청구는 학부모가 자고 있는 사이에 끝나 있어야 한다. 아침에 앱을 열었을 때
@@ -99,6 +103,22 @@ public class SubscriptionBillingJob {
      * 카드등록창에서 이탈한 PENDING 구독 정리 — 결제의 READY 정리와 같은 성격이다.
      * 빌키가 없어 돈과는 무관하고, 남겨두면 그 학생이 재등록할 때 목록만 지저분해진다.
      */
+    /**
+     * 카드 등록 후 첫 결제 (2026-10-27) — 등록한 지 1분이 지난 건을 2분마다 빌링 승인으로 결제한다.
+     * 등록 직후 바로 승인하면 이니시스 동기화 전이라 [1195]로 거절되기 때문이다.
+     */
+    @Scheduled(fixedDelay = 2 * 60 * 1000)
+    public void settleFirstCharges() {
+        try {
+            int settled = subscriptionService.settlePendingFirstCharges();
+            if (settled > 0) {
+                log.info("[자동결제] 카드등록 첫 결제 {}건 시도", settled);
+            }
+        } catch (Exception e) {
+            log.error("[자동결제] 카드등록 첫 결제 배치 실패 — 다음 주기에 다시 본다", e);
+        }
+    }
+
     @Scheduled(cron = "0 40 3 * * *", zone = "Asia/Seoul")
     public void closeStaleCardReg() {
         int closed = subscriptionService.closeStalePending(KstClock.now().minusHours(STALE_PENDING_HOURS));

@@ -123,6 +123,7 @@ CREATE TABLE erp_bookstore_pass (
     service_code VARCHAR(10)   NOT NULL,       -- 상품의 service_code 스냅샷. "이 학생 도서 잔여횟수"가 가장 잦은
                                                -- 조회라 매번 product를 조인하지 않으려고 값으로도 복사해 둔다
     source       VARCHAR(10)   NOT NULL,       -- PG(앱 카드결제) / SEODANG(서당 일괄청구) / FREE(본사 무상부여)
+                                               -- / COUPON(서비스 제공기간 종료 시 잔여를 옮긴 쿠폰, ref_no=원래 pass_id)
     ref_no       VARCHAR(40),                  -- 이 횟수가 발생한 근거의 식별자. source에 따라 가리키는 곳이 다르다.
                                                -- PG=erp_bookstore_payment.order_no / SEODANG=all_pass 청구 bill_id.
                                                -- 외부 시스템 키가 섞여 있어 FK를 걸 수 없다
@@ -137,7 +138,7 @@ CREATE TABLE erp_bookstore_pass (
     -- 서당 일괄청구분은 여전히 그 달의 1일~말일로 채워진다 — 두 체계가 공존하므로
     -- 주기를 billing_ym에서 역산하지 않고 이 두 컬럼을 단일 진실로 삼는다.
     valid_from   DATE,
-    -- 기간의 마지막 날(앱 결제분은 valid_from + 89일, 서당분은 말일).
+    -- 기간의 마지막 날(앱 결제분은 valid_from + 90일 — 2026-10-27 "90일 당일까지"로 변경, 서당분은 말일).
     -- 오늘이 이 범위 밖이면 remain_count가 남아 있어도 못 쓴다 — 이월 없이 소멸한다는 정책.
     valid_until  DATE,
     total_count  SMALLINT      NOT NULL,       -- 지급된 총 횟수 (product.total_count 스냅샷)
@@ -167,6 +168,22 @@ IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_
 
 IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'valid_until' AND is_nullable = 0)
     ALTER TABLE erp_bookstore_pass ALTER COLUMN valid_until DATE NULL;
+
+-- 마이그레이션 (2026-10-27, 서비스 제공기간 + 쿠폰 전환) — patch-261027-pass-service-period.sql과 같은 내용.
+-- service_until: 서비스 제공기간 마지막 날 = 결제일 + 90일(당일 포함). 이 날까지만 이용권으로 예약할 수 있고,
+--   이 날이 지나면 남은 횟수는 소멸하면서 같은 수만큼 쿠폰(source='COUPON', ref_no=원래 pass_id)으로 바뀐다.
+--   유효기간(valid_from~valid_until)과 별개다 — 유효기간이 더 늦게 끝나는 만큼이 쿠폰 기간이 된다.
+--   앱 결제분만 채운다. 서당/무상분과 쿠폰 행은 NULL(기간 제한 없이 valid_from~valid_until만 본다).
+-- converted_at: 쿠폰으로 전환된 시각. NULL이 아니면 이 이용권은 소멸했고 잔여는 쿠폰 행에 있다.
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'service_until')
+    ALTER TABLE erp_bookstore_pass ADD service_until DATE NULL;
+
+IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('erp_bookstore_pass') AND name = 'converted_at')
+    ALTER TABLE erp_bookstore_pass ADD converted_at DATETIME2 NULL;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_pass_service_until' AND object_id = OBJECT_ID('erp_bookstore_pass'))
+    CREATE INDEX IX_pass_service_until ON erp_bookstore_pass (service_until)
+        WHERE converted_at IS NULL AND service_until IS NOT NULL;
 
 -- 출석할 때마다 타는 경로 — 살아있는 이용권만 보면 되므로 필터드 인덱스로 좁힌다.
 -- 여러 달치가 겹칠 수 있게 되면서(월 단위 유효기간 도입) 소진 순서 기준이 granted_at(먼저 산 것)에서

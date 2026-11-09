@@ -92,6 +92,9 @@
             WHERE p.student_id = s.student_id
               AND p.service_code = 'BOOK'
               AND p.revoked_at IS NULL
+              -- 서비스 제공기간이 끝난 이용권은 소멸했다(2026-10-27). 남은 몫은 쿠폰 행으로 잡힌다
+              AND (p.service_until IS NULL
+                   OR p.service_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date))
               AND (p.valid_from IS NULL
                    OR (p.valid_from &lt;= cast(dateadd(HOUR, 9, getutcdate()) AS date)
                        AND p.valid_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date)))

@@ -173,7 +173,7 @@ class PaymentServiceRefundTest {
         assertEquals(0, remainAfterCaptor.getValue(), "형제 둘 다 환불하면 남는 금액은 0원");
     }
 
-    // ── 환불 정책(2026-10-21): 결제일로부터 3개월 이내, 남은 이용권 1회당 3,000원 ──
+    // ── 환불 정책(2026-10-21): 남은 이용권 1회당 3,000원 / 기간 = 서비스 제공기간(결제일 + 90일 당일까지, 2026-10-27) ──
 
     private PaymentRespDTO.RefundQuoteDTO quoteFor(LocalDateTime paidAt, int remainCount) {
         PaymentRespDTO.PaymentDTO payment = new PaymentRespDTO.PaymentDTO();
@@ -215,15 +215,15 @@ class PaymentServiceRefundTest {
     }
 
     @Test
-    void quote_결제일로부터_3개월_당일까지는_환불된다() {
-        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusMonths(3), 4);
+    void quote_결제일로부터_90일_당일까지는_환불된다() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusDays(90), 4);
         assertTrue(quote.isRefundable());
         assertEquals(12_000, quote.getRefundAmount());
     }
 
     @Test
-    void quote_3개월이_지나면_환불_불가() {
-        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusMonths(3).minusDays(1), 10);
+    void quote_90일이_지나면_환불_불가() {
+        PaymentRespDTO.RefundQuoteDTO quote = quoteFor(LocalDateTime.now().minusDays(91), 10);
         assertFalse(quote.isRefundable());
         assertEquals(0, quote.getRefundAmount());
     }

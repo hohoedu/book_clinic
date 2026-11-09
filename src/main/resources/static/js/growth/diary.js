@@ -108,6 +108,7 @@ function filterRowsBySlot(rows) {
 
 function initSearchControls() {
   document.getElementById("btnSearchDiary").addEventListener("click", loadDiaryList);
+  document.getElementById("myStudentOnly").addEventListener("change", loadDiaryList);
   document.getElementById("diaryStudentKeyword").addEventListener("keydown", (e) => {
     if (e.key === "Enter") loadDiaryList();
   });
@@ -166,6 +167,7 @@ async function loadDiaryList() {
   const params = new URLSearchParams({ date: document.getElementById("diaryDate").value || todayStr() });
   const keyword = document.getElementById("diaryStudentKeyword").value.trim();
   if (keyword) params.set("keyword", keyword);
+  if (document.getElementById("myStudentOnly").checked) params.set("mine", "true");
 
   try {
     const view = await getJson(`/admin/growth/diary/list?${params}`);

@@ -26,7 +26,7 @@
         LEFT JOIN erp_bookstore_reservation r
             ON r.slot_instance_id = si.slot_instance_id
            AND r.student_id = #{studentId}
-           AND r.status IN ('RESERVED', 'ATTENDED')
+           AND r.status IN ('RESERVED', 'ATTENDED', 'PAY_WAIT')
         WHERE si.center_code = #{centerCode}
           AND si.service_date BETWEEN #{fromDate} AND #{toDate}
           AND si.status = 'OPEN'
@@ -49,7 +49,7 @@
         LEFT JOIN erp_bookstore_reservation r
             ON r.slot_instance_id = si.slot_instance_id
            AND r.student_id = #{studentId}
-           AND r.status IN ('RESERVED', 'ATTENDED')
+           AND r.status IN ('RESERVED', 'ATTENDED', 'PAY_WAIT')
         WHERE si.center_code = #{centerCode}
           AND si.seq = #{seq}
           AND si.service_date IN
@@ -327,6 +327,62 @@
           AND r.status IN ('RESERVED', 'ATTENDED')
         ORDER BY r.reservation_id ASC
     </select>
+
+    <!--
+      결제대기(PAY_WAIT) 예약 (2026-10-27) — 자동구매 학생의 카드 결제가 실패했을 때 자리만 잡아둔 예약.
+      결제가 되면 날짜 순서대로 이용권을 깎으며 RESERVED로 바꾼다(앞 회차부터 확정돼야 유효기간이 자연스럽다).
+    -->
+    <select id="findPayWaitByStudent" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationItemDTO">
+        SELECT
+            r.reservation_id   AS reservationId,
+            r.slot_instance_id AS slotInstanceId,
+            si.service_date    AS serviceDate,
+            si.seq              AS seq,
+            si.starts_at        AS startsAt,
+            si.ends_at          AS endsAt,
+            r.status            AS status,
+            r.reserved_at       AS reservedAt
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.student_id = #{studentId}
+          AND r.status = 'PAY_WAIT'
+        ORDER BY si.starts_at ASC, r.reservation_id ASC
+    </select>
+
+    <!-- 결제대기 예약을 가진 학생 — 새벽 배치가 재결제 대상을 고를 때 쓴다 -->
+    <select id="findPayWaitStudentIds" resultType="string">
+        SELECT DISTINCT student_id
+        FROM erp_bookstore_reservation
+        WHERE status = 'PAY_WAIT'
+    </select>
+
+    <!-- 시작이 임박한 결제대기 — 입실할 수 없는 예약이 수업 직전까지 자리를 막지 않게 미리 푼다 -->
+    <select id="findPayWaitStartingBefore" resultType="com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO$ReservationItemDTO">
+        SELECT
+            r.reservation_id   AS reservationId,
+            r.slot_instance_id AS slotInstanceId,
+            r.student_id       AS studentId,
+            si.service_date    AS serviceDate,
+            si.seq              AS seq,
+            si.starts_at        AS startsAt,
+            si.ends_at          AS endsAt,
+            r.status            AS status
+        FROM erp_bookstore_reservation r
+        JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        WHERE r.status = 'PAY_WAIT'
+          AND si.starts_at &lt; #{before}
+    </select>
+
+    <!-- 결제대기 취소 — 이용권을 깎은 적이 없으므로 복구 없이 상태만 닫는다 -->
+    <update id="cancelPayWait">
+        UPDATE erp_bookstore_reservation
+        SET status = 'CANCELED',
+            canceled_at = DATEADD(HOUR, 9, GETUTCDATE()),
+            cancel_reason = #{reason}
+        WHERE reservation_id = #{reservationId}
+          AND student_id = #{studentId}
+          AND status = 'PAY_WAIT'
+    </update>
 
     <update id="transitionStatus">
         UPDATE erp_bookstore_reservation

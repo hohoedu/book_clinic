@@ -50,6 +50,15 @@ public class SubscriptionService {
     /** 연속 실패 재시도 간격(일) — 3회까지 시도하고 그래도 안 되면 자동 중지 */
     private static final int[] RETRY_DAYS = {1, 3, 5};
 
+    /** 같은 주기(날짜)에 낼 수 있는 결제 시도 수 — 학부모가 "다시 시도"를 연달아 누르는 경우의 상한 */
+    private static final int MAX_SAME_DAY_ATTEMPTS = 10;
+
+    /**
+     * 카드 등록 후 첫 결제까지 기다리는 시간(분). 빌키 발급 직후 바로 빌링 승인을 부르면 이니시스
+     * 서버 간 동기화 전이라 [1195] 빌링 미등록 거래로 거절된다(이니시스 FAQ).
+     */
+    private static final int FIRST_CHARGE_DELAY_MINUTES = 1;
+
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionTxService subscriptionTxService;
     private final PaymentRepository paymentRepository;
@@ -183,13 +192,12 @@ public class SubscriptionService {
     /**
      * INILite 빌키발급 창에서 돌아온 결과로 등록을 확정한다 (docs/billing 매뉴얼).
      *
-     * [빌키만 저장하고 끝낸다 — 첫 결제는 여기서 하지 않는다]
-     * 발급 요청 price를 0으로 보내므로 이 창은 돈을 빼지 않는다(응답에 tid가 실려와도
-     * 그건 빌키 발급 거래번호일 뿐 결제가 아니다). 첫 청구는 학부모가 고른 first_billing_on이
-     * 되면 배치(SubscriptionBillingJob)가 빌키로 billing() API를 호출해 낸다.
-     * 그래서 등록 시점에는 anchor_day / next_billing_on / billing_cycle_from을 first_billing_on으로
-     * 세워두기만 한다(비어 있으면 등록일). first_billing_on이 미래면 그날까지 이용권이 없는데,
-     * 아직 결제 전이므로 정상이다.
+     * [첫 결제는 1분쯤 뒤 배치가 낸다 — 2026-10-27] 등록창(INILite)은 빌키만 발급하고 결제는 하지 않는다
+     * (금액을 실어 보내도 결제되지 않는 것을 테스트 MID로 확인 — 거래조회 NOT_FOUND_PAYMENT).
+     * 그렇다고 여기서 바로 빌링 승인을 부르면 발급 직후라 [1195] 빌링 미등록 거래로 거절되고,
+     * 매뉴얼도 "빌키 발급 결과 페이지에서 빌링 승인을 부르지 말라"고 한다.
+     * 그래서 여기서는 빌키를 저장하고 첫 결제 행(READY)만 열어 두고, SubscriptionBillingJob이
+     * FIRST_CHARGE_DELAY_MINUTES 뒤에 그 행으로 빌링 승인을 낸다. 앱은 "결제 확인 중"을 보여준다.
      *
      * @param cardName 카드사명 (INILite 응답 cardCompanyName). 없으면 null
      * @param cardNo   마스킹된 카드번호 (INILite 응답 cardNumber). 없으면 null
@@ -211,17 +219,74 @@ public class SubscriptionService {
             throw new Exception400("이미 종료된 카드등록입니다.");
         }
 
-        LocalDate firstOn = sub.getFirstBillingOn() != null ? sub.getFirstBillingOn() : KstClock.today();
+        LocalDate today = KstClock.today();
         boolean activated = subscriptionTxService.activate(sub.getSubscriptionId(), billKey,
-                cardName, PaymentService.maskCardNo(cardNo), firstOn);
+                cardName, PaymentService.maskCardNo(cardNo), today);
         if (!activated) {
             log.info("[자동결제] 카드등록 중복 확정 요청 — regOrderNo={}", regOrderNo);
             return regResult(subscriptionRepository.findById(sub.getSubscriptionId()));
         }
 
-        log.info("[자동결제] 빌키 발급·저장 완료 — subscriptionId={}, 첫 결제일={} (첫 청구는 배치가 낸다)",
-                sub.getSubscriptionId(), firstOn);
+        SubscriptionRespDTO.SubscriptionDTO active = subscriptionRepository.findById(sub.getSubscriptionId());
+        List<SubscriptionRespDTO.MemberDTO> members =
+                subscriptionRepository.findMembers(sub.getSubscriptionId(), "ACTIVE");
+        try {
+            subscriptionTxService.openCharge(active, members,
+                    SubscriptionTxService.groupOrderNo(sub.getSubscriptionId(), today), today, PassService.cycleEnd(today));
+        } catch (org.springframework.dao.DataIntegrityViolationException e) {
+            log.warn("[자동결제] 첫 결제 행이 이미 있다 — subscriptionId={}", sub.getSubscriptionId(), e);
+        }
+        log.info("[자동결제] 빌키 발급·저장 완료 — subscriptionId={}, 첫 결제는 {}분 뒤 배치가 낸다",
+                sub.getSubscriptionId(), FIRST_CHARGE_DELAY_MINUTES);
         return regResult(subscriptionRepository.findById(sub.getSubscriptionId()));
+    }
+
+    /**
+     * 카드 등록 후 기다리던 첫 결제를 낸다 — 배치(SubscriptionBillingJob)가 2분마다 부른다.
+     *
+     * 같은 DB를 보는 서버가 여럿이어도 한 번만 결제되도록 claimOnDemand로 먼저 선점한다(등록 시
+     * next_billing_on=오늘 → 선점하면 내일). 첫 결제가 실패하면 자동구매를 멈춘다 — 앱에 "다시 시도"가 뜬다.
+     *
+     * @return 이번에 결제를 시도한 건수
+     */
+    public int settlePendingFirstCharges() {
+        LocalDate today = KstClock.today();
+        List<SubscriptionRespDTO.SubscriptionDTO> pending = subscriptionRepository
+                .findFirstChargePending(KstClock.now().minusMinutes(FIRST_CHARGE_DELAY_MINUTES));
+        int attempted = 0;
+        for (SubscriptionRespDTO.SubscriptionDTO sub : pending) {
+            try {
+                if (subscriptionRepository.claimOnDemand(sub.getSubscriptionId(), today, today.plusDays(1)) == 0) {
+                    continue;   // 다른 서버가 먼저 집었다
+                }
+                sub.setNextBillingOn(today.plusDays(1));
+                LocalDate cycleFrom = sub.getBillingCycleFrom();
+                String groupOrderNo = SubscriptionTxService.groupOrderNo(sub.getSubscriptionId(), cycleFrom);
+                List<PaymentRespDTO.PaymentDTO> payments = paymentRepository.findByGroupOrderNo(groupOrderNo).stream()
+                        .filter(p -> "READY".equals(p.getStatus()))
+                        .toList();
+                if (payments.isEmpty()) {
+                    continue;
+                }
+                attempted++;
+                if (billAndConfirm(sub, payments, groupOrderNo, cycleFrom, PassService.cycleEnd(cycleFrom))) {
+                    continue;
+                }
+                // 결제 행이 전부 FAILED로 닫혔을 때만 멈춘다. READY가 남았으면(확정 실패·응답 유실로
+                // 확인 필요 표시) 돈이 빠졌을 수 있어 "다시 시도"를 열어 주면 이중 결제가 된다.
+                boolean allFailed = paymentRepository.findByGroupOrderNo(groupOrderNo).stream()
+                        .allMatch(p -> "FAILED".equals(p.getStatus()));
+                if (allFailed) {
+                    SubscriptionRespDTO.SubscriptionDTO after = subscriptionRepository.findById(sub.getSubscriptionId());
+                    subscriptionTxService.pause(sub.getSubscriptionId(),
+                            after != null && after.getLastFailReason() != null ? after.getLastFailReason() : "첫 결제가 되지 않았습니다.");
+                    log.warn("[자동결제] 카드등록 첫 결제 실패로 중지 — subscriptionId={}", sub.getSubscriptionId());
+                }
+            } catch (Exception e) {
+                log.error("[자동결제] 카드등록 첫 결제 처리 실패 — subscriptionId={}", sub.getSubscriptionId(), e);
+            }
+        }
+        return attempted;
     }
 
     // ───────────────────────────── 청구 ─────────────────────────────
@@ -255,11 +320,16 @@ public class SubscriptionService {
     private boolean charge(SubscriptionRespDTO.SubscriptionDTO sub,
                            List<SubscriptionRespDTO.MemberDTO> members, LocalDate cycleFrom) {
         LocalDate cycleUntil = PassService.cycleEnd(cycleFrom);
-        String groupOrderNo = SubscriptionTxService.groupOrderNo(sub.getSubscriptionId(), cycleFrom);
+        String groupOrderNo = resolveGroupOrderNo(sub.getSubscriptionId(), cycleFrom);
+        if (groupOrderNo == null) {
+            log.warn("[자동결제] 이미 결제됐거나 처리 중인 주기 — subscriptionId={}, cycleFrom={}",
+                    sub.getSubscriptionId(), cycleFrom);
+            return true;
+        }
 
         List<PaymentRespDTO.PaymentDTO> payments;
         try {
-            payments = subscriptionTxService.openCharge(sub, members, cycleFrom, cycleUntil);
+            payments = subscriptionTxService.openCharge(sub, members, groupOrderNo, cycleFrom, cycleUntil);
         } catch (org.springframework.dao.DataIntegrityViolationException e) {
             // 유니크 인덱스가 막았다 = 이 주기는 이미 청구돼 있다. 배치 중복 실행에서 정상적으로
             // 생기는 상황이라 실패로 취급하지 않고, 성공한 것으로 보고 다음 주기로 넘긴다.
@@ -267,10 +337,18 @@ public class SubscriptionService {
                     sub.getSubscriptionId(), cycleFrom, e);
             return true;
         }
+        return billAndConfirm(sub, payments, groupOrderNo, cycleFrom, cycleUntil);
+    }
 
-        int totalPrice = members.stream().mapToInt(SubscriptionRespDTO.MemberDTO::getPrice).sum();
-        String goodName = members.get(0).getProductName()
-                + (members.size() > 1 ? " 외 " + (members.size() - 1) + "명" : "");
+    /**
+     * 열어 둔 결제 행(READY)으로 빌링 승인 1건을 내고 결과대로 확정한다.
+     * 일반 청구(charge)와 카드등록 첫 결제(settlePendingFirstCharges)가 함께 쓴다.
+     */
+    private boolean billAndConfirm(SubscriptionRespDTO.SubscriptionDTO sub, List<PaymentRespDTO.PaymentDTO> payments,
+                                   String groupOrderNo, LocalDate cycleFrom, LocalDate cycleUntil) {
+        int totalPrice = payments.stream().mapToInt(PaymentRespDTO.PaymentDTO::getAmount).sum();
+        String goodName = payments.get(0).getProductName()
+                + (payments.size() > 1 ? " 외 " + (payments.size() - 1) + "명" : "");
         Student owner = studentRepository.findById(sub.getOwnerStudentId());
 
         InicisClient.Result result;
@@ -323,6 +401,27 @@ public class SubscriptionService {
         log.info("[자동결제] 청구 완료 — subscriptionId={}, 주기={}~{}, 금액={}",
                 sub.getSubscriptionId(), cycleFrom, cycleUntil, totalPrice);
         return true;
+    }
+
+    /**
+     * 이번 청구에 쓸 그룹 주문번호. 그 주기가 이미 결제됐거나(PAID) 처리 중(READY)이면 null.
+     * 실패·취소만 남은 번호는 건너뛰고 -R2, -R3 …을 쓴다(SubscriptionTxService.retryGroupOrderNo 참고).
+     */
+    private String resolveGroupOrderNo(int subscriptionId, LocalDate cycleFrom) {
+        String candidate = SubscriptionTxService.groupOrderNo(subscriptionId, cycleFrom);
+        for (int attempt = 2; attempt <= MAX_SAME_DAY_ATTEMPTS; attempt++) {
+            List<PaymentRespDTO.PaymentDTO> existing = paymentRepository.findByGroupOrderNo(candidate);
+            if (existing.isEmpty()) {
+                return candidate;
+            }
+            boolean live = existing.stream()
+                    .anyMatch(p -> "PAID".equals(p.getStatus()) || "READY".equals(p.getStatus()));
+            if (live) {
+                return null;
+            }
+            candidate = SubscriptionTxService.retryGroupOrderNo(subscriptionId, cycleFrom, attempt);
+        }
+        throw new Exception400("오늘은 결제를 더 시도할 수 없어요. 내일 다시 시도해주세요.");
     }
 
     /**
@@ -397,6 +496,67 @@ public class SubscriptionService {
                 log.error("[자동결제] 확인 필요 표시 실패 — orderNo={}", payment.getOrderNo(), e);
             }
         }
+    }
+
+    // ───────────────────────────── 잔여 소진 청구 (2026-10-27) ─────────────────────────────
+
+    public static final String SHORTAGE_CHARGED = "CHARGED";
+    public static final String SHORTAGE_FAILED = "FAILED";
+    public static final String SHORTAGE_PAUSED = "PAUSED";
+    public static final String SHORTAGE_NOT_DUE = "NOT_DUE";
+    public static final String SHORTAGE_NONE = "NONE";
+
+    /** 자동구매가 살아 있는지(ACTIVE) — 자동 예약이 결제대기로 자리를 잡아줄지 정하는 기준 */
+    public boolean hasActiveSubscription(String studentId) {
+        SubscriptionRespDTO.SubscriptionDTO sub = subscriptionRepository.findLiveByMemberStudent(studentId, "BOOK");
+        return sub != null && "ACTIVE".equals(sub.getStatus());
+    }
+
+    /**
+     * 이용권이 떨어진 학생 1명을 지금 청구한다 — 자동 예약 배치가 부른다.
+     *
+     * [월 청구를 대신하는 트리거] 예전 계획은 "잔여 2회일 때 청구"였지만, 자동 예약은 30일 앞을
+     * 미리 잡기 때문에 그 시점에 사면 새 이용권이 첫 수업 7주 전에 결제되고, 결제 후 30일 자동
+     * 시작 규칙에 걸려 유효기간이 수업보다 먼저 끝난다(마지막 2회가 쿠폰으로도 못 쓰고 사라진다).
+     * 그래서 "예약을 못 잡는 순간(잔여 0)"에 청구한다 — 그때도 그 수업은 30일 뒤라 여유가 있다.
+     *
+     * 형제가 한 구독으로 묶여 있어도 이용권이 떨어진 학생만 청구한다(합산 청구는 월 청구 시절의 모양이다).
+     * 같은 구독에서 같은 날 두 번째 학생은 선점에 막혀 NOT_DUE가 되고 다음 날 청구된다 — 주문번호가
+     * 구독+날짜로 정해져 하루 한 건만 낼 수 있기 때문이다.
+     *
+     * 실패 시 재시도 간격은 기존 RETRY_DAYS(1·3·5일)를 그대로 따르고, 다 쓰면 PAUSED가 된다.
+     */
+    public SubscriptionRespDTO.ShortageChargeDTO chargeForPassShortage(String studentId) {
+        SubscriptionRespDTO.SubscriptionDTO sub = subscriptionRepository.findLiveByMemberStudent(studentId, "BOOK");
+        if (sub == null || !"ACTIVE".equals(sub.getStatus())) {
+            return new SubscriptionRespDTO.ShortageChargeDTO(SHORTAGE_NONE, null, null);
+        }
+        List<SubscriptionRespDTO.MemberDTO> members = subscriptionRepository
+                .findMembers(sub.getSubscriptionId(), "ACTIVE").stream()
+                .filter(m -> studentId.equals(m.getStudentId()))
+                .toList();
+        if (members.isEmpty()) {
+            return new SubscriptionRespDTO.ShortageChargeDTO(SHORTAGE_NONE, null, null);
+        }
+
+        LocalDate today = KstClock.today();
+        LocalDate tomorrow = today.plusDays(1);
+        if (subscriptionRepository.claimOnDemand(sub.getSubscriptionId(), today, tomorrow) == 0) {
+            return new SubscriptionRespDTO.ShortageChargeDTO(SHORTAGE_NOT_DUE, sub.getNextBillingOn(), null);
+        }
+        // 선점으로 next_billing_on이 바뀌었으므로, 실패 처리(fail)가 참조할 값도 갱신본이어야 한다
+        sub.setNextBillingOn(tomorrow);
+
+        if (charge(sub, members, today)) {
+            return new SubscriptionRespDTO.ShortageChargeDTO(SHORTAGE_CHARGED, null, null);
+        }
+        SubscriptionRespDTO.SubscriptionDTO after = subscriptionRepository.findById(sub.getSubscriptionId());
+        if (after == null || !"ACTIVE".equals(after.getStatus())) {
+            return new SubscriptionRespDTO.ShortageChargeDTO(SHORTAGE_PAUSED, null,
+                    after != null ? after.getLastFailReason() : null);
+        }
+        return new SubscriptionRespDTO.ShortageChargeDTO(SHORTAGE_FAILED, after.getNextBillingOn(),
+                after.getLastFailReason());
     }
 
     // ───────────────────────────── 조회 / 해지 ─────────────────────────────
@@ -547,7 +707,7 @@ public class SubscriptionService {
     private SubscriptionRespDTO.CardRegResultDTO regResult(SubscriptionRespDTO.SubscriptionDTO sub) {
         return new SubscriptionRespDTO.CardRegResultDTO(sub.getSubscriptionId(), sub.getStatus(),
                 sub.getCardName(), sub.getCardNo(), sub.getNextBillingOn(),
-                passService.remain(sub.getOwnerStudentId(), "BOOK"));
+                passService.remain(sub.getOwnerStudentId(), "BOOK"), sub.getLastPaidAt() != null);
     }
 
     private String studentName(String studentId) {

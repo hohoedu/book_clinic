@@ -819,6 +819,7 @@ function reservationStatusPill(status) {
     ATTENDED: { label: "이용완료", cls: "resv-done" },
     CANCELED: { label: "취소", cls: "resv-scheduled" },
     NOSHOW: { label: "노쇼", cls: "resv-scheduled" },
+    PAY_WAIT: { label: "결제대기", cls: "resv-scheduled" },
   };
   const m = map[status] ?? { label: status ?? "-", cls: "resv-scheduled" };
   return `<span class="resv-pill ${m.cls}">${m.label}</span>`;

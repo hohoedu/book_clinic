@@ -268,6 +268,37 @@ public class InicisClient {
      * 요청/응답 필드 이름과 해시 규칙은 이니시스 빌링 매뉴얼(상점관리자 배포본)과 대조해야 한다 —
      * 취소 API가 그랬듯 개정으로 바뀐 이력이 있다.
      */
+    /**
+     * INILite 빌키발급 창이 돌려준 billkey를 빌링승인에 쓸 원래 빌키(40자)로 복호화한다 (2026-10-27).
+     *
+     * 등록창의 billkey는 암호화된 값이다(매뉴얼: "AES256 암호화 후 UTF-8 URL Encode된 값"). 그대로
+     * 승인에 보내면 [1195] 빌링 미등록 거래로 거절된다. 방식은 매뉴얼에 없어 테스트 MID 빌키로
+     * 맞춰 확인했다: AES-256-CBC, 키 = INILite key 문자열 그대로(32바이트), IV = 0, PKCS5, base64.
+     *
+     * 이미 원래 빌키(40자 이하)면 그대로 돌려준다 — 복호화 전에 저장된 구독도 승인될 수 있게
+     * 저장 시점과 승인 시점 양쪽에서 부른다.
+     */
+    public String plainBillKey(String billKey) {
+        if (billKey == null || billKey.length() <= 40) {
+            return billKey;
+        }
+        try {
+            javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
+            cipher.init(javax.crypto.Cipher.DECRYPT_MODE,
+                    new javax.crypto.spec.SecretKeySpec(props.getBillingLiteKey().getBytes(StandardCharsets.UTF_8), "AES"),
+                    new javax.crypto.spec.IvParameterSpec(new byte[16]));
+            byte[] plain = cipher.doFinal(java.util.Base64.getDecoder().decode(billKey));
+            return new String(plain, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            // 키가 바뀌었거나 형식이 다르면 승인이 거절된다 — 원인을 찾을 수 있게 남기고 원문을 그대로 쓴다
+            log.error("[이니시스] 빌키 복호화 실패 — 받은 값 그대로 승인에 쓴다", e);
+            return billKey;
+        }
+    }
+
+    /** 빌링승인 필수 항목인 구매자 이메일을 받지 않아 넣는 값 — 카드등록창 폼과 같다 */
+    private static final String DEFAULT_BUYER_EMAIL = "test@hohoedu.com";
+
     public Result billing(String billKey, String moid, int price, String goodName,
                           String buyerName, String buyerTel, String buyerEmail) {
         String type = "billing";
@@ -276,15 +307,23 @@ public class InicisClient {
         // 유닉스 타임을 넣으면 ERR101(Length 오류)로 거절된다.
         String timestamp = LocalDateTime.now(KST).format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
 
+        // 필드 규격은 이니시스 빌링승인 v2 매뉴얼(manual.inicis.com/pay/bill_pc.html) 기준 — data 안은 전부 String이다.
+        // 2026-10-27 "파라미터 값이 잘못 되었습니다"로 거절돼 대조함: 필수인 authentification이 빠져 있었고,
+        // 필수인 buyerEmail을 빈 값으로, price를 숫자로 보내고 있었다.
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("url", props.getBillingSiteUrl());
         data.put("moid", moid);
         data.put("goodName", goodName);
         data.put("buyerName", buyerName);
-        data.put("buyerEmail", nvl(buyerEmail));
-        data.put("buyerTel", nvl(buyerTel));
-        data.put("price", price);
-        data.put("billKey", billKey);
+        // 필수인데 학부모 이메일을 받지 않는다 — 카드등록창(billing-checkout.html)과 같은 값으로 채운다
+        data.put("buyerEmail", (buyerEmail == null || buyerEmail.isBlank()) ? DEFAULT_BUYER_EMAIL : buyerEmail);
+        if (buyerTel != null && !buyerTel.isBlank()) {
+            data.put("buyerTel", buyerTel.replaceAll("[^0-9]", "")); // 선택 항목 — 없으면 빈 값 대신 아예 뺀다
+        }
+        data.put("price", String.valueOf(price));
+        data.put("billKey", plainBillKey(billKey));
+        data.put("authentification", "00"); // 본인인증 여부 — 일반 가맹점은 00 고정(99는 별도 계약)
+        data.put("cardQuota", "00");        // 일시불
 
         String dataJson;
         try {
@@ -307,10 +346,6 @@ public class InicisClient {
         body.put("data", data);
 
         return postJson(props.getBillingUrl(), body);
-    }
-
-    private String nvl(String s) {
-        return s == null ? "" : s;
     }
 
     // ─────────────── 결제창 호출용 서명 (승인 요청과는 별개의 규칙) ───────────────

@@ -28,6 +28,13 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
             throw new UsernameNotFoundException("존재하지 않는 계정입니다.");
         }
 
+        // 지점 코드 — 로그인 폼에서 details로 전달됨(SecurityConfig.authenticationDetailsSource)
+        // 지점 코드는 항상 대문자로 비교
+        String centerCode = authentication.getDetails() instanceof String s ? s.trim().toUpperCase() : "";
+        if (!centerCode.equals(user.getCenterCode())) {
+            throw new BadCredentialsException("지점 코드가 일치하지 않습니다.");
+        }
+
         String hashedPassword = HashUtils.hashPassword(rawPassword, user.getSalt());
         if (!hashedPassword.equalsIgnoreCase(user.getPasswordHash())) {
             throw new BadCredentialsException("비밀번호가 일치하지 않습니다.");

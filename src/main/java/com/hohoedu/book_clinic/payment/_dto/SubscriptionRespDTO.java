@@ -116,5 +116,20 @@ public class SubscriptionRespDTO {
         private final LocalDate nextBillingOn;
         /** 첫 청구로 충전된 뒤의 잔여 횟수(대표 학생 기준) */
         private final int remainCount;
+        /** 한 번이라도 결제됐는지 — ACTIVE인데 false면 첫 결제를 아직 확인 중이다 */
+        private final boolean paid;
+    }
+
+    /**
+     * 잔여 소진 청구 결과(2026-10-27) — 자동 예약이 이용권이 없어 막혔을 때 부른 청구.
+     * outcome: CHARGED(결제·이용권 발급 완료) / FAILED(실패, retryOn에 다시 시도) /
+     *          PAUSED(재시도까지 다 실패해 자동구매 중지) / NOT_DUE(오늘 이미 시도했거나 재시도일 전) /
+     *          NONE(자동구매가 없거나 중지·해지 상태)
+     */
+    @Data
+    public static class ShortageChargeDTO {
+        private final String outcome;
+        private final LocalDate retryOn;
+        private final String reason;
     }
 }

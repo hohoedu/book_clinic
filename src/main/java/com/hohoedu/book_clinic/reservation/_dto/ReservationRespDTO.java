@@ -20,7 +20,7 @@ public class ReservationRespDTO {
         private Integer reservedCount;
         /** OPEN / CLOSED */
         private String status;
-        /** 이 슬롯에 조회 주체가 이미 RESERVED 상태로 예약해뒀는지 */
+        /** 이 슬롯에 조회 주체가 이미 예약해뒀는지(RESERVED/ATTENDED/PAY_WAIT) */
         private Boolean reservedByMe;
     }
 
@@ -47,10 +47,13 @@ public class ReservationRespDTO {
     public static class ReservationItemDTO {
         private Long reservationId;
         private Long slotInstanceId;
+        /** 여러 학생을 한 번에 훑는 조회(결제대기 정리 배치)에서만 채워진다 */
+        private String studentId;
         private LocalDate serviceDate;
         private Integer seq;
         private LocalDateTime startsAt;
         private LocalDateTime endsAt;
+        /** RESERVED / CANCELED / ATTENDED / NOSHOW / PAY_WAIT(결제대기 — 자리만 잡아둠, 입실 불가, 2026-10-27) */
         private String status;
         private LocalDateTime reservedAt;
         /**
@@ -69,7 +72,7 @@ public class ReservationRespDTO {
 
     /**
      * 대리 예약 화면(관리자)의 날짜별 목록 1행 (2026-08-19, 전체 필드 확장).
-     * status: RESERVED/CANCELED/ATTENDED/NOSHOW. channel: 예약 생성 로그의 changed_by_role
+     * status: RESERVED/CANCELED/ATTENDED/NOSHOW/PAY_WAIT. channel: 예약 생성 로그의 changed_by_role
      * (STUDENT/PARENT → 직접 예약, ADMIN → 센터 예약)을 그대로 내려주고 화면에서 라벨링한다.
      */
     @Data
@@ -98,6 +101,57 @@ public class ReservationRespDTO {
         private String gradeKey;
         private String appId;
         private String contact;
+    }
+
+    // ── 매주 자동 예약 (2026-10-27) ──────────────────────────────────────
+
+    /**
+     * 자동 예약 패턴 1건 — "매주 ○요일 ○회차".
+     * state: ON(정상) / OFF(꺼짐) / NO_PASS(켜져 있지만 이용권이 없어 멈춤 — 구매하면 자동으로 이어진다)
+     */
+    @Data
+    public static class AutoPatternDTO {
+        private Integer autoId;
+        private String studentId;
+        /** ISO 요일 1=월 ~ 7=일 */
+        private Integer dayOfWeek;
+        private Integer seq;
+        private Boolean enabled;
+        /** 여기까지는 자동 예약을 시도했다 — 다음 시도는 이 다음 날부터 */
+        private LocalDate filledUntil;
+        /** 이용권이 없어 멈춘 날. null이면 정상 */
+        private LocalDate noPassAt;
+        private String state;
+    }
+
+    /**
+     * 자동 예약 1회 시도 결과.
+     * outcome: RESERVED(예약됨) / HELD(결제대기로 자리만 잡음) / ALREADY(이미 내 예약) /
+     *          NO_PASS(이용권 없음) / FAILED(마감·하루 상한 등 — message에 사유)
+     */
+    @Data
+    public static class AutoAttemptDTO {
+        private LocalDate serviceDate;
+        private Integer seq;
+        private String outcome;
+        private Long reservationId;
+        private String message;
+
+        public static AutoAttemptDTO of(String outcome, Long reservationId, String message) {
+            AutoAttemptDTO dto = new AutoAttemptDTO();
+            dto.setOutcome(outcome);
+            dto.setReservationId(reservationId);
+            dto.setMessage(message);
+            return dto;
+        }
+    }
+
+    /** 10시 일괄 안내 대기열 1줄 */
+    @Data
+    public static class AutoNoticeDTO {
+        private Integer noticeId;
+        private String studentId;
+        private String message;
     }
 
 }

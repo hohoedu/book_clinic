@@ -133,6 +133,15 @@
           AND next_billing_on = #{expectedNextBillingOn}
     </update>
 
+    <!-- 잔여 소진 청구 선점(2026-10-27) — 오늘 청구해도 되는 구독만 다음 시도일을 밀며 집는다 -->
+    <update id="claimOnDemand">
+        UPDATE erp_bookstore_subscription
+        SET next_billing_on = #{newNextBillingOn}
+        WHERE subscription_id = #{subscriptionId}
+          AND status = 'ACTIVE'
+          AND (next_billing_on IS NULL OR next_billing_on &lt;= #{today})
+    </update>
+
     <update id="markCharged">
         UPDATE erp_bookstore_subscription
         SET billing_cycle_from = #{nextCycleFrom},
@@ -185,6 +194,23 @@
         WHERE subscription_id = #{subscriptionId}
           AND status IN ('PENDING', 'ACTIVE')
     </update>
+
+    <!--
+      카드 등록 후 첫 결제를 기다리는 구독 (2026-10-27). 등록창은 빌키만 발급하므로 등록 때 첫 결제
+      행(READY)만 열어 두고, 이니시스 동기화를 기다린 뒤 배치가 빌링 승인을 낸다.
+      확인 필요(needs_review) 표시가 붙은 행은 사람이 처리할 몫이라 다시 집지 않는다.
+    -->
+    <select id="findFirstChargePending" resultType="com.hohoedu.book_clinic.payment._dto.SubscriptionRespDTO$SubscriptionDTO">
+        SELECT <include refid="subColumns"/>
+        FROM erp_bookstore_subscription s
+        WHERE s.status = 'ACTIVE'
+          AND s.last_paid_at IS NULL
+          AND EXISTS (SELECT 1 FROM erp_bookstore_payment p
+                      WHERE p.subscription_id = s.subscription_id
+                        AND p.status = 'READY'
+                        AND p.needs_review = 0
+                        AND p.requested_at &lt; #{olderThan})
+    </select>
 
     <update id="closeStalePending">
         UPDATE erp_bookstore_subscription
