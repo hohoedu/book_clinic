@@ -63,25 +63,6 @@ public class ImageUploadController {
         }
     }
 
-    /**
-     * 워크시트(출력용) 업로드 (2026-09-14) — 카드/표지와 저장 디렉터리가 다르다(FTP worksheets/).
-     * 반환된 URL을 도서 저장 시 worksheetUrl로 함께 보내면 erp_bookstore_card_path에 기록된다.
-     *
-     * 이미지 외에 PDF도 받는다(2026-10-02) — 워크시트를 PDF로 만들어 쓰는 경우가 많아서다.
-     * PDF는 변환 없이 원본 그대로 저장하고, 출력할 때 WorksheetPrintService가 PDF 한 장으로 묶는다.
-     */
-    @PostMapping("/worksheet-image")
-    public ResponseEntity<?> uploadWorksheetImage(@RequestParam("file") MultipartFile file,
-                                                  @RequestParam("contentId") Integer contentId) {
-        validateWorksheet(file);
-        try {
-            return ResponseEntity.ok(ApiUtils.success(Map.of("url", imageStorageService.storeWorksheet(file, contentId))));
-        } catch (IOException e) {
-            log.error("워크시트 업로드 실패", e);
-            throw new Exception400("워크시트 업로드 중 오류가 발생했습니다.");
-        }
-    }
-
     private void validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new Exception400("업로드할 이미지가 없습니다.");
@@ -96,18 +77,6 @@ public class ImageUploadController {
     private void validateCenterCode(String centerCode) {
         if (centerCode != null && !centerCode.isBlank() && !centerCode.trim().matches("[A-Za-z0-9]+")) {
             throw new Exception400("잘못된 센터코드입니다.");
-        }
-    }
-
-    /** 워크시트는 이미지와 PDF를 모두 받는다 (2026-10-02) */
-    private void validateWorksheet(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new Exception400("업로드할 파일이 없습니다.");
-        }
-        if (imageStorageService.isPdf(file)) return;
-        String contentType = file.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw new Exception400("이미지 또는 PDF 파일만 업로드할 수 있습니다.");
         }
     }
 }

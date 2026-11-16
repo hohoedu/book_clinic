@@ -2,6 +2,7 @@ package com.hohoedu.book_clinic.demo;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -28,14 +29,14 @@ public class DemoResetController {
     @PostMapping("/snapshot")
     public ResponseEntity<?> snapshot(@RequestBody Map<String, String> body,
                                       @AuthenticationPrincipal CustomUserDetails userDetails) {
-        demoResetService.verify(userDetails, body.get("password"));
+        demoResetService.verify(userDetails, body.get("password"), Set.of(DemoResetService.DEMO_USER_CODE));
         return ResponseEntity.ok(ApiUtils.success(demoResetService.saveSnapshot()));
     }
 
     @PostMapping("/reset")
     public ResponseEntity<?> reset(@RequestBody Map<String, String> body,
                                    @AuthenticationPrincipal CustomUserDetails userDetails) {
-        demoResetService.verify(userDetails, body.get("password"));
+        demoResetService.verify(userDetails, body.get("password"), DemoResetService.RESET_USER_CODES);
         List<Long> newReservationIds = demoResetService.restore();
         // SQL 커밋 뒤에 시연 중 생긴 모니터링 카드도 지운다 — 남겨두면 실시간 모니터링 구독이 유령 카드를 되살린다
         monitorSyncService.deleteCards(newReservationIds);

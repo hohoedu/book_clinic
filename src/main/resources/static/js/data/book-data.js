@@ -19,8 +19,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   initDetailFilter();
   initDeletedBooks();
   initImageButtons();
-  initWorksheetButtons();
   initRewardCardButtons();
+  initActivitySheet();
   initStatusToggle();
   initCategoryTagInput();
   initQuestionTabs();
@@ -154,12 +154,12 @@ let questionsOriginalSnapshot = "[]"; // 뒤로가기/새로고침/닫기 시 �
 let currentMode = "edit"; // "edit" | "new"
 let currentContentId = null;
 let currentImageUrl = "";
-// 부가 이미지 두 장 — 표지와 다른 그림이고 erp_bookstore_card_path에 한 행으로 따로 저장된다(2026-09-14).
-// 워크시트는 모니터링에서 선생님이 뽑아 쓰는 출력물(없으면 모니터링에 프린터 아이콘이 안 뜬다),
-// 수집 카드는 완독 시 학생에게 지급되는 카드 그림(없으면 화면이 기본 카드로 폴백)이다.
-// 책 1권당 각각 1장이라 새로 올리면 교체된다.
-let currentWorksheetUrl = "";
+// 수집 카드 — 표지와 다른 그림이고 erp_bookstore_card_path에 따로 저장된다(2026-09-14).
+// 완독 시 학생에게 지급되는 카드 그림(없으면 화면이 기본 카드로 폴백)이고, 책 1권당 1장이라 새로 올리면 교체된다.
+// (워크시트 등록은 2026-11-11 제거 — 워크시트는 DB의 JSON으로 그린다)
 let currentRewardCardUrl = "";
+// 지금 보고 있는 책의 활동지 JSON (erp_hoho_activity_result.json_data 원문, 없으면 null) — 2026-11-11
+let currentActivityJson = null;
 let selectedContentType = "";
 let originalSnapshot = null;
 let categoryTags = [];
@@ -1267,7 +1267,7 @@ function requireSavedBook() {
   return true;
 }
 
-/* 이미지/워크시트 파일 하나를 올리고 저장된 URL을 돌려준다 */
+/* 이미지 파일 하나를 올리고 저장된 URL을 돌려준다 */
 async function uploadAsset(endpoint, file, contentId, extra = {}) {
   const form = new FormData();
   form.append("file", file);
@@ -1291,9 +1291,8 @@ async function uploadAsset(endpoint, file, contentId, extra = {}) {
 const ASSET_KINDS = {
   image: { endpoint: "/book/image", field: "imageUrl", label: "표지" },
   card: { endpoint: "/book/card-image", field: "cardUrl", label: "수집 카드" },
-  worksheet: { endpoint: "/book/worksheet-image", field: "worksheetUrl", label: "워크시트" },
 };
-const pendingFiles = { image: null, card: null, worksheet: null };
+const pendingFiles = { image: null, card: null };
 const pendingPreviewUrls = [];
 
 function hasPendingFiles() {
@@ -1316,17 +1315,13 @@ function setPendingFile(kind, file) {
     return;
   }
 
-  const isPdf = kind === "worksheet" && (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
-  const img = document.getElementById(kind === "card" ? "bookCardImage" : "bookWorksheetImage");
-  const empty = document.getElementById(kind === "card" ? "bookCardEmpty" : "bookWorksheetEmpty");
+  const img = document.getElementById("bookCardImage");
+  const empty = document.getElementById("bookCardEmpty");
   if (img) {
-    img.src = isPdf ? "" : previewUrl;
-    img.hidden = isPdf;
+    img.src = previewUrl;
+    img.hidden = false;
   }
-  if (empty) {
-    if (isPdf) empty.innerHTML = "PDF<br>워크시트 선택됨";
-    empty.hidden = !isPdf;
-  }
+  if (empty) empty.hidden = true;
 }
 
 /* 방금 등록한 도서에 보류해 둔 파일을 올리고 URL을 붙인다. 실패한 항목 이름 목록을 돌려준다 */
@@ -1360,7 +1355,7 @@ async function uploadPendingFiles(contentId) {
   return failed;
 }
 
-/* 표지/카드/워크시트 버튼 공통 — 수정 화면은 바로 올리고, 신규 화면은 저장할 때까지 보류 */
+/* 표지/카드 버튼 공통 — 수정 화면은 바로 올리고, 신규 화면은 저장할 때까지 보류 */
 function initAssetButtons({ kind, inputId, changeId, deleteId, apply }) {
   const input = document.getElementById(inputId);
   document.getElementById(changeId)?.addEventListener("click", () => input?.click());
@@ -1397,35 +1392,7 @@ function setBookImage(url) {
   if (img) img.src = currentImageUrl || DEFAULT_BOOK_IMAGE;
 }
 
-/* 워크시트(출력용) 이미지 — 표지와 저장 위치도(FTP bookstore/worksheets/) 테이블도 다르다.
-   PDF도 올릴 수 있다(2026-10-02). PDF는 변환 없이 .pdf 그대로 저장되므로 <img>로는 미리볼 수 없다 —
-   그림 대신 "PDF 워크시트 등록됨" 문구를 띄운다. */
-function setWorksheetImage(url) {
-  currentWorksheetUrl = url || "";
-  const isPdf = currentWorksheetUrl.split("?")[0].toLowerCase().endsWith(".pdf");
-  const img = document.getElementById("bookWorksheetImage");
-  const empty = document.getElementById("bookWorksheetEmpty");
-  if (img) {
-    img.src = isPdf ? "" : currentWorksheetUrl;
-    img.hidden = !currentWorksheetUrl || isPdf;
-  }
-  if (empty) {
-    empty.innerHTML = isPdf ? "PDF<br>워크시트 등록됨" : "등록된<br>워크시트 없음";
-    empty.hidden = !!currentWorksheetUrl && !isPdf;
-  }
-}
-
-function initWorksheetButtons() {
-  initAssetButtons({
-    kind: "worksheet",
-    inputId: "bookWorksheetInput",
-    changeId: "btnWorksheetChange",
-    deleteId: "btnWorksheetDelete",
-    apply: setWorksheetImage,
-  });
-}
-
-/* 수집 카드 이미지 — 워크시트와 저장 테이블은 같고(한 행) 컬럼만 다르다.
+/* 수집 카드 이미지 — 표지와 저장 위치(erp_bookstore_card_path)가 다르다.
    이름이 setCardImage가 아닌 이유: 그 이름은 하위도서 카드 DOM용으로 이미 쓰이고 있다. */
 function setRewardCardImage(url) {
   currentRewardCardUrl = url || "";
@@ -1446,6 +1413,116 @@ function initRewardCardButtons() {
     deleteId: "btnCardDelete",
     apply: setRewardCardImage,
   });
+}
+
+/* 활동지 (2026-11-11) — 여기서 등록하지 않고, DB에 저장된 JSON을 그려 미리보기·인쇄만 한다.
+   모니터링 출력과 같은 API(/admin/monitor/worksheet)를 쓴다. */
+function initActivitySheet() {
+  // 렌더러의 기본 CSS 경로는 스크립트 폴더 기준이라 실제 위치로 맞춘다 (인쇄 창에 들어갈 CSS)
+  if (window.HohoSheet) HohoSheet.config.cssUrl = "/css/hoho/hoho_activity_sheet.css";
+  document.getElementById("btnActivityPrint")?.addEventListener("click", printActivitySheet);
+  document.getElementById("bookActivityPreview")?.addEventListener("click", openActivityWindow);
+}
+
+/* 활동지 인쇄 — 새 창 없이 숨긴 iframe에 띄워 인쇄 미리보기만 연다 (HohoSheet.print는 새 창을 띄운다) */
+function printActivitySheet() {
+  if (!currentActivityJson || document.querySelector(".activity-print-frame")) return;
+
+  const frame = document.createElement("iframe");
+  frame.className = "activity-print-frame";
+  // display:none이면 레이아웃이 안 잡혀 빈 종이가 나오는 브라우저가 있어 화면 밖으로만 민다
+  frame.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;";
+  frame.srcdoc = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+    <link rel="stylesheet" href="${HohoSheet.config.cssUrl}">
+    <style>html,body{margin:0;padding:0;} .hs-page{margin:0;box-shadow:none;}</style>
+    </head><body>${HohoSheet.render(currentActivityJson, { teacher: false })}</body></html>`;
+
+  let removed = false;
+  const cleanup = () => {
+    if (removed) return;
+    removed = true;
+    frame.remove();
+  };
+
+  // srcdoc의 load는 CSS까지 읽힌 뒤에 온다 — 그 전에 인쇄하면 스타일 없는 종이가 나온다
+  frame.onload = async () => {
+    // 글꼴(Jua)까지 받은 뒤에 재고 줄여야 넘침 판단이 맞는다
+    await frame.contentDocument.fonts?.ready;
+    HohoSheet.fit(frame.contentDocument);
+    frame.contentWindow.addEventListener("afterprint", cleanup, { once: true });
+    window.addEventListener("focus", cleanup, { once: true });
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+  };
+  document.body.appendChild(frame);
+}
+
+/* 미리보기를 누르면 새 창에서 원래 크기로 본다 (인쇄 대화상자는 띄우지 않는다) */
+function openActivityWindow() {
+  if (!currentActivityJson) return;
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("팝업이 차단되어 활동지 창을 열 수 없습니다. 팝업을 허용해 주세요.");
+    return;
+  }
+  const title = document.getElementById("bookInfoTitleInput")?.value.trim() || "활동지";
+  win.document.open();
+  win.document.write(`<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+    <title></title>
+    <link rel="stylesheet" href="${HohoSheet.config.cssUrl}">
+    <style>body{background:#eef0f3;margin:0;padding:16px 0;}
+      .print-fab{position:fixed;right:24px;top:16px;z-index:10;padding:12px 20px;border:0;border-radius:24px;
+        background:#2c6fb3;color:#fff;font:700 14px 'Malgun Gothic',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);cursor:pointer;}
+      .print-fab:hover{background:#245d97;}</style>
+    </head><body>${HohoSheet.render(currentActivityJson, { teacher: false })}
+    <button type="button" class="print-fab hs-no-print" onclick="window.print()">인쇄</button></body></html>`);
+  win.document.close();
+  win.document.title = `${title} 활동지`;
+  // CSS·글꼴이 다 들어온 뒤 넘치는 장을 줄인다
+  const fitWindow = () => win.document.fonts.ready.then(() => HohoSheet.fit(win.document));
+  if (win.document.readyState === "complete") fitWindow();
+  else win.addEventListener("load", fitWindow, { once: true });
+}
+
+function setActivitySheet(json) {
+  currentActivityJson = json || null;
+  const preview = document.getElementById("bookActivityPreview");
+  const empty = document.getElementById("bookActivityEmpty");
+  const printButton = document.getElementById("btnActivityPrint");
+  let rendered = false;
+
+  if (preview && currentActivityJson && window.HohoSheet) {
+    try {
+      HohoSheet.mount(preview, currentActivityJson, { teacher: false });
+      rendered = true;
+    } catch (error) {
+      console.error("활동지 JSON 오류", error);
+      currentActivityJson = null;
+    }
+  }
+  if (preview) {
+    if (!rendered) preview.innerHTML = "";
+    preview.hidden = !rendered;
+    preview.scrollTop = 0;
+  }
+  if (empty) {
+    empty.innerHTML = json && !rendered ? "활동지를<br>그리지 못했습니다" : "등록된<br>활동지 없음";
+    empty.hidden = rendered;
+  }
+  if (printButton) printButton.disabled = !rendered;
+}
+
+async function loadActivitySheet(contentId) {
+  setActivitySheet(null);
+  if (contentId == null) return;
+  try {
+    const data = await postJson("/admin/monitor/worksheet", { contentIds: [contentId] });
+    // 응답을 기다리는 사이 다른 책으로 넘어갔으면 버린다
+    if (currentContentId !== contentId) return;
+    setActivitySheet(data.response?.[0]?.json ?? null);
+  } catch (error) {
+    console.error("활동지 조회 실패", error);
+  }
 }
 
 function initImageButtons() {
@@ -1478,8 +1555,8 @@ function renderBookInfo(book) {
 
   setStatusRadio(book.state);
   setBookImage(book.imageUrl);
-  setWorksheetImage(book.worksheetUrl);
   setRewardCardImage(book.cardUrl);
+  loadActivitySheet(book.contentId);
   setContentTypeChip(book.contentType ?? "");
   setCategoryTags(book.keywords ? book.keywords.split(",").map((k) => k.trim()).filter(Boolean) : []);
   updateExtraDetailField(book.extraDetailName ?? "");
@@ -1508,8 +1585,8 @@ function clearBookInfo(isNew) {
 
   setStatusRadio("Y");
   setBookImage("");
-  setWorksheetImage("");
   setRewardCardImage("");
+  setActivitySheet(null);
   setContentTypeChip("");
   setCategoryTags([]);
 
@@ -1565,7 +1642,6 @@ function getFormSnapshot() {
     contentType: selectedContentType,
     state: getStatusValue(),
     imageUrl: currentImageUrl,
-    worksheetUrl: currentWorksheetUrl,
     cardUrl: currentRewardCardUrl,
     // 신규 화면에서 골라 둔(아직 안 올린) 파일 — 이탈 경고용. 등록 요청 본문엔 실리지 않는다
     pendingFiles: Object.keys(pendingFiles).filter((kind) => pendingFiles[kind]).join(","),
@@ -1673,7 +1749,7 @@ function initSaveBookButton() {
         contentId = await saveBook(isRegister ? "register" : "update", snapshot);
       }
 
-      // 신규 등록이면 이제 content_id가 생겼으니 보류해 둔 표지/카드/워크시트를 올린다
+      // 신규 등록이면 이제 content_id가 생겼으니 보류해 둔 표지/카드를 올린다
       let failedUploads = [];
       if (isRegister && hasPendingFiles()) {
         failedUploads = await uploadPendingFiles(contentId);
@@ -1717,7 +1793,6 @@ async function saveBook(mode, snapshot) {
     contentType: snapshot.contentType,
     state: snapshot.state,
     imageUrl: snapshot.imageUrl,
-    worksheetUrl: snapshot.worksheetUrl,
     cardUrl: snapshot.cardUrl,
     extraDetail: snapshot.extraDetail,
   };

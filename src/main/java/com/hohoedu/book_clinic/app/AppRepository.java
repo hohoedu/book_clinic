@@ -50,6 +50,11 @@ public interface AppRepository {
             @Param("studentId") String studentId, @Param("recordDate") String recordDate,
             @Param("sentOnly") boolean sentOnly);
 
+    /** "문해력이 자랐어요" 문구 — 그날 맞힌 문제에 걸린 item_advice.message (책별, 문제 순). */
+    List<AppRespDTO.ReportGrowthMessageDTO> selectBookstoreReportGrowthMessages(
+            @Param("studentId") String studentId, @Param("recordDate") String recordDate,
+            @Param("sentOnly") boolean sentOnly);
+
     /** 뱃지 마스터 4종 전부 + 그날 획득 여부. */
     List<AppRespDTO.ReportBadgeDTO> selectBookstoreReportBadges(
             @Param("studentId") String studentId, @Param("recordDate") String recordDate,

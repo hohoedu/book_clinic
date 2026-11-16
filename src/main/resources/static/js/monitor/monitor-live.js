@@ -1090,20 +1090,13 @@ async function saveHold(clear) {
   }
 }
 
-/* ── 활동지 출력 (2026-09-14, 2026-10-02 PDF 방식으로 교체) ──────────────────────
-   책마다 1장씩 등록해둔 출력용 워크시트를 선생님이 카드에서 바로 뽑아 쓴다. 워크시트가 등록된
-   책에만 프린터 아이콘이 뜨고(page.hasWorksheet), 머리말의 '활동지 전체 출력'은 입실 학생 몫을
-   한 번에 뽑는다.
+/* ── 활동지 출력 (2026-09-14, 2026-11-11 JSON 방식으로 교체) ──────────────────────
+   책마다 DB(erp_hoho_activity_result.json_data)에 저장된 활동지 JSON을 받아 hoho_activity_render.js로
+   그리고, 숨긴 iframe에 A4 문서로 띄워 인쇄한다. JSON이 있는 책에만 프린터 아이콘이 뜨고
+   (page.hasWorksheet), 머리말의 '활동지 전체 출력'은 입실 학생 몫을 한 번에 뽑는다.
+   학생 이름·날짜는 렌더러가 비워두는 머리띠 칸(.hs-name/.hs-date)에 여기서 채운다. */
 
-   [왜 PDF인가] 예전에는 업로드된 PDF를 PNG로 구워 저장하고 <img>에 물려 인쇄했는데, 래스터로
-   굳히는 순간 인쇄물의 작은 글자가 뭉개졌다. 지금은 서버가 원본 PDF에 이름·날짜를 찍어 한 개로
-   묶어주고, 브라우저는 그 PDF를 그대로 인쇄한다 — 벡터라 프린터 해상도 그대로 선명하다.
-   여러 장을 한 PDF로 받으므로 장 나눔도 PDF가 책임진다(예전의 "무조건 한 장" CSS 트릭 불필요).
-
-   [주소를 숨기는 이유] 워크시트는 호스팅 원본 주소가 아니라 서버가 만들어준 PDF로만 받는다.
-   원본 주소를 화면에 내려주면 로그인하지 않은 사람도 URL만 알면 통째로 받아갈 수 있다.
-
-   [복사 차단의 한계] 브라우저 PDF 뷰어의 저장 버튼은 웹에서 막을 수 없다. */
+const WORKSHEET_CSS_URL = "/css/hoho/hoho_activity_sheet.css";
 
 let worksheetPrinting = false;   // 연타로 인쇄 대화상자가 겹쳐 뜨는 것을 막는다
 
@@ -1136,7 +1129,7 @@ function printAllEnteredWorksheets() {
   });
 
   if (sheets.length === 0) {
-    alert("지금 출력할 활동지가 없습니다.\n\n워크시트가 등록된 책을 받은 입실 학생이 있어야 나옵니다.");
+    alert("지금 출력할 활동지가 없습니다.\n\n활동지가 있는 책을 받은 입실 학생이 있어야 나옵니다.");
     return;
   }
 
@@ -1146,7 +1139,7 @@ function printAllEnteredWorksheets() {
   printWorksheets(sheets);
 }
 
-/* 한 장이든 여러 장이든 여기로 모인다 — 서버에서 PDF를 받아 숨긴 iframe에 띄우고 인쇄한다. */
+/* 한 장이든 여러 장이든 여기로 모인다 — 서버에서 활동지 JSON을 받아 그리고, 숨긴 iframe에 띄워 인쇄한다. */
 async function printWorksheets(sheets) {
   if (worksheetPrinting || sheets.length === 0) return;
   worksheetPrinting = true;
@@ -1154,55 +1147,99 @@ async function printWorksheets(sheets) {
   const button = document.getElementById("btnPrintAllWorksheets");
   if (button) button.disabled = true;
 
-  let blobUrl = null;
   let frame = null;
+  let cleaned = false;
 
   const cleanup = () => {
-    // 인쇄가 끝나면 치운다 — 남겨두면 다른 화면에서 Ctrl+P를 눌러도 활동지가 딸려 나오고,
-    // blob 주소를 안 거두면 PDF가 메모리에 계속 남는다.
+    // 인쇄가 끝나면 치운다 — 남겨두면 다른 화면에서 Ctrl+P를 눌러도 활동지가 딸려 나온다.
+    // afterprint와 focus가 둘 다 올 수 있어 한 번만 돈다
+    if (cleaned) return;
+    cleaned = true;
     frame?.remove();
-    if (blobUrl) URL.revokeObjectURL(blobUrl);
     if (button) button.disabled = false;
     worksheetPrinting = false;
   };
 
   try {
-    const response = await fetch("/admin/monitor/worksheet/print", {
+    const response = await fetch("/admin/monitor/worksheet", {
       method: "POST",
       headers: { "Content-Type": "application/json", [CSRF_HEADER]: getCsrfToken() },
-      body: JSON.stringify({ sheets }),
+      body: JSON.stringify({ contentIds: sheets.map((sheet) => sheet.contentId) }),
     });
-
-    if (!response.ok) {
-      // 실패 응답은 PDF가 아니라 평소의 JSON 에러다
-      const error = await response.json().catch(() => null);
-      throw new Error(error?.error?.message ?? "활동지를 불러오지 못했습니다.");
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.success) {
+      throw new Error(data?.error?.message ?? "활동지를 불러오지 못했습니다.");
     }
 
-    blobUrl = URL.createObjectURL(await response.blob());
+    const jsonById = new Map(data.response.map((row) => [row.contentId, row.json]));
+    const docs = [];
+    let skipped = 0;
+    sheets.forEach((sheet) => {
+      const json = jsonById.get(sheet.contentId);
+      if (!json) {
+        skipped++;
+        return;
+      }
+      try {
+        docs.push(renderWorksheetDoc(json, sheet.studentName));
+      } catch (error) {
+        // JSON 한 권이 깨져도 나머지는 뽑는다
+        console.error(`활동지 JSON 오류 (content_id: ${sheet.contentId})`, error);
+        skipped++;
+      }
+    });
+
+    if (docs.length === 0) throw new Error("출력할 활동지가 없습니다.");
+    if (skipped > 0 && !confirm(`활동지 ${skipped}장은 불러오지 못했습니다.\n나머지 ${docs.length}장만 출력할까요?`)) {
+      cleanup();
+      return;
+    }
 
     frame = document.createElement("iframe");
     frame.className = "worksheet-print-frame";
-    frame.src = blobUrl;
-    document.body.appendChild(frame);
+    // 학생마다 .hs-doc 하나 — 한 문서의 마지막 장 뒤에서 다음 학생 장이 이어 붙지 않게 문서 단위로도 끊는다
+    frame.srcdoc = `<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8">
+      <link rel="stylesheet" href="${WORKSHEET_CSS_URL}">
+      <style>html,body{margin:0;padding:0;} .hs-page{margin:0;box-shadow:none;}
+      .hs-doc{break-after:page;} .hs-doc:last-child{break-after:auto;}</style>
+      </head><body>${docs.join("")}</body></html>`;
 
-    // PDF 뷰어가 다 뜨기 전에 인쇄하면 빈 종이가 나온다 — 로드가 끝난 뒤에 대화상자를 연다
+    // CSS까지 읽힌 뒤에 인쇄해야 스타일 없는 종이가 안 나온다 — srcdoc의 load는 스타일시트 로드 후 온다
     await new Promise((resolve, reject) => {
       frame.onload = resolve;
       frame.onerror = () => reject(new Error("활동지를 여는 데 실패했습니다."));
+      document.body.appendChild(frame);
     });
+    // 글꼴(Jua)까지 받은 뒤에 재고 넘치는 장을 줄인다
+    await frame.contentDocument.fonts?.ready;
+    HohoSheet.fit(frame.contentDocument);
 
+    frame.contentWindow.addEventListener("afterprint", cleanup, { once: true });
+    window.addEventListener("focus", cleanup, { once: true });
     frame.contentWindow.focus();
     frame.contentWindow.print();
-
-    // 인쇄 대화상자가 닫히면 치운다. PDF를 띄운 iframe은 afterprint가 부모로 오지 않는 브라우저가
-    // 있어, 창이 다시 포커스를 받는 시점을 함께 본다.
-    window.addEventListener("focus", cleanup, { once: true });
   } catch (error) {
     console.error(error);
     cleanup();
     alert(error.message ?? "활동지를 출력하지 못했습니다.");
   }
+}
+
+/* 활동지 한 부를 HTML로 그리고 머리띠의 이름·날짜 칸을 채운다 (교사용 정답 장은 넣지 않는다) */
+function renderWorksheetDoc(json, studentName) {
+  const box = document.createElement("div");
+  box.innerHTML = HohoSheet.render(json, { teacher: false });
+
+  const today = new Date();
+  box.querySelectorAll(".hs-date").forEach((date) => {
+    const [month, day] = date.querySelectorAll("span");
+    if (month) month.textContent = `${today.getMonth() + 1}월`;
+    if (day) day.textContent = `${today.getDate()}일`;
+  });
+  box.querySelectorAll(".hs-name").forEach((name) => {
+    name.textContent = `이름 : ${studentName ?? ""}`;
+  });
+  return box.innerHTML;
 }
 
 /* ── 추천 도서 교체 (2026-09-02) ────────────────────────────────────────────────

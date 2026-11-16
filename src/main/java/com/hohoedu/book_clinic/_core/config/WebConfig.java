@@ -33,7 +33,7 @@ public class WebConfig implements WebMvcConfigurer {
         // 앱 관리자 로그인 세션은 조회 전용 — 결제·환불·예약 변경 경로만 막는다(2026-10-21)
         registry.addInterceptor(appAdminReadOnlyInterceptor)
                 .addPathPatterns(
-                        "/app/reservation", "/app/reservation/cancel", "/app/reservation/batch",
+                        "/app/reservation", "/app/reservation/cancel", "/app/reservation/change", "/app/reservation/batch",
                         "/payment/prepare", "/payment/prepare/**",
                         "/payment/refund",
                         "/payment/checkout", "/payment/checkout/**",

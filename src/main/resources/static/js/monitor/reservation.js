@@ -82,6 +82,7 @@
     reservations: [],
     slots: [],
     selectedSeq: null,
+    listTab: "active", // active: 취소 외 전부 / canceled: 취소(변경으로 생긴 취소 포함)
     panelMode: "create",
     selectedRow: null,
     changeDate: todayStr(),
@@ -101,6 +102,9 @@
     listRoundLabel: document.getElementById("listRoundLabel"),
     listRoundSub: document.getElementById("listRoundSub"),
     tbody: document.getElementById("reservationListBody"),
+    listTabs: document.getElementById("listTabs"),
+    activeCount: document.getElementById("activeCount"),
+    canceledCount: document.getElementById("canceledCount"),
     btnAddReservation: document.getElementById("btnAddReservation"),
 
     changePanelTitle: document.getElementById("changePanelTitle"),
@@ -169,6 +173,13 @@
   function initSearch() {
     const apply = () => renderReservationTable();
     el.btnSearch.addEventListener("click", apply);
+    el.listTabs.addEventListener("click", (e) => {
+      const tab = e.target.closest(".list-tab");
+      if (!tab) return;
+      state.listTab = tab.dataset.tab;
+      el.listTabs.querySelectorAll(".list-tab").forEach((t) => t.classList.toggle("active", t === tab));
+      apply();
+    });
     el.searchInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") apply();
     });
@@ -253,20 +264,26 @@
         `| ${timeRange(selectedSlot.startsAt, selectedSlot.endsAt)} | 예약 ${selectedSlot.reservedCount}/${selectedSlot.capacity}명`;
     } else {
       el.listRoundLabel.textContent = "전체";
-      el.listRoundSub.textContent = `| 예약 ${state.reservations.length}건`;
+      el.listRoundSub.textContent = `| 예약 ${state.reservations.filter((r) => r.status !== "CANCELED").length}건`;
     }
 
     const keyword = el.searchInput.value.trim();
-    const rows = state.reservations.filter((r) => {
+    const filtered = state.reservations.filter((r) => {
       if (state.selectedSeq !== null && r.seq !== state.selectedSeq) return false;
       if (keyword && !r.studentName.includes(keyword)) return false;
       return true;
     });
+    const canceledRows = filtered.filter((r) => r.status === "CANCELED");
+    const activeRows = filtered.filter((r) => r.status !== "CANCELED");
+    el.activeCount.textContent = activeRows.length;
+    el.canceledCount.textContent = canceledRows.length;
+    const isCanceledTab = state.listTab === "canceled";
+    const rows = isCanceledTab ? canceledRows : activeRows;
 
     el.tbody.innerHTML = "";
     if (rows.length === 0) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="9" style="text-align:center; color:#9AA0A6; padding:64px 0;">예약된 학생이 없습니다.</td>`;
+      tr.innerHTML = `<td colspan="9" style="text-align:center; color:#9AA0A6; padding:64px 0;">${isCanceledTab ? "취소·변경된 예약이 없습니다." : "예약된 학생이 없습니다."}</td>`;
       el.tbody.appendChild(tr);
       return;
     }
@@ -285,9 +302,10 @@
         <td><span class="status-pill ${meta.cls}">${meta.label}</span></td>
         <td>${r.reason || ""}</td>
         <td>${r.monthlyAttendCount ?? 0}회</td>
-        <td><button type="button" class="btn outline small btn-row-change">예약 변경</button></td>
+        <td>${isCanceledTab ? "" : '<button type="button" class="btn outline small btn-row-change">예약 변경</button>'}</td>
       `;
-      tr.querySelector(".btn-row-change").addEventListener("click", () => selectRowForChange(r));
+      // 이미 취소된 예약은 변경 대상이 아니다(변경 = 등록 + 취소라 취소된 건에 걸면 이중 처리된다)
+      if (!isCanceledTab) tr.querySelector(".btn-row-change").addEventListener("click", () => selectRowForChange(r));
       el.tbody.appendChild(tr);
     });
   }

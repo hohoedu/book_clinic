@@ -62,23 +62,8 @@
                               VALUES (source.content_id, #{cardUrl, jdbcType=VARCHAR}, #{registeredBy, jdbcType=VARCHAR});
     </update>
 
-    <update id="upsertWorksheetPath">
-        MERGE erp_bookstore_card_path AS target
-        USING (SELECT #{contentId, jdbcType=INTEGER} AS content_id) AS source
-        ON target.content_id = source.content_id
-        WHEN MATCHED THEN UPDATE SET worksheet_url = #{worksheetUrl, jdbcType=VARCHAR},
-                                     registered_by = #{registeredBy, jdbcType=VARCHAR},
-                                     registered_at = DATEADD(HOUR, 9, GETUTCDATE())
-        WHEN NOT MATCHED THEN INSERT (content_id, worksheet_url, registered_by)
-                              VALUES (source.content_id, #{worksheetUrl, jdbcType=VARCHAR}, #{registeredBy, jdbcType=VARCHAR});
-    </update>
-
     <update id="clearCardPath">
         UPDATE erp_bookstore_card_path SET card_url = NULL WHERE content_id = #{contentId}
-    </update>
-
-    <update id="clearWorksheetPath">
-        UPDATE erp_bookstore_card_path SET worksheet_url = NULL WHERE content_id = #{contentId}
     </update>
 
     <!-- 카드/워크시트가 둘 다 비워진 행 정리 — 빈 껍데기 행을 남겨두지 않는다 -->
@@ -89,11 +74,6 @@
 
     <select id="findCardPath" resultType="java.lang.String">
         SELECT card_url FROM erp_bookstore_card_path WHERE content_id = #{contentId}
-    </select>
-
-    <!-- 워크시트 원본 호스팅 주소 — 프록시(/admin/monitor/worksheet/{contentId})만 쓰고 화면엔 안 내려간다 -->
-    <select id="findWorksheetPath" resultType="java.lang.String">
-        SELECT worksheet_url FROM erp_bookstore_card_path WHERE content_id = #{contentId}
     </select>
 
     <select id="deleteBook" statementType="CALLABLE">
@@ -189,7 +169,6 @@
                bc.reading_time   AS readingTime,
                bc.difficulty     AS difficulty,
                cp.card_url       AS cardUrl,
-               cp.worksheet_url  AS worksheetUrl,
                COALESCE(da.name, dr.name, dc.name) AS extraDetailName
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_code g ON g.gubun = 'G' AND g.code = bc.genre

@@ -284,11 +284,43 @@ public class ReservationService {
 
     /**
      * 학생/학부모 취소 — 회차 시작 24시간 전까지만 가능하다(2026-09-14).
-     * 예약 변경도 앱에서 "취소 후 재예약"으로 처리되므로 같은 마감을 탄다.
+     * 예약 변경(change)도 같은 마감을 탄다.
      */
     @Transactional
     public void cancel(String studentId, Long reservationId, String reason) {
         cancelInternal(studentId, reservationId, reason, studentId, "STUDENT");
+    }
+
+    /**
+     * 학생/학부모 예약 변경(2026-11-10) — 기존 예약 취소 + 새 회차 예약을 한 트랜잭션으로 묶는다.
+     * 앱에서 취소·예약을 따로 부르면 중간 실패 시 자리를 잃거나(취소만 됨) 이중 예약이 된다.
+     * 새 회차 예약이 실패하면(마감·24시간 마감·이용권 없음 등) 취소까지 전부 롤백돼 원래 예약이 그대로 남는다.
+     * 이용권은 취소에서 1회 복구 → 새 예약에서 1회 차감이라 결과적으로 그대로다.
+     * 결제대기(PAY_WAIT) 예약은 새 회차도 이용권이 없으면 결제대기로 잡는다(이용권이 있으면 확정된다).
+     */
+    @Transactional
+    public ReservationRespDTO.ReservationItemDTO change(String studentId, Long reservationId, Long slotInstanceId) {
+        if (reservationId == null || slotInstanceId == null) {
+            throw new Exception400("변경할 예약과 회차를 선택해주세요.");
+        }
+        Student student = requireStudent(studentId);
+
+        Long currentSlotId = repository.findSlotInstanceIdByReservationId(reservationId, studentId);
+        if (currentSlotId == null) {
+            throw new Exception404("예약을 찾을 수 없습니다.");
+        }
+        if (currentSlotId.equals(slotInstanceId)) {
+            throw new Exception400("지금 예약한 회차와 같은 회차입니다.");
+        }
+        ReservationRespDTO.ReservationItemDTO current = repository.findReservationById(reservationId);
+        boolean wasPayWait = current != null && "PAY_WAIT".equals(current.getStatus());
+
+        // 24시간 마감은 cancelInternal(기존 회차)·reserveOne(새 회차)이 각각 검사한다
+        cancelInternal(studentId, reservationId, "예약 변경", studentId, "STUDENT");
+        ReservationRespDTO.ReservationItemDTO changed = reserveOne(student, slotInstanceId, studentId, "STUDENT", wasPayWait);
+
+        log.info("[예약] 변경 — studentId={}, {} → {}", studentId, reservationId, changed.getReservationId());
+        return changed;
     }
 
     /**

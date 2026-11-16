@@ -481,7 +481,7 @@
   border-radius: 6px;
 }
 
-/* 부가 이미지(워크시트·수집 카드) 미등록 표시 (2026-09-14) — 표지와 달리 기본 이미지가 없어서
+/* 부가 이미지(수집 카드) 미등록 표시 (2026-09-14) — 표지와 달리 기본 이미지가 없어서
    (없으면 없는 것) 빈 자리만 잡아둔다. 등록되면 이미지로 교체되므로 둘이 같이 보이는 일은 없다. */
 .asset-empty {
   width: 110px;
@@ -500,7 +500,24 @@
 
 /* display를 가진 클래스는 hidden 속성(display:none)을 덮어버린다 — 안내문과 이미지가 나란히
    보이던 원인. 숨김 쪽을 명시해서 되돌린다. */
+/* 활동지 미리보기 (2026-11-11) — 다른 부가 이미지 칸과 같은 크기로 첫 장만 줄여 보여준다.
+   누르면 새 창에서 원래 크기로 연다(book-data.js openActivityWindow). */
+.activity-preview {
+  width: 110px;
+  height: 145px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: zoom-in;
+}
+
+.activity-preview .hs-doc {
+  zoom: 0.138;
+}
+
 .asset-empty[hidden],
+.activity-preview[hidden],
 .image-area img[hidden] {
   display: none;
 }

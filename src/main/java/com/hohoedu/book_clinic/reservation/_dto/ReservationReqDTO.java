@@ -40,6 +40,13 @@ public class ReservationReqDTO {
         private String reason;
     }
 
+    /** 예약 변경 — 기존 예약을 다른 회차(다른 날짜 가능)로 옮긴다 */
+    @Data
+    public static class ChangeReqDTO {
+        private Long reservationId;
+        private Long slotInstanceId;
+    }
+
     /** batch-preview에서 확인한 슬롯 id만 골라 보낸다 — 이미 예약된 주차는 클라이언트가 미리 제외한다 */
     @Data
     public static class BatchReserveReqDTO {

@@ -2,14 +2,10 @@ package com.hohoedu.book_clinic._core.file;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URI;
-import java.net.URLConnection;
 import java.util.UUID;
 
 import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -52,10 +48,6 @@ public class ImageStorageService {
     /** 수집 카드 이미지 디렉터리 — 미설정이면 'cards' */
     @Value("${ftp.card-dir:cards}")
     private String cardDir;
-
-    /** 워크시트(출력용) 이미지 디렉터리 — 미설정이면 'worksheets' (2026-09-14) */
-    @Value("${ftp.worksheet-dir:worksheets}")
-    private String worksheetDir;
 
     /** 입회 서명 이미지 디렉터리 — 미설정이면 'signatures' */
     @Value("${ftp.signature-dir:signatures}")
@@ -108,68 +100,6 @@ public class ImageStorageService {
     /** 수집 카드 이미지 저장 후 접근 가능한 URL 반환 — 파일명 {contentId}.확장자 */
     public String storeCard(MultipartFile file, int contentId) throws IOException {
         return store(file, cardDir, fileBase(contentId), extractExtension(file.getOriginalFilename()));
-    }
-
-    /**
-     * 워크시트 저장 후 접근 가능한 URL 반환 (2026-09-14).
-     * 여기서 돌려주는 호스팅 주소는 DB(erp_bookstore_card_path.worksheet_url)에만 남고 브라우저로는
-     * 내려가지 않는다 — 출력은 /admin/monitor/worksheet/print 가 만들어 주는 PDF로만 나간다.
-     *
-     * PDF는 변환 없이 원본 그대로 둔다(2026-10-02 재변경). 한때 PNG로 구워 저장했는데, 래스터로
-     * 굳히는 순간 인쇄물의 글자가 눈에 띄게 뭉개졌다 — 출력도 PDF로 하면 원본 벡터가 그대로
-     * 프린터 해상도로 찍힌다. 이미지로 올린 워크시트는 그대로 두고, 출력할 때 PDF 한 장에 얹는다.
-     */
-    public String storeWorksheet(MultipartFile file, int contentId) throws IOException {
-        if (isPdf(file)) {
-            validatePdf(file);
-            return store(file, worksheetDir, fileBase(contentId), ".pdf");
-        }
-        return store(file, worksheetDir, fileBase(contentId), extractExtension(file.getOriginalFilename()));
-    }
-
-    /** 업로드된 파일이 PDF인지 — content-type이 비거나 엉뚱하게 오는 브라우저가 있어 확장자도 본다 */
-    public boolean isPdf(MultipartFile file) {
-        if (file == null) return false;
-        String contentType = file.getContentType();
-        if (contentType != null && contentType.toLowerCase().startsWith("application/pdf")) return true;
-        String name = file.getOriginalFilename();
-        return name != null && name.toLowerCase().endsWith(".pdf");
-    }
-
-    /** 저장된 주소가 PDF인지 — 출력할 때 페이지를 가져다 쓸지, 그림으로 얹을지 가른다 */
-    public boolean isPdfUrl(String storedUrl) {
-        return stripQuery(storedUrl).endsWith(".pdf");
-    }
-
-    /** ?v=... 를 떼고 소문자로 — 확장자 판별용 */
-    private String stripQuery(String storedUrl) {
-        if (storedUrl == null) return "";
-        int q = storedUrl.indexOf('?');
-        return (q < 0 ? storedUrl : storedUrl.substring(0, q)).toLowerCase();
-    }
-
-    /**
-     * 열리는 PDF인지만 확인하고 버린다 (2026-10-02).
-     *
-     * 변환해서 저장하지 않으니 업로드 시점에 내용을 볼 일이 없지만, 암호가 걸렸거나 깨진 파일을
-     * 그대로 받아두면 몇 주 뒤 수업 직전 출력에서야 터진다. 그때는 등록한 사람도 자리에 없다.
-     * 그래서 올리는 순간 한 번 열어보고 안 열리면 등록 자체를 막는다.
-     */
-    private void validatePdf(MultipartFile file) throws IOException {
-        try (PDDocument document = Loader.loadPDF(file.getBytes())) {
-            if (document.getNumberOfPages() == 0) {
-                throw new Exception400("PDF에 페이지가 없습니다.");
-            }
-            if (document.getNumberOfPages() > 1) {
-                log.warn("워크시트 PDF가 {}장입니다 — 출력은 첫 페이지만 나갑니다. (파일명: {})",
-                        document.getNumberOfPages(), file.getOriginalFilename());
-            }
-        } catch (Exception400 e) {
-            throw e;
-        } catch (IOException e) {
-            log.warn("워크시트 PDF 열기 실패 (파일명: {})", file.getOriginalFilename(), e);
-            throw new Exception400("PDF를 열지 못했습니다. 암호가 걸려 있거나 손상된 파일일 수 있습니다.");
-        }
     }
 
     /** 입회 서명 이미지 저장 후 접근 가능한 URL 반환 (2026-09-10, 회원가입 이식) */
@@ -228,33 +158,6 @@ public class ImageStorageService {
                 }
             }
         }
-    }
-
-    /**
-     * 저장된 이미지를 서버가 직접 읽어 바이트로 돌려준다 (2026-09-14, 워크시트 프록시용).
-     *
-     * 워크시트는 호스팅 주소를 브라우저에 노출하지 않는 것이 핵심이라, 화면은 원본 URL 대신
-     * /admin/monitor/worksheet/{contentId}만 받는다. 그 엔드포인트가 이 메서드로 원본을 가져온다.
-     */
-    public byte[] read(String storedUrl) throws IOException {
-        if (!isNotBlank(storedUrl)) throw new IOException("이미지 주소가 비어 있습니다.");
-
-        URLConnection conn = URI.create(storedUrl).toURL().openConnection();
-        conn.setConnectTimeout(5000);
-        conn.setReadTimeout(10000);
-        try (InputStream in = conn.getInputStream()) {
-            return in.readAllBytes();
-        }
-    }
-
-    /** 저장 주소의 확장자로 추정한 MIME 타입 — 알 수 없으면 image/jpeg */
-    public String contentTypeOf(String storedUrl) {
-        String url = stripQuery(storedUrl);
-        if (url.endsWith(".pdf")) return "application/pdf";
-        if (url.endsWith(".png")) return "image/png";
-        if (url.endsWith(".gif")) return "image/gif";
-        if (url.endsWith(".webp")) return "image/webp";
-        return "image/jpeg";
     }
 
     /** 앞뒤 슬래시 제거 */

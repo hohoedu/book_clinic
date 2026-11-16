@@ -49,13 +49,19 @@ function initSidebarLogout() {
 /* 시연 데이터 초기화 (2026-10-01) — 시연 관리자 계정에서만 버튼을 보인다.
    실행 권한/비밀번호/대상 학생은 서버(DemoResetService)가 다시 검사한다. */
 const DEMO_USER_CODE = "PUS001cos";
+/* 초기화만 하는 계정 — 예약 현황 화면 [초기화] 버튼(2026-11-11). 서버 DemoResetService.RESET_USER_CODES와 맞춘다 */
+const RESET_USER_CODES = [DEMO_USER_CODE, "PUS001ssar"];
 
-async function initDemoReset() {
-  const btn = document.getElementById("demoResetBtn");
+function initDemoReset() {
+  bindDemoReset(document.getElementById("demoResetBtn"), [DEMO_USER_CODE], false);
+  bindDemoReset(document.getElementById("btnDemoResetOnly"), RESET_USER_CODES, true);
+}
+
+async function bindDemoReset(btn, allowedUserCodes, resetOnly) {
   if (!btn) return;
 
   const me = await loadSidebarMe();
-  if (!me || me.userCode !== DEMO_USER_CODE) {
+  if (!me || !allowedUserCodes.includes(me.userCode)) {
     btn.remove();
     return;
   }
@@ -67,7 +73,7 @@ async function initDemoReset() {
   };
 
   btn.addEventListener("click", async () => {
-    const picked = await promptDemoReset();
+    const picked = await promptDemoReset(resetOnly);
     if (!picked) return;
     const action = ACTIONS[picked.action];
 
@@ -98,18 +104,18 @@ async function initDemoReset() {
 }
 
 /* 시연 초기화 모달 — 공용 컨펌 모달(common.css) 모양에 비밀번호 입력칸을 더했다.
-   { action: "reset" | "snapshot", password } 또는 취소하면 null */
-function promptDemoReset() {
+   { action: "reset" | "snapshot", password } 또는 취소하면 null. resetOnly면 [기준점 저장]을 뺀다 */
+function promptDemoReset(resetOnly) {
   return new Promise((resolve) => {
     const overlay = document.createElement("div");
     overlay.className = "custom-confirm-overlay";
     overlay.innerHTML = `
       <div class="custom-confirm">
-        <p class="custom-confirm-message">[초기화] 시연 계정 학생들을 저장해 둔 기준점 상태로 되돌립니다. 시연 전부터 있던 기록은 남습니다.\n[기준점 저장] 지금 상태를 새 기준점으로 저장합니다. 시연 전 깨끗한 상태에서만 눌러 주세요.\n\n비밀번호를 입력해 주세요.</p>
+        <p class="custom-confirm-message">[초기화] 시연 계정 학생들을 저장해 둔 기준점 상태로 되돌립니다. 시연 전부터 있던 기록은 남습니다.${resetOnly ? "" : "\n[기준점 저장] 지금 상태를 새 기준점으로 저장합니다. 시연 전 깨끗한 상태에서만 눌러 주세요."}\n\n비밀번호를 입력해 주세요.</p>
         <input type="password" class="custom-confirm-input" autocomplete="current-password" placeholder="비밀번호">
         <div class="custom-confirm-actions">
           <button type="button" class="btn outline custom-confirm-cancel">취소</button>
-          <button type="button" class="btn outline" data-action="snapshot">기준점 저장</button>
+          ${resetOnly ? "" : '<button type="button" class="btn outline" data-action="snapshot">기준점 저장</button>'}
           <button type="button" class="btn primary" data-action="reset">초기화</button>
         </div>
       </div>

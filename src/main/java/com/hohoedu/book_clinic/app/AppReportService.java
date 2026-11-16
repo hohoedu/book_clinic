@@ -41,7 +41,15 @@ public class AppReportService {
             return res;
         }
 
-        res.setBooks(appRepository.selectBookstoreReportBooks(studentId, targetDate, sentOnly));
+        List<AppRespDTO.ReportBookDTO> books = appRepository.selectBookstoreReportBooks(studentId, targetDate, sentOnly);
+        for (AppRespDTO.ReportGrowthMessageDTO m : appRepository.selectBookstoreReportGrowthMessages(studentId,
+                targetDate, sentOnly)) {
+            for (AppRespDTO.ReportBookDTO b : books) {
+                if (Objects.equals(b.getContentId(), m.getContentId()))
+                    b.getGrowthMessages().add(m.getMessage());
+            }
+        }
+        res.setBooks(books);
         res.setBadges(appRepository.selectBookstoreReportBadges(studentId, targetDate, sentOnly));
         List<AppRespDTO.ReportTendencyDTO> tendencies = appRepository.selectBookstoreReportTendencies(studentId,
                 targetDate, sentOnly);

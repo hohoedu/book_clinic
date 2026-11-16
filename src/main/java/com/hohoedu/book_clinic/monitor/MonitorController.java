@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -35,7 +34,6 @@ import lombok.RequiredArgsConstructor;
 public class MonitorController {
 
     private final MonitorService monitorService;
-    private final WorksheetPrintService worksheetPrintService;
     private final ClinicService clinicService;
     private final CenterAccessGuard centerAccessGuard;
 
@@ -49,27 +47,13 @@ public class MonitorController {
     }
 
     /**
-     * 활동지 출력용 PDF (2026-10-02) — 모니터링 카드의 프린터 아이콘과 머리말의 '활동지 전체 출력'이
-     * 둘 다 이 주소를 본다. 받은 목록대로 워크시트를 모아 이름·날짜를 찍은 PDF 한 개로 돌려준다.
-     *
-     * 가비아 호스팅 주소를 그대로 화면에 내려주면 로그인하지 않은 사람도 URL만 알면 워크시트를
-     * 통째로 받아갈 수 있다. 그래서 주소는 서버 안에만 두고, 로그인한 직원에게만 결과물을 흘려준다.
-     * 브라우저 캐시에도 남기지 않는다(no-store) — 로그아웃 후 뒤로가기로 다시 뜨지 않게.
-     *
-     * 조회성 동작인데 POST인 이유: 뽑을 장 목록과 이름이 길어 URL에 담기 어렵고, 학생 이름이
-     * 주소창·접근 로그에 남는 것도 피하고 싶다.
+     * 활동지 JSON (2026-11-11) — 모니터링 카드의 프린터 아이콘과 머리말의 '활동지 전체 출력'이 둘 다
+     * 이 주소를 본다. erp_hoho_activity_result.json_data를 그대로 내려주고, 그리기·인쇄는 화면의
+     * hoho_activity_render.js가 한다. JSON이 없는 책은 응답에서 빠진다.
      */
-    @PostMapping("/worksheet/print")
-    public ResponseEntity<byte[]> worksheetPrint(@RequestBody @Valid MonitorReqDTO.WorksheetPrintReqDTO reqDTO) {
-        List<WorksheetPrintService.Item> items = reqDTO.getSheets().stream()
-                .map(sheet -> new WorksheetPrintService.Item(sheet.getContentId(), sheet.getStudentName()))
-                .toList();
-
-        return ResponseEntity.ok()
-                .header(HttpHeaders.CONTENT_TYPE, "application/pdf")
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"worksheet.pdf\"")
-                .header(HttpHeaders.CACHE_CONTROL, "no-store, no-cache, must-revalidate")
-                .body(worksheetPrintService.build(items));
+    @PostMapping("/worksheet")
+    public ResponseEntity<?> worksheets(@RequestBody @Valid MonitorReqDTO.WorksheetReqDTO reqDTO) {
+        return ResponseEntity.ok(ApiUtils.success(monitorService.getWorksheets(reqDTO.getContentIds())));
     }
 
     /**

@@ -2,6 +2,7 @@ package com.hohoedu.book_clinic.demo;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +37,9 @@ public class DemoResetService {
 
     public static final String DEMO_USER_CODE = "PUS001cos";
 
+    /** 초기화만 할 수 있는 계정 — 예약 현황 화면의 [초기화] 버튼(2026-11-11). 기준점 저장은 DEMO_USER_CODE만 */
+    public static final Set<String> RESET_USER_CODES = Set.of(DEMO_USER_CODE, "PUS001ssar");
+
     static final List<String> DEMO_STUDENT_IDS = List.of(
             "PUS001251202A0DA2",
             "PUS001251202BD9E7",
@@ -46,9 +50,9 @@ public class DemoResetService {
     private final DemoResetRepository demoResetRepository;
     private final UserRepository userRepository;
 
-    /** 실행 권한 확인 — 시연 관리자 계정이 아니거나 비밀번호가 틀리면 예외 */
-    public void verify(CustomUserDetails userDetails, String rawPassword) {
-        if (userDetails == null || !DEMO_USER_CODE.equals(userDetails.getLoginUser().getUserCode())) {
+    /** 실행 권한 확인 — allowedUserCodes에 없는 계정이거나 비밀번호가 틀리면 예외 */
+    public void verify(CustomUserDetails userDetails, String rawPassword, Set<String> allowedUserCodes) {
+        if (userDetails == null || !allowedUserCodes.contains(userDetails.getLoginUser().getUserCode())) {
             throw new Exception403("시연 관리자 계정에서만 실행할 수 있습니다.");
         }
         if (rawPassword == null || rawPassword.isBlank()) {

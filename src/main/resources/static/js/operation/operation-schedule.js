@@ -124,6 +124,14 @@
 
   /* ── 회차 표 ─────────────────────────────────────────────────────────── */
 
+  const ROUND_MINUTE_CHOICES = [50, 60, 70, 80, 90];
+
+  /** 목록에 없는 길이(시작/종료를 직접 바꾼 경우)도 그대로 보여주도록 그 값만 옵션으로 덧붙인다 */
+  function roundMinuteOptions(minutes) {
+    return ROUND_MINUTE_CHOICES.map((m) => `<option value="${m}" ${minutes === m ? "selected" : ""}>${m}분</option>`).join("")
+      + (ROUND_MINUTE_CHOICES.includes(minutes) ? "" : `<option value="${minutes}" selected>${minutes}분</option>`);
+  }
+
   // data-seq는 서버가 매긴 회차 번호다. 화면 순서와 분리해 두는 이유는 예외(회차 변경)에서
   // "3회차를 마감" 같은 지시를 만들 때 원래 번호가 있어야 하기 때문이다.
   function buildRoundRow({ seq, startTime, endTime, capacity, closed }) {
@@ -137,10 +145,7 @@
       <td><input type="text" class="time-value" value="${startTime}" readonly /></td>
       <td><input type="text" class="time-value" value="${endTime}" readonly /></td>
       <td>
-        <select>
-          ${[30, 40, 50, 60].map((m) => `<option value="${m}" ${minutes === m ? "selected" : ""}>${m}분</option>`).join("")}
-          ${[30, 40, 50, 60].includes(minutes) ? "" : `<option value="${minutes}" selected>${minutes}분</option>`}
-        </select>
+        <select>${roundMinuteOptions(minutes)}</select>
       </td>
       <td>
         <div class="stepper">
@@ -165,7 +170,51 @@
         closed: slot.closed,
       }));
     });
+    markOverlappingRounds();
   }
+
+  /** 시간이 겹치는 두 회차 중 늦게 시작하는 쪽(같으면 아래 행)에 겹침 표시를 단다 */
+  function markOverlappingRounds() {
+    const rows = [...roundListBody.querySelectorAll("tr")]
+      .map((tr) => ({ tr, inputs: tr.querySelectorAll("input.time-value") }))
+      .filter(({ inputs }) => inputs.length === 2)   // 휴무 안내 행 등은 건너뛴다
+      .map(({ tr, inputs }) => ({ tr, start: toMinutes(inputs[0].value), end: toMinutes(inputs[1].value) }));
+
+    overlapTip.classList.remove("show");   // 아이콘이 다시 그려지면 떠 있던 툴팁은 주인을 잃는다
+    rows.forEach((row, i) => {
+      row.tr.querySelector(".round-overlap-tag")?.remove();
+      const earlier = rows.find((other, j) => j !== i
+        && other.start < row.end && row.start < other.end
+        && (other.start < row.start || (other.start === row.start && j < i)));
+      if (!earlier) return;
+      const tag = document.createElement("span");
+      tag.className = "round-overlap-tag";
+      tag.dataset.tip = `${earlier.tr.dataset.seq}회차와 시간이 겹칩니다`;
+      tag.setAttribute("aria-label", tag.dataset.tip);
+      tag.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i>';
+      row.tr.querySelector(".round-name").appendChild(tag);
+    });
+  }
+
+  // 브라우저 기본 title 툴팁은 지연이 길어서 바로 뜨는 툴팁을 따로 띄운다.
+  // body에 붙이는 이유: 회차 목록이 스크롤 영역이라 그 안에 두면 위아래 끝에서 잘린다.
+  const overlapTip = document.createElement("div");
+  overlapTip.className = "round-overlap-tip";
+  document.body.appendChild(overlapTip);
+
+  roundListBody.addEventListener("mouseover", (e) => {
+    const tag = e.target.closest(".round-overlap-tag");
+    if (!tag) return;
+    const rect = tag.getBoundingClientRect();
+    overlapTip.textContent = tag.dataset.tip;
+    overlapTip.style.left = `${rect.left + rect.width / 2}px`;
+    overlapTip.style.top = `${rect.top - 6}px`;
+    overlapTip.classList.add("show");
+  });
+
+  roundListBody.addEventListener("mouseout", (e) => {
+    if (e.target.closest(".round-overlap-tag")) overlapTip.classList.remove("show");
+  });
 
   function readRounds() {
     return [...roundListBody.querySelectorAll("tr")].map((tr) => ({
@@ -213,7 +262,7 @@
     const slots = buildSlotGrid(
       dayOpenTime.value || "13:00",
       dayCloseTime.value || "19:00",
-      Number(roundDefaultMinutes.value) || 50,
+      Number(roundDefaultMinutes.value) || 60,
       numberOf(maxCapacityInput.value) || 10);
 
     if (!slots.length) {
@@ -272,7 +321,7 @@
     copiedSchedule = {
       openTime: dayOpenTime.value,
       closeTime: dayCloseTime.value,
-      slotMinutes: Number(roundDefaultMinutes.value) || 50,
+      slotMinutes: Number(roundDefaultMinutes.value) || 60,
       defaultCapacity: numberOf(maxCapacityInput.value),
       slots: rounds.map((r) => ({ ...r })),
     };
@@ -641,7 +690,7 @@
     day.isOpen = dayScheduleStateToggle.checked;
     day.openTime = dayOpenTime.value;
     day.closeTime = dayCloseTime.value;
-    day.slotMinutes = Number(roundDefaultMinutes.value) || 50;
+    day.slotMinutes = Number(roundDefaultMinutes.value) || 60;
     day.defaultCapacity = numberOf(maxCapacityInput.value);
     day.slots = readRounds();
   }
@@ -979,7 +1028,7 @@
     renderRounds(buildSlotGrid(
       dayOpenTime.value,
       dayCloseTime.value,
-      Number(roundDefaultMinutes.value) || day?.slotMinutes || 50,
+      Number(roundDefaultMinutes.value) || day?.slotMinutes || 60,
       numberOf(maxCapacityInput.value) || day?.defaultCapacity || 10));
   }
 
@@ -1126,6 +1175,19 @@
 
   roundListBody.addEventListener("change", (e) => {
     if (e.target.classList.contains("stepper-value")) clampRoundCapacity(e.target);
+
+    const tr = e.target.closest("tr");
+    const startInput = tr?.children[2].querySelector("input");
+    const endInput = tr?.children[3].querySelector("input");
+    const minutesSelect = tr?.querySelector("select");
+    if (e.target === startInput || e.target === endInput) {
+      // 시작/종료를 바꾸면 회차 시간을 다시 계산한다
+      minutesSelect.innerHTML = roundMinuteOptions(toMinutes(endInput.value) - toMinutes(startInput.value));
+    } else if (e.target === minutesSelect) {
+      // 회차 시간을 바꾸면 시작시간 기준으로 종료시간을 맞춘다
+      endInput.value = addMinutes(startInput.value, Number(minutesSelect.value));
+    }
+    markOverlappingRounds();
     markDirty();
   });
 
@@ -1152,6 +1214,7 @@
       renumberRounds();
       markDirty();
     }
+    markOverlappingRounds();
   });
 
   btnAutoGenerate.addEventListener("click", autoGenerateRounds);

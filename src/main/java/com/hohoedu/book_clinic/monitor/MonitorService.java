@@ -178,6 +178,11 @@ public class MonitorService {
         syncSafely(monitorRepository.findOpenSessionId(studentId, KstClock.today()));
     }
 
+    /** 활동지 JSON 조회 (2026-11-11) — 같은 책이 여러 번 와도 한 번만 조회한다 */
+    public List<MonitorRespDTO.WorksheetDTO> getWorksheets(List<Integer> contentIds) {
+        return monitorRepository.findActivitySheets(contentIds.stream().distinct().toList());
+    }
+
     /**
      * 실시간 모니터링 화면 최초 진입용 — 예약 기준 카드 목록(로그인 직원의 센터로 스코핑).
      * 이후 갱신은 Firestore 구독으로 받되, 끊겼을 때 대비해 monitor-live.js가 이 메서드를 30초

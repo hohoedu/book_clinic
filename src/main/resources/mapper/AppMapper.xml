@@ -30,9 +30,9 @@
             convert(varchar(5), prv.in_time, 108) AS checkIn,
             convert(varchar(5), coalesce(prv.out_time, prvres.ends_at), 108) AS checkOut,
 
-            pass.total_count  AS passTotal,
-            pass.remain_count AS passRemain,
-            convert(varchar(10), pass.valid_until, 23) AS passValidUntil,
+            passSum.total_count  AS passTotal,
+            passSum.remain_count AS passRemain,
+            convert(varchar(10), passSum.valid_until, 23) AS passValidUntil,
 
             books.img1 AS bookImg1,
             books.img2 AS bookImg2,
@@ -78,31 +78,22 @@
             ORDER BY ebsi.starts_at DESC
         ) prvres
 
-        -- 이용 중인 이용권 1장 — 다음 예약이 차감될 이용권이다(2026-09-28)
-        --
-        -- 가장 최근 부여분을 보던 것을 바꿨다. 쓰던 이용권이 남은 채로 새로 결제하면 새 이용권
-        -- (미사용, 12/12)이 잡혀서 실제로 차감 중인 쪽이 화면에서 사라졌다. 정렬은 차감 순서
-        -- (PassMapper.findUsablePassOn)와 같다 — 기간이 정해진 것 먼저, 먼저 만료되는 것 먼저,
-        -- 미배정(valid_from IS NULL)은 마지막.
-        -- 차감과 달리 remain_count > 0 을 거르지 않고 정렬 맨 앞으로만 뺀다 — 다 쓴 이용권만
-        -- 남았을 때 화면이 "이용권 없음"이 아니라 "0회 남음"을 보여주게 하려는 것이다.
+        -- 남은 이용권 N/M — 아직 만료되지 않은 이용권을 전부 합산한다(2026-11-11).
+        -- 월 4회권을 두 번 사서 주 2회 쓰면 8/8로 보여야 한다. 사용기한은 그중 가장 늦게 끝나는 날이다.
+        -- 기간이 아직 안 정해진(valid_until IS NULL) 것과 기간이 앞으로 시작될 것도 포함한다.
+        -- 이용권이 하나도 없으면 SUM 이 NULL 이라 앱은 "보유한 이용권이 없어요"를 그대로 보여준다.
         OUTER APPLY (
-            SELECT TOP 1 p.total_count, p.remain_count, p.valid_until
+            SELECT sum(p.total_count) AS total_count, sum(p.remain_count) AS remain_count,
+                   max(p.valid_until) AS valid_until
             FROM erp_bookstore_pass p
             WHERE p.student_id = s.student_id
               AND p.service_code = 'BOOK'
               AND p.revoked_at IS NULL
-              -- 서비스 제공기간이 끝난 이용권은 소멸했다(2026-10-27). 남은 몫은 쿠폰 행으로 잡힌다
               AND (p.service_until IS NULL
                    OR p.service_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date))
-              AND (p.valid_from IS NULL
-                   OR (p.valid_from &lt;= cast(dateadd(HOUR, 9, getutcdate()) AS date)
-                       AND p.valid_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date)))
-            ORDER BY CASE WHEN p.remain_count &gt; 0 THEN 0 ELSE 1 END,
-                     CASE WHEN p.valid_from IS NULL THEN 1 ELSE 0 END,
-                     p.valid_until ASC,
-                     p.granted_at ASC
-        ) pass
+              AND (p.valid_until IS NULL
+                   OR p.valid_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date))
+        ) passSum
 
         -- 최근 독서 기록 이미지 4개 (최신순)
         -- is_send = 1 — 직원이 발송한 일지만 센다(2026-09-23). 정독 결과 화면과 같은 규칙이다.
@@ -144,7 +135,7 @@
 
     <!--
       보유 이용권 목록 — 결제 건별. 이용권 1행이 곧 결제 1건이라(앱 결제분은 ref_no = order_no)
-      별도 집계 없이 JOIN 한 번으로 끝난다. 메인 화면의 passRemain 이 "가장 최근 부여분" 한 장인
+      별도 집계 없이 JOIN 한 번으로 끝난다. 메인 화면의 passRemain 이 만료 안 된 이용권의 합산인
       것과 달리 여기는 보유한 건을 전부 낸다 — 건별 환불을 고를 단위가 필요하다.
 
       status = 'PAID' 만 — READY/FAILED/CLOSED 는 이용권이 발급되지 않았고, CANCELED(전액환불)는
@@ -213,13 +204,15 @@
          확인하는 화면이라 미발송이어야 볼 이유가 있다 (2026-09-23).
     -->
 
-    <!-- 일자 탭 — 예전엔 최근 4일치만 내려 그 이전 결과를 앱에서 볼 수 없었다(2026-10-22).
-         앱 탭이 4개를 넘으면 옆으로 넘겨 보므로 넉넉히 내리되, 응답이 끝없이 커지지 않게 상한(60)만 둔다. -->
+    <!-- 회차 날짜 — 예전엔 최근 4일치(~2026-10-22), 그다음엔 최근 60개였다.
+         앱은 이전/다음 회차와 달력으로 이 목록을 오가므로 조회 범위를 오늘(KST) 기준 최근 1년으로 둔다(2026-11-12).
+         한 달 최대 8회라 1년이어도 100건 안팎이다. -->
     <select id="selectBookstoreReportDates" resultType="java.lang.String">
-        SELECT TOP 60 convert(varchar(10), d.record_date, 23)
+        SELECT convert(varchar(10), d.record_date, 23)
         FROM erp_bookstore_diary d
         WHERE d.student_id = #{studentId}
           AND d.record_date &lt;= cast(dateadd(hour, 9, getutcdate()) AS date)
+          AND d.record_date &gt; dateadd(year, -1, cast(dateadd(hour, 9, getutcdate()) AS date))
           <if test="sentOnly"> AND d.is_send = 1 </if>
         -- 하루에 두 번 입실하면(퇴실 후 다른 회차) 일지가 날짜당 2건이라 탭이 중복되지 않게 날짜로 묶는다
         GROUP BY d.record_date
@@ -320,6 +313,69 @@
           AND d.record_date = #{recordDate}
           <if test="sentOnly"> AND d.is_send = 1 </if>
         ORDER BY dd.id
+    </select>
+
+    <!--
+      "문해력이 자랐어요" 문구 — 그날 읽은 책에서 맞힌 문제에 걸린 erp_bookstore_item_advice.message.
+      문제와는 content_id · qtype · qnum 으로 잇는다(2026-11-12).
+
+      '맞혔다'의 기준은 독서 성향(selectBookstoreReportTendencies)과 같다 — 점수에 반영되는 제출
+      (첫 제출·재도전·틀린 문제 다시 풀기 1회차) 중 문항별 최신 답. 연습 모드(다시 풀기 2회차~)에서
+      맞힌 것까지 세면 점수는 틀렸는데 "자랐어요"가 뜬다.
+      책마다 유형(qtype)별로 한 문구만 내린다 — 같은 유형 문구가 줄줄이 붙으면 같은 말을 반복하는
+      것처럼 읽힌다. 같은 유형을 여러 문제 맞혔으면 그중 무작위 하나다(2026-11-12).
+      무작위는 요약 문장처럼 (학생, 날짜) 시드로 고정한다 — NEWID() 로 뽑으면 화면을 열 때마다
+      문구가 바뀌고, 발송 미리보기에서 본 문구와 학부모가 보는 문구가 달라진다.
+    -->
+    <select id="selectBookstoreReportGrowthMessages" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$ReportGrowthMessageDTO">
+        WITH scored AS (
+            SELECT q.recommend_id, q.content_id, q.qlevel, q.qnum, q.qtype, q.is_correct, q.answer_id
+            FROM erp_bookstore_diary d
+            JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
+            JOIN erp_bookstore_quiz_answer_log q ON q.recommend_id = dd.recommend_id
+            WHERE d.student_id = #{studentId}
+              AND d.record_date = #{recordDate}
+              <if test="sentOnly"> AND d.is_send = 1 </if>
+              AND (
+                    q.submit_mode IS NULL
+                 OR q.submit_mode &lt;&gt; 'WRONG_ONLY'
+                 OR q.submitted_at = (
+                        SELECT min(w.submitted_at)
+                        FROM erp_bookstore_quiz_answer_log w
+                        WHERE w.recommend_id = q.recommend_id
+                          AND w.qlevel      = q.qlevel
+                          AND w.submit_mode = 'WRONG_ONLY'
+                    )
+              )
+        ),
+        latest AS (
+            SELECT s.content_id, s.qlevel, s.qnum, s.qtype, s.is_correct
+            FROM scored s
+            WHERE s.answer_id = (
+                SELECT max(s2.answer_id)
+                FROM scored s2
+                WHERE s2.recommend_id = s.recommend_id
+                  AND s2.qlevel       = s.qlevel
+                  AND s2.qnum         = s.qnum
+            )
+        ),
+        matched AS (
+            SELECT l.content_id, l.qlevel, l.qnum, a.message,
+                   row_number() OVER (PARTITION BY l.content_id, l.qtype
+                                      ORDER BY checksum(#{studentId}, #{recordDate}, l.qlevel, l.qnum)) AS rn
+            FROM latest l
+            JOIN erp_bookstore_item_advice a
+              ON a.content_id = l.content_id
+             AND a.qtype      = l.qtype
+             AND a.qnum       = l.qnum
+            WHERE l.is_correct = 1
+              AND nullif(ltrim(rtrim(a.message)), '') IS NOT NULL
+        )
+        SELECT m.content_id AS contentId, m.message AS message
+        FROM matched m
+        WHERE m.rn = 1
+        -- 문제 순서대로 (qnum 은 문자열이라 숫자로 바꿔 정렬해야 10번이 2번 앞에 안 온다)
+        ORDER BY m.content_id, m.qlevel, try_convert(int, m.qnum), m.qnum
     </select>
 
     <!-- 보상 4칸 — 마스터 4종을 항상 전부 내린다. 그날 읽은 책에서 받은 것만 earned. -->

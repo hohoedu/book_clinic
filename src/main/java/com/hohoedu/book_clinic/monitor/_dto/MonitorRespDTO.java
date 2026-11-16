@@ -37,9 +37,7 @@ public class MonitorRespDTO {
         private String author;
         private String publisher;
         private String imageUrl;
-        // 이 책에 워크시트(출력용 이미지)가 등록돼 있는지 (2026-09-14). 모니터링 카드의 출력 아이콘 노출
-        // 조건으로만 쓴다 — 호스팅 원본 주소(card_path.worksheet_url)는 일부러 안 내려보내고, 그림은
-        // /admin/monitor/worksheet/{contentId} 프록시가 로그인한 직원에게만 스트리밍한다.
+        // 이 책에 활동지 JSON(erp_hoho_activity_result)이 있는지 — 모니터링 카드의 출력 아이콘 노출 조건 (2026-11-11)
         private Boolean hasWorksheet;
         private String readingTimeText;      // content.reading_time 원문 (예: "20분")
         private LocalDateTime recommendedAt; // 이 책이 추천/대여 확정된 시각 = 독서 시작 기준
@@ -98,7 +96,7 @@ public class MonitorRespDTO {
         private String author;
         private String publisher;
         private String imageUrl;
-        private Boolean hasWorksheet;  // 워크시트 등록 여부 — CardDTO의 같은 이름 필드와 의미가 같다 (2026-09-14)
+        private Boolean hasWorksheet;  // 활동지 JSON 유무 — CardDTO의 같은 이름 필드와 의미가 같다 (2026-11-11)
         private String readingTimeText;
         private LocalDateTime recommendedAt;
 
@@ -198,4 +196,10 @@ public class MonitorRespDTO {
         private List<AttitudeCodeDTO> attitudeCodeOptions;
     }
 
+    /** 활동지 JSON 한 권 (2026-11-11) — json은 json_data 원문 문자열 그대로 내려보내고 화면이 파싱한다 */
+    @Data
+    public static class WorksheetDTO {
+        private Integer contentId;
+        private String json;
+    }
 }

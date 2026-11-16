@@ -1053,6 +1053,39 @@ input.time-value {
   font-weight: 700;
 }
 
+/* 앞 회차와 시간이 겹치는 회차 — 칸 위에 겹쳐 띄워서 가운데 정렬된 회차 이름이 밀리지 않게 한다 */
+.round-name {
+  position: relative;
+}
+
+.round-overlap-tag {
+  position: absolute;
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+  color: #e08a00;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.round-overlap-tip {
+  position: fixed;
+  z-index: 1000;
+  display: none;
+  transform: translate(-50%, -100%);
+  padding: 5px 8px;
+  border-radius: 4px;
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.round-overlap-tip.show {
+  display: block;
+}
+
 /* 저장 버튼이 잠긴 상태를 눈으로 알 수 있어야 한다 — 눌러보고 알게 하면 안 된다 */
 #btnSaveSchedule:disabled {
   opacity: 0.45;

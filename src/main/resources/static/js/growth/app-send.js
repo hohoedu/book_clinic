@@ -611,17 +611,25 @@ function bookResultHtml(book) {
     </div>`;
 }
 
-/* "문해력이 자랐어요" — 낱말이 없으면(현재 서버가 항상 null) 영역을 통째로 숨긴다 */
+/* "문해력이 자랐어요" — 맞힌 문제에 걸린 item_advice 문구. 없으면 영역을 통째로 숨긴다(앱과 같다) */
 function growthHtml(book) {
-  const words = book.growthWords ?? [];
-  if (!words.length) return "";
+  const messages = book.growthMessages ?? [];
+  if (!messages.length) return "";
 
-  const quoted = words.map((w) => `‘${w}’`).join(", ");
   return `
     <h5 class="app-growth-head">
       <img src="/images/student_result/medal.png" alt="" onerror="this.remove()" /> 문해력이 자랐어요!
     </h5>
-    <p class="app-growth-text">${escapeHtml(quoted)} 처럼 문맥 속 낱말 뜻을 짐작하며 낱말 순서를 바르게 배열해 문장을 완성하는 힘이 자랐어요.</p>`;
+    <p class="app-growth-text">${escapeHtml(joinGrowth(messages))}</p>`;
+}
+
+/* 유형별 문구(심화 문법·심화 어휘)를 한 문단으로 — 둘째는 '또한', 그 뒤는 '그리고'. 앱 ReportBook.growthText 와 같다 */
+function joinGrowth(messages) {
+  return messages
+    .map((m) => (m ?? "").trim())
+    .filter(Boolean)
+    .map((m, i) => (i === 0 ? m : `${i === 1 ? "또한" : "그리고"} ${m}`))
+    .join(" ");
 }
 
 /* 이번 독서 활동에서는 — 계열별 대표 뱃지 2칸 + 누적 독서기록 + 가장 오른 영역.

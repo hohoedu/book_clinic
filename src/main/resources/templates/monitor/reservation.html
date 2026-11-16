@@ -25,10 +25,17 @@
 
       <header class="page-header">
         <h1>예약 현황</h1>
-        <button type="button" id="btnGuide" class="guide-btn" style="display: none;">
-          <i class="fa-regular fa-circle-question"></i>
-          사용 가이드
-        </button>
+        <div class="page-header-actions">
+          <button type="button" id="btnGuide" class="guide-btn" style="display: none;">
+            <i class="fa-regular fa-circle-question"></i>
+            사용 가이드
+          </button>
+          <!-- 시연 데이터 초기화(초기화만) — 허용 계정에서만 sidebar.js가 보이게 한다 -->
+          <button type="button" id="btnDemoResetOnly" class="guide-btn" hidden>
+            <i class="fa-solid fa-rotate-left"></i>
+            초기화
+          </button>
+        </div>
       </header>
 
       <div class="reservation-scroll">
@@ -83,8 +90,15 @@
             <section class="panel-card reservation-list-card">
               <div class="panel-head">
                 <h2><span class="round-highlight" id="listRoundLabel">전체</span> 예약자 목록 <span class="round-list-sub" id="listRoundSub"></span></h2>
-                <button type="button" id="btnAddReservation" class="btn outline small"><i class="fa-solid fa-plus"></i>
-                  예약 등록</button>
+                <div class="list-head-actions">
+                  <!-- 기본은 진행·완료된 예약만, 취소(변경으로 생긴 취소 포함)는 별도 탭에서 본다 -->
+                  <div class="list-tabs" id="listTabs">
+                    <button type="button" class="list-tab active" data-tab="active">예약 현황 <span class="list-tab-count" id="activeCount">0</span></button>
+                    <button type="button" class="list-tab" data-tab="canceled">취소·변경 내역 <span class="list-tab-count" id="canceledCount">0</span></button>
+                  </div>
+                  <button type="button" id="btnAddReservation" class="btn outline small"><i class="fa-solid fa-plus"></i>
+                    예약 등록</button>
+                </div>
               </div>
 
               <div class="reservation-table-wrap">

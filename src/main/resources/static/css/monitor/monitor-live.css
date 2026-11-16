@@ -1089,12 +1089,9 @@ i.badge-icon {
   color: #4c9be8;
 }
 
-/* 활동지 출력 (2026-10-02) — 서버가 만들어준 PDF를 숨긴 iframe에 띄우고 그 안에서 인쇄한다.
-   화면에는 보이지 않아야 하지만 display:none이면 PDF 뷰어가 로드되지 않아 인쇄가 비는 브라우저가
-   있다. 그래서 크기를 0으로 두지 않고 화면 밖으로 밀어낸다.
-
-   인쇄 대상은 이 문서가 아니라 iframe 안의 PDF라, 예전처럼 @media print로 화면을 숨기거나
-   용지를 A4로 못박을 필요가 없다 — 장 나눔·용지·여백은 전부 PDF가 들고 있다. */
+/* 활동지 출력 (2026-11-11 JSON 방식) — 활동지 JSON을 그린 A4 문서를 숨긴 iframe에 띄우고 그 안에서 인쇄한다.
+   display:none이면 레이아웃이 안 잡혀 인쇄가 비는 브라우저가 있어, 크기를 0으로 두지 않고 화면 밖으로 밀어낸다.
+   용지·장 나눔은 iframe 안의 hoho_activity_sheet.css(@page A4)가 맡는다. */
 .worksheet-print-frame {
   position: fixed;
   left: -10000px;

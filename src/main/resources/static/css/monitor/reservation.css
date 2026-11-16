@@ -418,6 +418,23 @@
 .status-cancelled { background: #F7DCDF; color: #C45C67; border-color: #DC939B; }
 .status-absent { background: #EEEEEE; color: #848484; border-color: #C9C9C9; }
 
+/* 예약자 목록 탭(예약 현황 / 취소·변경 내역) — monitor-live의 filter-chip과 같은 모양 */
+.list-head-actions { display: flex; align-items: center; gap: 12px; }
+.list-tabs { display: flex; gap: 6px; }
+.list-tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid #e0e4e7;
+  background: #f7f8f9;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  cursor: pointer;
+}
+.list-tab.active { background: #2f9e6e; border-color: transparent; color: #fff; }
+.list-tab[data-tab="canceled"].active { background: #C45C67; }
+.list-tab-count { font-weight: 700; margin-left: 2px; }
+
 /* 예약 변경 패널 */
 /* 오른쪽 패널이 reservation-grid의 stretch로 왼쪽 컬럼과 같은 높이를 받는다.
    student-pick-group(예약 등록 모드의 학생 목록)만 남는 높이를 다 가져가서 스크롤되고,

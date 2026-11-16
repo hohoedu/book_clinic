@@ -1,5 +1,6 @@
 package com.hohoedu.book_clinic.app._dto;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import lombok.Data;
@@ -51,7 +52,7 @@ public class AppRespDTO {
     /**
      * 보유 이용권 목록의 한 줄 = 결제 1건. 단일 쿼리(AppMapper.xml#selectPassList) 한 행이다.
      *
-     * 메인 화면({@link BookstoreMainDTO})의 passRemain 은 이용 중인 한 장의 잔여라
+     * 메인 화면({@link BookstoreMainDTO})의 passRemain 은 만료 안 된 이용권 전체의 합산이라
      * 건별 환불을 고를 단위가 되지 못한다. 이용권은 결제 건마다 따로 발급·회수되므로
      * (erp_bookstore_pass 1행 = 결제 1건) 이 화면은 건별로 내려준다.
      *
@@ -150,10 +151,17 @@ public class AppRespDTO {
         private Integer correctRate;
 
         /**
-         * "문해력이 자랐어요" 낱말들. itempool.ans 는 보기 번호라 낱말을 뽑을 수 없어
-         * 항상 null 이다 — 낱말 컬럼이 생기기 전까지 앱은 이 영역을 숨긴다.
+         * "문해력이 자랐어요" 문구들 — 이 책에서 맞힌 문제에 걸린 erp_bookstore_item_advice.message.
+         * 맞힌 문제에 문구가 없으면 빈 리스트이고, 앱은 그 영역을 숨긴다(2026-11-12).
          */
-        private List<String> growthWords;
+        private List<String> growthMessages = new ArrayList<>();
+    }
+
+    /** "문해력이 자랐어요" 문구 한 줄 — 서비스가 contentId 로 책에 나눠 담는다. */
+    @Data
+    public static class ReportGrowthMessageDTO {
+        private Integer contentId;
+        private String message;
     }
 
     /** 정독 결과 — 보상 칸. 뱃지 마스터 5종을 항상 전부 내리고 그날 획득분만 earned=true. */

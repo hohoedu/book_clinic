@@ -111,9 +111,10 @@
             c.author           AS author,
             c.publisher        AS publisher,
             c.image_url        AS imageUrl,
-            -- 워크시트 등록 여부만 내려준다(2026-09-14) — 호스팅 원본 주소는 화면/Firestore로
-            -- 내보내지 않고, 실제 그림은 /admin/monitor/worksheet/{contentId} 프록시로만 받는다
-            CAST(CASE WHEN wp.worksheet_url IS NULL THEN 0 ELSE 1 END AS BIT) AS hasWorksheet,
+            -- 활동지 JSON이 있는 책인지만 내려준다(2026-11-11, 업로드 워크시트 → erp_hoho_activity_result로 교체)
+            CAST(CASE WHEN EXISTS (SELECT 1 FROM erp_hoho_activity_result ar
+                                   WHERE ar.content_id = rl.content_id AND ar.json_data IS NOT NULL)
+                      THEN 1 ELSE 0 END AS BIT) AS hasWorksheet,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
             rl.correct_count       AS basicCorrectCount,
@@ -175,7 +176,6 @@
             ORDER BY recommend_id DESC
         ) rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
         OUTER APPLY (
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지를 세면 A책 카드에도
             -- B책에서 딴 뱃지가 같이 보이는 문제가 생긴다(2026-07-29 수정)
@@ -258,9 +258,10 @@
             c.author           AS author,
             c.publisher        AS publisher,
             c.image_url        AS imageUrl,
-            -- 워크시트 등록 여부만 내려준다(2026-09-14) — 호스팅 원본 주소는 화면/Firestore로
-            -- 내보내지 않고, 실제 그림은 /admin/monitor/worksheet/{contentId} 프록시로만 받는다
-            CAST(CASE WHEN wp.worksheet_url IS NULL THEN 0 ELSE 1 END AS BIT) AS hasWorksheet,
+            -- 활동지 JSON이 있는 책인지만 내려준다(2026-11-11, 업로드 워크시트 → erp_hoho_activity_result로 교체)
+            CAST(CASE WHEN EXISTS (SELECT 1 FROM erp_hoho_activity_result ar
+                                   WHERE ar.content_id = rl.content_id AND ar.json_data IS NOT NULL)
+                      THEN 1 ELSE 0 END AS BIT) AS hasWorksheet,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
             rl.correct_count       AS basicCorrectCount,
@@ -313,7 +314,6 @@
             ORDER BY recommend_id DESC
         ) rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
         OUTER APPLY (
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계한다 — 학생 전체 뱃지가 아니다(2026-07-29 수정)
             SELECT
@@ -396,9 +396,10 @@
             c.author           AS author,
             c.publisher        AS publisher,
             c.image_url        AS imageUrl,
-            -- 워크시트 등록 여부만 내려준다(2026-09-14) — 호스팅 원본 주소는 화면/Firestore로
-            -- 내보내지 않고, 실제 그림은 /admin/monitor/worksheet/{contentId} 프록시로만 받는다
-            CAST(CASE WHEN wp.worksheet_url IS NULL THEN 0 ELSE 1 END AS BIT) AS hasWorksheet,
+            -- 활동지 JSON이 있는 책인지만 내려준다(2026-11-11, 업로드 워크시트 → erp_hoho_activity_result로 교체)
+            CAST(CASE WHEN EXISTS (SELECT 1 FROM erp_hoho_activity_result ar
+                                   WHERE ar.content_id = rl.content_id AND ar.json_data IS NOT NULL)
+                      THEN 1 ELSE 0 END AS BIT) AS hasWorksheet,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
             rl.correct_count       AS basicCorrectCount,
@@ -420,7 +421,6 @@
             spcard.reached        AS specialCardReached
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
         OUTER APPLY (
             -- 이 책(rl.content_id)에서 딴 뱃지만 집계 — 카드 캐러셀에서 책마다 따로 보여줘야 한다
             SELECT
@@ -485,9 +485,10 @@
             c.author           AS author,
             c.publisher        AS publisher,
             c.image_url        AS imageUrl,
-            -- 워크시트 등록 여부만 내려준다(2026-09-14) — 호스팅 원본 주소는 화면/Firestore로
-            -- 내보내지 않고, 실제 그림은 /admin/monitor/worksheet/{contentId} 프록시로만 받는다
-            CAST(CASE WHEN wp.worksheet_url IS NULL THEN 0 ELSE 1 END AS BIT) AS hasWorksheet,
+            -- 활동지 JSON이 있는 책인지만 내려준다(2026-11-11, 업로드 워크시트 → erp_hoho_activity_result로 교체)
+            CAST(CASE WHEN EXISTS (SELECT 1 FROM erp_hoho_activity_result ar
+                                   WHERE ar.content_id = rl.content_id AND ar.json_data IS NOT NULL)
+                      THEN 1 ELSE 0 END AS BIT) AS hasWorksheet,
             c.reading_time     AS readingTimeText,
             rl.recommended_at  AS recommendedAt,
             rl.correct_count       AS basicCorrectCount,
@@ -508,7 +509,6 @@
             spcard.reached        AS specialCardReached
         FROM erp_bookstore_recommend_log rl
         LEFT JOIN erp_bookstore_content c ON c.content_id = rl.content_id
-        LEFT JOIN erp_bookstore_card_path wp ON wp.content_id = rl.content_id
         OUTER APPLY (
             SELECT
                 COUNT(*) AS badgeCount,
@@ -833,5 +833,16 @@
                     CASE WHEN #{qlevel} = '02' THEN #{correctCount} END,
                     CASE WHEN #{qlevel} = '02' THEN #{totalCount}   END);
     </update>
+
+    <!-- 활동지 JSON 원문 (2026-11-11) — 모니터링 출력에서 hoho_activity_render.js가 그대로 그린다 -->
+    <select id="findActivitySheets" resultType="com.hohoedu.book_clinic.monitor._dto.MonitorRespDTO$WorksheetDTO">
+        SELECT content_id AS contentId, json_data AS json
+        FROM erp_hoho_activity_result
+        WHERE json_data IS NOT NULL
+          AND content_id IN
+        <foreach item="contentId" collection="contentIds" open="(" separator="," close=")">
+            #{contentId}
+        </foreach>
+    </select>
 
 </mapper>

@@ -58,7 +58,7 @@ public class AppController {
     /**
      * 보유 이용권 목록 — 결제 건별 잔여.
      *
-     * 메인 화면(/app/bookstore/main)의 passRemain 은 이용 중인 한 장의 잔여라, 건별로
+     * 메인 화면(/app/bookstore/main)의 passRemain 은 만료 안 된 이용권 전체의 합산이라, 건별로
      * 환불할 건을 고르는 화면의 단위가 되지 못한다. 이용권은 결제 건마다 따로 발급·회수되므로
      * 이 화면은 보유한 건을 전부 한 줄씩 낸다. 메인 화면 쪽은 표시용으로 그대로 둔다.
      *

@@ -1,0 +1,103 @@
+/* =====================================================================
+   hoho_activity_sheet.css  -  호호책방 활동지 출력용 스타일 (독립 사용)
+   hoho_activity_sheet.asp 의 HS_CSS 와 같은 내용 + 인쇄(@media print) 규칙
+   - 모든 클래스가 .hs- 로 시작하므로 Bootstrap 등 기존 CSS 와 충돌하지 않는다.
+   - 화면에서 작게 보려면 .hs-zoom 으로 감싼다 (인쇄 시에는 자동으로 100%).
+   - 2026-11-11 book_clinic: 기존 PDF 활동지(013.pdf) 레이아웃에 맞춰 여백·글자 크기·카드/알약 모양을 조정.
+     장(.hs-page)은 A4 높이로 고정하고, 내용이 넘치면 렌더러의 HohoSheet.fit 이 .hs-body 를 줄인다.
+   ===================================================================== */
+@font-face { font-family:'Jua'; src:url('fonts/Jua-Regular.ttf') format('truetype'); font-display:block; }
+
+.hs-doc { font-family: 'Malgun Gothic','Apple SD Gothic Neo','Noto Sans KR',sans-serif; color:#222; font-size:14px; line-height:1.5;
+          -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.hs-doc * { box-sizing: border-box; }
+.hs-page { width:210mm; height:297mm; overflow:hidden; margin:0 auto 8mm; background:#fff; position:relative; page-break-after:always; break-after:page; padding:0 15mm 26mm; box-shadow:0 0 0 1px #ddd; }
+.hs-page:last-child { page-break-after:auto; break-after:auto; }
+
+/* ---------- 머리띠 ---------- */
+.hs-head { margin:0 -15mm 2mm; padding:7mm 15mm 5mm; display:flex; justify-content:space-between; align-items:flex-start; }
+.hs-head-l { flex:1; min-width:0; }
+.hs-kicker { font-size:11px; font-weight:700; }
+.hs-title { font-size:30px; font-weight:800; line-height:1.25; margin:2px 0 8px; white-space:nowrap; }
+.hs-theme { display:flex; align-items:center; gap:10px; font-size:14.5px; font-weight:600; }
+.hs-theme .hs-tp { border-radius:12px; padding:2px 10px; font-weight:700; flex:none; }
+.hs-head-r { width:62mm; flex:none; margin-left:8mm; }
+.hs-date { display:flex; justify-content:space-around; font-size:15px; font-weight:700; padding:0 6mm 4px; }
+.hs-name { background:#fff; border-radius:16px; height:18mm; display:flex; align-items:center; padding:0 5mm; font-size:15px; font-weight:600; }
+
+/* ---------- 영역 카드 (한자어휘 / 국어문법) ---------- */
+.hs-card { position:relative; border:1px solid #e3e2e3; border-radius:16px; padding:22px 26px 2px; margin:22px 0 6px; box-shadow:2px 3px 6px rgba(0,0,0,.13); background:#fff; }
+.hs-sechead { position:absolute; top:-16px; left:18px; display:flex; align-items:center; }
+.hs-pill { font-family:'Jua','Malgun Gothic',sans-serif; color:#fff; font-size:17px; line-height:1.2; border-radius:18px; padding:5px 13px 3px; position:relative; z-index:2; letter-spacing:-.5px; }
+.hs-ban { font-family:'Jua','Malgun Gothic',sans-serif; font-size:15px; line-height:1.2; border-radius:0 14px 14px 0; padding:4px 16px 3px 24px; margin-left:-14px; letter-spacing:-.5px; }
+
+/* ---------- 문항 ---------- */
+.hs-q { margin:4px 0 14px; break-inside:avoid; page-break-inside:avoid; }
+.hs-qh { display:flex; align-items:center; gap:10px; font-weight:500; font-size:14.5px; margin-bottom:6px; }
+.hs-no { flex:none; min-width:28px; height:28px; padding:0 6px; white-space:nowrap; border-radius:8px; color:#fff; font-weight:800; display:inline-flex; align-items:center; justify-content:center; font-size:18px; }
+.hs-lab { flex:none; background:#dcf0fa; color:#3d6b8f; font-size:12px; font-weight:700; border-radius:4px; padding:2px 7px; margin-right:16px; }
+.hs-ex { display:flex; align-items:center; border:1px solid #bdbdbd; min-height:40px; padding:5px 14px; margin:0 0 2px; }
+.hs-exl { flex:1; text-align:center; font-size:16px; }
+.hs-ex.multi .hs-exl { text-align:left; padding-left:6px; }
+.hs-exblank { width:68%; height:1.5em; margin:2px 0 6px; border-bottom:1.5px solid #444; }
+.hs-doc u { color:#d84aa8; font-weight:700; text-decoration:underline; text-underline-offset:4px; }
+.hs-chips { display:flex; align-items:center; gap:8px; margin:6px 0 6px 14px; }
+.hs-chips .hs-lab { margin-right:24px; }
+.hs-chip { min-width:38mm; border:1px solid #bfc5cc; background:#fff; color:#2c3f8a; font-weight:600; text-align:center; font-size:16px; padding:6px 10px; }
+.hs-note { display:flex; justify-content:flex-end; align-items:center; gap:8px; margin:3px 0 4px; font-size:12px; color:#e0408a; font-weight:700; }
+.hs-note.both { justify-content:space-between; }
+.hs-hint { background:#fdf0a6; border-radius:14px 14px 0 14px; padding:4px 14px 4px 10px; color:#e0356f; font-size:12px; font-weight:600; box-shadow:0 1px 3px rgba(0,0,0,.15); }
+.hs-hint::before { content:'💡'; margin-right:8px; }
+
+/* ---------- 답란 ---------- */
+.hs-abox { background:#f2f3f5; border-radius:16px; padding:2px 20px; margin-top:4px; }
+.hs-aline { display:flex; align-items:flex-end; gap:8px; border-bottom:1.5px dotted #8a8a8a; min-height:13mm; padding-bottom:4px; font-family:'Batang','Nanum Myeongjo','AppleMyungjo',serif; font-size:16px; color:#333; }
+.hs-aline + .hs-aline { margin-top:2px; }
+.hs-pb { display:inline-block; min-width:13mm; }
+.hs-aline.hs-has-tail { border-bottom:none; }
+.hs-dotspan { flex:1; border-bottom:1.5px dotted #8a8a8a; height:1.4em; }
+.hs-tailt { flex:none; }
+.hs-fields { margin:4px 0 6px; }
+.hs-frow { display:flex; align-items:center; gap:12px; margin:5px 0; }
+.hs-flab { flex:none; width:34mm; text-align:center; font-weight:700; color:#2c3f8a; background:#dcf0fa; border-radius:8px; padding:4px 6px; font-size:13px; }
+.hs-fbox { flex:1; background:#f2f3f5; border-radius:12px; padding:0 14px; height:10mm; display:flex; align-items:flex-end; }
+.hs-fdots { flex:1; border-bottom:1.5px dotted #8a8a8a; margin-bottom:8px; }
+.hs-grid { border-collapse:collapse; margin:6px auto 8px; }
+.hs-grid td { width:9.5mm; height:9.5mm; border:1px solid #8aa0c4; padding:0; }
+.hs-match { display:grid; grid-template-columns: 34% 1fr 1fr 52%; align-items:center; row-gap:6px; margin:4px 0; }
+.hs-mw { background:#f2f3f5; border-radius:10px; text-align:center; font-weight:700; font-size:16px; padding:6px 8px; }
+.hs-hj { font-size:12.5px; font-weight:600; color:#555; margin-left:2px; }
+.hs-mn { font-weight:800; margin-right:4px; }
+.hs-mm { background:#d3ecf7; border-radius:10px; text-align:center; font-weight:600; font-size:14px; padding:6px 8px; }
+.hs-md { text-align:center; font-size:14px; color:#555; }
+.hs-fill { padding:6px 16px 4px 24px; margin:0 0 2px; font-size:16px; line-height:2; }
+.hs-fill.one { text-align:center; }
+.hs-blank { display:inline-block; min-width:26mm; height:1em; margin:0 2px; }
+.hs-pieces { border:1px solid #bdbdbd; padding:6px 14px; text-align:center; font-size:16px; margin:4px 0 6px; }
+
+/* ---------- 바닥 ---------- */
+.hs-foot { position:absolute; left:15mm; right:15mm; bottom:8mm; display:flex; justify-content:space-between; align-items:center; }
+.hs-check { display:flex; align-items:stretch; width:76mm; height:10mm; border:2px solid #e1e1e1; border-radius:14px; overflow:hidden; background:#fff; }
+.hs-check .hs-cl { background:#ededed; color:#4a6fa5; font-weight:800; font-size:12px; display:flex; align-items:center; padding:0 8mm 0 6mm; }
+.hs-logo { font-size:22px; font-weight:900; letter-spacing:-1px; }
+.hs-logo img { height:11mm; display:block; }
+
+/* ---------- 심화문제 / 교사용 정답 ---------- */
+.hs-area { font-family:'Jua','Malgun Gothic',sans-serif; font-size:16px; margin:14px 0 8px; padding:4px 14px 3px; background:#f4cbe4; color:#c0487f; border-radius:14px; display:inline-block; }
+.hs-aq { margin:0 0 14px; break-inside:avoid; page-break-inside:avoid; }
+.hs-aq .hs-qh { margin-bottom:6px; }
+.hs-choices { margin:4px 0 0 40px; font-size:15px; }
+.hs-choices div { margin-bottom:3px; }
+.hs-ans-tbl { width:100%; border-collapse:collapse; margin-bottom:10px; }
+.hs-ans-tbl th, .hs-ans-tbl td { border:1px solid #999; padding:4px 7px; vertical-align:top; }
+.hs-ans-tbl th { background:#eee; }
+.hs-zoom { zoom:.62; }
+
+/* ---------- 인쇄 / PDF 저장 ---------- */
+@page { size: A4; margin: 0; }
+@media print {
+    html, body { margin:0 !important; padding:0 !important; background:#fff !important; }
+    .hs-no-print { display:none !important; }          /* 인쇄에서 숨길 버튼·메뉴 등에 붙인다 */
+    .hs-zoom { zoom:1 !important; }
+    .hs-page { margin:0; box-shadow:none; }
+}

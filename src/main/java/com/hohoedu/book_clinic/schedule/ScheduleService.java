@@ -42,7 +42,7 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class ScheduleService {
 
-    private static final int SLOT_MINUTES_DEFAULT = 50;
+    private static final int SLOT_MINUTES_DEFAULT = 60;
     private static final int CAPACITY_DEFAULT = 10;
     /** 회차 1개가 가질 수 있는 최대 인원 — 오타로 999명이 들어가는 것만 막는 상한 */
     private static final int CAPACITY_MAX = 200;
@@ -83,7 +83,7 @@ public class ScheduleService {
         return week;
     }
 
-    /** 아직 저장된 적 없는 요일 — 휴무 + 화면 기본값 */
+    /** 아직 저장된 적 없는 요일 — 휴무 + 화면 기본값 */ 
     private ScheduleRespDTO.DayDTO emptyDay(int dayOfWeek) {
         ScheduleRespDTO.DayDTO day = new ScheduleRespDTO.DayDTO();
         day.setDayOfWeek(dayOfWeek);

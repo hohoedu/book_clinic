@@ -393,4 +393,18 @@
                     #{s.inactiveReason,jdbcType=VARCHAR});
     </update>
 
+    <!-- all_pass app.xml isNotiMuted 와 같은 규칙 — 토큰 주인 중 이 종류를 명시적으로 끈(N) 학생이 있으면 1 -->
+    <select id="isNotiMuted" resultType="boolean">
+        SELECT CASE
+                   WHEN EXISTS (SELECT 1
+                                FROM erp_student s
+                                         JOIN erp_app_noti_option o
+                                              ON o.student_id = s.student_id
+                                                  AND o.type_code = #{typeCode}
+                                WHERE s.app_token = #{token}
+                                  AND o.enabled_yn = 'N')
+                       THEN 1
+                   ELSE 0 END
+    </select>
+
 </mapper>

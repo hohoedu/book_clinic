@@ -82,4 +82,10 @@ public interface StudentRepository {
 
     /** "학생 정보" 상세모달 예약현황 탭 — 최근 순 */
     List<StudentRespDTO.ReservationHistoryRowDTO> findReservationHistory(@Param("studentId") String studentId);
+
+    /**
+     * 이 토큰을 쓰는 학생 중 이 종류의 앱 알림을 끈 학생이 있는지 (2026-11-11).
+     * 설정은 i-with 알림 설정 화면에서 all_pass 가 erp_app_noti_option 에 저장한다(형제는 같이 저장).
+     */
+    boolean isNotiMuted(@Param("token") String token, @Param("typeCode") String typeCode);
 }

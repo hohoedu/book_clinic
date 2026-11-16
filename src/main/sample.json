@@ -1,0 +1,167 @@
+{
+    "content_id": 1,
+    "book_title": "42가지 마음의 색깔",
+    "grade": 2,
+    "theme": "우리 마음속에 있는 42가지 감정의 의미와 모습",
+    "generated_at": "2026-11-10T08:53:54.398Z",
+    "model": "gemini-3.6-flash",
+    "activity_sheet": {
+        "sections": [
+            {
+                "id": "hanja",
+                "title": "한자어휘",
+                "banner": "문장에서 활용된 한자어휘를 알아봐요.",
+                "questions": [
+                    {
+                        "no": "1-1",
+                        "kind": "word_fill",
+                        "instruction": "예문을 참고하여 ‘만족’을 넣어, 아래의 문장을 완성해 보세요.",
+                        "example": {
+                            "label": "예문",
+                            "lines": [
+                                "자신의 삶에서 충분한 <u>만족</u>과 기쁨을 느낄 때 우린 행복하다고 말하지."
+                            ]
+                        },
+                        "chips": null,
+                        "pairs": null,
+                        "blanks": null,
+                        "pieces": null,
+                        "fields": null,
+                        "grid": null,
+                        "hint": "",
+                        "gloss": "만족(滿足) : 마음에 모자람이 없이 가득하고 뿌듯함",
+                        "answer_box": {
+                            "lead": "어려운 문제집을 스스로 다 풀고 나니",
+                            "tail": "",
+                            "lines": 1
+                        },
+                        "answer": "어려운 문제집을 스스로 다 풀고 나니 큰 만족을 느꼈어요."
+                    },
+                    {
+                        "no": "1-2",
+                        "kind": "tail_fill",
+                        "instruction": "예문을 참고하여 ‘희망’을 넣어, 아래의 문장을 완성해 보세요.",
+                        "example": {
+                            "label": "예문",
+                            "lines": [
+                                "<u>희망</u>은 미래에 대한 기대와 바람이야."
+                            ]
+                        },
+                        "chips": null,
+                        "pairs": null,
+                        "blanks": null,
+                        "pieces": null,
+                        "fields": null,
+                        "grid": null,
+                        "hint": "",
+                        "gloss": "희망(希望) : 앞으로 어떤 일이 잘되기를 바라는 마음",
+                        "answer_box": {
+                            "lead": "",
+                            "tail": "밝은 얼굴로 웃었어요.",
+                            "lines": 1
+                        },
+                        "answer": "내일 소풍을 갈 수 있다는 희망을 품고 밝은 얼굴로 웃었어요."
+                    },
+                    {
+                        "no": "2",
+                        "kind": "sentence_make",
+                        "instruction": "예문을 참고하여 내가 느꼈던 ‘자랑’스러운 일을 떠올리며 문장을 지어 보세요.",
+                        "example": {
+                            "label": "예문",
+                            "lines": [
+                                "스스로에게 느끼는 <u>자랑</u>스러움은 너에게 용기를 줄 거야."
+                            ]
+                        },
+                        "chips": null,
+                        "pairs": null,
+                        "blanks": null,
+                        "pieces": null,
+                        "fields": null,
+                        "grid": null,
+                        "hint": "",
+                        "gloss": "자랑(自誇) : 자기 또는 자기와 관계있는 사람이나 일을 높이어 말하거나 마음 뿌듯하게 여김",
+                        "answer_box": {
+                            "lead": "",
+                            "tail": "",
+                            "lines": 1
+                        },
+                        "answer": "줄넘기 백 개를 성공해서 내 자신이 정말 자랑스러웠어요."
+                    }
+                ]
+            },
+            {
+                "id": "grammar",
+                "title": "국어문법",
+                "banner": "문해력의 기초를 익혀 문장에서 활용해요.",
+                "questions": [
+                    {
+                        "no": "1",
+                        "kind": "connective_fill",
+                        "instruction": "아래 문장의 관계에 알맞은 말을 [보기]에서 골라, 두 문장을 자연스럽게 이어 써 보세요.",
+                        "example": {
+                            "label": "보기",
+                            "lines": [
+                                "짜증이 나는 순간을 잘 넘기지 못했어요.",
+                                "마음속 깊은 곳에서 화가 났어요."
+                            ]
+                        },
+                        "chips": {
+                            "label": "보기",
+                            "items": [
+                                "하지만",
+                                "그래서",
+                                "그리고"
+                            ]
+                        },
+                        "pairs": null,
+                        "blanks": null,
+                        "pieces": null,
+                        "fields": null,
+                        "grid": null,
+                        "hint": "",
+                        "gloss": "",
+                        "answer_box": {
+                            "lead": "",
+                            "tail": "",
+                            "lines": 2
+                        },
+                        "answer": "짜증이 나는 순간을 잘 넘기지 못했어요. 그래서 마음속 깊은 곳에서 화가 났어요."
+                    },
+                    {
+                        "no": "2",
+                        "kind": "word_relation",
+                        "instruction": "밑줄 친 말의 뜻으로 알맞은 것을 찾아 ○하고, 그 뜻이 드러나도록 문장을 다시 써 보세요.",
+                        "example": {
+                            "label": "보기",
+                            "lines": [
+                                "희망은 우리가 더 <u>활기차게</u> 살 수 있게 해 주지."
+                            ]
+                        },
+                        "chips": {
+                            "label": "뜻풀이",
+                            "items": [
+                                "기운과 생기가 넘치게",
+                                "조용하고 부드럽게",
+                                "슬프고 눈물이 나게"
+                            ]
+                        },
+                        "pairs": null,
+                        "blanks": null,
+                        "pieces": null,
+                        "fields": null,
+                        "grid": null,
+                        "hint": "",
+                        "gloss": "",
+                        "answer_box": {
+                            "lead": "",
+                            "tail": "",
+                            "lines": 1
+                        },
+                        "answer": "희망은 우리가 더 기운과 생기가 넘치게 살 수 있게 해 주지."
+                    }
+                ]
+            }
+        ]
+    },
+    "advanced_questions": []
+}

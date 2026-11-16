@@ -147,4 +147,6 @@ public interface MonitorRepository {
                            @Param("recommendId") Integer recommendId, @Param("qlevel") String qlevel,
                            @Param("correctCount") Integer correctCount, @Param("totalCount") Integer totalCount);
 
+    /** 활동지 JSON 원문 (2026-11-11) — erp_hoho_activity_result.json_data. JSON이 없는 책은 빠진다 */
+    List<MonitorRespDTO.WorksheetDTO> findActivitySheets(@Param("contentIds") List<Integer> contentIds);
 }

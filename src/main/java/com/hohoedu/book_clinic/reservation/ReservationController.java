@@ -78,6 +78,18 @@ public class ReservationController {
         return ResponseEntity.ok(ApiUtils.success("예약이 취소되었습니다."));
     }
 
+    /** 예약 변경 — 기존 예약 취소 + 새 회차 예약을 한 번에. 새 예약을 돌려준다 */
+    @PostMapping("/change")
+    public ResponseEntity<?> change(@RequestBody ReservationReqDTO.ChangeReqDTO reqDTO, HttpServletRequest request) {
+        String studentId = requireStudentId(request);
+        ReservationRespDTO.ReservationItemDTO reservation =
+                reservationService.change(studentId, reqDTO.getReservationId(), reqDTO.getSlotInstanceId());
+        // 취소·예약과 똑같이 모니터링에 반영한다(동기화 실패는 내부에서 삼킨다)
+        monitorService.syncCanceledReservationCard(reqDTO.getReservationId());
+        monitorService.syncReservationCard(reservation.getReservationId());
+        return ResponseEntity.ok(ApiUtils.success(reservation));
+    }
+
     /** 4주 일괄 신청 미리보기 — 요일(1=월~7=일)·회차로, 고른 날짜(없으면 가장 가까운 날)부터 4개 날짜의 슬롯 상태를 알려준다 */
     @PostMapping("/batch-preview")
     public ResponseEntity<?> batchPreview(@RequestBody ReservationReqDTO.BatchPreviewReqDTO reqDTO,
