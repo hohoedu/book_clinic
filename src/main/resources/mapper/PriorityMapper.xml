@@ -62,7 +62,7 @@
             LEFT JOIN erp_bookstore_priority_draft d
                    ON d.year = #{year} AND d.schoolyear = #{schoolYear} AND d.is_active = 'Y'
             LEFT JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id AND p.content_id = bc.content_id
-            WHERE bc.schoolyear = #{schoolYear}
+            WHERE bc.schoolyear = #{schoolYear} AND ISNULL(bc.state, 'Y') &lt;&gt; 'D'
         )
         SELECT contentId, originalTitle, contentTypeName, keywords, difficulty, state, imageUrl, sortOrder
         FROM ranked

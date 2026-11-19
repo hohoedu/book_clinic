@@ -63,10 +63,11 @@ public class ReservationService {
     private final ReservationRepository repository;
     private final StudentRepository studentRepository;
     private final PassService passService;
+    private final ScheduleMaterializer scheduleMaterializer;
 
     // ── 조회 ─────────────────────────────────────────────────────────────
 
-    /** 예약 가능한 열린 슬롯 목록(학생 앱). 기간 미지정 시 오늘부터 열려 있는 회차 전체(ScheduleMaterializer.RESERVATION_OPEN_DAYS) */
+    /** 예약 가능한 열린 슬롯 목록(학생 앱). 기간 미지정 시 오늘부터 열려 있는 회차 전체(ScheduleMaterializer.openUntil) */
     public List<ReservationRespDTO.SlotOptionDTO> findOpenSlots(String studentId, LocalDate fromDate, LocalDate toDate) {
         Student student = requireStudent(studentId);
         List<ReservationRespDTO.SlotOptionDTO> slots =
@@ -92,9 +93,18 @@ public class ReservationService {
         LocalDate from = fromDate != null ? fromDate : KstClock.today();
         // 기간 미지정이면 미리 만들어 둔 회차 전체(오늘 ~ 오늘+RESERVATION_OPEN_DAYS)를 보여준다(2026-10-22).
         // 예전엔 4주(28일)로 잘려서, 정독 달력(달 단위 조회)에는 보이는 마지막 며칠이 예약하기 화면에는 안 보였다.
-        LocalDate to = toDate != null ? toDate : from.plusDays(ScheduleMaterializer.RESERVATION_OPEN_DAYS);
+        LocalDate openUntil = scheduleMaterializer.openUntil(centerCode);
+        LocalDate to = toDate != null ? toDate : openUntil;
         if (to.isBefore(from)) {
             throw new Exception400("조회 기간이 올바르지 않습니다.");
+        }
+        // 오픈일 너머는 내리지 않는다(2026-11-19) — 서당 병행 센터는 30일 규칙 때 미리 찍힌 다음 달 회차가
+        // DB에 남아 있을 수 있는데, 19일 전에는 보이면 안 된다
+        if (to.isAfter(openUntil)) {
+            to = openUntil;
+        }
+        if (to.isBefore(from)) {
+            return List.of();
         }
         return repository.findOpenSlots(centerCode, from, to, studentId == null ? "" : studentId);
     }
@@ -103,10 +113,10 @@ public class ReservationService {
      * 내 예약 목록. 각 건에 학생 채널의 취소 가능 여부(24시간 마감)를 함께 채워 내린다 —
      * 앱이 취소 버튼을 비활성화할 수 있게 하려는 것이고, 실제 차단은 cancel()이 다시 한다.
      */
-    public List<ReservationRespDTO.ReservationItemDTO> findMyReservations(String studentId) {
+    public List<ReservationRespDTO.ReservationItemDTO> findMyReservations(String studentId, LocalDate fromDate) {
         requireStudent(studentId);
         List<ReservationRespDTO.ReservationItemDTO> reservations =
-                repository.findMyReservations(studentId, KstClock.today());
+                repository.findMyReservations(studentId, fromDate != null ? fromDate : KstClock.today());
         for (ReservationRespDTO.ReservationItemDTO r : reservations) {
             // 결제대기(PAY_WAIT)도 학생이 스스로 풀 수 있다 — 이용권을 깎지 않은 예약이라 자리만 반납된다
             r.setCancelable(("RESERVED".equals(r.getStatus()) || "PAY_WAIT".equals(r.getStatus())) && r.getStartsAt() != null
@@ -433,9 +443,11 @@ public class ReservationService {
         Map<LocalDate, Integer> capByCycle = new HashMap<>();
         Map<LocalDate, Integer> usedByCycle = new HashMap<>();
 
+        LocalDate openUntil = scheduleMaterializer.openUntil(student.getCenterCode());
         List<ReservationRespDTO.BatchPreviewItemDTO> result = new ArrayList<>();
         for (LocalDate date : targetDates) {
-            ReservationRespDTO.SlotOptionDTO slot = byDate.get(date);
+            // 오픈일 너머 회차는 DB에 남아 있어도 "준비중"이다(2026-11-19)
+            ReservationRespDTO.SlotOptionDTO slot = date.isAfter(openUntil) ? null : byDate.get(date);
             ReservationRespDTO.BatchPreviewItemDTO item = new ReservationRespDTO.BatchPreviewItemDTO();
             item.setServiceDate(date);
             item.setSeq(seq);
@@ -665,6 +677,11 @@ public class ReservationService {
         // 직원 대리 예약도 같은 규칙을 탄다 — 지난 회차로 잡아주면 그 학생은 입실을 못 한다.
         if (!slot.getEndsAt().isAfter(KstClock.now())) {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 이미 종료된 회차입니다.");
+        }
+
+        // 아직 열리지 않은 회차(2026-11-19) — 목록에서 빼지만 API 직접 호출 우회를 막으려고 여기서도 막는다
+        if (slot.getServiceDate().isAfter(scheduleMaterializer.openUntil(student.getCenterCode()))) {
+            throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 아직 예약이 열리지 않은 회차입니다.");
         }
 
         // 학생 채널 예약 마감(2026-10-15) — 시작 24시간 이내 회차는 앱에서 예약할 수 없다. 목록에서

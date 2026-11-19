@@ -589,3 +589,12 @@
   text-align: center;
   color: #999;
 }
+
+/* 띠지 번호 설정 팝업 */
+.book-no-input {
+  width: 80px;
+  text-align: center;
+}
+.bulk-table[data-hq="true"] .book-no-center-col {
+  display: none;
+}

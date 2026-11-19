@@ -97,20 +97,33 @@ const QTYPE_CODES = [
   { code: "07", name: "지식" },
   { code: "08", name: "심화 어휘" },
   { code: "09", name: "심화 문법" },
+  { code: "10", name: "추론" },
+  { code: "11", name: "공감" },
+  { code: "12", name: "분석" },
+  { code: "13", name: "비판" },
+  { code: "14", name: "통합" },
 ];
 
 /*
  * 레벨/학년별 문제 영역
  * - 심화(02): 심화 어휘, 심화 문법 (둘 다 선택 가능, 기본값은 번호로 자동 지정)
- * - 기본(01), 초1·초2(schoolyear 01·02): 이해, 논리, 사고, 표현, 어휘, 감정
- * - 기본(01), 초3~초6(schoolyear 03~06): 이해, 논리, 사고, 표현, 어휘, 지식
+ * - 기본(01): 학년별 6개 영역 (2026-11-18 개정, 초4~초6은 임시안) — BASIC_QTYPES_BY_GRADE
  */
+const BASIC_QTYPES_BY_GRADE = {
+  "01": ["01", "06", "02", "05", "03", "04"], // 이해-어휘-표현-감정-논리-사고
+  "02": ["01", "06", "02", "11", "03", "04"], // 이해-어휘-표현-공감-논리-사고
+  "03": ["01", "06", "02", "07", "10", "04"], // 이해-어휘-표현-지식-추론-사고
+  "04": ["01", "06", "02", "04", "10", "12"], // 이해-어휘-표현-사고-추론-분석 (임시)
+  "05": ["01", "06", "02", "04", "10", "13"], // 이해-어휘-표현-사고-추론-비판 (임시)
+  "06": ["01", "06", "02", "04", "13", "14"], // 이해-어휘-표현-사고-비판-통합 (임시)
+};
+
 function qtypeCodesForActiveLevel() {
   if (activeLevel === "02") return QTYPE_CODES.filter((t) => ["08", "09"].includes(t.code));
 
-  const schoolyear = getCurrentSchoolyear();
-  const excluded = schoolyear === "01" || schoolyear === "02" ? "07" : "05";
-  return QTYPE_CODES.filter((t) => t.code !== excluded && t.code !== "08");
+  // shortcut: 중등(07) 등 표에 없는 학년은 초6 영역을 쓴다 — 중등 영역이 정해지면 표에 추가
+  const codes = BASIC_QTYPES_BY_GRADE[getCurrentSchoolyear()] ?? BASIC_QTYPES_BY_GRADE["06"];
+  return codes.map((code) => QTYPE_CODES.find((t) => t.code === code));
 }
 
 /* 심화(02) 문제 영역은 고정: 앞 절반은 무조건 심화 어휘(08), 뒤 절반은 무조건 심화 문법(09) */
@@ -139,12 +152,10 @@ function hasAdvancedLevel(schoolyear) {
 /*
  * 학년+레벨별 고정 문제 수
  * - 기본(01): 초1~초4는 12문제, 초5·초6은 15문제
- * - 심화(02): 초1·초2는 6문제(어휘3+문법3), 초3~초6은 10문제(어휘5+문법5) — 초5·초6도 12→10으로 통일(2026-10-27)
+ * - 심화(02): 전 학년 4문제(어휘2+문법2) (2026-11-18, 이전엔 초1·2 6문제 / 초3~6 10문제)
  */
 function requiredQuestionCount(schoolyear, level) {
-  if (level === "02") {
-    return schoolyear === "01" || schoolyear === "02" ? 6 : 10;
-  }
+  if (level === "02") return 4;
   return schoolyear === "05" || schoolyear === "06" ? 15 : 12;
 }
 
@@ -2255,7 +2266,15 @@ function buildQuestionCard(q, qnum) {
 
   if (q) {
     // 심화(02)는 영역이 번호로 고정이라(위 뱃지/hidden input에서 이미 세팅됨) 저장된 qtype으로 덮어쓰지 않는다
-    if (activeLevel !== "02") card.querySelector(".q-qtype").value = q.qtype ?? "";
+    if (activeLevel !== "02") {
+      const select = card.querySelector(".q-qtype");
+      // 영역 개정(2026-11-18) 전에 저장된 문항은 지금 학년 목록에 없는 영역일 수 있다 — 옵션이 없으면 값이 비어 저장되므로 붙여준다
+      if (q.qtype && !Array.from(select.options).some((o) => o.value === q.qtype)) {
+        const name = QTYPE_CODES.find((t) => t.code === q.qtype)?.name ?? q.qtype;
+        select.insertAdjacentHTML("beforeend", `<option value="${q.qtype}">${name} (이전 영역)</option>`);
+      }
+      select.value = q.qtype ?? "";
+    }
     setQValue(card, q.q ?? "");
     card.querySelector(".q-qex").value = q.qex ?? "";
     card.querySelector(".q-e1").value = q.e1 ?? "";

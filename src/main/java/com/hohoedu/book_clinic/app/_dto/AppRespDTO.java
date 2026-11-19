@@ -47,6 +47,18 @@ public class AppRespDTO {
 
         // 가장 최근 정독 결과 발송 시각 (yyyy-MM-dd HH:mm:ss, 없으면 null) — 앱 "새 결과" 표시용
         private String lastReportSentAt;
+
+        // 월별 이용권(2026-11-19) — 센터(서당) 학생은 이용권이 달력 월 단위라 앱이 합산 대신 이걸 보여준다.
+        // 컨트롤러가 selectPassMonths 로 따로 채운다
+        private List<PassMonthDTO> passMonths = new ArrayList<>();
+    }
+
+    /** 월별 이용권 한 줄 — 사용기간 끝나는 달(valid_until) 기준 합산 */
+    @Data
+    public static class PassMonthDTO {
+        private String ym;          // yyyy-MM
+        private Integer totalCount;
+        private Integer remainCount;
     }
 
     /**

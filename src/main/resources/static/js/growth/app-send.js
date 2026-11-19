@@ -71,6 +71,12 @@ const TENDENCY_ICON = {
   "07": "know.png",          // 지식
   "08": "advance_voca.png",  // 어휘심화
   "09": "advance_gram.png",  // 문법심화
+  // 2026-11-18 추가 영역 — 학생 화면과 같은 임시 아이콘
+  "10": "logic.png",         // 추론
+  "11": "emo.png",           // 공감
+  "12": "think.png",         // 분석
+  "13": "think.png",         // 비판
+  "14": "comp.png",          // 통합
 };
 
 /* 독서 성향 문구와 아이콘 — 점수 상위 3개 영역을 이 문구로 바꿔 보여준다.

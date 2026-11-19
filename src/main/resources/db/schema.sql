@@ -65,7 +65,8 @@ CREATE TABLE erp_center (
     manager_tel     VARCHAR(20),    -- 담당자 전화번호
     manager_email   VARCHAR(100),   -- 담당자 이메일
     registration_no VARCHAR(50),    -- 등록번호
-    biz_name        VARCHAR(100)    -- 상호명
+    biz_name        VARCHAR(100),   -- 상호명
+    with_seodang    BIT          NOT NULL DEFAULT 0  -- 1=서당 병행 센터(운영스케줄 달 단위 오픈) / 0=책방만 (2026-11-19)
 );
 
 -- ERP 로그인 사용자(관리자/센터 직원) 계정
@@ -142,7 +143,8 @@ CREATE TABLE erp_bookstore_content (
     publisher      VARCHAR(100),  -- 출판사
     image_url      VARCHAR(500),  -- 표지 이미지 URL
     reading_time   VARCHAR(20),   -- 예상 독서 시간
-    difficulty     VARCHAR(20)    -- 난이도
+    difficulty     VARCHAR(20),   -- 난이도
+    content_num    INT            -- 본사 기본 띠지 번호 (학년 안에서 유일, 센터는 erp_bookstore_center_book_no로 덮어쓴다)
 );
 
 -- 도서별 부가 이미지 (2026-09-02 수집 카드 / 2026-09-14 워크시트 추가) — 표지(content.image_url)와
@@ -268,6 +270,17 @@ CREATE TABLE erp_bookstore_priority_del (
     sort_order  INT         -- 원본 순위
 );
 
+-- 센터별 띠지 번호 (2026-11-18) — 본사 기본번호(content.content_num)와 다르게 쓰는 책만 행이 있다.
+-- 화면 번호 = ISNULL(이 테이블 book_no, content.content_num). 같은 센터·같은 학년 안에서 겹치면 안 된다(저장 시 서비스에서 검사).
+IF OBJECT_ID('erp_bookstore_center_book_no', 'U') IS NULL
+CREATE TABLE erp_bookstore_center_book_no (
+    center_code VARCHAR(20) NOT NULL,  -- erp_center.center_code
+    content_id  INT         NOT NULL,  -- erp_bookstore_content.content_id
+    book_no     INT         NOT NULL,  -- 이 센터의 띠지 번호
+    PRIMARY KEY (center_code, content_id),
+    FOREIGN KEY (content_id) REFERENCES erp_bookstore_content(content_id)
+);
+
 -- 실물도서 마스터 (2026-07-29 재설계) — bcode+센터당 1행, qty/loaned_qty 카운터로 보유수량 관리.
 -- 사본 1권 = 1행이던 이전 모델은 보유수량을 늘릴 때마다 행을 insert/delete해야 했다. 지금은 qty(총 보유)와
 -- loaned_qty(그중 대여중)만 두고, "대여 가능 수량 = qty - loaned_qty - lost_qty"로 계산한다.
@@ -371,7 +384,7 @@ CREATE TABLE erp_bookstore_itempool (
     e3             NVARCHAR(500),  -- 선택지 3
     e4             NVARCHAR(500),  -- 선택지 4
     ans            VARCHAR(100),   -- 정답
-    qtype          VARCHAR(2),     -- 문제 유형 코드 (erp_bookstore_code gubun='T', 이해/표현/논리/사고/감정/어휘/지식/문법)
+    qtype          VARCHAR(2),     -- 문제 유형 코드 (erp_bookstore_code gubun='T', 이해/표현/논리/사고/감정/어휘/지식/심화 + 2026-11-18 추론/공감/분석/비판/통합)
     qexgb          VARCHAR(20),    -- 보기 구분
     state          VARCHAR(20),    -- 사용 여부
 

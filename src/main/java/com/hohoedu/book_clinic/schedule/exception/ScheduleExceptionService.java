@@ -339,9 +339,15 @@ public class ScheduleExceptionService {
         }
     }
 
-    /** 지난 날짜는 손대지 않으므로 오늘부터 끝날까지만 다시 찍는다 */
+    /**
+     * 지난 날짜는 손대지 않으므로 오늘부터 끝날까지만 다시 찍는다.
+     * 오픈일 너머는 찍지 않는다(2026-11-19) — 서당 병행 센터의 다음 달 회차가 19일 전에 미리 열리지 않게.
+     * 그 날짜들은 일일 배치가 오픈 기간에 들어올 때 이 예외를 반영해 찍는다.
+     */
     private MaterializeDTO.ResultDTO materializeAffected(String centerCode, LocalDate startDate, LocalDate endDate) {
-        return scheduleMaterializer.materializeRange(centerCode, maxOf(startDate, KstClock.today()), endDate);
+        LocalDate openUntil = scheduleMaterializer.openUntil(centerCode);
+        return scheduleMaterializer.materializeRange(centerCode, maxOf(startDate, KstClock.today()),
+                endDate.isAfter(openUntil) ? openUntil : endDate);
     }
 
     private LocalDate maxOf(LocalDate a, LocalDate b) {

@@ -6,6 +6,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import lombok.Data;
 
 /** 도서 관련 요청 DTO 모음 */
@@ -230,4 +231,21 @@ public class BookReqDTO {
         private Integer loanId;
     }
 
+    /** 띠지 번호 저장 — 한 학년 탭 단위. 본사는 기본번호, 센터는 자기 센터 번호로 저장된다 */
+    @Data
+    public static class BookNoSaveReqDTO {
+        @NotBlank(message = "학년은 필수입니다.")
+        private String schoolYear;
+        @NotEmpty(message = "변경할 항목이 없습니다.")
+        @Valid
+        private List<BookNoItemReqDTO> items;
+    }
+
+    @Data
+    public static class BookNoItemReqDTO {
+        @NotNull(message = "도서 ID는 필수입니다.")
+        private Integer contentId;
+        @Positive(message = "번호는 1 이상이어야 합니다.")
+        private Integer bookNo; // null = 번호 없음(본사) / 본사 번호 따르기(센터)
+    }
 }

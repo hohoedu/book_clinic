@@ -50,6 +50,9 @@ public interface SlotInstanceRepository {
                              @Param("serviceDate") LocalDate serviceDate,
                              @Param("keepSeqs") List<Integer> keepSeqs);
 
+    /** 서당 병행 센터인지(erp_center.with_seodang). 센터 행이 없으면 null */
+    Boolean isWithSeodang(@Param("centerCode") String centerCode);
+
     /** 운영 규칙이 하나라도 등록된 센터 목록 — 일일 배치가 돌 대상 */
     List<String> findCenterCodesWithSchedule();
 

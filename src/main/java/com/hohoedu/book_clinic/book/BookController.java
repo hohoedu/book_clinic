@@ -22,6 +22,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import com.hohoedu.book_clinic._core.auth.CustomUserDetails;
 import com.hohoedu.book_clinic._core.utils.ApiUtils;
+import com.hohoedu.book_clinic._core.utils.CenterPolicy;
 import com.hohoedu.book_clinic.book._dto.BookReqDTO;
 
 import lombok.RequiredArgsConstructor;
@@ -319,5 +320,26 @@ public class BookController {
         int quantity = bookService.updateStockItemQuantity(reqDTO.getContentId(), reqDTO.getBcode(), centerCode,
                 reqDTO.getQuantity(), userDetails.getUsername(), reqDTO.getMemo());
         return ResponseEntity.ok(ApiUtils.success(quantity));
+    }
+
+    // ===================== 띠지 번호 (2026-11-18) =====================
+
+    /** 띠지 번호 설정 팝업 — 한 학년 도서의 본사 번호 / 우리 센터 번호. hq=true면 화면이 본사 번호를 편집한다 */
+    @GetMapping("/stock/book-no")
+    public ResponseEntity<?> findBookNos(@RequestParam("schoolYear") String schoolYear,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        return ResponseEntity.ok(ApiUtils.success(java.util.Map.of(
+                "hq", CenterPolicy.isHq(userDetails),
+                "books", bookService.findBookNos(centerCode, schoolYear))));
+    }
+
+    /** 띠지 번호 저장 — 본사 로그인이면 기본번호, 센터 로그인이면 그 센터 번호 */
+    @PostMapping("/stock/book-no")
+    public ResponseEntity<?> saveBookNos(@RequestBody @Valid BookReqDTO.BookNoSaveReqDTO reqDTO,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        String centerCode = userDetails.getLoginUser().getCenterCode();
+        bookService.saveBookNos(centerCode, CenterPolicy.isHq(userDetails), reqDTO);
+        return ResponseEntity.ok(ApiUtils.success(null));
     }
 }

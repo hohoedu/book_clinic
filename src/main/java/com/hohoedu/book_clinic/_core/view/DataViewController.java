@@ -30,7 +30,7 @@ public class DataViewController {
     /** 관리자 로그인 — 이미 로그인된 상태면 센터별 첫 화면으로 보낸다. 실패 사유는 Spring Security가 세션에 남긴 예외 메시지 */
     @GetMapping("/login")
     public String login(@AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestParam(required = false) String error, HttpSession session, Model model) {
+            @RequestParam(value = "error", required = false) String error, HttpSession session, Model model) {
         if (userDetails != null) {
             return "redirect:" + CenterPolicy.homeUrl(userDetails);
         }

@@ -19,6 +19,9 @@ public interface AppRepository {
 
     AppRespDTO.BookstoreMainDTO selectBookstoreMain(@Param("studentId") String studentId);
 
+    /** 메인 화면 월별 이용권 — 이번 달부터 앞으로 쓸 달까지, 이른 달부터 */
+    List<AppRespDTO.PassMonthDTO> selectPassMonths(@Param("studentId") String studentId);
+
     /**
      * 보유 이용권 목록 — 결제 건별. 결제 행과 묶어야 상품명·금액·결제일이 나오므로 앱 결제분
      * (source='PG', ref_no = payment.order_no)만 잡힌다. 서당 일괄청구분은 이 시스템에 결제 행이

@@ -134,6 +134,29 @@
     </select>
 
     <!--
+      월별 이용권(2026-11-19) — 센터(서당) 학생용, 이번 달부터 앞으로 쓸 달까지 낸다(앱이 한 달씩 넘겨 본다).
+      "그 달 이용권"은 끝나는 날(valid_until)의 년월로 정한다 — 전월 20일 결제분은 valid_from 이 결제일(20일)이고
+      valid_until 이 다음 달 말일이라, valid_from 으로 묶으면 한 달 앞 이름(10월 결제 → "10월")이 붙는다.
+      거르는 조건은 위 passSum 과 같고, 기간이 아직 안 정해진(valid_until IS NULL) 앱 결제분은 달을 정할 수 없어 뺀다.
+    -->
+    <select id="selectPassMonths" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$PassMonthDTO">
+        SELECT convert(char(7), p.valid_until, 23) AS ym,
+               sum(p.total_count)  AS totalCount,
+               sum(p.remain_count) AS remainCount
+        FROM erp_bookstore_pass p
+        WHERE p.student_id = #{studentId}
+          AND p.service_code = 'BOOK'
+          AND p.revoked_at IS NULL
+          AND p.valid_until IS NOT NULL
+          AND (p.service_until IS NULL
+               OR p.service_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date))
+          AND (p.valid_until IS NULL
+               OR p.valid_until &gt;= cast(dateadd(HOUR, 9, getutcdate()) AS date))
+        GROUP BY convert(char(7), p.valid_until, 23)
+        ORDER BY ym ASC
+    </select>
+
+    <!--
       보유 이용권 목록 — 결제 건별. 이용권 1행이 곧 결제 1건이라(앱 결제분은 ref_no = order_no)
       별도 집계 없이 JOIN 한 번으로 끝난다. 메인 화면의 passRemain 이 만료 안 된 이용권의 합산인
       것과 달리 여기는 보유한 건을 전부 낸다 — 건별 환불을 고를 단위가 필요하다.

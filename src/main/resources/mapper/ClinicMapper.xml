@@ -88,7 +88,7 @@
     -->
     <select id="findBookCard" resultType="com.hohoedu.book_clinic.clinic._dto.ClinicRespDTO$RecommendBookDTO">
         SELECT bc.content_id     AS contentId,
-               bc.content_num    AS contentNum,
+               ISNULL(cbn.book_no, bc.content_num) AS contentNum,
                it.item_id        AS itemId,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
@@ -105,6 +105,7 @@
                da.name           AS awardName
         FROM erp_bookstore_content bc
         LEFT JOIN erp_bookstore_item it ON it.item_id = #{itemId}
+        LEFT JOIN erp_bookstore_center_book_no cbn ON cbn.center_code = it.center_code AND cbn.content_id = bc.content_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
@@ -118,7 +119,7 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
-               bc.content_num    AS contentNum,
+               ISNULL(cbn.book_no, bc.content_num) AS contentNum,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
                COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
@@ -136,6 +137,7 @@
         FROM erp_bookstore_recommend_log rl
         JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
         LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
+        LEFT JOIN erp_bookstore_center_book_no cbn ON cbn.center_code = it.center_code AND cbn.content_id = bc.content_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
@@ -150,7 +152,7 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
-               bc.content_num    AS contentNum,
+               ISNULL(cbn.book_no, bc.content_num) AS contentNum,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
                COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
@@ -167,6 +169,7 @@
         FROM erp_bookstore_recommend_log rl
         JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
         LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
+        LEFT JOIN erp_bookstore_center_book_no cbn ON cbn.center_code = it.center_code AND cbn.content_id = bc.content_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
@@ -540,7 +543,7 @@
         SELECT TOP 1
                rl.item_id        AS itemId,
                bc.content_id     AS contentId,
-               bc.content_num    AS contentNum,
+               ISNULL(cbn.book_no, bc.content_num) AS contentNum,
                COALESCE(NULLIF(it.book_title, ''), bc.original_title) AS originalTitle,
                COALESCE(NULLIF(it.author, ''),     bc.author)         AS author,
                COALESCE(NULLIF(it.publisher, ''),  bc.publisher)      AS publisher,
@@ -558,6 +561,7 @@
         FROM erp_bookstore_recommend_log rl
         JOIN erp_bookstore_content bc ON bc.content_id = rl.content_id
         LEFT JOIN erp_bookstore_item it ON it.item_id = rl.item_id
+        LEFT JOIN erp_bookstore_center_book_no cbn ON cbn.center_code = it.center_code AND cbn.content_id = bc.content_id
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'

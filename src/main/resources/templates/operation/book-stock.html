@@ -28,6 +28,10 @@
       <header class="page-header">
         <h1>보유도서 설정</h1>
         <div class="page-header-actions">
+          <button type="button" id="btnBookNo" class="btn outline">
+            <i class="fa-solid fa-hashtag"></i>
+            띠지 번호 설정
+          </button>
           <button type="button" id="btnBulkStock" class="btn outline">
             <i class="fa-solid fa-list-check"></i>
             수량 일괄 등록
@@ -180,6 +184,37 @@
       <div class="modal-foot">
         <span class="bulk-pending-hint" id="bulkPendingHint"></span>
         <button type="button" id="btnBulkSave" class="btn primary">이 탭 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 띠지 번호 설정 팝업 — 본사 로그인은 기본번호, 센터 로그인은 우리 센터 번호(비우면 본사 번호를 따름) -->
+  <div class="modal-overlay" id="bookNoModal" hidden>
+    <div class="modal modal-wide">
+      <div class="modal-head">
+        <h3>띠지 번호 설정</h3>
+        <button type="button" id="btnCloseBookNo" class="modal-close" aria-label="닫기">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p class="bulk-hint" id="bookNoHint"></p>
+        <div class="bulk-tabs" id="bookNoTabs"></div>
+        <div class="bulk-table-wrap">
+          <table class="bulk-table">
+            <thead>
+              <tr>
+                <th>도서명</th>
+                <th>본사 번호</th>
+                <th class="book-no-center-col">우리 센터 번호</th>
+              </tr>
+            </thead>
+            <tbody id="bookNoListBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" id="btnBookNoSave" class="btn primary">이 학년 저장</button>
       </div>
     </div>
   </div>

@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   initFilters();
   initHistoryModal();
   initBulkModal();
+  initBookNoModal();
   await loadStocks();
 });
 
@@ -780,3 +781,128 @@ async function saveBulkTab() {
   }
 }
 
+
+/*
+ * ===================== 띠지 번호 설정 팝업 (2026-11-18) =====================
+ * 책에 붙이는 띠지 번호를 학년 탭별로 입력한다. 본사 로그인이면 기본번호를, 센터 로그인이면 우리 센터 번호를
+ * 편집한다(서버 응답 hq로 판단). 센터 번호 칸을 비우면 본사 번호를 따른다.
+ * 같은 센터·같은 학년 안에서 번호가 겹치면 서버가 저장을 거부하고 겹친 책을 알려준다.
+ */
+let bookNoGrade = null;
+
+function initBookNoModal() {
+  const modal = document.getElementById("bookNoModal");
+  document.getElementById("btnBookNo").addEventListener("click", () => {
+    modal.hidden = false;
+    bookNoGrade = bookNoGrade ?? document.querySelector("#filterGrade option[value]:not([value=''])")?.value ?? null;
+    renderBookNoTabs();
+  });
+  document.getElementById("btnCloseBookNo").addEventListener("click", () => (modal.hidden = true));
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) modal.hidden = true;
+  });
+  document.getElementById("btnBookNoSave").addEventListener("click", saveBookNos);
+}
+
+function renderBookNoTabs() {
+  const tabsEl = document.getElementById("bookNoTabs");
+  tabsEl.innerHTML = "";
+  Array.from(document.querySelectorAll("#filterGrade option"))
+    .filter((option) => option.value)
+    .forEach((option) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `bulk-tab ${option.value === bookNoGrade ? "active" : ""}`.trim();
+      btn.textContent = option.textContent;
+      btn.addEventListener("click", () => {
+        bookNoGrade = option.value;
+        renderBookNoTabs();
+      });
+      tabsEl.appendChild(btn);
+    });
+  loadBookNos();
+}
+
+async function loadBookNos() {
+  const tbody = document.getElementById("bookNoListBody");
+  tbody.innerHTML = `<tr class="stock-empty"><td colspan="3">불러오는 중입니다...</td></tr>`;
+  if (!bookNoGrade) return;
+
+  try {
+    const response = await fetch(`/book/stock/book-no?schoolYear=${encodeURIComponent(bookNoGrade)}`);
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error?.message ?? "목록을 불러오지 못했습니다.");
+    renderBookNos(data.response.hq, data.response.books ?? []);
+  } catch (error) {
+    console.error(error);
+    tbody.innerHTML = `<tr class="stock-empty"><td colspan="3">목록을 불러오지 못했습니다.</td></tr>`;
+  }
+}
+
+function renderBookNos(hq, books) {
+  document.querySelector("#bookNoModal .bulk-table").dataset.hq = String(hq);
+  document.getElementById("bookNoHint").textContent = hq
+    ? "본사 기본 번호입니다. 센터가 따로 정하지 않은 책은 이 번호가 띠지·추천 화면에 표시됩니다."
+    : "우리 센터 번호를 입력하세요. 비워두면 본사 번호를 그대로 씁니다. 같은 학년 안에서는 번호가 겹칠 수 없습니다.";
+
+  const tbody = document.getElementById("bookNoListBody");
+  tbody.innerHTML = "";
+  if (books.length === 0) {
+    tbody.innerHTML = `<tr class="stock-empty"><td colspan="3">도서가 없습니다.</td></tr>`;
+    return;
+  }
+
+  books.forEach((book) => {
+    const tr = document.createElement("tr");
+    tr.dataset.contentId = book.contentId;
+    tr.innerHTML = `
+      <td class="bulk-title"></td>
+      <td class="book-no-hq"></td>
+      <td class="book-no-center-col"></td>
+    `;
+    tr.querySelector(".bulk-title").textContent = book.originalTitle ?? "";
+
+    const input = document.createElement("input");
+    input.type = "text";
+    input.inputMode = "numeric";
+    input.className = "book-no-input";
+    input.value = (hq ? book.hqBookNo : book.centerBookNo) ?? "";
+
+    if (hq) {
+      tr.querySelector(".book-no-hq").appendChild(input);
+    } else {
+      tr.querySelector(".book-no-hq").textContent = book.hqBookNo ?? "-";
+      input.placeholder = book.hqBookNo ?? "";
+      tr.querySelector(".book-no-center-col").appendChild(input);
+    }
+    tbody.appendChild(tr);
+  });
+}
+
+async function saveBookNos() {
+  const rows = Array.from(document.querySelectorAll("#bookNoListBody tr[data-content-id]"));
+  if (rows.length === 0) return;
+
+  const items = [];
+  for (const tr of rows) {
+    const raw = tr.querySelector(".book-no-input").value.trim();
+    if (raw !== "" && !/^[1-9][0-9]*$/.test(raw)) {
+      alert(`${tr.querySelector(".bulk-title").textContent}: 번호는 1 이상의 숫자로 입력해주세요.`);
+      return;
+    }
+    items.push({ contentId: Number(tr.dataset.contentId), bookNo: raw === "" ? null : Number(raw) });
+  }
+
+  const saveBtn = document.getElementById("btnBookNoSave");
+  saveBtn.disabled = true;
+  try {
+    await postJson("/book/stock/book-no", { schoolYear: bookNoGrade, items });
+    alert("저장되었습니다.");
+    await loadBookNos();
+    loadStocks(); // 목록 No 칸도 새 번호로
+  } catch (error) {
+    alert(error.message ?? "저장 중 오류가 발생했습니다.");
+  } finally {
+    saveBtn.disabled = false;
+  }
+}

@@ -198,4 +198,21 @@ public class BookRespDTO {
         private java.util.List<String> errors = new java.util.ArrayList<>();
     }
 
+    /** 띠지 번호 설정 팝업 1행 — 센터 번호가 없으면 본사 번호를 따른다 */
+    @Data
+    public static class BookNoRespDTO {
+        private Integer contentId;
+        private String originalTitle;
+        private Integer hqBookNo;      // 본사 기본번호 (content.content_num)
+        private Integer centerBookNo;  // 이 센터가 따로 정한 번호 (없으면 null)
+    }
+
+    /** 띠지 번호 중복 검사 결과 1행 (centerCode=''면 본사 기본번호끼리의 중복) */
+    @Data
+    public static class BookNoDuplicateDTO {
+        private String centerCode;
+        private String centerName;
+        private Integer bookNo;
+        private String originalTitle;
+    }
 }

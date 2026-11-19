@@ -87,7 +87,7 @@ public class ScheduleService {
     private ScheduleRespDTO.DayDTO emptyDay(int dayOfWeek) {
         ScheduleRespDTO.DayDTO day = new ScheduleRespDTO.DayDTO();
         day.setDayOfWeek(dayOfWeek);
-        day.setEffectiveFrom(null);
+        day.setEffectiveFrom(null); 
         day.setIsOpen(false);
         day.setSlotMinutes(SLOT_MINUTES_DEFAULT);
         day.setBreakMinutes(0);

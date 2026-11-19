@@ -50,11 +50,16 @@ public class ReservationController {
                 reservationService.findOpenSlots(studentId, parseDate(fromDate), parseDate(toDate))));
     }
 
-    /** 내 예약 목록(RESERVED, 오늘 이후) */
+    /**
+     * 내 예약 목록(취소 제외, 기본 오늘 이후). fromDate 를 주면 그날부터 — 앱 나의 예약 탭이 이번 달 지난
+     * 이용완료·노쇼까지 보여주려고 이번 달 1일을 보낸다(2026-11-19). 본문 없이 부르는 기존 호출은 그대로다.
+     */
     @PostMapping("/my")
-    public ResponseEntity<?> my(HttpServletRequest request) {
+    public ResponseEntity<?> my(@RequestBody(required = false) ReservationReqDTO.SlotsReqDTO reqDTO,
+                                HttpServletRequest request) {
         String studentId = requireStudentId(request);
-        return ResponseEntity.ok(ApiUtils.success(reservationService.findMyReservations(studentId)));
+        LocalDate fromDate = reqDTO == null ? null : parseDate(reqDTO.getFromDate());
+        return ResponseEntity.ok(ApiUtils.success(reservationService.findMyReservations(studentId, fromDate)));
     }
 
     /** 단건 예약 */

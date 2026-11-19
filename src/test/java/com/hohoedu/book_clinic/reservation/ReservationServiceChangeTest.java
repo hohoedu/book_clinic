@@ -27,6 +27,7 @@ import com.hohoedu.book_clinic._core.utils.KstClock;
 import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.reservation._dto.ReservationReqDTO;
 import com.hohoedu.book_clinic.reservation._dto.ReservationRespDTO;
+import com.hohoedu.book_clinic.schedule.materialize.ScheduleMaterializer;
 import com.hohoedu.book_clinic.student.StudentRepository;
 import com.hohoedu.book_clinic.student.model.Student;
 
@@ -44,6 +45,7 @@ class ReservationServiceChangeTest {
     @Mock ReservationRepository repository;
     @Mock StudentRepository studentRepository;
     @Mock PassService passService;
+    @Mock ScheduleMaterializer scheduleMaterializer;
     @InjectMocks ReservationService service;
 
     /** 24시간 마감에 안 걸리게 충분히 먼 날짜 */
@@ -52,6 +54,7 @@ class ReservationServiceChangeTest {
     @BeforeEach
     void setUp() {
         when(studentRepository.findById(STUDENT)).thenReturn(Student.builder().studentId(STUDENT).centerCode("C1").build());
+        lenient().when(scheduleMaterializer.openUntil(anyString())).thenReturn(LocalDate.MAX);
     }
 
     private ReservationRespDTO.ReservationItemDTO item(long id, String status) {

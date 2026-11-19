@@ -443,9 +443,11 @@
       const day = state.days[dow];
 
       let isOpen = !!day?.isOpen;
-      const closedByException = (nearestExceptionFor(dow)?.exceptions ?? [])
-        .some((ex) => ex.exceptionType === "CLOSED");
+      const nearest = nearestExceptionFor(dow)?.exceptions ?? [];
+      const closedByException = nearest.some((ex) => ex.exceptionType === "CLOSED");
       if (closedByException) isOpen = false;
+      // 휴무 요일인데 다음 그 요일만 예외로 여는 경우
+      else if (!isOpen && nearest.some(opensOnClosedDay)) isOpen = true;
 
       tab.dataset.state = isOpen ? "open" : "closed";
       // 예외 입력 중에는 어떤 요일도 선택 상태로 두지 않는다
@@ -592,7 +594,9 @@
   function computeExceptionResult(day, preview) {
     const period = preview.exceptions.find((ex) => ex.exceptionType !== "SLOT_CHANGE");
     const slotChange = preview.exceptions.find((ex) => ex.exceptionType === "SLOT_CHANGE");
-    const closed = period?.exceptionType === "CLOSED" || !day.isOpen;
+    // 휴무 요일이라도 하루짜리 운영시간 변경 예외에 회차를 확정해 뒀으면 그날만 연다(서버 ScheduleMaterializer와 동일)
+    const opensClosedDay = !day.isOpen && opensOnClosedDay(period);
+    const closed = period?.exceptionType === "CLOSED" || (!day.isOpen && !opensClosedDay);
     if (closed) return { closed: true, openTime: null, closeTime: null, slots: [] };
 
     const openTime = period?.exceptionType === "TIME_CHANGE" ? period.openTime : day.openTime;
@@ -629,6 +633,13 @@
     }
 
     return { closed: false, openTime, closeTime, slots };
+  }
+
+  /** 휴무 요일을 그날만 여는 예외인가 — 하루짜리 운영시간 변경 + 확정 회차 */
+  function opensOnClosedDay(ex) {
+    return ex?.exceptionType === "TIME_CHANGE"
+      && ex.startDate === ex.endDate
+      && (ex.slotOverrides ?? []).some((o) => o.startTime && o.endTime);
   }
 
   /**

@@ -3,6 +3,7 @@ package com.hohoedu.book_clinic.schedule.materialize;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -54,11 +55,34 @@ public class ScheduleMaterializer {
 
     private final SlotInstanceRepository slotInstanceRepository;
 
+    /** 서당 병행 센터가 다음 달 운영스케줄을 여는 날(전월 19일 — 서당 청구일 20일보다 하루 먼저) */
+    public static final int MONTHLY_OPEN_DAY = 19;
+
+    /**
+     * 이 센터의 예약 오픈 마지막 날(2026-11-19).
+     *
+     * 책방만 하는 센터는 오늘+RESERVATION_OPEN_DAYS 를 매일 굴린다. 서당 병행 센터(erp_center.with_seodang)는
+     * 이용권이 달력 월 단위라 스케줄도 달 단위로 연다 — 18일까지는 이번 달 말일, 19일부터는 다음 달 말일.
+     * 엔진·예약 목록·예약 확정·자동예약이 모두 이 값을 써야 "보이는데 예약은 안 되는" 날이 생기지 않는다.
+     */
+    public LocalDate openUntil(String centerCode) {
+        LocalDate today = KstClock.today();
+        if (!Boolean.TRUE.equals(slotInstanceRepository.isWithSeodang(centerCode))) {
+            return today.plusDays(RESERVATION_OPEN_DAYS);
+        }
+        return monthlyOpenUntil(today);
+    }
+
+    /** 서당 병행 센터 오픈 마지막 날 — 18일까지는 이번 달 말일, 19일부터는 다음 달 말일 */
+    static LocalDate monthlyOpenUntil(LocalDate today) {
+        YearMonth ym = YearMonth.from(today);
+        return (today.getDayOfMonth() >= MONTHLY_OPEN_DAY ? ym.plusMonths(1) : ym).atEndOfMonth();
+    }
+
     /** 오늘~예약 오픈일 전체를 다시 찍는다. 일일 배치·수동 재계산용 */
     @Transactional
     public MaterializeDTO.ResultDTO materializeHorizon(String centerCode) {
-        LocalDate today = KstClock.today();
-        return materializeRange(centerCode, today, today.plusDays(RESERVATION_OPEN_DAYS));
+        return materializeRange(centerCode, KstClock.today(), openUntil(centerCode));
     }
 
     /** 기간 안의 모든 날짜를 다시 찍는다. 예외 등록·삭제 후 호출 */
@@ -73,7 +97,7 @@ public class ScheduleMaterializer {
      */
     @Transactional
     public MaterializeDTO.ResultDTO materializeDayOfWeek(String centerCode, int dayOfWeek, LocalDate from) {
-        LocalDate to = KstClock.today().plusDays(RESERVATION_OPEN_DAYS);
+        LocalDate to = openUntil(centerCode);
         List<LocalDate> dates = datesBetween(from, to).stream()
                 .filter(d -> d.getDayOfWeek().getValue() == dayOfWeek)
                 .toList();
@@ -194,13 +218,20 @@ public class ScheduleMaterializer {
             return List.of();   // 휴무 — 회차 조정이 같이 걸려 있어도 열 슬롯 자체가 없다
         }
 
-        if (rule == null || !Boolean.TRUE.equals(rule.getIsOpen())) {
-            // 규칙이 없거나 휴무 요일이면 운영시간 예외가 걸려 있어도 열 수업 자체가 없다.
-            return List.of();
-        }
-
         List<MaterializeDTO.InstanceDTO> slots;
-        if (period != null && TYPE_TIME_CHANGE.equals(period.getExceptionType())) {
+        if (rule == null || !Boolean.TRUE.equals(rule.getIsOpen())) {
+            // 규칙이 없거나 휴무 요일 — 하루짜리 운영시간 변경 예외에 회차를 확정해 둔 날만 연다(2026-11-19).
+            // 기간형은 열지 않는다: "12/20~27 운영시간 15~19시"가 그 사이 휴무 요일(일요일 등)까지
+            // 열어버리면 안 되기 때문이다. 템플릿이 없으니 확정 회차 없이는 만들 회차도 없다.
+            if (!isSingleDayTimeChange(period)) {
+                return List.of();
+            }
+            List<MaterializeDTO.ExceptionSlotDTO> defined = definedSlots(exceptionSlots, period.getExceptionId());
+            if (defined.isEmpty()) {
+                return List.of();
+            }
+            slots = fromExceptionSlots(date, defined, rule);
+        } else if (period != null && TYPE_TIME_CHANGE.equals(period.getExceptionType())) {
             // 관리자가 그날 회차를 직접 확정했으면 그것이 답이다. 운영시간을 늘리거나 다른 시간대로
             // 옮기는 경우는 템플릿에서 남길 회차가 없어 확정값 없이는 만들 방법이 없다.
             List<MaterializeDTO.ExceptionSlotDTO> defined = definedSlots(exceptionSlots, period.getExceptionId());
@@ -216,6 +247,13 @@ public class ScheduleMaterializer {
             applyOverrides(slots, exceptionSlots.get(slotChange.getExceptionId()));
         }
         return slots;
+    }
+
+    /** 휴무 요일을 그날만 열 수 있는 예외인가 — 하루짜리 운영시간 변경 */
+    static boolean isSingleDayTimeChange(MaterializeDTO.ExceptionDTO period) {
+        return period != null
+                && TYPE_TIME_CHANGE.equals(period.getExceptionType())
+                && period.getStartDate().equals(period.getEndDate());
     }
 
     /** 요일 규칙에 등록된 회차 템플릿을 그날 날짜에 붙여 슬롯으로 만든다 */

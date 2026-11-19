@@ -52,6 +52,9 @@ public class AppController {
     public ResponseEntity<?> bookstoreMain(HttpServletRequest request) {
         String studentId = requireStudentId(request);
         AppRespDTO.BookstoreMainDTO res = appRepository.selectBookstoreMain(studentId);
+        if (res != null) {
+            res.setPassMonths(appRepository.selectPassMonths(studentId));
+        }
         return ResponseEntity.ok(ApiUtils.success(res));
     }
 

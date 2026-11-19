@@ -72,6 +72,7 @@ public class BookService {
     @Transactional
     public void registerContent(BookReqDTO.RegisterReqDTO reqDTO, String registeredBy) {
         bookRepository.registerContent(reqDTO);
+        bookRepository.appendToActivePriority(reqDTO.getContentId(), reqDTO.getSchoolYear());
         saveExtraDetail(reqDTO.getContentId(), reqDTO.getContentType(), reqDTO.getExtraDetail());
         saveCardPath(reqDTO.getContentId(), reqDTO.getCardUrl(), registeredBy);
     }
@@ -514,6 +515,7 @@ public class BookService {
     @Transactional
     public void updateContent(BookReqDTO.UpdateReqDTO reqDTO, String updatedBy) {
         bookRepository.archiveContentForUpdate(reqDTO.getContentId(), updatedBy);
+        if (reqDTO.getSchoolYear() != null) bookRepository.renumberIfGradeChanged(reqDTO.getContentId(), reqDTO.getSchoolYear());
         bookRepository.updateContent(reqDTO);
         if (reqDTO.getContentType() != null) {
             bookRepository.archiveContentDetailForUpdate(reqDTO.getContentId(), updatedBy);
@@ -1088,5 +1090,38 @@ public class BookService {
         long timestamp = System.currentTimeMillis();
         int random = (int) (Math.random() * 100000);
         return timestamp + String.format("%05d", random);
+    }
+
+    // ===================== 띠지 번호 (2026-11-18) =====================
+
+    public List<BookRespDTO.BookNoRespDTO> findBookNos(String centerCode, String schoolYear) {
+        return bookRepository.findBookNos(centerCode, schoolYear);
+    }
+
+    /**
+     * 한 학년 탭의 띠지 번호 저장. 본사는 기본번호(content_num), 센터는 자기 센터 번호를 저장한다.
+     * 저장 후 실제로 보이는 번호가 겹치면 예외로 전부 롤백한다 — 본사 저장은 센터 번호를 가진 모든 센터까지 검사한다.
+     */
+    @Transactional
+    public void saveBookNos(String centerCode, boolean hq, BookReqDTO.BookNoSaveReqDTO reqDTO) {
+        String schoolYear = reqDTO.getSchoolYear();
+        for (BookReqDTO.BookNoItemReqDTO item : reqDTO.getItems()) {
+            if (hq) bookRepository.updateHqBookNo(item.getContentId(), schoolYear, item.getBookNo());
+            else bookRepository.saveCenterBookNo(centerCode, item.getContentId(), schoolYear, item.getBookNo());
+        }
+
+        List<BookRespDTO.BookNoDuplicateDTO> dups = bookRepository.findBookNoDuplicates(schoolYear, hq ? null : centerCode);
+        if (dups.isEmpty()) return;
+
+        // 센터+번호별로 묶어 "[센터] 3번: 책A, 책B" 형태로 알려준다
+        Map<String, List<String>> grouped = new LinkedHashMap<>();
+        for (BookRespDTO.BookNoDuplicateDTO d : dups) {
+            String who = d.getCenterCode().isEmpty() ? "본사 기본번호"
+                    : (d.getCenterName() != null ? d.getCenterName() : d.getCenterCode());
+            grouped.computeIfAbsent("[" + who + "] " + d.getBookNo() + "번", k -> new ArrayList<>()).add(d.getOriginalTitle());
+        }
+        StringBuilder msg = new StringBuilder("같은 학년 안에서 번호가 겹칩니다.");
+        grouped.forEach((k, titles) -> msg.append("\n").append(k).append(": ").append(String.join(", ", titles)));
+        throw new Exception400(msg.toString());
     }
 }

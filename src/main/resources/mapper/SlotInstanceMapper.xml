@@ -85,6 +85,10 @@
       erp_center 전체가 아니라 규칙이 등록된 센터만 돈다 — 아직 운영 스케줄을 설정하지 않은
       센터는 찍을 것도 없으면서 조회 5회를 그대로 먹기 때문이다.
     -->
+    <select id="isWithSeodang" resultType="boolean">
+        SELECT with_seodang FROM erp_center WHERE center_code = #{centerCode}
+    </select>
+
     <select id="findCenterCodesWithSchedule" resultType="string">
         SELECT DISTINCT center_code
         FROM erp_bookstore_schedule

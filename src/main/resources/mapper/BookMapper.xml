@@ -6,8 +6,102 @@
 
     <insert id="registerContent" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$RegisterReqDTO"
             useGeneratedKeys="true" keyProperty="contentId">
-        INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty)
-        VALUES (#{title}, #{author}, #{genre}, #{contentType}, #{schoolYear}, #{summary}, #{keywords}, #{state}, #{publisher}, #{imageUrl}, #{readingTime}, #{difficulty})
+        INSERT INTO erp_bookstore_content (original_title, author, genre, content_type, schoolyear, summary, keywords, state, publisher, image_url, reading_time, difficulty, content_num)
+        VALUES (#{title}, #{author}, #{genre}, #{contentType}, #{schoolYear}, #{summary}, #{keywords}, #{state}, #{publisher}, #{imageUrl}, #{readingTime}, #{difficulty},
+                <include refid="nextBookNo"/>)
+    </insert>
+
+    <!-- 그 학년의 다음 띠지 번호 — 본사 번호와 모든 센터 번호 중 최댓값 + 1이라 어느 센터에서도 겹치지 않는다 -->
+    <sql id="nextBookNo">
+        (SELECT ISNULL(MAX(t.n), 0) + 1 FROM (
+            SELECT content_num AS n FROM erp_bookstore_content WHERE schoolyear = #{schoolYear}
+            UNION ALL
+            SELECT cb.book_no FROM erp_bookstore_center_book_no cb
+            JOIN erp_bookstore_content c2 ON c2.content_id = cb.content_id
+            WHERE c2.schoolyear = #{schoolYear}
+        ) t)
+    </sql>
+
+    <!-- 도서 수정으로 학년이 바뀌면 새 학년 기준으로 번호를 다시 붙이고 센터 번호는 지운다 (학년이 같으면 0건) -->
+    <update id="renumberIfGradeChanged">
+        DELETE FROM erp_bookstore_center_book_no
+        WHERE content_id = #{contentId}
+          AND EXISTS (SELECT 1 FROM erp_bookstore_content
+                      WHERE content_id = #{contentId} AND ISNULL(schoolyear, '') &lt;&gt; #{schoolYear});
+        UPDATE erp_bookstore_content SET content_num = <include refid="nextBookNo"/>
+        WHERE content_id = #{contentId} AND ISNULL(schoolyear, '') &lt;&gt; #{schoolYear};
+    </update>
+
+    <!-- ===================== 띠지 번호 (2026-11-18) ===================== -->
+
+    <!-- 번호 설정 팝업 — 한 학년의 사용중 도서와 본사 번호 / 이 센터 번호 -->
+    <select id="findBookNos" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$BookNoRespDTO">
+        SELECT bc.content_id     AS contentId,
+               bc.original_title AS originalTitle,
+               bc.content_num    AS hqBookNo,
+               cbn.book_no       AS centerBookNo
+        FROM erp_bookstore_content bc
+        LEFT JOIN erp_bookstore_center_book_no cbn ON cbn.center_code = #{centerCode} AND cbn.content_id = bc.content_id
+        WHERE bc.schoolyear = #{schoolYear} AND ISNULL(bc.state, 'Y') = 'Y'
+        ORDER BY CASE WHEN ISNULL(cbn.book_no, bc.content_num) IS NULL THEN 1 ELSE 0 END,
+                 ISNULL(cbn.book_no, bc.content_num), bc.content_id
+    </select>
+
+    <!-- 본사 기본번호 저장 — 다른 학년 도서는 건드리지 않는다(학년 단위로 중복 검사하므로) -->
+    <update id="updateHqBookNo">
+        UPDATE erp_bookstore_content SET content_num = #{bookNo, jdbcType=INTEGER}
+        WHERE content_id = #{contentId} AND schoolyear = #{schoolYear}
+    </update>
+
+    <!-- 센터 번호 저장 — 비우거나 본사 번호와 같으면 행을 지워 본사 번호를 따르게 한다 -->
+    <update id="saveCenterBookNo">
+        DELETE FROM erp_bookstore_center_book_no WHERE center_code = #{centerCode} AND content_id = #{contentId};
+        INSERT INTO erp_bookstore_center_book_no (center_code, content_id, book_no)
+        SELECT #{centerCode}, content_id, #{bookNo, jdbcType=INTEGER}
+        FROM erp_bookstore_content
+        WHERE content_id = #{contentId} AND schoolyear = #{schoolYear}
+          AND #{bookNo, jdbcType=INTEGER} IS NOT NULL
+          AND ISNULL(content_num, -1) &lt;&gt; #{bookNo, jdbcType=INTEGER};
+    </update>
+
+    <!--
+      한 학년 안에서 실제로 보이는 번호(센터 번호 없으면 본사 번호)가 겹치는 도서들.
+      centerCode가 있으면 그 센터만, 없으면(본사 저장) 본사 기본번호('') + 센터 번호를 가진 모든 센터를 본다.
+    -->
+    <select id="findBookNoDuplicates" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$BookNoDuplicateDTO">
+        WITH eff AS (
+            SELECT ce.center_code,
+                   ISNULL(n.book_no, c.content_num) AS book_no,
+                   c.original_title,
+                   COUNT(*) OVER (PARTITION BY ce.center_code, ISNULL(n.book_no, c.content_num)) AS cnt
+            FROM erp_bookstore_content c
+            CROSS JOIN (
+                <choose>
+                    <when test="centerCode != null">SELECT #{centerCode} AS center_code</when>
+                    <otherwise>SELECT '' AS center_code UNION SELECT DISTINCT center_code FROM erp_bookstore_center_book_no</otherwise>
+                </choose>
+            ) ce
+            LEFT JOIN erp_bookstore_center_book_no n ON n.center_code = ce.center_code AND n.content_id = c.content_id
+            WHERE c.schoolyear = #{schoolYear} AND ISNULL(c.state, 'Y') = 'Y'
+        )
+        SELECT e.center_code    AS centerCode,
+               ctr.center_name  AS centerName,
+               e.book_no        AS bookNo,
+               e.original_title AS originalTitle
+        FROM eff e
+        LEFT JOIN erp_center ctr ON ctr.center_code = e.center_code
+        WHERE e.book_no IS NOT NULL AND e.cnt &gt; 1
+        ORDER BY e.center_code, e.book_no
+    </select>
+
+    <!-- 신규 도서를 그 학년의 적용중(is_active='Y') 순위 초안마다 맨 뒤 순위로 추가 — 초안이 없으면 0건 -->
+    <insert id="appendToActivePriority">
+        INSERT INTO erp_bookstore_priority (draft_id, content_id, sort_order)
+        SELECT d.draft_id, #{contentId}, ISNULL(MAX(p.sort_order), 0) + 1
+        FROM erp_bookstore_priority_draft d
+        LEFT JOIN erp_bookstore_priority p ON p.draft_id = d.draft_id
+        WHERE d.schoolyear = #{schoolYear} AND d.is_active = 'Y'
+        GROUP BY d.draft_id
     </insert>
 
     <update id="updateContent" parameterType="com.hohoedu.book_clinic.book._dto.BookReqDTO$UpdateReqDTO">
@@ -179,6 +273,7 @@
         LEFT JOIN erp_bookstore_content_detail dc ON dc.content_id = bc.content_id AND dc.gubun = 'C'
         LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = bc.content_id
         <where>
+            AND ISNULL(bc.state, 'Y') &lt;&gt; 'D'   <!-- 논리삭제 도서는 관리 목록에서 제외 -->
             <if test="title != null and title != ''">AND bc.original_title LIKE '%' + #{title} + '%'</if>
             <if test="author != null and author != ''">AND bc.author LIKE '%' + #{author} + '%'</if>
             <if test="genre != null and genre != ''">AND bc.genre = #{genre}</if>
@@ -191,12 +286,12 @@
 
     <!-- 도서 제목으로 content_id 단건 조회 (엑셀 업로드 도서 선택 매핑용) -->
     <select id="findContentIdByTitle" resultType="java.lang.Integer">
-        SELECT TOP 1 content_id FROM erp_bookstore_content WHERE original_title = #{title}
+        SELECT TOP 1 content_id FROM erp_bookstore_content WHERE original_title = #{title} AND ISNULL(state, 'Y') &lt;&gt; 'D'
     </select>
 
     <!-- content_id 존재 여부 (엑셀 일괄 등록에서 수정 대상 검증용) -->
     <select id="existsContentById" resultType="boolean">
-        SELECT CASE WHEN EXISTS (SELECT 1 FROM erp_bookstore_content WHERE content_id = #{contentId}) THEN 1 ELSE 0 END
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM erp_bookstore_content WHERE content_id = #{contentId} AND ISNULL(state, 'Y') &lt;&gt; 'D') THEN 1 ELSE 0 END
     </select>
 
     <!-- 학년별 도서 목록 엑셀 다운로드용 — 학년 코드명(codeNm) 기준 정렬, 번호는 시트 작성 시 순번으로 매긴다 -->
@@ -206,6 +301,7 @@
                ebc.codeNm        AS schoolyearName
         FROM erp_bookstore_content bc
         JOIN erp_bookstore_code ebc ON bc.schoolyear = ebc.code AND ebc.gubun = 'S'
+        WHERE ISNULL(bc.state, 'Y') &lt;&gt; 'D'
         ORDER BY ebc.codeNm
     </select>
 
@@ -329,7 +425,7 @@
                image_url                                       AS imageUrl
         FROM erp_bookstore_item
         JOIN erp_bookstore_content c ON c.content_id = erp_bookstore_item.content_id
-        WHERE center_code = #{centerCode}
+        WHERE center_code = #{centerCode} AND ISNULL(c.state, 'Y') &lt;&gt; 'D'
         ORDER BY c.content_num DESC 
     </select>
 
@@ -353,7 +449,8 @@
         ) d
         WHERE d.rn = 1
           AND d.log_type = 'DELETE'
-          AND NOT EXISTS (SELECT 1 FROM erp_bookstore_content c WHERE c.content_id = d.content_id)
+          AND NOT EXISTS (SELECT 1 FROM erp_bookstore_content c
+                          WHERE c.content_id = d.content_id AND ISNULL(c.state, 'Y') &lt;&gt; 'D')  <!-- 논리삭제(D)면 아직 삭제 상태 -->
         ORDER BY d.logged_at DESC
     </select>
 
@@ -529,7 +626,7 @@
     <!-- 보유도서 설정 목록 — 마스터 도서가 기준이고 우리 센터 사본 수를 붙인다 (보유 0권도 행으로 보여야 하므로 LEFT JOIN 집계).
          절판(state='N') 도서는 더 이상 보유 수량을 조정할 대상이 아니라 제외한다. -->
     <select id="searchCenterStocks" resultType="com.hohoedu.book_clinic.book._dto.BookRespDTO$StockRespDTO">
-        SELECT bc.content_num    AS contentNum,
+        SELECT ISNULL(cbn.book_no, bc.content_num) AS contentNum,
                bc.content_id     AS contentId,
                bc.original_title AS originalTitle,
                bc.image_url      AS imageUrl,
@@ -545,6 +642,7 @@
         LEFT JOIN erp_bookstore_code s  ON s.gubun  = 'S' AND s.code  = bc.schoolyear
         LEFT JOIN erp_bookstore_code ct ON ct.gubun = 'C' AND ct.code = bc.content_type
         LEFT JOIN erp_bookstore_code g  ON g.gubun  = 'G' AND g.code  = bc.genre
+        LEFT JOIN erp_bookstore_center_book_no cbn ON cbn.center_code = #{centerCode} AND cbn.content_id = bc.content_id
         LEFT JOIN (
             SELECT content_id,
                    SUM(qty) AS qty,
@@ -568,7 +666,7 @@
             <if test="hasStock == 'Y'.toString()">AND ISNULL(q.qty, 0) &gt; 0</if>
             <if test="hasStock == 'N'.toString()">AND ISNULL(q.qty, 0) = 0</if>
         </where>
-        ORDER BY bc.schoolyear, bc.content_num
+        ORDER BY bc.schoolyear, ISNULL(cbn.book_no, bc.content_num)
     </select>
 
     <!-- (content + center) 보유수량 총합 (여러 bcode 판본에 걸쳐 있을 수 있음) -->

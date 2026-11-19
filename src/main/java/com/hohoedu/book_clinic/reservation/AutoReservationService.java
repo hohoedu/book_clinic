@@ -65,6 +65,7 @@ public class AutoReservationService {
     private final SubscriptionService subscriptionService;
     private final NotificationService notificationService;
     private final PlatformTransactionManager transactionManager;
+    private final ScheduleMaterializer scheduleMaterializer;
 
     // ── 학생 앱 ──────────────────────────────────────────────────────────
 
@@ -247,7 +248,8 @@ public class AutoReservationService {
         }
 
         LocalDate today = KstClock.today();
-        LocalDate horizon = today.plusDays(ScheduleMaterializer.RESERVATION_OPEN_DAYS);
+        // 센터별 오픈일까지(2026-11-19) — 서당 병행 센터는 달 단위로 열린다
+        LocalDate horizon = scheduleMaterializer.openUntil(student.getCenterCode());
         LocalDate from = pattern.getFilledUntil() == null ? today : pattern.getFilledUntil().plusDays(1);
         if (from.isBefore(today)) {
             from = today;

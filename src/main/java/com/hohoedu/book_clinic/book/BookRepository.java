@@ -18,6 +18,8 @@ public interface BookRepository {
     /** 마스터 도서 등록 */
     void registerContent(BookReqDTO.RegisterReqDTO reqDTO);
 
+    void appendToActivePriority(@Param("contentId") Integer contentId, @Param("schoolYear") String schoolYear);
+
     /** 마스터 도서 수정 */
     void updateContent(BookReqDTO.UpdateReqDTO reqDTO);
 
@@ -210,5 +212,20 @@ public interface BookRepository {
 
     /** (content + center) 보유 수량 변경 이력 (최신순) */
     List<BookRespDTO.StockLogRespDTO> findStockLogs(@Param("contentId") Integer contentId,
+            @Param("centerCode") String centerCode);
+
+    // ===================== 띠지 번호 (2026-11-18) =====================
+
+    void renumberIfGradeChanged(@Param("contentId") Integer contentId, @Param("schoolYear") String schoolYear);
+
+    List<BookRespDTO.BookNoRespDTO> findBookNos(@Param("centerCode") String centerCode, @Param("schoolYear") String schoolYear);
+
+    void updateHqBookNo(@Param("contentId") Integer contentId, @Param("schoolYear") String schoolYear,
+            @Param("bookNo") Integer bookNo);
+
+    void saveCenterBookNo(@Param("centerCode") String centerCode, @Param("contentId") Integer contentId,
+            @Param("schoolYear") String schoolYear, @Param("bookNo") Integer bookNo);
+
+    List<BookRespDTO.BookNoDuplicateDTO> findBookNoDuplicates(@Param("schoolYear") String schoolYear,
             @Param("centerCode") String centerCode);
 }

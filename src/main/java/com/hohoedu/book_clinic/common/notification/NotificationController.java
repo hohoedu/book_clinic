@@ -54,7 +54,7 @@ public class NotificationController {
      * GET /api/notification/history/student/{studentId}
      */
     @GetMapping("/history/student/{studentId}")
-    public ResponseEntity<?> getHistoryByStudent(@PathVariable String studentId) {
+    public ResponseEntity<?> getHistoryByStudent(@PathVariable("studentId") String studentId) {
         List<NotificationRespDTO.NotificationDTO> list = notificationService.getHistoryByStudent(studentId)
                 .stream().map(NotificationRespDTO.NotificationDTO::new).collect(Collectors.toList());
         return ResponseEntity.ok(ApiUtils.success(list));
