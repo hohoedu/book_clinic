@@ -21,8 +21,9 @@
     ADVANCED: 'pass',
     ADVANCED_PERFECT: 'perfect',
   };
-  // 학년(schoolyear) 코드 → 캐릭터. 초1=frog, 초2=mouse, 초3~중3(03~07)은 parrot을 그대로 쓴다(2026-09-14).
-  const HERO_LOTTIE_CHARACTER_BY_SCHOOLYEAR = { '01': 'frog', '02': 'mouse' };
+  // 학년(schoolyear) 코드 → 캐릭터. 초1=frog, 초2=mouse, 초4=cat, 초5=crocodile, 초6=lion(2026-11-20).
+  // 초3·중등(03, 07)은 기본값 parrot.
+  const HERO_LOTTIE_CHARACTER_BY_SCHOOLYEAR = { '01': 'frog', '02': 'mouse', '04': 'cat', '05': 'crocodile', '06': 'lion' };
   const HERO_LOTTIE_DEFAULT_CHARACTER = 'parrot';
   let heroAnim = null;
   let heroSchoolyear = null;

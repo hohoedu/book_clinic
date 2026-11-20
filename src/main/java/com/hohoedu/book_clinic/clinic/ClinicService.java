@@ -121,7 +121,10 @@ public class ClinicService {
     private static final Map<String, String> CHARACTER_IMG_BY_SCHOOLYEAR = Map.of(
             "01", "/images/character01.png",
             "02", "/images/character02.png",
-            "03", "/images/character03.png"
+            "03", "/images/character03.png",
+            "04", "/images/character04.png",
+            "05", "/images/character05.png",
+            "06", "/images/character06.png"
     );
 
     /**

@@ -86,7 +86,7 @@ public class ClinicRespDTO {
         private String feature;
         private Integer progressPercent;   // 현재 레벨 구간 내 진행률 (0~100)
         private Integer booksToNextLevel;  // 다음 레벨까지 남은 완독 권수 (만렙이면 0)
-        private String characterImg;       // 학년별 캐릭터 이미지 경로 (초1~3만 전용 이미지, 나머지는 기본값)
+        private String characterImg;       // 학년별 캐릭터 이미지 경로 (초1~6 전용 이미지, 중등은 기본값)
         private String medalImg;           // 레벨 메달 이미지 경로 (그 레벨 이미지가 아직 없으면 null — ClinicService.levelMedalImg)
     }
 

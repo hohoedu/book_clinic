@@ -15,9 +15,14 @@ public class CustomUserDetails implements UserDetails {
     private final LoginUser loginUser;
 
     public CustomUserDetails(User user) {
+        this(user, user.getCenterCode());
+    }
+
+    /** centerCode를 계정 값 대신 지정 — ALL 계정이 로그인한 지점 소속으로 들어갈 때 사용 */
+    public CustomUserDetails(User user, String centerCode) {
         this.loginUser = LoginUser.builder()
                 .id(user.getId())
-                .centerCode(user.getCenterCode())
+                .centerCode(centerCode)
                 .roleKey(user.getRoleKey())
                 .userCode(user.getUserCode())
                 .userId(user.getUserId())
