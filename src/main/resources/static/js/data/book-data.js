@@ -102,6 +102,8 @@ const QTYPE_CODES = [
   { code: "12", name: "분석" },
   { code: "13", name: "비판" },
   { code: "14", name: "통합" },
+  { code: "15", name: "상징" },
+  { code: "16", name: "평가" },
 ];
 
 /*

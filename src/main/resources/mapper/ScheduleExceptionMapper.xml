@@ -11,7 +11,8 @@
         exception_type AS exceptionType,
         reason         AS reason,
         open_time      AS openTime,
-        close_time     AS closeTime
+        close_time     AS closeTime,
+        substitute_date AS substituteDate
     </sql>
 
     <!--
@@ -64,7 +65,7 @@
 
     <insert id="insertException" useGeneratedKeys="true" keyProperty="req.exceptionId" keyColumn="exception_id">
         INSERT INTO erp_bookstore_schedule_exception
-            (center_code, start_date, end_date, exception_type, reason, open_time, close_time, created_by)
+            (center_code, start_date, end_date, exception_type, reason, open_time, close_time, substitute_date, created_by)
         VALUES (
             #{centerCode},
             #{req.startDate},
@@ -75,6 +76,7 @@
                  jdbcType을 명시하지 않으면 mssql이 varbinary로 해석해 TIME 변환에서 실패한다. -->
             #{req.openTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
             #{req.closeTime,jdbcType=TIME,typeHandler=com.hohoedu.book_clinic._core.config.typehandler.LocalTimeTypeHandler},
+            #{req.substituteDate,jdbcType=DATE},
             #{userId}
         )
     </insert>
@@ -102,10 +104,10 @@
     <insert id="archiveException">
         INSERT INTO erp_bookstore_schedule_exception_del
             (log_type, logged_by, exception_id, center_code, start_date, end_date,
-             exception_type, reason, open_time, close_time, created_at, created_by)
+             exception_type, reason, open_time, close_time, substitute_date, created_at, created_by)
         SELECT
             #{logType}, #{loggedBy}, exception_id, center_code, start_date, end_date,
-            exception_type, reason, open_time, close_time, created_at, created_by
+            exception_type, reason, open_time, close_time, substitute_date, created_at, created_by
         FROM erp_bookstore_schedule_exception
         WHERE exception_id = #{exceptionId}
     </insert>

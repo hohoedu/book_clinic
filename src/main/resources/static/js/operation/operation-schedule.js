@@ -78,6 +78,8 @@
   const exceptionStartDate = document.getElementById("exceptionStartDate");
   const exceptionEndDate = document.getElementById("exceptionEndDate");
   const exceptionReason = document.getElementById("exceptionReason");
+  const exceptionSubstituteGroup = document.getElementById("exceptionSubstituteGroup");
+  const exceptionSubstituteDate = document.getElementById("exceptionSubstituteDate");
   const exceptionList = document.getElementById("exceptionList");
   const btnRegisterException = document.getElementById("btnRegisterException");
 
@@ -309,7 +311,7 @@
       state.dirty.add(state.activeDow);
       renderDay(state.activeDow);
       alert(`${labelOf(copiedFromDow)} 스케줄을 ${labelOf(state.activeDow)}에 붙여넣었습니다.`
-        + `${wasClosed ? " (휴무였던 요일은 운영으로 전환됨)" : ""}\n저장을 눌러야 반영됩니다.`);
+        + `${wasClosed ? " (미운영이었던 요일은 운영으로 전환됨)" : ""}\n저장을 눌러야 반영됩니다.`);
       return;
     }
 
@@ -446,14 +448,14 @@
       const nearest = nearestExceptionFor(dow)?.exceptions ?? [];
       const closedByException = nearest.some((ex) => ex.exceptionType === "CLOSED");
       if (closedByException) isOpen = false;
-      // 휴무 요일인데 다음 그 요일만 예외로 여는 경우
-      else if (!isOpen && nearest.some(opensOnClosedDay)) isOpen = true;
+      // 휴무 요일인데 다음 그 요일만 예외로 여는 경우(하루짜리 운영시간 변경 또는 대체 운영일)
+      else if (!isOpen && nearest.some((ex) => opensOnClosedDay(ex) || ex.substituteOnly)) isOpen = true;
 
       tab.dataset.state = isOpen ? "open" : "closed";
       // 예외 입력 중에는 어떤 요일도 선택 상태로 두지 않는다
       tab.classList.toggle("active", state.mode !== "exception" && dow === state.activeDow);
       const stateEl = tab.querySelector(".day-tab-state");
-      stateEl.textContent = isOpen ? "운영" : "휴무";
+      stateEl.textContent = isOpen ? "운영" : "미운영";
       stateEl.classList.toggle("closed", !isOpen);
     });
   }
@@ -486,6 +488,12 @@
     const date = nextDateForDow(dow);
     const exceptions = (state.exceptions ?? [])
       .filter((ex) => !ex.past && ex.startDate <= date && ex.endDate >= date);
+    // 이 날을 대체 운영일로 지정한 미운영 예외 — 그날만 미운영일의 회차로 열린다
+    const substituteOf = (state.exceptions ?? []).find((ex) => !ex.past && ex.substituteDate === date);
+    // 종류를 따로 둬야 탭·저장 안내가 이 날을 "미운영"으로 오해하지 않는다
+    if (substituteOf) {
+      exceptions.push({ ...substituteOf, substituteOnly: true, exceptionType: "SUBSTITUTE", exceptionTypeLabel: "대체 운영일" });
+    }
     return exceptions.length ? { date, exceptions } : null;
   }
 
@@ -561,7 +569,7 @@
       dayCloseTime.value = result.closed ? "" : result.closeTime;
       applyDayBadge(!result.closed);
       if (result.closed) {
-        roundListBody.innerHTML = '<tr><td colspan="7" class="round-readonly-empty">오늘은 휴무입니다</td></tr>';
+        roundListBody.innerHTML = '<tr><td colspan="7" class="round-readonly-empty">오늘은 운영하지 않습니다</td></tr>';
       } else {
         // "평소 규칙"과 완전히 같은 행을 그대로 쓴다(드래그 손잡이·셀렉트·스테퍼 포함) — 그 위에
         // disabled만 씌우면 화면이 자연스럽게 똑같아진다. 회차 삭제 버튼도 disabled라 안 눌린다.
@@ -592,8 +600,16 @@
    * 어디에도 쓰지 않으므로, 이 결과를 편집 필드에 다시 채워 넣지 않는다.
    */
   function computeExceptionResult(day, preview) {
-    const period = preview.exceptions.find((ex) => ex.exceptionType !== "SLOT_CHANGE");
-    const slotChange = preview.exceptions.find((ex) => ex.exceptionType === "SLOT_CHANGE");
+    const own = preview.exceptions.filter((ex) => !ex.substituteOnly);
+    const substituteOf = preview.exceptions.find((ex) => ex.substituteOnly);
+    const period = own.find((ex) => ex.exceptionType !== "SLOT_CHANGE");
+    const slotChange = own.find((ex) => ex.exceptionType === "SLOT_CHANGE");
+    // 원래 열지 않는 날이 대체 운영일이면 미운영일 요일의 규칙으로 연다(서버 ScheduleMaterializer와 동일)
+    if (substituteOf && !period && !day.isOpen) {
+      const closedDow = new Date(substituteOf.startDate).getDay() || 7;
+      const closedDayRule = state.days[closedDow];
+      if (closedDayRule?.isOpen) day = closedDayRule;
+    }
     // 휴무 요일이라도 하루짜리 운영시간 변경 예외에 회차를 확정해 뒀으면 그날만 연다(서버 ScheduleMaterializer와 동일)
     const opensClosedDay = !day.isOpen && opensOnClosedDay(period);
     const closed = period?.exceptionType === "CLOSED" || (!day.isOpen && !opensClosedDay);
@@ -682,7 +698,7 @@
   }
 
   function applyDayBadge(isOpen) {
-    dayScheduleBadge.textContent = isOpen ? "운영중" : "휴무";
+    dayScheduleBadge.textContent = isOpen ? "운영중" : "미운영";
     dayScheduleBadge.classList.toggle("badge-open", isOpen);
     dayScheduleBadge.classList.toggle("badge-closed", !isOpen);
     dayScheduleStateToggle.checked = isOpen;
@@ -794,7 +810,8 @@
       return `${ex.openTime} ~ ${ex.closeTime}`;
     }
     if (ex.exceptionType === "CLOSED") {
-      return ex.reason ?? "";
+      const reason = ex.reason ?? "";
+      return ex.substituteDate ? `${reason} (대체 운영일 ${ex.substituteDate})` : reason;
     }
     return ex.slotSummary ?? "";
   }
@@ -940,6 +957,10 @@
       exceptionType: type,
       reason: exceptionReason.value.trim(),
     };
+    // 대체 운영일은 선택 — 비워두면 보내지 않는다(서버 검증은 하루짜리 미운영 + 열린 회차)
+    if (type === "CLOSED" && exceptionSubstituteDate.value) {
+      payload.substituteDate = exceptionSubstituteDate.value;
+    }
 
     if (type === "TIME_CHANGE") {
       payload.openTime = dayOpenTime.value;
@@ -964,6 +985,7 @@
       const message = await sendJson(`${API}/exception`, payload);
       alert(message);
       exceptionReason.value = "";
+      exceptionSubstituteDate.value = "";
       state.mode = "edit";
       resetExceptionType();         // 예외 입력용으로 바꿔둔 왼쪽 카드를 원래 상태로
       await refreshAfterExceptionChange();
@@ -1081,6 +1103,7 @@
     });
 
     exceptionEditHint.hidden = type === "closed";
+    exceptionSubstituteGroup.hidden = type !== "closed";
     // 회차 변경은 하루만 지정할 수 있다(서버 CK 제약과 동일) — 종료일을 시작일에 묶는다
     exceptionEndDate.disabled = type === "round";
     if (type === "round") exceptionEndDate.value = exceptionStartDate.value;
@@ -1470,7 +1493,7 @@
   function describeDay(day) {
     const label = labelOf(day.dayOfWeek);
     if (!day.isOpen) {
-      return `<p class="version-detail-row closed"><strong>${label}</strong><span>휴무</span></p>`;
+      return `<p class="version-detail-row closed"><strong>${label}</strong><span>미운영</span></p>`;
     }
     const slotCount = (day.slots ?? []).length;
     return `<p class="version-detail-row"><strong>${label}</strong>`
@@ -1561,6 +1584,7 @@
     exceptionEndDate.value = today;
     exceptionStartDate.min = today;      // 지난 날짜 예외는 서버가 거부한다
     exceptionEndDate.min = today;
+    exceptionSubstituteDate.min = today;
     effectiveFromDate.min = today;
 
     state.activeDow = new Date().getDay() === 0 ? 7 : new Date().getDay();

@@ -39,7 +39,7 @@ public class ScheduleReqDTO {
         @NotNull(message = "요일이 없습니다.")
         private Integer dayOfWeek;
 
-        @NotNull(message = "운영/휴무 여부가 없습니다.")
+        @NotNull(message = "운영/미운영 여부가 없습니다.")
         private Boolean isOpen;
 
         @JsonFormat(pattern = "HH:mm")
@@ -104,6 +104,9 @@ public class ScheduleReqDTO {
         private LocalTime openTime;
         @JsonFormat(pattern = "HH:mm")
         private LocalTime closeTime;
+
+        /** 하루짜리 CLOSED 전용, 선택 — 그날 대신 여는 날. 반복 예약이 이 날로 옮겨 잡는다 */
+        private LocalDate substituteDate;
 
         /** SLOT_CHANGE 전용 — 조정할 회차만 담는다 */
         @Valid

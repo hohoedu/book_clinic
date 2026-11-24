@@ -47,11 +47,14 @@
             end_date       AS endDate,
             exception_type AS exceptionType,
             open_time      AS openTime,
-            close_time     AS closeTime
+            close_time     AS closeTime,
+            substitute_date AS substituteDate,
+            reason         AS reason
         FROM erp_bookstore_schedule_exception
         WHERE center_code = #{centerCode}
-          AND start_date &lt;= #{toDate}
-          AND end_date   &gt;= #{fromDate}
+          AND ((start_date &lt;= #{toDate} AND end_date &gt;= #{fromDate})
+               <!-- 대체 운영일이 기간 안에 있는 미운영 예외 — 그날을 미운영일 회차로 연다(2026-11-23) -->
+               OR substitute_date BETWEEN #{fromDate} AND #{toDate})
         ORDER BY start_date ASC, exception_id ASC
     </select>
 

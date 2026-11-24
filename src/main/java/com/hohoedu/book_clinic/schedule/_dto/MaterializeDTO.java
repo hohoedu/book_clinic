@@ -52,6 +52,10 @@ public class MaterializeDTO {
         private String exceptionType;
         private LocalTime openTime;
         private LocalTime closeTime;
+        /** 대체 운영일 — 하루짜리 CLOSED에만 있다(선택) */
+        private LocalDate substituteDate;
+        /** 관리자가 적은 사유 — 앱이 대체일 안내에 보여준다 */
+        private String reason;
     }
 
     /** 회차별 예외 오버라이드 (erp_bookstore_schedule_exception_slot) */

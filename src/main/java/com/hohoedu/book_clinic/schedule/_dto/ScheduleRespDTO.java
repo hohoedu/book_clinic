@@ -70,13 +70,15 @@ public class ScheduleRespDTO {
         private LocalDate endDate;
         /** CLOSED / TIME_CHANGE / SLOT_CHANGE */
         private String exceptionType;
-        /** 화면 뱃지에 그대로 쓰는 한글 이름 (휴무 / 운영시간 변경 / 운영회차 변경) */
+        /** 화면 뱃지에 그대로 쓰는 한글 이름 (미운영 / 운영시간 변경 / 운영회차 변경) */
         private String exceptionTypeLabel;
         private String reason;
         @JsonFormat(pattern = "HH:mm")
         private LocalTime openTime;
         @JsonFormat(pattern = "HH:mm")
         private LocalTime closeTime;
+        /** 대체 운영일 — 하루짜리 CLOSED에만 있다(선택) */
+        private LocalDate substituteDate;
         /** 회차 조정 요약 — SLOT_CHANGE가 아니면 null */
         private String slotSummary;
         /**

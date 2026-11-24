@@ -20,6 +20,7 @@ import com.hohoedu.book_clinic._core.handler.exception.Exception400;
 import com.hohoedu.book_clinic._core.handler.exception.Exception401;
 import com.hohoedu.book_clinic._core.handler.exception.Exception404;
 import com.hohoedu.book_clinic._core.utils.KstClock;
+import com.hohoedu.book_clinic.schedule._dto.MaterializeDTO;
 import com.hohoedu.book_clinic.schedule.materialize.ScheduleMaterializer;
 import com.hohoedu.book_clinic.pass.PassService;
 import com.hohoedu.book_clinic.pass._dto.PassRespDTO;
@@ -408,6 +409,7 @@ public class ReservationService {
      * startDate 가 있으면 그 날짜(앱에서 고른 날짜)부터 센다(2026-10-22). 예전엔 항상 오늘 이후 가장
      * 가까운 같은 요일부터라, 11/19를 고르고 반복을 켜도 10/22·10/29… 처럼 고른 날짜와 무관한 주가 잡혔다.
      * 오늘보다 이전이면 오늘부터로 당긴다. 아직 회차가 안 열린 뒤쪽 주는 NOT_OPEN(앱 "준비중")으로 나온다.
+     * 미운영 예외에 대체 운영일이 있으면 그 주는 대체일로 바뀌어 나온다 — 요일이 달라질 수 있다.
      */
     public List<ReservationRespDTO.BatchPreviewItemDTO> previewBatch(String studentId, Integer dayOfWeek, Integer seq,
                                                                       LocalDate startDate) {
@@ -421,7 +423,33 @@ public class ReservationService {
 
         LocalDate today = KstClock.today();
         LocalDate from = (startDate == null || startDate.isBefore(today)) ? today : startDate;
-        List<LocalDate> targetDates = nextDates(from, dayOfWeek, BATCH_WEEKS);
+        List<LocalDate> weekDates = nextDates(from, dayOfWeek, BATCH_WEEKS);
+        // 미운영일에 대체 운영일이 지정돼 있으면 그 주는 대체일의 같은 회차로 잡는다(2026-11-23).
+        // 지난 날이거나 이미 다른 주차로 들어 있는 날은 옮기지 않는다(같은 날이 두 번 잡히지 않게).
+        Map<LocalDate, MaterializeDTO.ExceptionDTO> substitutes = scheduleMaterializer.substituteExceptions(
+                student.getCenterCode(), weekDates.get(0), weekDates.get(weekDates.size() - 1));
+        // 첫 주차 이용권의 유효기간 안에서만 반복한다(2026-11-23) — 12/12부터 4주를 잡으면 1월로 넘어가는데,
+        // 그 이용권으로는 어차피 1월을 예약할 수 없다. 기간이 아직 안 정해진 이용권(첫 예약 전)은 자르지 않는다.
+        // 기준은 원래 주차 날짜다 — 12/31 미운영 → 1/2 대체면 1/2는 12월 이용권으로 쓸 수 있으니 남긴다.
+        LocalDate passUntil = passService.cycleOn(studentId, "BOOK", weekDates.get(0)).getCycleUntil();
+        // 대체일 → 원래 미운영일. 대체일의 예약 오픈·이용권은 미운영일 기준으로 본다
+        Map<LocalDate, LocalDate> closedDayOf = new HashMap<>();
+        List<LocalDate> targetDates = weekDates.stream()
+                .filter(d -> passUntil == null || !d.isAfter(passUntil))
+                .map(d -> {
+                    MaterializeDTO.ExceptionDTO ex = substitutes.get(d);
+                    LocalDate sub = ex == null ? null : ex.getSubstituteDate();
+                    if (sub != null && !sub.isBefore(today) && !weekDates.contains(sub)) {
+                        closedDayOf.put(sub, d);
+                        return sub;
+                    }
+                    return d;
+                })
+                .distinct()
+                .toList();
+        if (targetDates.isEmpty()) {
+            return List.of();
+        }
         List<ReservationRespDTO.SlotOptionDTO> slots =
                 repository.findSlotsByDates(student.getCenterCode(), targetDates, seq, studentId);
         Map<LocalDate, ReservationRespDTO.SlotOptionDTO> byDate = slots.stream()
@@ -446,19 +474,25 @@ public class ReservationService {
         LocalDate openUntil = scheduleMaterializer.openUntil(student.getCenterCode());
         List<ReservationRespDTO.BatchPreviewItemDTO> result = new ArrayList<>();
         for (LocalDate date : targetDates) {
+            LocalDate basis = closedDayOf.getOrDefault(date, date);
             // 오픈일 너머 회차는 DB에 남아 있어도 "준비중"이다(2026-11-19)
-            ReservationRespDTO.SlotOptionDTO slot = date.isAfter(openUntil) ? null : byDate.get(date);
+            ReservationRespDTO.SlotOptionDTO slot = basis.isAfter(openUntil) ? null : byDate.get(date);
             ReservationRespDTO.BatchPreviewItemDTO item = new ReservationRespDTO.BatchPreviewItemDTO();
             item.setServiceDate(date);
             item.setSeq(seq);
+            if (!basis.equals(date)) {
+                item.setSubstituteFor(basis);
+                item.setSubstituteReason(substitutes.get(basis).getReason());
+            }
 
-            PassRespDTO.CycleDTO cycle = passService.cycleOn(studentId, "BOOK", date);
+            PassRespDTO.CycleDTO cycle = passCycleFor(studentId, date, basis);
             LocalDate cycleKey = cycle.getCycleFrom() != null ? cycle.getCycleFrom() : UNASSIGNED_CYCLE;
             int cap = capByCycle.computeIfAbsent(cycleKey, k -> cycle.getRemaining());
             int used = usedByCycle.computeIfAbsent(cycleKey, k -> 0);
 
             if (slot == null) {
-                item.setTargetStatus("NOT_OPEN");
+                // 오픈 기간 안인데 슬롯이 없으면 그날은 운영하지 않는 날이다 — "준비중"이 아니라 미운영(CLOSED)
+                item.setTargetStatus(basis.isAfter(openUntil) ? "NOT_OPEN" : "CLOSED");
             } else {
                 item.setSlotInstanceId(slot.getSlotInstanceId());
                 item.setStartsAt(slot.getStartsAt());
@@ -679,8 +713,12 @@ public class ReservationService {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 이미 종료된 회차입니다.");
         }
 
+        // 대체 운영일이면 원래 미운영일(2026-11-23) — 예약 오픈과 이용권 유효기간을 그날 기준으로도 본다
+        LocalDate closedDay = scheduleMaterializer.closedDayOf(student.getCenterCode(), slot.getServiceDate());
+
         // 아직 열리지 않은 회차(2026-11-19) — 목록에서 빼지만 API 직접 호출 우회를 막으려고 여기서도 막는다
-        if (slot.getServiceDate().isAfter(scheduleMaterializer.openUntil(student.getCenterCode()))) {
+        LocalDate openBasis = closedDay != null ? closedDay : slot.getServiceDate();
+        if (openBasis.isAfter(scheduleMaterializer.openUntil(student.getCenterCode()))) {
             throw new Exception400(slotLabel(slot.getServiceDate(), slot.getSeq()) + "는 아직 예약이 열리지 않은 회차입니다.");
         }
 
@@ -737,7 +775,10 @@ public class ReservationService {
         //
         // 위 lockStudentForReservation이 같은 학생의 동시 예약 요청을 직렬화하므로, 잔여 1회를
         // 두 요청이 동시에 깎아 마이너스로 내려가는 일은 없다(decrementRemain의 조건도 이중 방어).
-        if (!passService.consumeForReservation(student.getStudentId(), "BOOK",
+        // 대체 운영일은 미운영일의 이용권을 먼저 쓴다(먼저 만료되므로) — 없으면 그날 이용권으로
+        boolean consumed = closedDay != null && passService.consumeForReservation(student.getStudentId(), "BOOK",
+                command.getReservationId(), slot.getServiceDate(), closedDay);
+        if (!consumed && !passService.consumeForReservation(student.getStudentId(), "BOOK",
                 command.getReservationId(), slot.getServiceDate())) {
             if (holdIfNoPass) {
                 // 결제대기(2026-10-27) — 자동구매 카드 결제가 실패한 사이 자리를 다른 학생에게 뺏기지 않게
@@ -753,6 +794,15 @@ public class ReservationService {
         repository.insertLog(command.getReservationId(), null, "RESERVED", changedBy, changedByRole,
                 "SYSTEM".equals(changedByRole) ? "자동 예약" : null);
         return repository.findReservationById(command.getReservationId());
+    }
+
+    /** 대체 운영일(date ≠ basis)은 미운영일 이용권을 먼저 보고, 잔여가 없으면 그날 이용권 — reserveOne 차감 순서와 같다 */
+    private PassRespDTO.CycleDTO passCycleFor(String studentId, LocalDate date, LocalDate basis) {
+        PassRespDTO.CycleDTO cycle = passService.cycleOn(studentId, "BOOK", basis);
+        if (!basis.equals(date) && cycle.getRemaining() <= 0) {
+            cycle = passService.cycleOn(studentId, "BOOK", date);
+        }
+        return cycle;
     }
 
     private Student requireStudent(String studentId) {

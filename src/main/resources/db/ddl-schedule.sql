@@ -154,6 +154,7 @@ CREATE TABLE erp_bookstore_schedule_exception (
     reason           VARCHAR(200) NOT NULL,   -- 변경 사유 (예: 광복절, 공사로 인한 휴무)
     open_time        TIME(0),                 -- 변경 시작시각 — TIME_CHANGE 전용
     close_time       TIME(0),                 -- 변경 종료시각 — TIME_CHANGE 전용
+    substitute_date  DATE,                    -- 대체 운영일 — 하루짜리 CLOSED 전용(선택). 반복예약이 이 날로 대신 잡는다
     created_at       DATETIME2    DEFAULT DATEADD(HOUR, 9, GETUTCDATE()),
     created_by       VARCHAR(50),
     CONSTRAINT CK_schedule_exc_range CHECK (start_date <= end_date),
@@ -183,6 +184,7 @@ CREATE TABLE erp_bookstore_schedule_exception_del (
     reason           VARCHAR(200),
     open_time        TIME(0),
     close_time       TIME(0),
+    substitute_date  DATE,
     created_at       DATETIME2,
     created_by       VARCHAR(50)
 );

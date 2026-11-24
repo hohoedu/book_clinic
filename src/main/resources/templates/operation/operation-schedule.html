@@ -49,31 +49,31 @@
               <div class="day-tabs" id="dayTabs">
                 <button type="button" class="day-tab" data-day="mon" data-state="closed">
                   <span class="day-tab-label">월</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
                 <button type="button" class="day-tab" data-day="tue" data-state="closed">
                   <span class="day-tab-label">화</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
                 <button type="button" class="day-tab" data-day="wed" data-state="closed">
                   <span class="day-tab-label">수</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
                 <button type="button" class="day-tab" data-day="thu" data-state="closed">
                   <span class="day-tab-label">목</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
                 <button type="button" class="day-tab" data-day="fri" data-state="closed">
                   <span class="day-tab-label">금</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
                 <button type="button" class="day-tab" data-day="sat" data-state="closed">
                   <span class="day-tab-label">토</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
                 <button type="button" class="day-tab" data-day="sun" data-state="closed">
                   <span class="day-tab-label">일</span>
-                  <span class="day-tab-state closed">휴무</span>
+                  <span class="day-tab-state closed">미운영</span>
                 </button>
               </div>
               <div class="effective-date-group">
@@ -241,7 +241,7 @@
               <div class="check-group" id="exceptionTypeGroup">
                 <label class="check-pill checked" data-exception-type="closed">
                   <input type="radio" name="exceptionType" value="closed" checked />
-                  휴무
+                  미운영
                 </label>
                 <label class="check-pill" data-exception-type="time">
                   <input type="radio" name="exceptionType" value="time" />
@@ -253,6 +253,17 @@
                 </label>
               </div>
               <p class="exception-edit-hint" id="exceptionEditHint" hidden>왼쪽에서 운영 시간과 회차를 그날에 맞게 고친 뒤 예외 일정 등록을 눌러주세요.</p>
+            </div>
+
+            <!-- 미운영 전용, 선택 — 반복 예약이 미운영일 대신 이 날의 같은 회차로 잡힌다 -->
+            <div class="field-group" id="exceptionSubstituteGroup">
+              <label for="exceptionSubstituteDate">대체 운영일 (선택)</label>
+              <!-- 예외 기간의 시작일 칸과 폭을 맞추려고 같은 2칸 배치를 쓰고 오른쪽은 비워둔다 -->
+              <div class="date-range">
+                <input type="date" class="date-input-native" id="exceptionSubstituteDate" />
+                <span class="date-sep date-range-blank" aria-hidden="true">~</span>
+                <span class="date-input-native date-range-blank" aria-hidden="true"></span>
+              </div>
             </div>
 
             <div class="field-group">

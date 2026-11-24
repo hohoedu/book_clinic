@@ -248,5 +248,7 @@ public class AppRespDTO {
         private String imageUrl;
         private String readDate;  // yyyy-MM-dd — 그 책이 실린 가장 최근 독서일지 날짜
         private String result;    // KING 정독왕 / FRIEND 정독 완료 / RETRY 재도전 필요 / null(결과 없음)
+        private String cardUrl;   // 이 책의 일반 카드 이미지 — 카드를 아직 못 받았으면 null (2026-11-23)
+        private String cardEarnedDate; // yyyy-MM-dd — 카드 받은 날(KST). 앱의 new 표시용, 카드 없으면 null
     }
 }

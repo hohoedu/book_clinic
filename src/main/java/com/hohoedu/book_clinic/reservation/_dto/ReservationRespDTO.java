@@ -27,7 +27,7 @@ public class ReservationRespDTO {
     /**
      * 4주 일괄 신청 미리보기 1건.
      * targetStatus: OPEN(신청 가능) / ALREADY_RESERVED(이미 내 예약 있음) /
-     *               FULL(마감) / CLOSED(휴무·마감된 회차) / NOT_OPEN(아직 슬롯이 생성되지 않음) /
+     *               FULL(마감) / CLOSED(미운영·마감된 회차) / NOT_OPEN(아직 슬롯이 생성되지 않음) /
      *               DAY_CONFLICT(이 날짜에 이미 하루 상한(4회차)만큼 예약함) /
      *               MONTH_FULL(이용권 잔여를 이미 다 씀 — 예약 시 차감이라 잔여 = 예약 가능 횟수) /
      *               NO_PASS(그 날짜를 덮는 이용권이 없음 — 결제 후 예약 가능)
@@ -40,6 +40,9 @@ public class ReservationRespDTO {
         private LocalDateTime startsAt;
         private LocalDateTime endsAt;
         private String targetStatus;
+        /** 대체 운영일로 옮겨 잡힌 주차면 원래 미운영일과 사유(2026-11-23) — 앱이 안내 아이콘을 띄운다 */
+        private LocalDate substituteFor;
+        private String substituteReason;
     }
 
     /** 예약 1건 (등록 결과 / 내 예약 목록 공용) */
@@ -68,6 +71,9 @@ public class ReservationRespDTO {
          */
         private String checkIn;
         private String checkOut;
+        /** 대체 운영일 예약이면 원래 미운영일과 사유(2026-11-23). 내 예약 목록에서만 채워진다 */
+        private LocalDate substituteFor;
+        private String substituteReason;
     }
 
     /**

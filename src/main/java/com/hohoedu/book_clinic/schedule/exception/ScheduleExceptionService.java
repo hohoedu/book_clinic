@@ -118,7 +118,7 @@ public class ScheduleExceptionService {
 
     private String typeLabel(String type) {
         return switch (type == null ? "" : type) {
-            case TYPE_CLOSED -> "휴무";
+            case TYPE_CLOSED -> "미운영";
             case TYPE_TIME_CHANGE -> "운영시간 변경";
             case TYPE_SLOT_CHANGE -> "운영회차 변경";
             default -> type;
@@ -131,6 +131,7 @@ public class ScheduleExceptionService {
     public Integer create(String centerCode, String userId, ScheduleReqDTO.SaveExceptionReqDTO req) {
         normalizeAndValidate(req);
         checkOverlap(centerCode, req);
+        validateSubstitute(centerCode, req);
         checkNoReservations(centerCode, req.getStartDate(), req.getEndDate(), "예외 일정을 등록할 수 없습니다");
 
         scheduleExceptionRepository.insertException(centerCode, req, userId);
@@ -139,9 +140,12 @@ public class ScheduleExceptionService {
         }
 
         MaterializeDTO.ResultDTO result = materializeAffected(centerCode, req.getStartDate(), req.getEndDate());
-        log.info("[운영스케줄] 예외 등록 — center={}, id={}, {}~{}, type={}, 슬롯 재생성 {}건, by={}",
+        if (req.getSubstituteDate() != null) {
+            materializeSubstitute(centerCode, req.getStartDate(), req.getSubstituteDate());   // 대체일을 연다
+        }
+        log.info("[운영스케줄] 예외 등록 — center={}, id={}, {}~{}, type={}, 대체일={}, 슬롯 재생성 {}건, by={}",
                 centerCode, req.getExceptionId(), req.getStartDate(), req.getEndDate(),
-                req.getExceptionType(), result.getSlotCount(), userId);
+                req.getExceptionType(), req.getSubstituteDate(), result.getSlotCount(), userId);
         return req.getExceptionId();
     }
 
@@ -156,6 +160,9 @@ public class ScheduleExceptionService {
             throw new Exception400("예외 종류가 올바르지 않습니다.");
         }
         req.setExceptionType(type);
+        if (!TYPE_CLOSED.equals(type)) {
+            req.setSubstituteDate(null);   // 대체 운영일은 미운영에만 의미가 있다
+        }
 
         if (req.getStartDate().isAfter(req.getEndDate())) {
             throw new Exception400("예외 종료일은 시작일과 같거나 늦어야 합니다.");
@@ -273,6 +280,40 @@ public class ScheduleExceptionService {
         }
     }
 
+    /**
+     * 대체 운영일(선택) 검증 — 대체일은 원래 열지 않는 날이어도 미운영일과 같은 회차로 그날만 열린다
+     * (ScheduleMaterializer). 이미 운영하는 날이면 그날 회차를 그대로 쓴다. 반복 예약은 이 날로 옮겨 잡힌다.
+     * 오픈일 너머라 아직 슬롯이 안 찍힌 날도 있어서 slot_instance가 아니라 엔진 계산 결과로 본다.
+     */
+    private void validateSubstitute(String centerCode, ScheduleReqDTO.SaveExceptionReqDTO req) {
+        LocalDate substitute = req.getSubstituteDate();
+        if (substitute == null) {
+            return;
+        }
+        if (!req.getStartDate().isEqual(req.getEndDate())) {
+            throw new Exception400("대체 운영일은 하루짜리 미운영에만 지정할 수 있습니다.");
+        }
+        if (substitute.isEqual(req.getStartDate())) {
+            throw new Exception400("대체 운영일은 미운영일과 다른 날이어야 합니다.");
+        }
+        if (substitute.isBefore(KstClock.today())) {
+            throw new Exception400("지난 날짜는 대체 운영일로 지정할 수 없습니다.");
+        }
+        // 등록 전이라 미운영일은 아직 평소대로 계산된다 — 원래 쉬는 날이면 옮길 회차가 없다
+        if (scheduleMaterializer.previewDay(centerCode, req.getStartDate()).isEmpty()) {
+            throw new Exception400(req.getStartDate() + "은 원래 운영하지 않는 날이라 대체 운영일을 지정할 수 없습니다.");
+        }
+        for (MaterializeDTO.ExceptionDTO ex : slotInstanceRepository.findExceptionsInRange(centerCode, substitute, substitute)) {
+            if (TYPE_CLOSED.equals(ex.getExceptionType())
+                    && !substitute.isBefore(ex.getStartDate()) && !substitute.isAfter(ex.getEndDate())) {
+                throw new Exception400(substitute + "은 미운영 예외 기간이라 대체 운영일로 지정할 수 없습니다.");
+            }
+            if (substitute.equals(ex.getSubstituteDate())) {
+                throw new Exception400(substitute + "은 이미 " + ex.getStartDate() + "의 대체 운영일로 지정돼 있습니다.");
+            }
+        }
+    }
+
     /** 겹침 규칙은 ddl-schedule.sql 상단 주석 그대로 — 기간끼리만 막고, 기간 안의 회차 변경은 허용 */
     private void checkOverlap(String centerCode, ScheduleReqDTO.SaveExceptionReqDTO req) {
         if (TYPE_SLOT_CHANGE.equals(req.getExceptionType())) {
@@ -305,6 +346,10 @@ public class ScheduleExceptionService {
             throw new Exception400("이미 지난 예외 일정은 삭제할 수 없습니다.");
         }
         checkNoReservations(centerCode, target.getStartDate(), target.getEndDate(), "예외 일정을 삭제할 수 없습니다");
+        if (target.getSubstituteDate() != null) {
+            // 대체일로 열린 회차가 같이 사라지므로 그날 예약도 확인한다
+            checkNoReservations(centerCode, target.getSubstituteDate(), target.getSubstituteDate(), "예외 일정을 삭제할 수 없습니다");
+        }
 
         scheduleExceptionRepository.archiveExceptionSlots(exceptionId, "DELETE", userId);
         scheduleExceptionRepository.archiveException(exceptionId, "DELETE", userId);
@@ -313,6 +358,10 @@ public class ScheduleExceptionService {
         // 삭제한 뒤에 다시 찍어야 요일 규칙대로 복구된다. 순서가 바뀌면 지운 예외가 그대로 반영된다.
         MaterializeDTO.ResultDTO result =
                 materializeAffected(centerCode, target.getStartDate(), target.getEndDate());
+        if (target.getSubstituteDate() != null) {
+            // 대체일을 되돌린다 — 오픈일 너머에 미리 찍어둔 대체일 회차도 지워야 하므로 오픈일로 자르지 않는다
+            scheduleMaterializer.materializeRange(centerCode, target.getSubstituteDate(), target.getSubstituteDate());
+        }
         log.info("[운영스케줄] 예외 삭제 — center={}, id={}, {}~{}, 슬롯 재생성 {}건, by={}",
                 centerCode, exceptionId, target.getStartDate(), target.getEndDate(), result.getSlotCount(), userId);
     }
@@ -348,6 +397,18 @@ public class ScheduleExceptionService {
         LocalDate openUntil = scheduleMaterializer.openUntil(centerCode);
         return scheduleMaterializer.materializeRange(centerCode, maxOf(startDate, KstClock.today()),
                 endDate.isAfter(openUntil) ? openUntil : endDate);
+    }
+
+    /**
+     * 대체일은 오픈일 너머여도 미운영일이 오픈 기간 안이면 바로 찍는다(2026-11-23) — 반복 예약은 미운영일
+     * 기준으로 대체일을 잡으므로(12/26 미운영 → 1/3 대체), 1월이 아직 안 열렸어도 1/3 회차가 있어야 한다.
+     * 학생 단건 목록은 오픈일로 잘라 보여주므로 1월 회차가 미리 드러나지는 않는다.
+     * 미운영일도 오픈일 너머면 일일 배치(materializeHorizon)가 그날이 열릴 때 함께 찍는다.
+     */
+    private void materializeSubstitute(String centerCode, LocalDate closedDay, LocalDate substitute) {
+        if (!closedDay.isAfter(scheduleMaterializer.openUntil(centerCode))) {
+            scheduleMaterializer.materializeRange(centerCode, substitute, substitute);
+        }
     }
 
     private LocalDate maxOf(LocalDate a, LocalDate b) {

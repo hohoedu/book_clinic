@@ -591,13 +591,19 @@
          발송된 일지(is_send=1)만, 오늘(KST)까지, 표지는 도서 마스터 이미지 우선.
          같은 책이 여러 날 일지에 실리면(재도전 등) 가장 최근 1건만 남긴다. -->
     <select id="selectBookcaseBooks" resultType="com.hohoedu.book_clinic.app._dto.AppRespDTO$BookcaseBookDTO">
-        SELECT contentId, title, imageUrl, readDate, result
+        SELECT contentId, title, imageUrl, readDate, result, cardUrl, cardEarnedDate
         FROM (
             SELECT dd.content_id                                  AS contentId,
                    coalesce(dd.book_name, c.original_title)       AS title,
                    coalesce(nullif(c.image_url, ''), dd.book_img) AS imageUrl,
                    convert(varchar(10), d.record_date, 23)        AS readDate,
                    rl.grade                                       AS result,
+                   -- 앱 '획득한 카드' 보기(2026-11-23) — 이 책의 일반(NORMAL) 카드를 받았을 때만 이미지. 그림 미등록이면 기본 카드
+                   CASE WHEN sc.earned_at IS NOT NULL
+                        THEN isnull(nullif(cp.card_url, ''), '/images/student_result/card.png')
+                   END                                            AS cardUrl,
+                   -- 카드 받은 날(KST) — 앱이 오늘 받은 카드에 new를 붙인다(2026-11-23)
+                   convert(varchar(10), sc.earned_at, 23)         AS cardEarnedDate,
                    d.record_date                                  AS sortDate,
                    d.record_time                                  AS sortTime,
                    row_number() OVER (
@@ -608,6 +614,14 @@
             JOIN erp_bookstore_diary_detail dd ON dd.diary_key = d.diary_key
             LEFT JOIN erp_bookstore_content c ON c.content_id = dd.content_id
             LEFT JOIN erp_bookstore_recommend_log rl ON rl.recommend_id = dd.recommend_id
+            LEFT JOIN erp_bookstore_card_path cp ON cp.content_id = dd.content_id
+            <!-- 일반 카드는 (학생, 책)당 하나다(UX_erp_bookstore_student_card_normal) -->
+            OUTER APPLY (
+                SELECT TOP 1 earned_at FROM erp_bookstore_student_card
+                WHERE student_id = d.student_id
+                  AND content_id = dd.content_id
+                  AND card_type  = 'NORMAL'
+            ) sc
             WHERE d.student_id = #{studentId}
               AND d.is_send = 1
               AND dd.content_id IS NOT NULL

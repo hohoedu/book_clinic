@@ -145,7 +145,16 @@ public class PassService {
      */
     public boolean consumeForReservation(String studentId, String serviceCode,
                                          Long reservationId, LocalDate serviceDate) {
-        PassRespDTO.PassDTO pass = passRepository.findUsablePassOn(studentId, serviceCode, serviceDate);
+        return consumeForReservation(studentId, serviceCode, reservationId, serviceDate, serviceDate);
+    }
+
+    /**
+     * passDate에 유효한 이용권에서 깎는다(2026-11-23) — 대체 운영일 예약은 원래 미운영일의 이용권을
+     * 쓸 수 있어야 해서다. 차감 이력(used_date)에는 실제 회차 날짜(serviceDate)를 남긴다.
+     */
+    public boolean consumeForReservation(String studentId, String serviceCode,
+                                         Long reservationId, LocalDate serviceDate, LocalDate passDate) {
+        PassRespDTO.PassDTO pass = passRepository.findUsablePassOn(studentId, serviceCode, passDate);
         if (pass == null) {
             log.info("[이용권] 예약 차감 실패(잔여 없음) — studentId={}, service={}, serviceDate={}",
                     studentId, serviceCode, serviceDate);
@@ -159,15 +168,15 @@ public class PassService {
         // 조건부 UPDATE라 0행이면 다른 요청이 먼저 활성화한 것이고, 그 경우엔 기간이 이 예약
         // 날짜를 덮는지 다시 봐야 하므로 선택부터 새로 한다.
         if (pass.getValidFrom() == null) {
-            LocalDate start = activationStart(pass, serviceDate);
+            LocalDate start = activationStart(pass, passDate);
             if (passRepository.activatePass(pass.getPassId(), start, VALID_DAYS) == 0) {
                 log.warn("[이용권] 활성화 경합 — passId={}, studentId={}", pass.getPassId(), studentId);
-                pass = passRepository.findUsablePassOn(studentId, serviceCode, serviceDate);
+                pass = passRepository.findUsablePassOn(studentId, serviceCode, passDate);
                 if (pass == null) {
                     return false;
                 }
                 if (pass.getValidFrom() == null) {
-                    start = activationStart(pass, serviceDate);
+                    start = activationStart(pass, passDate);
                     if (passRepository.activatePass(pass.getPassId(), start, VALID_DAYS) == 0) {
                         return false;
                     }
@@ -176,7 +185,7 @@ public class PassService {
             // 시작일을 당겼으면 회차 날짜가 기간 밖일 수 있다. 예약은 한 달 앞까지만 열리고 서비스
             // 기간(결제일 + 90일) 안에서만 잡을 수 있어 정상적으로는 생기지 않지만, 생기면 이 예약은
             // 이 이용권으로 쓸 수 없다 — false면 호출부가 예약째 롤백하므로 활성화도 함께 되돌아간다.
-            if (pass.getValidFrom() == null && serviceDate.isAfter(start.plusDays(VALID_DAYS))) {
+            if (pass.getValidFrom() == null && passDate.isAfter(start.plusDays(VALID_DAYS))) {
                 log.warn("[이용권] 회차가 유효기간 밖 — passId={}, 시작={}, 회차={}", pass.getPassId(), start, serviceDate);
                 return false;
             }

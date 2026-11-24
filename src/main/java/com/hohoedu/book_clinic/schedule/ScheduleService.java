@@ -322,7 +322,8 @@ public class ScheduleService {
                     case "UPCOMING" -> 1;
                     default -> 2;
                 })
-                .thenComparing(v -> "PAST".equals(v.getStatus())
+                // thenComparingLong + 타입 명시 — 그냥 thenComparing이면 VS Code(Eclipse 컴파일러)가 타입 추론에 실패한다
+                .thenComparingLong((ScheduleRespDTO.VersionSummaryDTO v) -> "PAST".equals(v.getStatus())
                         ? LocalDate.MAX.toEpochDay() - v.getEffectiveFrom().toEpochDay()
                         : v.getEffectiveFrom().toEpochDay()));
         return versions;

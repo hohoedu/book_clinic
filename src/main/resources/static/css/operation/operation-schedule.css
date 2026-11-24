@@ -628,6 +628,11 @@ input.time-value {
   color: #9aa5ab;
 }
 
+/* 자리만 차지하는 빈 칸 — 대체 운영일 입력을 시작일 칸과 같은 폭으로 맞춘다 */
+.date-range-blank {
+  visibility: hidden;
+}
+
 .btn.small {
   height: 30px;
   padding: 0 10px;

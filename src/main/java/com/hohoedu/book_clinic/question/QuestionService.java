@@ -243,7 +243,7 @@ public class QuestionService {
 
         addDropdown(dvHelper, main, bookTitles,                                                      0,  "목록에서 도서를 선택해주세요.");
         addDropdown(dvHelper, main, new String[]{"기본", "심화"},                                     2,  "목록에서 레벨을 선택해주세요.");
-        addDropdown(dvHelper, main, new String[]{"이해", "표현", "논리", "사고", "감정", "어휘", "지식", "심화 어휘", "심화 문법", "추론", "공감", "분석", "비판", "통합"}, 10, "목록에서 유형을 선택해주세요.");
+        addDropdown(dvHelper, main, new String[]{"이해", "표현", "논리", "사고", "감정", "어휘", "지식", "심화 어휘", "심화 문법", "추론", "공감", "분석", "비판", "통합", "상징", "평가"}, 10, "목록에서 유형을 선택해주세요.");
         addDropdown(dvHelper, main, new String[]{"Y", "N"},                                          11, "Y 또는 N을 선택해주세요.");
         addDropdown(dvHelper, main, new String[]{"활성", "비활성"},                                   12, "목록에서 상태를 선택해주세요.");
 
@@ -269,7 +269,8 @@ public class QuestionService {
             java.util.Map.entry("사고", "04"), java.util.Map.entry("감정", "05"), java.util.Map.entry("어휘", "06"),
             java.util.Map.entry("지식", "07"), java.util.Map.entry("심화 어휘", "08"), java.util.Map.entry("심화 문법", "09"),
             java.util.Map.entry("추론", "10"), java.util.Map.entry("공감", "11"), java.util.Map.entry("분석", "12"),
-            java.util.Map.entry("비판", "13"), java.util.Map.entry("통합", "14")
+            java.util.Map.entry("비판", "13"), java.util.Map.entry("통합", "14"),
+            java.util.Map.entry("상징", "15"), java.util.Map.entry("평가", "16")
     );
 
     private String formatQnum(String raw) {

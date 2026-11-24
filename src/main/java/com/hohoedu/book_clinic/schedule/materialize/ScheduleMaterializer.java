@@ -82,7 +82,16 @@ public class ScheduleMaterializer {
     /** 오늘~예약 오픈일 전체를 다시 찍는다. 일일 배치·수동 재계산용 */
     @Transactional
     public MaterializeDTO.ResultDTO materializeHorizon(String centerCode) {
-        return materializeRange(centerCode, KstClock.today(), openUntil(centerCode));
+        LocalDate today = KstClock.today();
+        LocalDate until = openUntil(centerCode);
+        // 오픈 기간 안 미운영일의 대체일은 오픈일 너머여도 함께 찍는다(2026-11-23) — ScheduleExceptionService.materializeSubstitute 참고
+        List<LocalDate> dates = new ArrayList<>(datesBetween(today, until));
+        substituteDates(centerCode, today, until).forEach((closedDay, substitute) -> {
+            if (!closedDay.isBefore(today) && !closedDay.isAfter(until)) {
+                dates.add(substitute);
+            }
+        });
+        return run(centerCode, dates);
     }
 
     /** 기간 안의 모든 날짜를 다시 찍는다. 예외 등록·삭제 후 호출 */
@@ -126,23 +135,7 @@ public class ScheduleMaterializer {
 
         LocalDate from = targets.get(0);
         LocalDate to = targets.get(targets.size() - 1);
-
-        // 입력값은 날짜별로 쪼개 조회하지 않고 기간 전체를 한 번에 읽는다 (SlotInstanceMapper 주석 참고)
-        Map<Integer, List<MaterializeDTO.RuleDTO>> rulesByDay = slotInstanceRepository
-                .findRulesUpTo(centerCode, to).stream()
-                .collect(Collectors.groupingBy(MaterializeDTO.RuleDTO::getDayOfWeek));
-
-        Map<String, List<MaterializeDTO.TemplateSlotDTO>> slotsByVersion = new HashMap<>();
-        for (MaterializeDTO.TemplateSlotDTO slot : slotInstanceRepository.findTemplateSlotsUpTo(centerCode, to)) {
-            slotsByVersion.computeIfAbsent(versionKey(slot.getDayOfWeek(), slot.getEffectiveFrom()),
-                    k -> new ArrayList<>()).add(slot);
-        }
-
-        List<MaterializeDTO.ExceptionDTO> exceptions =
-                slotInstanceRepository.findExceptionsInRange(centerCode, from, to);
-        Map<Integer, List<MaterializeDTO.ExceptionSlotDTO>> exceptionSlots = slotInstanceRepository
-                .findExceptionSlotsInRange(centerCode, from, to).stream()
-                .collect(Collectors.groupingBy(MaterializeDTO.ExceptionSlotDTO::getExceptionId));
+        Map<LocalDate, List<MaterializeDTO.InstanceDTO>> desiredByDate = desiredSlots(centerCode, targets);
 
         Set<LocalDate> reservedDates =
                 new HashSet<>(slotInstanceRepository.findReservedDatesInRange(centerCode, from, to));
@@ -157,8 +150,7 @@ public class ScheduleMaterializer {
                 continue;
             }
 
-            MaterializeDTO.RuleDTO rule = effectiveRule(rulesByDay.get(date.getDayOfWeek().getValue()), date);
-            List<MaterializeDTO.InstanceDTO> desired = buildSlots(date, rule, slotsByVersion, exceptions, exceptionSlots);
+            List<MaterializeDTO.InstanceDTO> desired = desiredByDate.get(date);
 
             List<Integer> keepSeqs = desired.stream().map(MaterializeDTO.InstanceDTO::getSeq).toList();
             slotInstanceRepository.deleteObsoleteSlots(centerCode, date, keepSeqs);
@@ -177,6 +169,96 @@ public class ScheduleMaterializer {
                 centerCode, from, to, dateCount, slotCount);
 
         return new MaterializeDTO.ResultDTO(dateCount, slotCount, blocked);
+    }
+
+    /**
+     * 그날 찍힐 슬롯을 DB에 쓰지 않고 계산만 한다(2026-11-23) — 미운영 예외의 대체 운영일 검증용.
+     * 오픈일 너머라 아직 slot_instance가 없는 날도 규칙·예외대로 열리는지 알 수 있다.
+     */
+    public List<MaterializeDTO.InstanceDTO> previewDay(String centerCode, LocalDate date) {
+        return desiredSlots(centerCode, List.of(date)).get(date);
+    }
+
+    /**
+     * 기간 안의 미운영 예외 중 대체 운영일이 있는 것 — 미운영일 → 대체일.
+     * 반복 예약 미리보기가 그 주를 대체일로 옮겨 잡을 때 쓴다.
+     */
+    public Map<LocalDate, LocalDate> substituteDates(String centerCode, LocalDate from, LocalDate to) {
+        Map<LocalDate, LocalDate> map = new HashMap<>();
+        substituteExceptions(centerCode, from, to).forEach((closedDay, ex) -> map.put(closedDay, ex.getSubstituteDate()));
+        return map;
+    }
+
+    /** 미운영일 → 대체 운영일이 있는 그 미운영 예외(사유 포함) — 반복 예약 미리보기가 안내 문구까지 내려줄 때 쓴다 */
+    public Map<LocalDate, MaterializeDTO.ExceptionDTO> substituteExceptions(String centerCode, LocalDate from, LocalDate to) {
+        Map<LocalDate, MaterializeDTO.ExceptionDTO> map = new HashMap<>();
+        for (MaterializeDTO.ExceptionDTO ex : slotInstanceRepository.findExceptionsInRange(centerCode, from, to)) {
+            if (TYPE_CLOSED.equals(ex.getExceptionType()) && ex.getSubstituteDate() != null) {
+                map.put(ex.getStartDate(), ex);
+            }
+        }
+        return map;
+    }
+
+    /** 날짜별 확정 슬롯 계산 — 입력값은 날짜별로 쪼개 조회하지 않고 기간 전체를 한 번에 읽는다 */
+    private Map<LocalDate, List<MaterializeDTO.InstanceDTO>> desiredSlots(String centerCode, List<LocalDate> targets) {
+        LocalDate from = targets.get(0);
+        LocalDate to = targets.get(targets.size() - 1);
+
+        // SlotInstanceMapper 주석 참고. 대체 운영일이 기간 안에 있는 미운영 예외도 함께 읽힌다
+        List<MaterializeDTO.ExceptionDTO> exceptions =
+                slotInstanceRepository.findExceptionsInRange(centerCode, from, to);
+
+        // 대체 운영일은 미운영일의 규칙으로 찍으므로, 미운영일이 기간보다 뒤면 그 날까지의 규칙이 필요하다
+        LocalDate ruleTo = exceptions.stream().map(MaterializeDTO.ExceptionDTO::getStartDate)
+                .filter(to::isBefore).max(LocalDate::compareTo).orElse(to);
+
+        Map<Integer, List<MaterializeDTO.RuleDTO>> rulesByDay = slotInstanceRepository
+                .findRulesUpTo(centerCode, ruleTo).stream()
+                .collect(Collectors.groupingBy(MaterializeDTO.RuleDTO::getDayOfWeek));
+
+        Map<String, List<MaterializeDTO.TemplateSlotDTO>> slotsByVersion = new HashMap<>();
+        for (MaterializeDTO.TemplateSlotDTO slot : slotInstanceRepository.findTemplateSlotsUpTo(centerCode, ruleTo)) {
+            slotsByVersion.computeIfAbsent(versionKey(slot.getDayOfWeek(), slot.getEffectiveFrom()),
+                    k -> new ArrayList<>()).add(slot);
+        }
+
+        Map<Integer, List<MaterializeDTO.ExceptionSlotDTO>> exceptionSlots = slotInstanceRepository
+                .findExceptionSlotsInRange(centerCode, from, to).stream()
+                .collect(Collectors.groupingBy(MaterializeDTO.ExceptionSlotDTO::getExceptionId));
+
+        Map<LocalDate, List<MaterializeDTO.InstanceDTO>> result = new HashMap<>();
+        for (LocalDate date : targets) {
+            MaterializeDTO.RuleDTO rule = effectiveRule(rulesByDay.get(date.getDayOfWeek().getValue()), date);
+            List<MaterializeDTO.InstanceDTO> slots = buildSlots(date, rule, slotsByVersion, exceptions, exceptionSlots);
+
+            // 대체 운영일(2026-11-23) — 원래 열지 않는 날이면 미운영일의 요일 규칙 회차로 그날만 연다.
+            // 이미 운영하는 날은 그날 회차를 그대로 둔다. 그날 자체가 미운영 예외면 buildSlots가 다시 막는다.
+            LocalDate closedDay = substitutedFrom(date, exceptions);
+            if (slots.isEmpty() && closedDay != null) {
+                MaterializeDTO.RuleDTO closedRule =
+                        effectiveRule(rulesByDay.get(closedDay.getDayOfWeek().getValue()), closedDay);
+                slots = buildSlots(date, closedRule, slotsByVersion, exceptions, exceptionSlots);
+            }
+            result.put(date, slots);
+        }
+        return result;
+    }
+
+    /**
+     * date가 대체 운영일이면 원래 미운영일, 아니면 null(2026-11-23). 대체 운영일은 예약 오픈·이용권
+     * 유효기간을 미운영일 기준으로도 본다 — 12/31 미운영 → 1/2 대체면 12월 이용권으로 1/2를 쓸 수 있다.
+     */
+    public LocalDate closedDayOf(String centerCode, LocalDate date) {
+        return substitutedFrom(date, slotInstanceRepository.findExceptionsInRange(centerCode, date, date));
+    }
+
+    /** date를 대체 운영일로 지정한 미운영 예외의 날짜 — 없으면 null */
+    private LocalDate substitutedFrom(LocalDate date, List<MaterializeDTO.ExceptionDTO> exceptions) {
+        return exceptions.stream()
+                .filter(ex -> TYPE_CLOSED.equals(ex.getExceptionType()) && date.equals(ex.getSubstituteDate()))
+                .map(MaterializeDTO.ExceptionDTO::getStartDate)
+                .findFirst().orElse(null);
     }
 
     /** 그 날짜에 유효한 버전 = effective_from이 날짜 이하인 것 중 가장 늦은 것 */

@@ -210,9 +210,19 @@
             si.starts_at        AS startsAt,
             si.ends_at          AS endsAt,
             r.status            AS status,
-            r.reserved_at       AS reservedAt
+            r.reserved_at       AS reservedAt,
+            sub.start_date      AS substituteFor,
+            sub.reason          AS substituteReason
         FROM erp_bookstore_reservation r
         JOIN erp_bookstore_slot_instance si ON si.slot_instance_id = r.slot_instance_id
+        <!-- 대체 운영일 예약이면 원래 미운영일과 사유(2026-11-23) — 대체일은 예외 하나에만 쓰인다(등록 시 검증) -->
+        OUTER APPLY (
+            SELECT TOP 1 e.start_date, e.reason
+            FROM erp_bookstore_schedule_exception e
+            WHERE e.center_code     = si.center_code
+              AND e.exception_type  = 'CLOSED'
+              AND e.substitute_date = si.service_date
+        ) sub
         WHERE r.student_id = #{studentId}
           AND r.status &lt;&gt; 'CANCELED'
           <if test="fromDate != null">AND si.service_date &gt;= #{fromDate}</if>
